@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluxagent-controller-manager
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          image: fluxagent/operator:latest
+          env:
+            - name: FLUXAGENT_PROMETHEUS_URL
+              value: http://fluxagent-observability:8080
+            - name: FLUXAGENT_LOKI_URL
+              value: http://fluxagent-observability:8080
+            - name: FLUXAGENT_WEBHOOK_URL
+              value: http://fluxagent-observability:8080/demo/webhook
+            - name: FLUXAGENT_SCAN_INTERVAL
+              value: 15s
+          args:
+            - --enable-remediation=false

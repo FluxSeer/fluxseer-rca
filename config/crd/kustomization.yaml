@@ -1,0 +1,4 @@
+resources:
+  - bases/aiops.platform_risksignals.yaml
+  - bases/aiops.platform_remediationplans.yaml
+  - bases/aiops.platform_agentactions.yaml

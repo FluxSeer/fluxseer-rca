@@ -1,0 +1,31 @@
+apiVersion: aiops.platform/v1alpha1
+kind: RemediationPlan
+metadata:
+  name: payments-api-plan
+  namespace: payments
+spec:
+  target:
+    cluster: prod-cluster-apne1
+    namespace: payments
+    kind: Deployment
+    name: payments-api
+    apiVersion: apps/v1
+    service: payments-api
+  recommendedBy: heuristic-provider
+  severity: high
+  confidence: 86
+  dryRun: true
+  ttlSeconds: 1800
+  summary: Pause the rollout to stop additional unhealthy replicas.
+  rollbackPlan:
+    - Resume rollout after verifying memory profile
+    - Revert deployment image if restart rate remains elevated
+  references:
+    - runbook://payments-api/oom-restart-guide
+    - doc://payments-api/release-playbook
+  steps:
+    - name: stabilize-workload
+      actionType: kubernetes.rolloutPause
+      description: Pause the rollout to stop additional unhealthy replicas.
+      parameters:
+        reason: automatic-guardrail-pause

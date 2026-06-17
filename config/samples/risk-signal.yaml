@@ -1,0 +1,26 @@
+apiVersion: aiops.platform/v1alpha1
+kind: RiskSignal
+metadata:
+  name: payments-api-risk
+  namespace: payments
+spec:
+  target:
+    cluster: prod-cluster-apne1
+    namespace: payments
+    kind: Deployment
+    name: payments-api
+    apiVersion: apps/v1
+    service: payments-api
+  signalType: incident
+  actionType: kubernetes.rolloutPause
+  severity: high
+  confidence: 86
+  dryRun: true
+  ttlSeconds: 1800
+  evidence:
+    - kind: incident-context
+      source: kubernetes-events
+      summary: AI-ready incident context
+      reason: BackOff
+  parameters:
+    reason: automatic-guardrail-pause

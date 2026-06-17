@@ -1,0 +1,7 @@
+FluxAgent is installed as a Kubernetes-native AI SRE Agent Operator.
+
+Next steps:
+
+1. Create datasource and model secrets or config.
+2. Apply a RiskSignal sample.
+3. Watch RemediationPlan and AgentAction resources.

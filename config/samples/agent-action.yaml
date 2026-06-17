@@ -1,0 +1,21 @@
+apiVersion: aiops.platform/v1alpha1
+kind: AgentAction
+metadata:
+  name: payments-api-action
+  namespace: payments
+spec:
+  target:
+    cluster: prod-cluster-apne1
+    namespace: payments
+    kind: Deployment
+    name: payments-api
+    apiVersion: apps/v1
+    service: payments-api
+  actionType: kubernetes.rolloutPause
+  approvedBy: sre-oncall@example.com
+  dryRunResult: dry-run: target exists, policy passes, approval required
+  ttlSeconds: 1800
+  rollbackPlan:
+    - Resume rollout if false positive
+  parameters:
+    reason: manual-sre-approval

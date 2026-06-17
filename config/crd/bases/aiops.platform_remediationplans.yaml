@@ -1,0 +1,69 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: remediationplans.aiops.platform
+spec:
+  group: aiops.platform
+  scope: Namespaced
+  names:
+    plural: remediationplans
+    singular: remediationplan
+    kind: RemediationPlan
+    shortNames:
+      - rplan
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: ["target", "severity", "confidence"]
+              properties:
+                target:
+                  type: object
+                  properties:
+                    cluster: {type: string}
+                    namespace: {type: string}
+                    kind: {type: string}
+                    name: {type: string}
+                    apiVersion: {type: string}
+                    service: {type: string}
+                recommendedBy: {type: string}
+                severity: {type: string}
+                confidence: {type: integer}
+                dryRun: {type: boolean}
+                ttlSeconds: {type: integer, format: int64}
+                summary: {type: string}
+                rollbackPlan:
+                  type: array
+                  items:
+                    type: string
+                references:
+                  type: array
+                  items:
+                    type: string
+                steps:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name: {type: string}
+                      actionType: {type: string}
+                      description: {type: string}
+                      parameters:
+                        type: object
+                        additionalProperties:
+                          type: string
+            status:
+              type: object
+              properties:
+                phase: {type: string}
+                message: {type: string}
+                observedGeneration: {type: integer, format: int64}
+                updatedAt: {type: string, format: date-time}
+      subresources:
+        status: {}

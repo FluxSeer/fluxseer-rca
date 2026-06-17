@@ -1,0 +1,22 @@
+image:
+  repository: fluxagent/operator
+  tag: latest
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: fluxagent-controller-manager
+
+modelGateway:
+  provider: heuristic
+
+dataSources:
+  prometheus:
+    enabled: false
+    url: ""
+  loki:
+    enabled: false
+    url: ""
+
+notification:
+  slackWebhookSecretRef: ""

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluxagent-sample
+  annotations:
+    fluxagent.aiops.platform/enabled: "true"
+    fluxagent.aiops.platform/prometheus-query: |
+      sum(rate(http_requests_total{namespace="fluxagent-demo",app="fluxagent-sample",status=~"5.."}[5m]))
+    fluxagent.aiops.platform/prometheus-threshold: "0.2"
+    fluxagent.aiops.platform/loki-query: |
+      {namespace="fluxagent-demo",app="fluxagent-sample"} |= "error"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fluxagent-sample
+  template:
+    metadata:
+      labels:
+        app: fluxagent-sample
+    spec:
+      containers:
+        - name: app
+          image: hashicorp/http-echo:1.0.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - -listen=:8080
+            - -text=fluxagent sample app
+          ports:
+            - containerPort: 8080
+              name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fluxagent-sample
+spec:
+  selector:
+    app: fluxagent-sample
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

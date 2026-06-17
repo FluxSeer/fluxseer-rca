@@ -1,0 +1,21 @@
+# Binaries
+/fluxagent
+/manager
+/operator
+/demo-observability
+
+# Go build artifacts
+/bin/
+/dist/
+*.test
+*.out
+coverage.out
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Environment overrides
+.env
+.env.*
