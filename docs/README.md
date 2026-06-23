@@ -35,6 +35,14 @@ docs/
 - [tutorials/quickstart-kind.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/quickstart-kind.md:1)
 - [github-repo.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/github-repo.md:1)
 
+## Diagram Sources
+
+- `drawio/Kubernetes-native AI Agent Platform Architecture v1.drawio`
+  Historical draft source.
+- `drawio/Kubernetes-native AI Agent Platform Architecture v2.drawio`
+  Current maintained source.
+  Layer 2 detail pages: `Layer 2-1` through `Layer 2-5`
+
 ## Current Product Truth
 
 - `v0.1` is a read-only `RiskSignal` operator by default.

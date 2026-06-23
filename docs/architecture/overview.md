@@ -1,17 +1,25 @@
 # FluxAgent Architecture Overview
 
-FluxAgent is a Kubernetes-native AI SRE Agent Operator with two runtime tracks:
+FluxAgent adopts a layered plus split-path architecture.
 
-- `v0.1 read-only`: detect risk and notify
-- `guarded remediation`: propose and optionally execute guarded actions
+The default runtime path is read-only detection: observe workload risk, create a `RiskSignal`, and notify without mutating the target workload.
 
-The default runtime path is read-only.
+Guarded remediation is an optional expansion path. Only when it is explicitly enabled and passes guardrails can a `RiskSignal` lead to a `RemediationPlan`, an `AgentAction`, and an executed side effect.
 
-## Layered View
+## Design Goals
+
+- read-only by default
+- Kubernetes-native workflow
+- pluggable datasources
+- pluggable model providers
+- guarded remediation
+- auditable execution
+
+## High-level Architecture
 
 ### 1. Signal Sources
 
-FluxAgent is designed to accept signals from multiple systems without hard-coding one stack into the core:
+FluxAgent accepts signals from multiple systems without hard-coding one observability stack into the core:
 
 - Kubernetes Events
 - Prometheus
@@ -19,7 +27,7 @@ FluxAgent is designed to accept signals from multiple systems without hard-codin
 - OpenTelemetry
 - deployment metadata and rollout context
 
-These systems are accessed through datasource adapters rather than direct platform coupling.
+This layer answers where risk evidence comes from.
 
 ### 2. Datasource Adapter Layer
 
@@ -44,21 +52,21 @@ Current adapters:
 - OpenTelemetry scaffold
 - CloudWatch scaffold
 
-This is the main extensibility seam for observability integrations.
+This is the primary extensibility seam for observability integrations. The core detection path depends on the contract, not on provider-specific query code.
 
-### 3. Read-only Detection Layer
+### 3. Detection Service Layer
 
 The default `v0.1` runtime uses `DeploymentRiskReconciler` plus `detector.Service`.
 
-Flow:
+Responsibilities:
 
-1. Watch `Deployment`
-2. Check `fluxagent.aiops.platform/enabled: "true"`
-3. Query enabled datasource adapters
-4. Merge evidence
-5. Produce a `Finding`
-6. Materialize a `RiskSignal`
-7. Notify via webhook
+- watch `Deployment`
+- require `fluxagent.aiops.platform/enabled: "true"` for opt-in
+- query enabled datasource adapters
+- merge evidence by severity and confidence
+- produce a normalized `Finding`
+- materialize a `RiskSignal`
+- trigger notification
 
 This path does not create remediation resources by default.
 
@@ -70,19 +78,26 @@ Key files:
 
 ### 4. CRD Contract Layer
 
-FluxAgent exposes its core workflow through Kubernetes-native CRDs:
+FluxAgent exposes its workflow through Kubernetes-native CRDs:
 
 - `RiskSignal`
 - `RemediationPlan`
 - `AgentAction`
 
-These resources are the platform API for higher-level automation and external tooling.
-
 The API group is `aiops.platform/v1alpha1`.
+
+These CRDs are not only data models. They are workflow state carriers. Each controller advances only the state it owns, so detection, reasoning, approval, and execution do not collapse into one controller.
+
+This gives FluxAgent:
+
+- auditable state transitions
+- observable control-plane behavior
+- stable contracts for external tooling
+- controller-native separation of concerns
 
 ### 5. Model Gateway Layer
 
-Reasoning and RCA should depend on provider-neutral abstractions instead of a specific LLM vendor.
+Reasoning and RCA depend on a provider-neutral abstraction rather than a specific LLM vendor.
 
 Provider interface:
 
@@ -102,7 +117,7 @@ Current providers:
 - bedrock scaffold
 - local scaffold
 
-Today, the runtime defaults to the heuristic provider so the project stays runnable without external secrets.
+The runnable repo defaults to the heuristic provider so the project stays usable without external secrets. The model gateway is a reasoning seam, not an execution authority.
 
 ### 6. Guardrails Layer
 
@@ -114,14 +129,14 @@ Responsibilities:
 - protected namespace checks
 - severity thresholds
 - auto-approve low risk
-- require approval for medium/high risk
+- require approval for medium and high risk
 - reject unsupported or unsafe actions
 
-This layer exists so AI reasoning does not directly mutate production state.
+Guardrails exist so model output cannot directly mutate production state.
 
 ### 7. Executor Layer
 
-Executors are split from reasoning and policy.
+Executors are isolated from reasoning and policy.
 
 Current executor routes:
 
@@ -132,28 +147,152 @@ Current executor routes:
 
 The router is responsible only for dispatch. Safety and approval happen earlier.
 
-## Runtime Modes
+The long-term contract for live executors should include:
 
-### Default: Read-only
+- dry-run support
+- idempotent behavior
+- timeout and retry policy
+- action result status
+- rollback hints
+- audit-friendly execution metadata
 
-Enabled by default in `cmd/manager`.
+### 8. Notification and Audit Layer
 
-Behavior:
+Notification is part of the default read-only story, and status persistence is part of every workflow stage.
 
-- create `RiskSignal`
-- notify webhook
-- no remediation resources
+This layer makes sure risk detection and guarded execution both leave an observable trail through:
 
-### Optional: Guarded Remediation
+- webhook notification
+- CRD status transitions
+- execution summaries
+- rollback metadata
 
-Enabled only with `--enable-remediation=true`.
+## Primary Flow: Read-only Detection
 
-Behavior:
+The default path is:
 
-- `RiskSignal` may create `RemediationPlan`
-- guardrails assess plan
-- `AgentAction` is created only through guarded flow
-- execution is routed through adapters
+```text
+Signal Sources
+→ Datasource Adapters
+→ Detection Service
+→ Finding
+→ RiskSignal
+→ Notification
+```
+
+In runtime terms:
+
+1. `DeploymentRiskReconciler` watches `Deployment`.
+2. It only processes workloads annotated with `fluxagent.aiops.platform/enabled: "true"`.
+3. `detector.Service` queries the enabled adapters.
+4. Evidence is merged into a `Finding`.
+5. The controller creates or updates a `RiskSignal`.
+6. `RiskSignalNotificationReconciler` sends a webhook notification when configured.
+
+This is the main open-source entry point and the default runtime truth of `v0.1`.
+
+## Optional Flow: Guarded Remediation
+
+The remediation path is separate from the detection path:
+
+```text
+RiskSignal
+→ Model Gateway / Heuristic Reasoner
+→ RemediationPlan
+→ Guardrails
+→ Approval
+→ AgentAction
+→ Executor
+→ Status / Audit
+```
+
+This flow is only active when remediation is explicitly enabled.
+
+In runtime terms:
+
+1. `RiskSignalReconciler` derives a `RemediationPlan`.
+2. `RemediationPlanReconciler` evaluates the plan through the guardrails engine.
+3. Guardrails decide `Approved`, `WaitingApproval`, or `Rejected`.
+4. `AgentActionReconciler` executes only approved actions through the executor router.
+5. Result status is persisted for auditability.
+
+This separation is intentional: risk detection and side-effect execution are not a single direct pipeline.
+
+## CRD Workflow Contract
+
+### `RiskSignal`
+
+Represents a detected risk with severity, confidence, target, and evidence. In `v0.1`, this is the core product output.
+
+### `RemediationPlan`
+
+Represents a reviewable mitigation proposal with summary, steps, references, and rollback hints.
+
+### `AgentAction`
+
+Represents one executable action after policy evaluation and, when required, human approval.
+
+Together these CRDs form the workflow contract for the operator:
+
+- `RiskSignal` captures observation
+- `RemediationPlan` captures proposal
+- `AgentAction` captures approved execution intent
+
+## Current Implementation Status
+
+Current `v0.1` implementation is intentionally uneven by design.
+
+Implemented and runnable:
+
+- read-only detection
+- `RiskSignal` generation
+- webhook notification
+- Prometheus, Loki, and Kubernetes Events demo path
+
+Established as contracts or scaffolds:
+
+- model gateway abstraction
+- multiple model provider packages
+- guarded remediation controller chain
+- multi-backend executor routing
+
+Simulation-oriented today:
+
+- most `kubernetes.*` executor behavior
+- most `gitops.*` executor behavior
+- most `runbook.*` executor behavior
+
+This means FluxAgent should be described today as a read-only `RiskSignal` operator with guarded remediation expansion seams, not as a fully autonomous production remediation system.
+
+## Safety Model
+
+FluxAgent is designed around explicit safety boundaries.
+
+Read-only defaults:
+
+- no workload patching in the default path
+- no deployment scaling in the default path
+- no rollout pause in the default path
+- no remediation resources unless remediation is enabled
+
+Guardrails default to preventing the following:
+
+- modifying protected namespaces
+- remediating workloads that are not explicitly opted in
+- creating `AgentAction` for non-allowlisted `actionType`
+- executing destructive actions before approval policy passes
+- allowing the model provider to call the Kubernetes API directly
+
+This safety model is why the read-only track and the remediation track are documented separately.
+
+## Extension Points
+
+FluxAgent is designed to grow through stable seams instead of controller rewrites.
+
+- datasource adapter: add a new observability backend behind the shared datasource contract
+- model provider: add or swap a reasoning backend without changing CRD schemas
+- executor: add a new action backend behind stable `actionType` routing
+- notification channel: extend outbound notification behavior without changing detection semantics
 
 ## Mermaid Diagram
 
@@ -207,4 +346,4 @@ It should not yet be described as:
 
 `FluxAgent fully automates AI remediation in production.`
 
-That distinction is important because the read-only path is intentionally safe, operator-native, and easy to demo, while the guarded remediation path is still an expansion track rather than the primary entry point.
+That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.

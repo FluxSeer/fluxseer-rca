@@ -1,0 +1,877 @@
+<mxfile host="65bd71144e">
+    <diagram name="Layer 2-1" id="layer-2-1">
+        <mxGraphModel dx="4000" dy="1489" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p21-title" value="Kubernetes-native AI SRE Agent - Layer 2-1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=34;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="20" width="1080" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-subtitle" value="Signal Ingestion &amp;amp; Context Pipeline (1 of 5)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;fontColor=#2563eb;" parent="1" vertex="1">
+                    <mxGeometry x="580" y="70" width="760" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-left" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#ff4d4f;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="-70" y="109" width="280" height="640" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-left-title" value="Signal Sources" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="-25" y="134" width="190" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-src-1" value="Kubernetes API&#xa;Pods / Deployments / Nodes / HPA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=12;" parent="1" vertex="1">
+                    <mxGeometry x="-57" y="184" width="250" height="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-src-2" value="Kubernetes Events&#xa;Warnings / BackOff / OOMKilled" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=12;" parent="1" vertex="1">
+                    <mxGeometry x="-57" y="272" width="250" height="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-src-3" value="Metrics&#xa;Prometheus / CloudWatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=12;" parent="1" vertex="1">
+                    <mxGeometry x="-57" y="360" width="250" height="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-src-4" value="Logs&#xa;Loki / CloudWatch Logs / ELK" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=12;" parent="1" vertex="1">
+                    <mxGeometry x="-57" y="448" width="250" height="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-src-5" value="Traces&#xa;OpenTelemetry / Tempo / X-Ray" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=12;" parent="1" vertex="1">
+                    <mxGeometry x="-57" y="536" width="250" height="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-src-6" value="Deployment Context&#xa;Git / Argo CD / CI/CD Pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=12;" parent="1" vertex="1">
+                    <mxGeometry x="-57" y="624" width="250" height="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-center" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f59e0b;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="290" y="130" width="1320" height="640" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-center-title" value="Ingestion &amp;amp; Context Pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="650" y="150" width="460" height="58" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-step-1" value="SourceConnectors&#xa;Secure watchers and&#xa;API scrapers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="310" y="305" width="96" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-step-2" value="EventWatcher&#xa;Watch cluster state&#xa;changes in real time" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="430" y="305" width="96" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-step-3" value="MetricsQuery&#xa;Query and align&#xa;metric windows" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="554" y="305" width="96" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-step-4" value="LogRetriever&#xa;Fetch and stream&#xa;selected logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="679" y="305" width="96" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-step-5" value="TraceRetriever&#xa;Retrieve traces and&#xa;span links" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="810" y="305" width="96" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-step-6" value="DeploymentChange&#xa;Detect rollout and&#xa;pipeline updates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="940" y="305" width="96" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-step-7" value="Normalization&#xa;Normalize and tag&#xa;K8s / business fields" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1080" y="305" width="96" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-step-8" value="Deduplication&#xa;Remove noise and&#xa;aggregate in windows" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1210" y="305" width="96" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-step-9" value="IncidentContext&#xa;Correlate signals&#xa;into incident context" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1340" y="305" width="96" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-right" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1fae5;strokeColor=#16a34a;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="1690" y="110" width="250" height="640" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-right-title" value="Outputs" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="1750" y="135" width="130" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-out-1" value="Enriched Incident Context&#xa;Correlated and tagged context" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1708" y="205" width="215" height="92" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-out-2" value="Evidence Bundle&#xa;Logs, metrics, traces and events" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1708" y="316" width="215" height="92" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-out-3" value="Normalized Signals&#xa;Unified metrics, logs, traces" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1708" y="427" width="215" height="92" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-out-4" value="Resource Timeline&#xa;State and change history" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1708" y="538" width="215" height="92" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-downstream" value="Downstream&#xa;AI Platform&#xa;AI Agent&#xa;Reasoning&#xa;Layer 2-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;dashed=1;dashPattern=8 8;fontFamily=Comic Sans MS;fontStyle=1;fontSize=13;" parent="1" vertex="1">
+                    <mxGeometry x="1980" y="305" width="130" height="248" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-cross" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="85" y="790" width="1580" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-cross-title" value="Observability / Governance (Cross-Cutting)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="165" y="810" width="420" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-pill-1" value="Namespace &amp;amp; Resource Tags" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="165" y="850" width="200" height="52" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-pill-2" value="Correlation IDs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="375" y="850" width="190" height="52" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-pill-3" value="Rate Limiting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="585" y="850" width="190" height="52" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-pill-4" value="Retry / Backoff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="795" y="850" width="190" height="52" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-pill-5" value="Read-only Access" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1005" y="850" width="190" height="52" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-pill-6" value="Audit Hooks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1215" y="850" width="190" height="52" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-pill-7" value="LLM-ready Redaction" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1425" y="850" width="190" height="52" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-legend" value="Data Flow            Control Flow            Reference / Audit Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;spacingLeft=115;" parent="1" vertex="1">
+                    <mxGeometry x="25" y="1000" width="800" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-purpose" value="Purpose: gather, normalize, redact, and package telemetry into AI-ready incident context." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=75;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="995" width="1040" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-s12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p21-step-1" target="p21-step-2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-s23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p21-step-2" target="p21-step-3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-s34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p21-step-3" target="p21-step-4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-s45" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p21-step-4" target="p21-step-5" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-s56" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p21-step-5" target="p21-step-6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-s67" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p21-step-6" target="p21-step-7" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-s78" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p21-step-7" target="p21-step-8" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-s89" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p21-step-8" target="p21-step-9" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-s910" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p21-step-9" target="p21-step-10" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-down" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p21-right" target="p21-downstream" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="wzJIJSRb4NUTAmhT7bAh-4" style="edgeStyle=orthogonalEdgeStyle;shape=connector;rounded=0;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#2563eb;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=11;fontColor=default;labelBackgroundColor=default;endArrow=block;endFill=1;" edge="1" parent="1" source="p21-step-10" target="p21-right">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p21-step-10" value="EvidenceBundleCache&#xa;Cache bundled&#xa;evidence for AI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1472" y="305" width="96" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="AOHXaFhNUZ55zkuJDLjq-1" style="edgeStyle=orthogonalEdgeStyle;shape=connector;rounded=0;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;strokeColor=#2563eb;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=11;fontColor=default;labelBackgroundColor=default;endArrow=block;endFill=1;" edge="1" parent="1" source="p21-left" target="p21-step-1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram name="Layer 2-2" id="layer-2-2">
+        <mxGraphModel dx="4260" dy="1675" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p22-title" value="Kubernetes-native AI SRE Agent - Layer 2-2" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=34;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="20" width="1080" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-subtitle" value="Provider-neutral Reasoning Seam &amp;amp; Model Gateway (2 of 5)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;fontColor=#2563eb;" parent="1" vertex="1">
+                    <mxGeometry x="510" y="70" width="900" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-left" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#ff4d4f;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="-120" y="91.5" width="245" height="575" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-left-title" value="Inputs" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="-50" y="116.5" width="105" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-in-1" value="Enriched Incident Context&#xa;Tagged and structured context" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="-103" y="176.5" width="205" height="102" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-in-2" value="Evidence Bundle&#xa;Logs, metrics, traces, events" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="-103" y="292.5" width="205" height="102" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-in-3" value="Normalized Signals&#xa;Unified metrics, logs and traces" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="-103" y="408.5" width="205" height="102" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-in-4" value="Resource Timeline&#xa;State and change timeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="-103" y="524.5" width="205" height="102" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-center" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f59e0b;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="230" y="125" width="1280" height="690" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-center-title" value="Reasoning Pipeline for Risk, RCA &amp;amp; Remediation Candidates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="650" y="145" width="460" height="58" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-step-1" value="ContextInterpreter&#xa;- parse incident context&#xa;- extract entities&#xa;- normalize statement" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="260" y="255" width="118" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-step-2" value="SignalCorrelator&#xa;- correlate metrics, logs, traces&#xa;- identify impact axes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="410" y="255" width="118" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-step-3" value="RiskAnalyzer&#xa;- assess impact and blast radius&#xa;- evaluate severity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="570" y="254" width="118" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-step-4" value="RCAAssistant&#xa;- propose root-cause hypotheses&#xa;- rank by likelihood" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="720" y="255" width="118" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-step-5" value="RunbookRetriever&#xa;- retrieve relevant runbooks&#xa;- match service and symptom" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="880" y="255" width="118" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-step-6" value="ConfidenceScorer&#xa;- score evidence coverage&#xa;- calibrate uncertainty" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1030" y="255" width="118" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-step-7" value="RemediationPlanner&#xa;- build step-by-step plan&#xa;- include rollback and validation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1188.5" y="255" width="118" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-step-8" value="OutputFormatter&#xa;- return structured JSON&#xa;- attach references and metadata" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;fontFamily=Comic Sans MS;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1350" y="255" width="118" height="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-kb" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="310" y="650" width="560" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-kb-title" value="Knowledge Base" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="475" y="668" width="220" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-kb-1" value="Runbooks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#60a5fa;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="335" y="710" width="110" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-kb-2" value="Incident History" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#60a5fa;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="460" y="710" width="110" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-kb-3" value="Service Docs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#60a5fa;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="585" y="710" width="110" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-kb-4" value="Service Topology" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#60a5fa;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="710" y="710" width="110" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-gw" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="650" width="520" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-gw-title" value="Provider-neutral Model Gateway" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="1045" y="668" width="230" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-gw-1" value="heuristic&#xa;(default)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#8b5cf6;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="710" width="85" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-gw-2" value="openai&#xa;scaffold" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#8b5cf6;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1015" y="710" width="85" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-gw-3" value="claude&#xa;scaffold" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#8b5cf6;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1110" y="710" width="85" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-gw-4" value="gemini&#xa;scaffold" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#8b5cf6;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1205" y="710" width="85" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-gw-5" value="bedrock / local&#xa;scaffolds" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#8b5cf6;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1300" y="710" width="100" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-right" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1fae5;strokeColor=#16a34a;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="1580" y="75" width="245" height="610" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-right-title" value="Outputs" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="1645" y="100" width="115" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-out-1" value="RiskSignal Candidate&#xa;Risk and severity assessment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1598" y="160" width="205" height="102" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-out-2" value="RCA Summary&#xa;Likely causes with evidence" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1598" y="276" width="205" height="102" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-out-3" value="Remediation Candidates&#xa;Structured proposals with safeguards" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1598" y="392" width="205" height="102" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-out-4" value="Confidence / Severity Metadata&#xa;Scores, rationale, coverage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1598" y="508" width="205" height="102" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-downstream" value="K8s-native&#xa;Control Layer&#xa;Layer 2-3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;dashed=1;dashPattern=8 8;fontFamily=Comic Sans MS;fontStyle=1;fontSize=13;" parent="1" vertex="1">
+                    <mxGeometry x="1880" y="287.5" width="125" height="185" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-cross" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="160" y="850" width="1420" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-cross-title" value="Reasoning Safeguards (Cross-Cutting)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="220" y="865" width="410" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-pill-1" value="Read-only Operation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="210" y="905" width="190" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-pill-2" value="Hallucination Checks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="435" y="905" width="190" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-pill-3" value="Evidence Linking" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="660" y="905" width="190" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-pill-4" value="Explainability Notes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="885" y="905" width="190" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-pill-5" value="Sensitive Data Redaction" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1110" y="905" width="190" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-pill-6" value="Provider Abstraction" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1335" y="905" width="190" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-legend" value="Data Flow            Control Flow            Reference / Audit Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;spacingLeft=115;" parent="1" vertex="1">
+                    <mxGeometry x="25" y="1000" width="800" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-purpose" value="Purpose: transform incident context into explainable risk, RCA, and remediation candidates through a provider-neutral reasoning seam with a runnable heuristic default." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=75;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="995" width="1040" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-s12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p22-step-1" target="p22-step-2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-s23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p22-step-2" target="p22-step-3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-s34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p22-step-3" target="p22-step-4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-s45" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p22-step-4" target="p22-step-5" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-s56" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p22-step-5" target="p22-step-6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-s67" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p22-step-6" target="p22-step-7" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-s78" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p22-step-7" target="p22-step-8" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-outflow" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p22-step-8" target="p22-right" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-kb-edge-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;dashPattern=8 8;strokeColor=#64748b;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" source="p22-kb" target="p22-step-1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-kb-edge-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;dashPattern=8 8;strokeColor=#64748b;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" source="p22-kb" target="p22-step-5" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="590" y="580"/>
+                            <mxPoint x="939" y="580"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="p22-gw-edge-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;dashPattern=8 8;strokeColor=#64748b;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" source="p22-gw" target="p22-step-6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-gw-edge-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;dashPattern=8 8;strokeColor=#64748b;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" source="p22-gw" target="p22-step-8" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p22-down" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p22-right" target="p22-downstream" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="dC25ByvhM5Unl4ldtzVc-1" style="edgeStyle=orthogonalEdgeStyle;shape=connector;rounded=0;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#2563eb;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontSize=11;fontColor=default;labelBackgroundColor=default;endArrow=block;endFill=1;" edge="1" parent="1" source="p22-left" target="p22-step-1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram name="Layer 2-3" id="layer-2-3">
+        <mxGraphModel dx="2340" dy="1675" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p23-title" value="Kubernetes-native AI SRE Agent - Layer 2-3" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=34;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="20" width="1080" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-subtitle" value="CRD Workflow Contract &amp;amp; Controller Boundaries (3 of 5)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;fontColor=#2563eb;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="70" width="800" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-ai" value="Read-only Detection Output&#xa;- create or update RiskSignal&#xa;- attach evidence&#xa;- carry suggested action metadata" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+                    <mxGeometry x="25" y="145" width="210" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-main" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="265" y="125" width="1200" height="510" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-rs-crd" value="RiskSignal CRD&#xa;target&#xa;type / actionType&#xa;severity / parameters&#xa;confidence / dryRun&#xa;evidence / ttl" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="315" y="150" width="300" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-rs-ctrl" value="RiskSignal Controller&#xa;- persist read-only workflow state&#xa;- update status and conditions&#xa;- optionally derive remediation handoff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="315" y="350" width="300" height="165" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-rp-crd" value="RemediationPlan CRD&#xa;target&#xa;type / actionType&#xa;severity / parameters&#xa;confidence / dryRun&#xa;evidence / ttl" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="150" width="300" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-rp-ctrl" value="RemediationPlan Controller&#xa;- evaluate plan via guardrails&#xa;- attach rollback and dry-run output&#xa;- create AgentAction or block" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="350" width="300" height="165" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-aa-crd" value="AgentAction CRD&#xa;target&#xa;type / actionType&#xa;severity / parameters&#xa;confidence / dryRun&#xa;evidence / ttl" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffedd5;strokeColor=#f97316;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1085" y="150" width="300" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-aa-ctrl" value="AgentAction Controller&#xa;- hold WaitingApproval when needed&#xa;- execute approved actions only&#xa;- persist execution phase and result" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f97316;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1085" y="350" width="300" height="165" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-right" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1fae5;strokeColor=#16a34a;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="1510" y="98" width="350" height="385" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-right-title" value="External Output Systems" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="1580" y="123" width="210" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-rec" value="Notification Outputs&#xa;- webhook / ChatOps preview&#xa;- incident summary and RCA draft&#xa;- suggested next steps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1535" y="178" width="300" height="118" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-guarded" value="Optional Guarded Actions&#xa;- kubernetes.*&#xa;- gitops.*&#xa;- runbook.*&#xa;- notification.*" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f97316;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1535" y="311" width="300" height="118" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-guardrails" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="180" y="660" width="1120" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-guardrails-title" value="Guardrails / Security / Governance (Policy Engine)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;fontColor=#ef4444;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="685" width="640" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-g-1" value="Policy &amp;amp; Compliance" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="205" y="728" width="205" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-g-2" value="Risk &amp;amp; Impact Evaluation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="728" width="205" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-g-3" value="Approval &amp;amp; Human-in-the-Loop" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="635" y="728" width="205" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-g-4" value="Execution Safeguards" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="850" y="728" width="205" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-g-5" value="Audit &amp;amp; Logging" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1065" y="728" width="205" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-exec" value="Action Executor&#xa;- route approved actions&#xa;- dispatch to adapter executors&#xa;- update execution state" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffedd5;strokeColor=#f97316;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1350" y="660" width="200" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-feedback-1" value="Reference / Audit Feedback&#xa;Runbooks, policies, findings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="860" width="285" height="92" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-feedback-2" value="Status &amp;amp; Audit Store&#xa;CRD state, events, approvals" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="430" y="860" width="285" height="92" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-feedback-3" value="Observability &amp;amp; Monitoring&#xa;Metrics, traces, dashboards" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="770" y="860" width="285" height="92" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-feedback-4" value="Notifications &amp;amp; Integrations&#xa;Alerting, ticketing, webhooks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1110" y="860" width="285" height="92" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-legend" value="Data Flow            Control Flow            Reference / Audit Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;spacingLeft=115;" parent="1" vertex="1">
+                    <mxGeometry x="25" y="1000" width="800" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-purpose" value="Purpose: turn RiskSignal, RemediationPlan, and AgentAction into auditable workflow states so detection, approval, and execution stay separated." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=75;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="995" width="1040" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-ai" target="p23-rs-crd" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-rs-crd" target="p23-rp-crd" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-rp-crd" target="p23-aa-crd" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-rs-crd" target="p23-rs-ctrl" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-rp-crd" target="p23-rp-ctrl" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-aa-crd" target="p23-aa-ctrl" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-c1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-rs-ctrl" target="p23-guardrails" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-c2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-rp-ctrl" target="p23-guardrails" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-c3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-aa-ctrl" target="p23-guardrails" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-c4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-guardrails" target="p23-exec" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-c5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;entryX=0.5;entryY=1;entryDx=0;entryDy=0;fontFamily=Comic Sans MS;" parent="1" source="p23-exec" target="p23-right" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1685" y="750"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="p23-c6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p23-aa-crd" target="p23-rec" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-r1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;dashPattern=8 8;strokeColor=#64748b;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" source="p23-feedback-1" target="p23-feedback-2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-r2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;dashPattern=8 8;strokeColor=#64748b;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" source="p23-feedback-2" target="p23-feedback-3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-r3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;dashPattern=8 8;strokeColor=#64748b;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" source="p23-feedback-3" target="p23-feedback-4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-r4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;dashPattern=8 8;strokeColor=#64748b;strokeWidth=2;fontFamily=Comic Sans MS;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="p23-feedback-4" target="p23-exec" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="2i5BMhiH1TgL2fbBNELg-1" value="" style="group;fontFamily=Comic Sans MS;" parent="1" vertex="1" connectable="0">
+                    <mxGeometry x="1810" y="520" width="310" height="285" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-state" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;strokeWidth=2;fontFamily=Comic Sans MS;" parent="2i5BMhiH1TgL2fbBNELg-1" vertex="1">
+                    <mxGeometry width="310" height="285" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-state-title" value="Example AgentAction States" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=16;" parent="2i5BMhiH1TgL2fbBNELg-1" vertex="1">
+                    <mxGeometry x="55" y="20" width="200" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-st-1" value="WaitingApproval" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="2i5BMhiH1TgL2fbBNELg-1" vertex="1">
+                    <mxGeometry x="50" y="65" width="210" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-st-2" value="Approved" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="2i5BMhiH1TgL2fbBNELg-1" vertex="1">
+                    <mxGeometry x="50" y="110" width="210" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-st-3" value="Rejected" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="2i5BMhiH1TgL2fbBNELg-1" vertex="1">
+                    <mxGeometry x="50" y="155" width="210" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-st-4" value="Executing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="2i5BMhiH1TgL2fbBNELg-1" vertex="1">
+                    <mxGeometry x="50" y="200" width="210" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p23-st-5" value="Succeeded / Failed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="2i5BMhiH1TgL2fbBNELg-1" vertex="1">
+                    <mxGeometry x="50" y="245" width="210" height="30" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram name="Layer 2-4" id="layer-2-4">
+        <mxGraphModel dx="1080" dy="18" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p24-title" value="Kubernetes-native AI SRE Agent - Layer 2-4" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=34;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="20" width="1080" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-subtitle" value="Guardrails, Approval &amp;amp; Safety Boundary (4 of 5)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;fontColor=#2563eb;" parent="1" vertex="1">
+                    <mxGeometry x="570" y="70" width="780" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="zzUQg8oyE7ty4890eVy1-1" style="edgeStyle=orthogonalEdgeStyle;shape=connector;rounded=0;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#2563eb;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=11;fontColor=default;labelBackgroundColor=default;endArrow=block;endFill=1;" edge="1" parent="1" source="p24-left" target="p24-main">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-left" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#ff4d4f;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="10" y="8" width="270" height="594" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-left-title" value="Inputs from Control Layer" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="38" width="210" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-in-1" value="RiskSignal&#xa;severity / confidence" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="103" width="230" height="74" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-in-2" value="RemediationPlan&#xa;impact / proposed actions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="199" width="230" height="74" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-in-3" value="AgentAction&#xa;actionType / payload" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="295" width="230" height="74" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-in-4" value="Target&#xa;namespace / resource / environment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="391" width="230" height="74" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-in-5" value="EvidenceBundle&#xa;metrics / logs / traces / events" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="487" width="230" height="74" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-main" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="345" y="125" width="1110" height="360" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-main-title" value="Guardrails / Security / Governance" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=28;" parent="1" vertex="1">
+                    <mxGeometry x="630" y="150" width="540" height="36" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-n1" value="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ef4444;strokeColor=#ef4444;fontColor=#ffffff;fontStyle=1;fontSize=18;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="372" y="205" width="34" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-b1" value="Policy &amp;amp; Compliance&#xa;- opt-in workload requirement&#xa;- protected namespace checks&#xa;- actionType allowlist&#xa;- environment protection" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="365" y="205" width="200" height="185" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-n2" value="2" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ef4444;strokeColor=#ef4444;fontColor=#ffffff;fontStyle=1;fontSize=18;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="588" y="205" width="34" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-b2" value="Risk &amp;amp; Impact Evaluation&#xa;- blast radius&#xa;- business impact&#xa;- rollback feasibility&#xa;- confidence threshold" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="580" y="205" width="200" height="185" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-n3" value="3" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ef4444;strokeColor=#ef4444;fontColor=#ffffff;fontStyle=1;fontSize=18;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="804" y="205" width="34" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-b3" value="Dry-run &amp;amp; Validation&#xa;- schema validation&#xa;- target existence&#xa;- canary / safe simulation&#xa;- prerequisite checks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="795" y="205" width="200" height="185" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-n4" value="4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ef4444;strokeColor=#ef4444;fontColor=#ffffff;fontStyle=1;fontSize=18;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="1020" y="205" width="34" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-b4" value="Approval Routing&#xa;- auto approve low risk&#xa;- human approval medium / high risk&#xa;- protected namespace escalation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1010" y="205" width="200" height="185" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-n5" value="5" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ef4444;strokeColor=#ef4444;fontColor=#ffffff;fontStyle=1;fontSize=18;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="1236" y="205" width="34" height="34" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-b5" value="Audit &amp;amp; Logging&#xa;- decision log&#xa;- approval trail&#xa;- execution audit&#xa;- immutable storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1225" y="205" width="200" height="185" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-auto" value="Auto Approve (Low Risk)&#xa;- meets policy and low risk threshold" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+                    <mxGeometry x="350" y="520" width="230" height="105" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-need" value="Need Approval (Medium / High Risk)&#xa;- requires human review and approval" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#f59e0b;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+                    <mxGeometry x="765" y="520" width="260" height="105" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-reject" value="Reject / Block&#xa;- policy violation&#xa;- unsafe or insufficient information" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+                    <mxGeometry x="1210" y="520" width="230" height="105" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-human" value="Human Approval&#xa;- required for medium / high risk&#xa;- escalated for protected targets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+                    <mxGeometry x="715" y="680" width="360" height="115" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-right" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1fae5;strokeColor=#16a34a;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="1540" y="125" width="300" height="475" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-right-title" value="Approved Output to Executor" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="1575" y="155" width="230" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-f1" value="actionType" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1570" y="230" width="240" height="44" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-f2" value="target" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1570" y="286" width="240" height="44" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-f3" value="approvedBy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1570" y="342" width="240" height="44" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-f4" value="dryRunResult" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1570" y="398" width="240" height="44" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-f5" value="rollbackPlan" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1570" y="454" width="240" height="44" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-f6" value="ttl" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1570" y="510" width="240" height="44" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-audit" value="Audit Store / Guardrails History&#xa;Immutable records of decisions, approvals and policy results" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;dashed=1;dashPattern=8 8;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1740" y="817.5" width="300" height="125" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-cross" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="180" y="830" width="1090" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-cross-title" value="Cross-Cutting Safety Controls" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="845" width="410" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-pill-1" value="Least Privilege" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="210" y="885" width="150" height="38" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-pill-2" value="Separation of Duties" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="385" y="885" width="150" height="38" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-pill-3" value="Approval Timeout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="885" width="150" height="38" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-pill-4" value="Rate Limiting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="735" y="885" width="150" height="38" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-pill-5" value="Policy Versioning" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="910" y="885" width="150" height="38" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-pill-6" value="Tamper-evident Logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1085" y="885" width="150" height="38" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-matrix" value="Approval Decision Matrix&#xa;Low      -&amp;gt; Auto Approve&#xa;Medium   -&amp;gt; Human Approval&#xa;High     -&amp;gt; Human Approval&#xa;Unsafe   -&amp;gt; Reject" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#3b82f6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1320" y="830" width="380" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-legend" value="Data Flow            Control Flow            Reference / Audit Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;spacingLeft=115;" parent="1" vertex="1">
+                    <mxGeometry x="25" y="1000" width="800" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-purpose" value="Purpose: ensure every action is policy-checked, explainable, approved when needed, and auditable before execution." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=75;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="995" width="1040" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-a1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p24-b1" target="p24-auto" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-a2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p24-b3" target="p24-need" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-a3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p24-b5" target="p24-reject" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-a4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="p24-auto" target="p24-human" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="465" y="748"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="p24-a5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p24-need" target="p24-human" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-a6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p24-human" target="p24-right" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-a7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p24-reject" target="p24-right" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p24-r1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;dashPattern=8 8;strokeColor=#64748b;strokeWidth=2;fontFamily=Comic Sans MS;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="p24-right" target="p24-audit" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram name="Layer 2-5" id="layer-2-5">
+        <mxGraphModel dx="2080" dy="1489" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p25-title" value="Kubernetes-native AI SRE Agent - Layer 2-5" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=34;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="20" width="1080" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-subtitle" value="Executor Router &amp;amp; Side-effect Boundary (5 of 5)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;fontColor=#2563eb;" parent="1" vertex="1">
+                    <mxGeometry x="665" y="70" width="590" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-left" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#ff4d4f;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="30" y="125" width="310" height="775" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-left-title" value="Approved AgentAction" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="85" y="150" width="200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-f1" value="actionType&#xa;e.g. kubernetes.rolloutPause" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="52" y="205" width="265" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-f2" value="targetResource&#xa;e.g. Deployment / my-app" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="52" y="276" width="265" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-f3" value="parameters&#xa;key:value map" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="52" y="347" width="265" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-f4" value="approvedBy&#xa;sre-bot / user@company.com" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="52" y="418" width="265" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-f5" value="dryRunResult&#xa;simulation output / diff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="52" y="489" width="265" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-f6" value="rollbackPlan&#xa;steps / commands" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="52" y="560" width="265" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-f7" value="ttl&#xa;ISO8601 timestamp / duration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="52" y="631" width="265" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-core" value="Action Executor Core&#xa;&#xa;- accept approved actions only&#xa;- route by actionType prefix&#xa;- dispatch to backend executors&#xa;- write execution status&#xa;- simulation-first except notification" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#f59e0b;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="430" y="130" width="980" height="160" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-ex1" value="KubernetesExecutor&#xa;- simulate rollout pause / scale&#xa;- return execution metadata&#xa;- no live mutation in v0.1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="360" width="220" height="245" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-ex2" value="GitOpsExecutor&#xa;- simulate pull request change&#xa;- return branch metadata&#xa;- keep CRD contract stable" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+                    <mxGeometry x="640" y="360" width="220" height="245" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-ex3" value="RunbookExecutor&#xa;- simulate workflow trigger&#xa;- return workflow metadata&#xa;- keep approval boundary intact" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="360" width="220" height="245" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-ex4" value="NotificationExecutor&#xa;- send webhook notification&#xa;- fan out to ChatOps / portal&#xa;- current real outbound path" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffedd5;strokeColor=#f97316;strokeWidth=2;fontFamily=Comic Sans MS;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+                    <mxGeometry x="1160" y="360" width="220" height="245" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-right" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1fae5;strokeColor=#16a34a;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="1510" y="125" width="350" height="520" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-right-title" value="Outbound Targets / External Systems" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="1555" y="150" width="260" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-t1" value="Webhook Endpoint&#xa;notification callback / integration URL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1535" y="210" width="300" height="74" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-t2" value="Ticket / ITSM&#xa;ServiceNow / Jira / incident tracking" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1535" y="302" width="300" height="74" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-t3" value="ChatOps Channel&#xa;Slack / Teams / LINE / group messaging" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1535" y="394" width="300" height="74" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-t4" value="Portal / Dashboard&#xa;status page / incident portal / console" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1535" y="486" width="300" height="74" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-t5" value="Audit / Integration Sink&#xa;webhook relay / archive / downstream system" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1535" y="578" width="300" height="74" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-bottom" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="330" y="700" width="1160" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-b1" value="Update AgentAction Status&#xa;Persist state, result summary, timestamps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="350" y="725" width="255" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-b2" value="Audit Log&#xa;Record who, what, when, where and outcome" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="630" y="725" width="255" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-b3" value="Execution Metrics&#xa;Latency, success rate, error rate and retries" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="910" y="725" width="255" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-b4" value="Notification Result&#xa;Notify stakeholders of outcome and next steps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1190" y="725" width="255" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-example" value="Example actionType&#xa;- kubernetes.scaleDeployment&#xa;- kubernetes.rolloutPause&#xa;- gitops.createPullRequest&#xa;- runbook.triggerWorkflow&#xa;- notification.sendSlack" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;dashed=1;dashPattern=8 8;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="1530" y="695" width="320" height="125" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-cross" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="860" width="1500" height="105" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-cross-title" value="Execution Safeguards (Cross-Cutting)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Comic Sans MS;fontStyle=1;fontSize=18;" parent="1" vertex="1">
+                    <mxGeometry x="665" y="875" width="570" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-pill-1" value="Idempotency" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="230" y="900" width="215" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-pill-2" value="TTL / Timeout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="470" y="900" width="215" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-pill-3" value="Retry Policy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="710" y="900" width="215" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-pill-4" value="Rollback Hook" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="950" y="900" width="215" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-pill-5" value="Least Privilege" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1190" y="900" width="215" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-pill-6" value="Immutable Audit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontStyle=1;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1430" y="900" width="215" height="42" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-legend" value="Data Flow            Control Flow            Reference / Audit Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;dashed=1;dashPattern=6 6;fontFamily=Comic Sans MS;fontStyle=1;fontSize=12;spacingLeft=115;" parent="1" vertex="1">
+                    <mxGeometry x="25" y="1000" width="800" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-purpose" value="Purpose: route approved actions to backend executors, keep execution auditable, and stay simulation-first in v0.1 except for notification." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;fontFamily=Comic Sans MS;fontSize=12;spacingLeft=75;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="995" width="1040" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-left" target="p25-core" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-core" target="p25-ex1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-core" target="p25-ex2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-core" target="p25-ex3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-core" target="p25-ex4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-ex1" target="p25-bottom" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-ex2" target="p25-bottom" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-ex3" target="p25-bottom" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-ex4" target="p25-bottom" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-core" target="p25-right" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-ex4" target="p25-t2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-ex4" target="p25-t3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-ex4" target="p25-t4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-e14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#f97316;strokeWidth=3;fontFamily=Comic Sans MS;" parent="1" source="p25-ex4" target="p25-t5" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p25-r1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;jettySize=auto;html=1;endArrow=block;endFill=1;dashed=1;dashPattern=8 8;strokeColor=#64748b;strokeWidth=2;fontFamily=Comic Sans MS;" parent="1" source="p25-example" target="p25-b4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

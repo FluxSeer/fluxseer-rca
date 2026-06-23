@@ -15,6 +15,23 @@ The router dispatches by action prefix:
 
 This keeps the `AgentAction` CRD stable while allowing multiple execution backends.
 
+## Execution Role
+
+The executor layer is the side-effect boundary of the system.
+
+The intended handoff is:
+
+```text
+AgentAction
+→ AgentActionReconciler
+→ Executor Router
+→ Backend-specific Executor
+→ Execution Result
+→ Status / Audit
+```
+
+This means controllers and model providers do not need to know how a Kubernetes action, GitOps change, runbook trigger, or notification is actually performed.
+
 ## Current Executors
 
 ### Kubernetes Executor
@@ -37,6 +54,33 @@ This keeps the `AgentAction` CRD stable while allowing multiple execution backen
 - can send a real webhook when `FLUXAGENT_WEBHOOK_URL` is configured
 - source: [internal/executor/notification.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/executor/notification.go:1)
 
+## Architecture Diagram
+
+```mermaid
+flowchart LR
+    AA[AgentAction]
+    AAR[AgentActionReconciler]
+    RT[Executor Router]
+    KX[Kubernetes Executor]
+    GX[GitOps Executor]
+    RX[Runbook Executor]
+    NX[Notification Executor]
+    ER[Execution Result]
+    ST[Status / Audit]
+
+    AA --> AAR
+    AAR -->|approved only| RT
+    RT -->|kubernetes.*| KX
+    RT -->|gitops.*| GX
+    RT -->|runbook.*| RX
+    RT -->|notification.*| NX
+    KX --> ER
+    GX --> ER
+    RX --> ER
+    NX --> ER
+    ER --> ST
+```
+
 ## Why This Layer Exists
 
 Without a dedicated executor layer, the controller or model logic would need to know:
@@ -47,6 +91,17 @@ Without a dedicated executor layer, the controller or model logic would need to 
 - how to persist execution results
 
 That would couple reasoning, policy, and side effects together. FluxAgent avoids that.
+
+## Execution Contract Expectations
+
+Live executors should eventually support:
+
+- dry-run semantics where possible
+- idempotent behavior for retry safety
+- timeout and retry policy
+- structured execution result status
+- rollback hints
+- audit-friendly metadata
 
 ## Current Production Posture
 

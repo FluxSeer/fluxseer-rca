@@ -16,6 +16,23 @@ GOWORK=off go run ./cmd/manager --enable-remediation=true
 
 The wiring lives in [internal/operatorapp/run.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/operatorapp/run.go:1).
 
+## Flow Summary
+
+The remediation path is:
+
+```text
+RiskSignal
+→ Plan Derivation
+→ RemediationPlan
+→ Guardrails
+→ Approval
+→ AgentAction
+→ Executor
+→ Status / Audit
+```
+
+This is a separate, opt-in control path. Detection and execution are not a single direct pipeline.
+
 ## Controller Chain
 
 ### 1. `RiskSignalReconciler`
@@ -28,6 +45,11 @@ Responsibilities:
 - derive one `RemediationPlan`
 - carry over severity, confidence, TTL, target, and evidence references
 - build an initial step from `spec.actionType`
+
+Current posture:
+
+- plan derivation is controller-driven in the current repo
+- richer reasoning through the model gateway is an intended seam, not a required runtime dependency for `v0.1`
 
 ### 2. `RemediationPlanReconciler`
 
@@ -62,6 +84,13 @@ Current policy behavior:
 - require manual approval for high severity against protected namespaces
 - reject unsupported or unsafe severities
 
+Guardrails also exist to prevent:
+
+- direct model-to-cluster mutation
+- non-allowlisted action routing
+- bypass of approval on destructive or higher-risk actions
+- remediation against protected targets without explicit policy allowance
+
 Default allowlisted action types:
 
 - `kubernetes.scaleDeployment`
@@ -81,32 +110,37 @@ Typical status progression:
 5. `AgentAction`: `Executing`
 6. `AgentAction`: `Succeeded` or `Failed`
 
-## Sequence Diagram
+The CRDs in this flow are workflow state carriers, not passive records. Each controller owns one state transition boundary.
+
+## Architecture Diagram
 
 ```mermaid
-sequenceDiagram
-    participant RS as RiskSignal
-    participant RSR as RiskSignalReconciler
-    participant RP as RemediationPlan
-    participant RPR as RemediationPlanReconciler
-    participant G as Guardrails
-    participant AA as AgentAction
-    participant AAR as AgentActionReconciler
-    participant X as Executor Router
+flowchart LR
+    RS[RiskSignal]
+    RSR[RiskSignalReconciler]
+    RP[RemediationPlan]
+    MG[Model Gateway<br/>optional reasoning seam]
+    RPR[RemediationPlanReconciler]
+    G[Guardrails]
+    AP[Approval Decision]
+    AA[AgentAction]
+    AAR[AgentActionReconciler]
+    X[Executor Router]
+    AU[Status / Audit]
 
-    RS->>RSR: reconcile
-    RSR->>RP: create or update plan
-    RP->>RPR: reconcile
-    RPR->>G: evaluate(policy, severity, target)
-    G-->>RPR: auto / manual / reject
-    RPR->>AA: create or update action
-    AA->>AAR: reconcile
-    alt approved
-        AAR->>X: execute(actionType)
-        X-->>AAR: execution result
-    else waiting approval
-        AAR-->>AA: keep WaitingApproval
-    end
+    RS --> RSR
+    RSR --> RP
+    MG -. enrich / format .-> RP
+    RP --> RPR
+    RPR --> G
+    G --> AP
+    AP -->|approved| AA
+    AP -->|waiting approval| AA
+    AP -->|rejected| AU
+    AA --> AAR
+    AAR -->|approved only| X
+    X --> AU
+    AA --> AU
 ```
 
 ## Important Limitation

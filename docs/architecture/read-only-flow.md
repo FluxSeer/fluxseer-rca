@@ -18,6 +18,21 @@ Default behavior:
 - register webhook notification controller when `FLUXAGENT_WEBHOOK_URL` is set
 - keep remediation disabled unless `--enable-remediation=true`
 
+## Flow Summary
+
+The default runtime path is:
+
+```text
+Signal Sources
+→ Datasource Adapters
+→ Detection Service
+→ Finding
+→ RiskSignal
+→ Notification
+```
+
+This path is intentionally separate from remediation. It is designed to detect and report risk, not to execute change.
+
 ## Resource Selection
 
 The controller watches all `Deployment` resources, but detection only runs for workloads annotated with:
@@ -46,6 +61,17 @@ See [examples/sample-app/deployment.yaml](/Users/czhuang/Chongzhe-workspace/Home
 5. A `RiskSignal` object is created or updated.
 6. `RiskSignalNotificationReconciler` sends a webhook notification once.
 7. The `RiskSignal` status moves to `Confirmed`, then `Notified` when webhook delivery succeeds.
+
+## Workflow State
+
+In this path, the `RiskSignal` CRD is the workflow state carrier.
+
+Typical progression:
+
+1. `RiskSignal`: `Confirmed`
+2. `RiskSignal`: `Notified`
+
+If remediation is later enabled, the same `RiskSignal` may become the upstream input to a separate guarded flow. That does not change the fact that the default path is read-only.
 
 ## Signal Semantics
 
@@ -76,32 +102,42 @@ The generated `RiskSignal` currently contains:
 
 That last field is a contract placeholder. It allows downstream guarded flows to reuse the same CRD shape without meaning that production remediation has already happened.
 
-## Sequence Diagram
+## Architecture Diagram
 
 ```mermaid
-sequenceDiagram
-    participant K8s as Deployment Watch
-    participant C as DeploymentRiskReconciler
-    participant D as detector.Service
-    participant P as Prometheus Adapter
-    participant L as Loki Adapter
-    participant E as K8s Events Adapter
-    participant R as RiskSignal
-    participant N as Notification Reconciler
-    participant W as Webhook
+flowchart LR
+    subgraph Sources[Signal Sources]
+        KE[Kubernetes Events]
+        PM[Prometheus]
+        LO[Loki]
+        DC[Deployment Context]
+    end
 
-    K8s->>C: Deployment reconcile
-    C->>D: Detect(target, labels, annotations)
-    D->>P: query_range
-    D->>L: query_range
-    D->>E: list namespace events
-    P-->>D: metric evidence
-    L-->>D: log evidence
-    E-->>D: event evidence
-    D-->>C: merged finding
-    C->>R: create or update
-    R->>N: reconcile
-    N->>W: POST notification payload
+    subgraph Detection[Read-only Detection Path]
+        AD[Datasource Adapters]
+        DR[DeploymentRiskReconciler]
+        DS[detector.Service]
+        FI[Finding]
+        RS[RiskSignal]
+        NR[Notification Reconciler]
+        WH[Webhook]
+    end
+
+    subgraph Boundary[Safety Boundary]
+        RO[Read-only only]
+    end
+
+    KE --> AD
+    PM --> AD
+    LO --> AD
+    DC --> DR
+    DR --> DS
+    AD --> DS
+    DS --> FI
+    FI --> RS
+    RS --> NR
+    NR --> WH
+    RS -. no default remediation .-> RO
 ```
 
 ## Safety Boundary
@@ -114,4 +150,4 @@ This mode does not:
 - create `RemediationPlan`
 - create `AgentAction`
 
-That boundary is the reason `v0.1` is safe to describe publicly as a read-only operator.
+This boundary is the reason `v0.1` is safe to describe publicly as a read-only operator rather than an autonomous remediation system.
