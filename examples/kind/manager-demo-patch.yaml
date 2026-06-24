@@ -9,10 +9,6 @@ spec:
         - name: manager
           image: fluxagent/operator:latest
           env:
-            - name: FLUXAGENT_PROMETHEUS_URL
-              value: http://fluxagent-observability:8080
-            - name: FLUXAGENT_LOKI_URL
-              value: http://fluxagent-observability:8080
             - name: FLUXAGENT_WEBHOOK_URL
               value: http://fluxagent-observability:8080/demo/webhook
             - name: FLUXAGENT_SCAN_INTERVAL
