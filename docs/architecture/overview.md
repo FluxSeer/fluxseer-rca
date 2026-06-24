@@ -14,6 +14,17 @@ Guarded remediation is an optional expansion path. Only when it is explicitly en
 - pluggable model providers
 - guarded remediation
 - auditable execution
+- optional external dependencies
+
+## Dependency Model
+
+FluxAgent treats dependencies in three separate categories:
+
+- runtime dependency: only Kubernetes is required for operator mode; Prometheus, Loki, and external model APIs are optional
+- compile-time dependency: controllers and adapters may import Kubernetes or provider-specific packages, but core evaluation and reasoning should stay expressed through FluxAgent domain types
+- deployment dependency: FluxAgent manifests install FluxAgent itself, not a full monitoring stack on the user's behalf
+
+That distinction matters because the project goal is integration without structural lock-in.
 
 ## High-level Architecture
 
@@ -38,11 +49,14 @@ Each adapter implements the same contract:
 ```go
 type DataSource interface {
     Name() string
-    Type() domain.QueryType
+    Type() string
+    Capabilities() Capabilities
     Query(ctx context.Context, req QueryRequest) (*QueryResult, error)
     HealthCheck(ctx context.Context) error
 }
 ```
+
+This is the current interface. It is now capability-oriented, so rule evaluation can validate requested query types against adapter support before issuing queries.
 
 Current adapters:
 
@@ -53,6 +67,8 @@ Current adapters:
 - CloudWatch scaffold
 
 This is the primary extensibility seam for observability integrations. The core detection path depends on the contract, not on provider-specific query code.
+
+See [dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1) for the staged direction toward capabilities, standardized query results, and future datasource resources.
 
 ### 3. Detection Service Layer
 
@@ -76,6 +92,8 @@ Key files:
 - `internal/detector/service.go`
 - `internal/controllers/risksignal_notification_controller.go`
 
+This layer should continue to consume FluxAgent-owned evidence and domain types rather than pass Kubernetes objects or vendor SDK payloads deep into the system.
+
 ### 4. CRD Contract Layer
 
 FluxAgent exposes its workflow through Kubernetes-native CRDs:
@@ -83,6 +101,8 @@ FluxAgent exposes its workflow through Kubernetes-native CRDs:
 - `RiskSignal`
 - `RemediationPlan`
 - `AgentAction`
+
+`v0.2` adds `RiskRule` and `ModelProvider` as read-only RCA configuration contracts.
 
 The API group is `aiops.platform/v1alpha1`.
 
@@ -118,6 +138,8 @@ Current providers:
 - local scaffold
 
 The runnable repo defaults to the heuristic provider so the project stays usable without external secrets. The model gateway is a reasoning seam, not an execution authority.
+
+This is the same dependency-neutrality principle as datasources: model vendors are integrations, not core architecture assumptions.
 
 ### 6. Guardrails Layer
 
