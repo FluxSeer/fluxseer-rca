@@ -15,6 +15,12 @@ var (
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(
 		SchemeGroupVersion,
+		&DataSource{},
+		&DataSourceList{},
+		&ModelProvider{},
+		&ModelProviderList{},
+		&RiskRule{},
+		&RiskRuleList{},
 		&RiskSignal{},
 		&RiskSignalList{},
 		&RemediationPlan{},

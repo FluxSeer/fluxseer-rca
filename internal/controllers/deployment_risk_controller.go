@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -70,6 +71,15 @@ func (r *DeploymentRiskReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if err := controllerutil.SetControllerReference(&deployment, riskSignal, r.Scheme); err != nil {
 			return err
 		}
+		if riskSignal.Labels == nil {
+			riskSignal.Labels = map[string]string{}
+		}
+		if riskSignal.Annotations == nil {
+			riskSignal.Annotations = map[string]string{}
+		}
+		riskSignal.Labels[labelManagedBy] = "deployment-risk-controller"
+		riskSignal.Annotations[annotationTargetRef] = fmt.Sprintf("%s/%s", deployment.Namespace, deployment.Name)
+		riskSignal.Annotations[annotationDetectionSource] = "deployment-annotation"
 
 		evidence := make([]v1alpha1.EvidenceRef, 0, len(finding.Evidence))
 		for _, item := range finding.Evidence {
@@ -113,7 +123,7 @@ func (r *DeploymentRiskReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	original := riskSignal.DeepCopy()
-	setResourceStatus(&riskSignal.Status, v1alpha1.PhaseConfirmed, finding.Summary, riskSignal.Generation, now())
+	setRiskSignalStatus(&riskSignal.Status, v1alpha1.PhaseConfirmed, finding.Summary, riskSignal.Generation, now())
 	if statusChangedRiskSignal(original, riskSignal) {
 		if err := r.Status().Update(ctx, riskSignal); err != nil && !apierrors.IsConflict(err) {
 			return ctrl.Result{}, err
@@ -139,6 +149,9 @@ func (r *DeploymentRiskReconciler) requeueAfter() time.Duration {
 
 func deploymentToResource(deployment appsv1.Deployment) domain.ResourceRef {
 	service := deployment.Labels["app"]
+	if service == "" {
+		service = deployment.Spec.Template.Labels["app"]
+	}
 	if service == "" {
 		service = deployment.Name
 	}

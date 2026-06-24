@@ -144,10 +144,15 @@ func buildRiskSignal(input domain.IngestionOutput, reasoning domain.ReasoningOut
 			Evidence:   evidence,
 			Parameters: reasoning.Remediation.Parameters,
 		},
-		Status: v1alpha1.ResourceStatus{
-			Phase:     v1alpha1.PhaseRecommendation,
-			Message:   reasoning.RiskSummary,
-			UpdatedAt: metav1.NewTime(now),
+		Status: v1alpha1.RiskSignalStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{
+				Phase:     v1alpha1.PhaseRecommendation,
+				Message:   reasoning.RiskSummary,
+				UpdatedAt: metav1.NewTime(now),
+			},
+			RCASummary:    reasoning.RiskSummary,
+			RCAHypothesis: reasoning.RCA.Hypothesis,
+			RCAProvider:   reasoning.Provider,
 		},
 	}
 }

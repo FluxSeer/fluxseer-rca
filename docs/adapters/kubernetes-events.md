@@ -2,6 +2,8 @@
 
 Kubernetes Events are the only datasource wired by default, because they rely on the controller-runtime client already present inside the operator.
 
+They can also be represented as a `DataSource` resource for consistency with the adapter-neutral config path, but the in-cluster adapter remains the built-in baseline.
+
 ## Runtime Wiring
 
 The adapter is always registered by the manager.

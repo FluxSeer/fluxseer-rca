@@ -4,13 +4,19 @@ FluxAgent uses Prometheus as an optional metric datasource for read-only detecti
 
 ## Runtime Wiring
 
-The adapter is registered only when:
+The adapter is registered when either:
+
+- `FLUXAGENT_PROMETHEUS_URL` is set
+- a `DataSource` resource of type `prometheus` is present
+
+Env-based example:
 
 ```bash
 export FLUXAGENT_PROMETHEUS_URL=http://your-prometheus.example
 ```
 
 Registration source: [internal/operatorapp/run.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/operatorapp/run.go:1)
+Resource loader: [internal/datasourceconfig/loader.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/datasourceconfig/loader.go:1)
 
 Implementation source: [internal/datasource/prometheus/adapter.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/datasource/prometheus/adapter.go:1)
 

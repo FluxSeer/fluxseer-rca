@@ -47,6 +47,20 @@ type ResourceStatus struct {
 	UpdatedAt          metav1.Time `json:"updatedAt,omitempty"`
 }
 
+type RCACause struct {
+	Cause      string `json:"cause,omitempty"`
+	Confidence int    `json:"confidence,omitempty"`
+}
+
+type RiskSignalStatus struct {
+	ResourceStatus `json:",inline"`
+	RCASummary     string             `json:"rcaSummary,omitempty"`
+	RCAHypothesis  string             `json:"rcaHypothesis,omitempty"`
+	RCAProvider    string             `json:"rcaProvider,omitempty"`
+	RCACauses      []RCACause         `json:"rcaCauses,omitempty"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+}
+
 type RiskSignalSpec struct {
 	Target     TargetRef         `json:"target"`
 	SignalType string            `json:"signalType"`
@@ -93,8 +107,8 @@ type RiskSignal struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   RiskSignalSpec `json:"spec,omitempty"`
-	Status ResourceStatus `json:"status,omitempty"`
+	Spec   RiskSignalSpec   `json:"spec,omitempty"`
+	Status RiskSignalStatus `json:"status,omitempty"`
 }
 
 type RiskSignalList struct {
@@ -143,6 +157,13 @@ func (in *RiskSignal) DeepCopyInto(out *RiskSignal) {
 		for key, value := range in.Spec.Parameters {
 			out.Spec.Parameters[key] = value
 		}
+	}
+	if in.Status.RCACauses != nil {
+		out.Status.RCACauses = append([]RCACause(nil), in.Status.RCACauses...)
+	}
+	if in.Status.Conditions != nil {
+		out.Status.Conditions = make([]metav1.Condition, len(in.Status.Conditions))
+		copy(out.Status.Conditions, in.Status.Conditions)
 	}
 }
 

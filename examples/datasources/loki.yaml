@@ -1,0 +1,8 @@
+apiVersion: aiops.platform/v1alpha1
+kind: DataSource
+metadata:
+  name: loki
+spec:
+  type: loki
+  endpoint: http://fluxagent-observability:8080
+  timeout: 10s

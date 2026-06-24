@@ -1,6 +1,7 @@
 package operatorapp
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -23,9 +24,14 @@ import (
 	lokiadapter "fluxagent/internal/datasource/loki"
 	oteladapter "fluxagent/internal/datasource/opentelemetry"
 	promadapter "fluxagent/internal/datasource/prometheus"
+	"fluxagent/internal/datasourceconfig"
 	"fluxagent/internal/detector"
 	"fluxagent/internal/executor"
 	"fluxagent/internal/guardrails"
+	"fluxagent/internal/knowledge"
+	"fluxagent/internal/model"
+	"fluxagent/internal/model/heuristic"
+	"fluxagent/internal/modelgateway"
 	"fluxagent/internal/notifier/webhook"
 )
 
@@ -85,6 +91,16 @@ func Run(args []string, out io.Writer) error {
 	registry := datasource.NewRegistry(
 		k8sadapter.Adapter{Client: mgr.GetClient()},
 	)
+	modelProviders := model.NewRegistry(
+		heuristic.Provider{},
+	)
+	gateway := &modelgateway.Gateway{
+		Base:      knowledge.NewBase(),
+		Providers: modelProviders,
+	}
+	resolver := modelgateway.KubeResolver{
+		Client: mgr.GetClient(),
+	}
 	if url := os.Getenv("FLUXAGENT_PROMETHEUS_URL"); url != "" {
 		registry.Register(promadapter.Adapter{BaseURL: url})
 	}
@@ -97,7 +113,17 @@ func Run(args []string, out io.Writer) error {
 	if region := os.Getenv("FLUXAGENT_CLOUDWATCH_REGION"); region != "" {
 		registry.Register(cwadapter.Adapter{Region: region})
 	}
+	if err := datasourceconfig.RegisterFromResources(context.Background(), mgr.GetAPIReader(), registry, mgr.GetClient()); err != nil {
+		return fmt.Errorf("unable to register datasource resources: %w", err)
+	}
 	detectionInterval := parseDurationEnv("FLUXAGENT_SCAN_INTERVAL", 30*time.Second)
+
+	if err := (&controllers.DataSourceReconciler{
+		Client:    mgr.GetClient(),
+		APIReader: mgr.GetAPIReader(),
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to create DataSource controller: %w", err)
+	}
 
 	if err := (&controllers.DeploymentRiskReconciler{
 		Client: mgr.GetClient(),
@@ -108,6 +134,16 @@ func Run(args []string, out io.Writer) error {
 		Interval: detectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create DeploymentRisk controller: %w", err)
+	}
+
+	if err := (&controllers.RiskRuleReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Registry: registry,
+		Resolver: resolver,
+		Gateway:  gateway,
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to create RiskRule controller: %w", err)
 	}
 
 	if webhookURL := os.Getenv("FLUXAGENT_WEBHOOK_URL"); webhookURL != "" {

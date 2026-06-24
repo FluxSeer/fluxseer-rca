@@ -22,8 +22,16 @@ func (a Adapter) Name() string {
 	return "prometheus"
 }
 
-func (a Adapter) Type() domain.QueryType {
-	return domain.QueryTypeMetric
+func (a Adapter) Type() string {
+	return "prometheus"
+}
+
+func (a Adapter) Capabilities() datasource.Capabilities {
+	return datasource.Capabilities{
+		Metrics:      true,
+		RangeQuery:   true,
+		InstantQuery: true,
+	}
 }
 
 func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {

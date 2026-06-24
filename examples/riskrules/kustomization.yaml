@@ -1,0 +1,2 @@
+resources:
+  - latency-regression.yaml

@@ -1,4 +1,7 @@
 resources:
+  - bases/aiops.platform_datasources.yaml
+  - bases/aiops.platform_modelproviders.yaml
+  - bases/aiops.platform_riskrules.yaml
   - bases/aiops.platform_risksignals.yaml
   - bases/aiops.platform_remediationplans.yaml
   - bases/aiops.platform_agentactions.yaml

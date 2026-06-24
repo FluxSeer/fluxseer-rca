@@ -14,8 +14,16 @@ type fakeSource struct {
 	result *datasource.QueryResult
 }
 
-func (f fakeSource) Name() string                      { return f.name }
-func (f fakeSource) Type() domain.QueryType            { return f.result.QueryType }
+func (f fakeSource) Name() string { return f.name }
+func (f fakeSource) Type() string { return string(f.result.QueryType) }
+func (f fakeSource) Capabilities() datasource.Capabilities {
+	return datasource.Capabilities{
+		Metrics: f.result.QueryType == domain.QueryTypeMetric,
+		Logs:    f.result.QueryType == domain.QueryTypeLog,
+		Events:  f.result.QueryType == domain.QueryTypeEvent,
+		Traces:  f.result.QueryType == domain.QueryTypeTrace,
+	}
+}
 func (f fakeSource) HealthCheck(context.Context) error { return nil }
 func (f fakeSource) Query(context.Context, datasource.QueryRequest) (*datasource.QueryResult, error) {
 	return f.result, nil

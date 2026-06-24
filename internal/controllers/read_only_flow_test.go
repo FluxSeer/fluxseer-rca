@@ -25,20 +25,30 @@ type fakeDataSource struct {
 	result *datasource.QueryResult
 }
 
-func (f fakeDataSource) Name() string                      { return f.name }
-func (f fakeDataSource) Type() domain.QueryType            { return f.result.QueryType }
+func (f fakeDataSource) Name() string { return f.name }
+func (f fakeDataSource) Type() string { return string(f.result.QueryType) }
+func (f fakeDataSource) Capabilities() datasource.Capabilities {
+	return datasource.Capabilities{
+		Metrics: f.result.QueryType == domain.QueryTypeMetric,
+		Logs:    f.result.QueryType == domain.QueryTypeLog,
+		Events:  f.result.QueryType == domain.QueryTypeEvent,
+		Traces:  f.result.QueryType == domain.QueryTypeTrace,
+	}
+}
 func (f fakeDataSource) HealthCheck(context.Context) error { return nil }
 func (f fakeDataSource) Query(context.Context, datasource.QueryRequest) (*datasource.QueryResult, error) {
 	return f.result, nil
 }
 
 type fakeNotifier struct {
-	calls int
+	calls       int
+	lastMessage notifier.Message
 }
 
 func (f *fakeNotifier) Name() string { return "fake" }
-func (f *fakeNotifier) Notify(context.Context, notifier.Message) error {
+func (f *fakeNotifier) Notify(_ context.Context, message notifier.Message) error {
 	f.calls++
+	f.lastMessage = message
 	return nil
 }
 
@@ -116,5 +126,8 @@ func TestReadOnlyFlowCreatesRiskSignalAndNotifies(t *testing.T) {
 	}
 	if notifier.calls != 1 {
 		t.Fatalf("expected 1 notification, got %d", notifier.calls)
+	}
+	if notifier.lastMessage.Fields["origin"] != "deployment-annotation" {
+		t.Fatalf("expected deployment origin field, got %#v", notifier.lastMessage.Fields["origin"])
 	}
 }

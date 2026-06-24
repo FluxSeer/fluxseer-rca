@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -68,7 +69,7 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	original := riskSignal.DeepCopy()
-	setResourceStatus(
+	setRiskSignalStatus(
 		&riskSignal.Status,
 		v1alpha1.PhaseReadyForApproval,
 		"remediation plan materialized",
@@ -104,5 +105,5 @@ func evidenceSummaries(evidence []v1alpha1.EvidenceRef) []string {
 }
 
 func statusChangedRiskSignal(before, after *v1alpha1.RiskSignal) bool {
-	return before.Status != after.Status
+	return !reflect.DeepEqual(before.Status, after.Status)
 }

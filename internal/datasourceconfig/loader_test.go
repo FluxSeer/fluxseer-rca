@@ -1,0 +1,159 @@
+package datasourceconfig
+
+import (
+	"context"
+	"net/http"
+	"testing"
+	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"fluxagent/api/v1alpha1"
+	"fluxagent/internal/datasource"
+	k8sadapter "fluxagent/internal/datasource/kubernetes"
+	lokiadapter "fluxagent/internal/datasource/loki"
+	promadapter "fluxagent/internal/datasource/prometheus"
+)
+
+func TestRegisterFromResourcesBuildsRegistry(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add core scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+
+	reader := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "prom-token",
+					Namespace: "fluxagent-system",
+				},
+				Data: map[string][]byte{
+					"token": []byte("secret-token"),
+				},
+			},
+			&v1alpha1.DataSource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "prometheus",
+					Namespace: "fluxagent-system",
+				},
+				Spec: v1alpha1.DataSourceSpec{
+					Type:     "prometheus",
+					Endpoint: "http://prometheus.example",
+					Timeout:  metav1.Duration{Duration: 3 * time.Second},
+					Auth: &v1alpha1.DataSourceAuthSpec{
+						Type: "bearerToken",
+						SecretRef: &v1alpha1.SecretKeyRef{
+							Name: "prom-token",
+							Key:  "token",
+						},
+					},
+				},
+			},
+			&v1alpha1.DataSource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "loki",
+					Namespace: "fluxagent-system",
+				},
+				Spec: v1alpha1.DataSourceSpec{
+					Type:     "loki",
+					Endpoint: "http://loki.example",
+					Timeout:  metav1.Duration{Duration: 5 * time.Second},
+				},
+			},
+			&v1alpha1.DataSource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kubernetes-events",
+					Namespace: "fluxagent-system",
+				},
+				Spec: v1alpha1.DataSourceSpec{
+					Type: "kubernetesEvents",
+				},
+			},
+		).
+		Build()
+
+	registry := datasource.NewRegistry()
+	if err := RegisterFromResources(context.Background(), reader, registry, reader); err != nil {
+		t.Fatalf("register from resources failed: %v", err)
+	}
+
+	promSource, found := registry.Get(CanonicalPrometheusName)
+	if !found {
+		t.Fatal("expected prometheus datasource in registry")
+	}
+	promAdapter, ok := promSource.(promadapter.Adapter)
+	if !ok {
+		t.Fatalf("expected prometheus adapter, got %T", promSource)
+	}
+	if promAdapter.Client == nil {
+		t.Fatal("expected prometheus client to be configured")
+	}
+	if promAdapter.Client.Timeout != 3*time.Second {
+		t.Fatalf("expected prometheus timeout 3s, got %s", promAdapter.Client.Timeout)
+	}
+	rt, ok := promAdapter.Client.Transport.(bearerRoundTripper)
+	if !ok {
+		t.Fatalf("expected bearer transport, got %T", promAdapter.Client.Transport)
+	}
+	if rt.token != "secret-token" {
+		t.Fatalf("expected bearer token to be loaded from secret, got %q", rt.token)
+	}
+
+	lokiSource, found := registry.Get(CanonicalLokiName)
+	if !found {
+		t.Fatal("expected loki datasource in registry")
+	}
+	lokiAdapter, ok := lokiSource.(lokiadapter.Adapter)
+	if !ok {
+		t.Fatalf("expected loki adapter, got %T", lokiSource)
+	}
+	if lokiAdapter.Client == nil || lokiAdapter.Client.Timeout != 5*time.Second {
+		t.Fatalf("expected loki timeout 5s, got %#v", lokiAdapter.Client)
+	}
+
+	k8sSource, found := registry.Get(CanonicalKubernetesEventName)
+	if !found {
+		t.Fatal("expected kubernetes events datasource in registry")
+	}
+	if _, ok := k8sSource.(k8sadapter.Adapter); !ok {
+		t.Fatalf("expected kubernetes adapter, got %T", k8sSource)
+	}
+}
+
+func TestBearerRoundTripperAddsAuthorizationHeader(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+
+	called := false
+	base := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		called = true
+		if got := r.Header.Get("Authorization"); got != "Bearer secret-token" {
+			t.Fatalf("expected authorization header, got %q", got)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+	})
+
+	_, err = bearerRoundTripper{base: base, token: "secret-token"}.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("round trip failed: %v", err)
+	}
+	if !called {
+		t.Fatal("expected base round tripper to be called")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}

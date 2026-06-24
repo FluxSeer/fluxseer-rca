@@ -4,13 +4,19 @@ FluxAgent uses Loki as an optional log datasource for read-only detection.
 
 ## Runtime Wiring
 
-The adapter is registered only when:
+The adapter is registered when either:
+
+- `FLUXAGENT_LOKI_URL` is set
+- a `DataSource` resource of type `loki` is present
+
+Env-based example:
 
 ```bash
 export FLUXAGENT_LOKI_URL=http://your-loki.example
 ```
 
 Implementation source: [internal/datasource/loki/adapter.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/datasource/loki/adapter.go:1)
+Resource loader: [internal/datasourceconfig/loader.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/datasourceconfig/loader.go:1)
 
 ## Endpoint Shape
 

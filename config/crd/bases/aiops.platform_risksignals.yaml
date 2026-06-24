@@ -60,5 +60,27 @@ spec:
                 message: {type: string}
                 observedGeneration: {type: integer, format: int64}
                 updatedAt: {type: string, format: date-time}
+                rcaSummary: {type: string}
+                rcaHypothesis: {type: string}
+                rcaProvider: {type: string}
+                rcaCauses:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      cause: {type: string}
+                      confidence: {type: integer}
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type: {type: string}
+                      status: {type: string}
+                      reason: {type: string}
+                      message: {type: string}
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
       subresources:
         status: {}

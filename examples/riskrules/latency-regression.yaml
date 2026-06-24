@@ -1,0 +1,52 @@
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: fluxagent-sample-latency
+spec:
+  targetSelector:
+    namespaceSelector:
+      matchNames:
+        - fluxagent-demo
+    workloadSelector:
+      matchLabels:
+        app: fluxagent-sample
+      kinds:
+        - Deployment
+  interval: 15s
+  window: 10m
+  severity: high
+  signals:
+    - name: elevated-5xx-rate
+      datasourceRef:
+        name: prometheus
+      queryType: metric
+      queryTemplate: |
+        sum(rate(http_requests_total{namespace="{{ .namespace }}",app="{{ .app }}"}[5m]))
+      threshold:
+        operator: ">"
+        value: 0.20
+    - name: error-logs
+      datasourceRef:
+        name: loki
+      queryType: log
+      queryTemplate: |
+        {namespace="{{ .namespace }}",app="{{ .app }}"} |= "error"
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: unhealthy-events
+      datasourceRef:
+        name: kubernetes-events
+      queryType: event
+      reasons:
+        - BackOff
+        - Unhealthy
+        - Failed
+        - OOMKilled
+      threshold:
+        operator: count_gt
+        value: 0
+  ai:
+    rcaEnabled: true
+    providerRef:
+      name: heuristic-provider

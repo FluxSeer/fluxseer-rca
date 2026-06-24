@@ -1,0 +1,9 @@
+apiVersion: aiops.platform/v1alpha1
+kind: DataSource
+metadata:
+  name: loki
+  namespace: fluxagent-system
+spec:
+  type: loki
+  endpoint: http://loki-gateway.monitoring.svc:3100
+  timeout: 10s

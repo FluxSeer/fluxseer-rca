@@ -1,0 +1,50 @@
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: open-api-latency-regression
+  namespace: fluxagent-system
+spec:
+  targetSelector:
+    namespaceSelector:
+      matchNames:
+        - prod
+    workloadSelector:
+      matchLabels:
+        app: open-api
+      kinds:
+        - Deployment
+  interval: 2m
+  window: 10m
+  severity: warning
+  signals:
+    - name: p95-latency
+      datasourceRef:
+        name: prometheus
+      queryType: metric
+      queryTemplate: |
+        histogram_quantile(
+          0.95,
+          rate(http_request_duration_seconds_bucket{
+            namespace="{{ .namespace }}",
+            app="{{ .app }}"
+          }[5m])
+        )
+      threshold:
+        operator: ">"
+        value: 1.5
+    - name: unhealthy-events
+      datasourceRef:
+        name: kubernetes-events
+      queryType: event
+      reasons:
+        - Unhealthy
+        - BackOff
+        - Failed
+  notification:
+    webhookRef:
+      name: fluxagent-webhook
+      key: url
+  ai:
+    rcaEnabled: true
+    providerRef:
+      name: heuristic-provider

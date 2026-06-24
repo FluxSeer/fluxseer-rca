@@ -60,6 +60,7 @@ Capture a detected workload risk with enough context for notification, review, a
 | `status.message` | string | no | Human-readable status message. |
 | `status.observedGeneration` | integer | no | Last generation observed by the controller. |
 | `status.updatedAt` | string | no | Timestamp of the latest status update. |
+| `status.conditions` | array | no | Condition-based readiness for evidence collection and RCA enrichment. |
 
 ## Field Notes
 
@@ -113,6 +114,11 @@ Typical phases:
 - `Confirmed`
 - `Notified`
 - `ReadyForApproval`
+
+Current condition types:
+
+- `EvidenceCollectionReady`
+- `RCAReady`
 
 ## Sample
 

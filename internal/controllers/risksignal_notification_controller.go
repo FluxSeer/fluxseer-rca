@@ -15,8 +15,6 @@ import (
 	"fluxagent/internal/notifier"
 )
 
-const notificationAnnotation = "fluxagent.aiops.platform/notified-at"
-
 type RiskSignalNotificationReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
@@ -30,7 +28,7 @@ func (r *RiskSignalNotificationReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if riskSignal.Annotations[notificationAnnotation] != "" {
+	if riskSignal.Annotations[annotationNotificationAt] != "" {
 		return ctrl.Result{}, nil
 	}
 
@@ -39,20 +37,11 @@ func (r *RiskSignalNotificationReconciler) Reconcile(ctx context.Context, req ct
 		now = r.Now
 	}
 
-	body := make([]string, 0, len(riskSignal.Spec.Evidence))
-	for _, evidence := range riskSignal.Spec.Evidence {
-		body = append(body, fmt.Sprintf("[%s] %s", evidence.Source, evidence.Summary))
-	}
-
 	if err := r.Notifier.Notify(ctx, notifier.Message{
 		Title:   fmt.Sprintf("RiskSignal detected: %s", riskSignal.Name),
 		Summary: riskSignal.Status.Message,
-		Body:    strings.Join(body, "\n"),
-		Fields: map[string]any{
-			"namespace":  riskSignal.Namespace,
-			"severity":   riskSignal.Spec.Severity,
-			"signalType": riskSignal.Spec.SignalType,
-		},
+		Body:    notificationBody(riskSignal),
+		Fields:  notificationFields(riskSignal),
 	}); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -61,7 +50,8 @@ func (r *RiskSignalNotificationReconciler) Reconcile(ctx context.Context, req ct
 	if riskSignal.Annotations == nil {
 		riskSignal.Annotations = map[string]string{}
 	}
-	riskSignal.Annotations[notificationAnnotation] = now().UTC().Format(time.RFC3339)
+	riskSignal.Annotations[annotationNotificationAt] = now().UTC().Format(time.RFC3339)
+	riskSignal.Annotations[annotationNotificationSource] = notifierSource(riskSignal)
 	if err := r.Update(ctx, &riskSignal); err != nil && !apierrors.IsConflict(err) {
 		return ctrl.Result{}, err
 	}
@@ -69,7 +59,7 @@ func (r *RiskSignalNotificationReconciler) Reconcile(ctx context.Context, req ct
 	if err := r.Get(ctx, req.NamespacedName, &riskSignal); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	setResourceStatus(&riskSignal.Status, v1alpha1.PhaseNotified, original.Status.Message, riskSignal.Generation, now())
+	setRiskSignalStatus(&riskSignal.Status, v1alpha1.PhaseNotified, original.Status.Message, riskSignal.Generation, now())
 	if statusChangedRiskSignal(original, &riskSignal) {
 		if err := r.Status().Update(ctx, &riskSignal); err != nil && !apierrors.IsConflict(err) {
 			return ctrl.Result{}, err
@@ -83,4 +73,44 @@ func (r *RiskSignalNotificationReconciler) SetupWithManager(mgr ctrl.Manager) er
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.RiskSignal{}).
 		Complete(r)
+}
+
+func notificationBody(riskSignal v1alpha1.RiskSignal) string {
+	lines := []string{fmt.Sprintf("Summary: %s", riskSignal.Status.Message)}
+	if riskSignal.Labels[labelRiskRule] != "" {
+		lines = append(lines, fmt.Sprintf("Rule: %s", riskSignal.Labels[labelRiskRule]))
+	}
+	lines = append(lines, fmt.Sprintf("Target: %s", targetRefString(riskSignal.Spec.Target)))
+	for _, evidence := range riskSignal.Spec.Evidence {
+		source := evidence.Source
+		if source == "" {
+			source = evidence.Kind
+		}
+		lines = append(lines, fmt.Sprintf("[%s] %s", source, evidence.Summary))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func notificationFields(riskSignal v1alpha1.RiskSignal) map[string]any {
+	fields := map[string]any{
+		"namespace":  riskSignal.Namespace,
+		"severity":   riskSignal.Spec.Severity,
+		"signalType": riskSignal.Spec.SignalType,
+		"confidence": riskSignal.Spec.Confidence,
+		"target":     targetRefString(riskSignal.Spec.Target),
+	}
+	if riskSignal.Labels[labelRiskRule] != "" {
+		fields["riskRule"] = riskSignal.Labels[labelRiskRule]
+	}
+	if source := notifierSource(riskSignal); source != "" {
+		fields["origin"] = source
+	}
+	return fields
+}
+
+func notifierSource(riskSignal v1alpha1.RiskSignal) string {
+	if riskSignal.Annotations[annotationDetectionSource] != "" {
+		return riskSignal.Annotations[annotationDetectionSource]
+	}
+	return riskSignal.Labels[labelManagedBy]
 }

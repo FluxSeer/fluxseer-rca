@@ -1,0 +1,4 @@
+resources:
+  - prometheus.yaml
+  - loki.yaml
+  - kubernetes-events.yaml

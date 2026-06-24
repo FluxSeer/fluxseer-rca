@@ -1,0 +1,9 @@
+apiVersion: aiops.platform/v1alpha1
+kind: ModelProvider
+metadata:
+  name: heuristic-provider
+spec:
+  provider: heuristic
+  model: built-in
+  timeout: 5s
+  maxTokens: 512

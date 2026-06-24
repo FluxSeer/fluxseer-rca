@@ -1,0 +1,9 @@
+apiVersion: aiops.platform/v1alpha1
+kind: DataSource
+metadata:
+  name: prometheus
+  namespace: fluxagent-system
+spec:
+  type: prometheus
+  endpoint: http://prometheus-server.monitoring.svc:9090
+  timeout: 10s

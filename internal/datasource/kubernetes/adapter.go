@@ -20,8 +20,14 @@ func (a Adapter) Name() string {
 	return "kubernetes-events"
 }
 
-func (a Adapter) Type() domain.QueryType {
-	return domain.QueryTypeEvent
+func (a Adapter) Type() string {
+	return "kubernetesEvents"
+}
+
+func (a Adapter) Capabilities() datasource.Capabilities {
+	return datasource.Capabilities{
+		Events: true,
+	}
 }
 
 func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {

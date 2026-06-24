@@ -24,9 +24,35 @@ type QueryResult struct {
 	Records   []map[string]any
 }
 
+type Capabilities struct {
+	Metrics      bool
+	Logs         bool
+	Events       bool
+	Traces       bool
+	RangeQuery   bool
+	InstantQuery bool
+	LabelQuery   bool
+}
+
+func (c Capabilities) SupportsQueryType(queryType domain.QueryType) bool {
+	switch queryType {
+	case domain.QueryTypeMetric:
+		return c.Metrics
+	case domain.QueryTypeLog:
+		return c.Logs
+	case domain.QueryTypeEvent:
+		return c.Events
+	case domain.QueryTypeTrace:
+		return c.Traces
+	default:
+		return false
+	}
+}
+
 type DataSource interface {
 	Name() string
-	Type() domain.QueryType
+	Type() string
+	Capabilities() Capabilities
 	Query(ctx context.Context, req QueryRequest) (*QueryResult, error)
 	HealthCheck(ctx context.Context) error
 }
@@ -44,10 +70,14 @@ func NewRegistry(items ...DataSource) *Registry {
 }
 
 func (r *Registry) Register(source DataSource) {
+	r.RegisterNamed(source.Name(), source)
+}
+
+func (r *Registry) RegisterNamed(name string, source DataSource) {
 	if r.sources == nil {
 		r.sources = map[string]DataSource{}
 	}
-	r.sources[source.Name()] = source
+	r.sources[name] = source
 }
 
 func (r *Registry) Get(name string) (DataSource, bool) {
