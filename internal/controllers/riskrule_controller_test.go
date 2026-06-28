@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +24,7 @@ import (
 	"fluxagent/internal/knowledge"
 	"fluxagent/internal/model"
 	"fluxagent/internal/model/heuristic"
+	"fluxagent/internal/model/local"
 	"fluxagent/internal/modelgateway"
 )
 
@@ -809,6 +813,132 @@ func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderMissing(t *testing.
 	}
 }
 
+func TestRiskRuleReconcilerUsesReferencedLocalModelProvider(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 6, 28, 10, 0, 0, 0, time.UTC)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		var request struct {
+			Model   string              `json:"model"`
+			Request domain.ModelRequest `json:"request"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if request.Model != "llama3.1:8b" {
+			t.Fatalf("expected model from ModelProvider spec, got %q", request.Model)
+		}
+		if request.Request.Context["evidence"] == nil {
+			t.Fatalf("expected evidence context in local provider request")
+		}
+		if err := json.NewEncoder(w).Encode(domain.ModelResponse{
+			Provider:   "local",
+			Model:      request.Model,
+			Structured: true,
+			Output: map[string]any{
+				"riskTitle":       "Rollout regression",
+				"riskSummary":     "Local provider correlated crash loops with rollout timing.",
+				"severity":        "high",
+				"confidenceScore": 91,
+				"rationale":       "local endpoint reasoning",
+				"rcaHypothesis":   "The latest image introduced unstable startup behavior.",
+				"actionType":      "notification.sendSlack",
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: "prod"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "payments-api"}}},
+		},
+	}
+	ruleObj := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-local-provider", Namespace: "prod"},
+		Spec: v1alpha1.RiskRuleSpec{
+			Severity: "high",
+			TargetSelector: v1alpha1.TargetSelector{
+				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
+				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			},
+			Signals: []v1alpha1.RiskRuleSignal{{Name: "unhealthy-events", Type: "kubernetesEvent", Reasons: []string{"BackOff"}}},
+			AI: v1alpha1.RiskRuleAI{
+				RCAEnabled:  true,
+				ProviderRef: v1alpha1.LocalObjectReference{Name: "local-provider"},
+			},
+		},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "local-provider", Namespace: "prod"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "local",
+			Model:    "llama3.1:8b",
+			Endpoint: server.URL,
+			Timeout:  metav1.Duration{Duration: 2 * time.Second},
+		},
+	}
+	eventSource := &fakeRuleDataSource{
+		name:      "kubernetes-events",
+		queryType: domain.QueryTypeEvent,
+		result: &datasource.QueryResult{
+			Source:    "kubernetes-events",
+			QueryType: domain.QueryTypeEvent,
+			Records:   []map[string]any{{"reason": "BackOff", "message": "BackOff restarting failed container"}},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskRule{}, &v1alpha1.RiskSignal{}).
+		WithObjects(ruleObj, deployment, provider).
+		Build()
+	reconciler := &RiskRuleReconciler{
+		Client:   client,
+		Scheme:   scheme,
+		Registry: datasource.NewRegistry(eventSource),
+		Resolver: modelgateway.KubeResolver{Client: client},
+		Gateway: &modelgateway.Gateway{
+			Base:      knowledge.NewBase(),
+			Providers: model.NewRegistry(heuristic.Provider{}, local.Provider{Client: server.Client()}),
+		},
+		Now: func() time.Time { return now },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	var signals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &signals, crclient.InNamespace("prod")); err != nil {
+		t.Fatalf("list risk signals: %v", err)
+	}
+	if len(signals.Items) != 1 {
+		t.Fatalf("expected one risk signal, got %d", len(signals.Items))
+	}
+	riskSignal := signals.Items[0]
+	if riskSignal.Status.RCAProvider != "local-provider" {
+		t.Fatalf("expected local provider name, got %s", riskSignal.Status.RCAProvider)
+	}
+	if riskSignal.Status.RCASummary != "Local provider correlated crash loops with rollout timing." {
+		t.Fatalf("expected local provider RCA summary, got %q", riskSignal.Status.RCASummary)
+	}
+	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Fatalf("expected RCAReady true condition, got %#v", cond)
+	}
+}
+
 func TestRiskSignalNotificationIncludesRiskRuleMetadata(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -848,6 +978,8 @@ func TestRiskSignalNotificationIncludesRiskRuleMetadata(t *testing.T) {
 				Phase:   v1alpha1.PhaseConfirmed,
 				Message: "p95-latency crossed threshold for open-api",
 			},
+			RCASummary:  "A recent rollout saturated the upstream retry path.",
+			RCAProvider: "heuristic-provider",
 		},
 	}
 
@@ -878,6 +1010,12 @@ func TestRiskSignalNotificationIncludesRiskRuleMetadata(t *testing.T) {
 	}
 	if !strings.Contains(notifier.lastMessage.Body, "Rule: latency-regression") {
 		t.Fatalf("expected rule line in notification body, got %q", notifier.lastMessage.Body)
+	}
+	if !strings.Contains(notifier.lastMessage.Body, "RCA Summary: A recent rollout saturated the upstream retry path.") {
+		t.Fatalf("expected RCA summary in notification body, got %q", notifier.lastMessage.Body)
+	}
+	if notifier.lastMessage.Fields["rcaProvider"] != "heuristic-provider" {
+		t.Fatalf("expected RCA provider field, got %#v", notifier.lastMessage.Fields["rcaProvider"])
 	}
 }
 

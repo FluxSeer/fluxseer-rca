@@ -142,3 +142,65 @@ func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) 
 		t.Fatalf("expected succeeded phase, got %s", action.Status.Phase)
 	}
 }
+
+func TestRiskSignalReconcilerDisabledDoesNotCreateRemediationResources(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	riskSignal := &v1alpha1.RiskSignal{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: v1alpha1.SchemeGroupVersion.String(),
+			Kind:       "RiskSignal",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "payments-api-risk",
+			Namespace: "payments",
+		},
+		Spec: v1alpha1.RiskSignalSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace: "payments",
+				Name:      "payments-api",
+				Kind:      "Deployment",
+			},
+			ActionType: "kubernetes.rolloutPause",
+			Severity:   "high",
+			Confidence: 90,
+			DryRun:     true,
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskSignal{}, &v1alpha1.RemediationPlan{}, &v1alpha1.AgentAction{}).
+		WithObjects(riskSignal).
+		Build()
+
+	reconciler := &RiskSignalReconciler{
+		Client:  fakeClient,
+		Scheme:  scheme,
+		Enabled: false,
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: riskSignal.Name, Namespace: riskSignal.Namespace},
+	}); err != nil {
+		t.Fatalf("disabled reconcile failed: %v", err)
+	}
+
+	var plans v1alpha1.RemediationPlanList
+	if err := fakeClient.List(context.Background(), &plans); err != nil {
+		t.Fatalf("list plans: %v", err)
+	}
+	if len(plans.Items) != 0 {
+		t.Fatalf("expected no remediation plans, got %d", len(plans.Items))
+	}
+
+	var actions v1alpha1.AgentActionList
+	if err := fakeClient.List(context.Background(), &actions); err != nil {
+		t.Fatalf("list actions: %v", err)
+	}
+	if len(actions.Items) != 0 {
+		t.Fatalf("expected no agent actions, got %d", len(actions.Items))
+	}
+}

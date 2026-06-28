@@ -81,6 +81,12 @@ func notificationBody(riskSignal v1alpha1.RiskSignal) string {
 		lines = append(lines, fmt.Sprintf("Rule: %s", riskSignal.Labels[labelRiskRule]))
 	}
 	lines = append(lines, fmt.Sprintf("Target: %s", targetRefString(riskSignal.Spec.Target)))
+	if strings.TrimSpace(riskSignal.Status.RCASummary) != "" {
+		lines = append(lines, fmt.Sprintf("RCA Summary: %s", riskSignal.Status.RCASummary))
+	}
+	if strings.TrimSpace(riskSignal.Status.RCAHypothesis) != "" {
+		lines = append(lines, fmt.Sprintf("RCA Hypothesis: %s", riskSignal.Status.RCAHypothesis))
+	}
 	for _, evidence := range riskSignal.Spec.Evidence {
 		source := evidence.Source
 		if source == "" {
@@ -101,6 +107,12 @@ func notificationFields(riskSignal v1alpha1.RiskSignal) map[string]any {
 	}
 	if riskSignal.Labels[labelRiskRule] != "" {
 		fields["riskRule"] = riskSignal.Labels[labelRiskRule]
+	}
+	if riskSignal.Status.RCASummary != "" {
+		fields["rcaSummary"] = riskSignal.Status.RCASummary
+	}
+	if riskSignal.Status.RCAProvider != "" {
+		fields["rcaProvider"] = riskSignal.Status.RCAProvider
 	}
 	if source := notifierSource(riskSignal); source != "" {
 		fields["origin"] = source
