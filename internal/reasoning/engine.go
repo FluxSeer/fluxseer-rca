@@ -33,6 +33,11 @@ func (e *Engine) Analyze(ctx context.Context, input domain.IngestionOutput) (dom
 		},
 		Context: map[string]any{
 			"service":  input.Context.Service,
+			"resource": input.Context.Resource,
+			"summary":  input.Context.Summary,
+			"signals":  input.Signals,
+			"evidence": input.Evidence,
+			"timeline": input.Timeline.Events,
 			"runbooks": runbooks,
 			"docs":     docs,
 		},

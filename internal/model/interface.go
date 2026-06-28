@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"time"
 
 	"fluxagent/internal/domain"
 )
@@ -9,6 +10,16 @@ import (
 type Provider interface {
 	Name() string
 	Complete(ctx context.Context, req domain.ModelRequest) (domain.ModelResponse, error)
+}
+
+type RuntimeConfig struct {
+	Model    string
+	Endpoint string
+	Timeout  time.Duration
+}
+
+type ConfigurableProvider interface {
+	WithConfig(config RuntimeConfig) Provider
 }
 
 type Registry struct {

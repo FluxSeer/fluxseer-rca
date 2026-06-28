@@ -8,6 +8,7 @@ import (
 
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/domain"
+	"fluxagent/internal/evidence"
 	"fluxagent/internal/knowledge"
 	"fluxagent/internal/model"
 	"fluxagent/internal/reasoning"
@@ -26,6 +27,7 @@ func (e *AnalyzeError) Error() string {
 type Gateway struct {
 	Base      *knowledge.Base
 	Providers *model.Registry
+	Redactor  evidence.Redactor
 }
 
 func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider, target domain.ResourceRef, matches []rule.Match, now time.Time) (domain.ReasoningOutput, error) {
@@ -50,13 +52,31 @@ func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider,
 			Message: fmt.Sprintf("model provider type %q is not supported by the gateway", provider.Spec.Provider),
 		}
 	}
+	modelProvider = configureProvider(modelProvider, provider.Spec)
 
 	base := g.Base
 	if base == nil {
 		base = knowledge.NewBase()
 	}
+	redactor := g.Redactor
+	if redactor == nil {
+		defaultRedactor := evidence.NewPatternRedactor()
+		redactor = defaultRedactor
+	}
 	engine := reasoning.NewEngine(base, modelProvider)
-	return engine.Analyze(ctx, buildIngestionOutput(target, matches, now))
+	return engine.Analyze(ctx, redactor.RedactIngestion(buildIngestionOutput(target, matches, now)))
+}
+
+func configureProvider(provider model.Provider, spec v1alpha1.ModelProviderSpec) model.Provider {
+	configurable, ok := provider.(model.ConfigurableProvider)
+	if !ok {
+		return provider
+	}
+	return configurable.WithConfig(model.RuntimeConfig{
+		Model:    spec.Model,
+		Endpoint: spec.Endpoint,
+		Timeout:  spec.Timeout.Duration,
+	})
 }
 
 func buildIngestionOutput(target domain.ResourceRef, matches []rule.Match, now time.Time) domain.IngestionOutput {

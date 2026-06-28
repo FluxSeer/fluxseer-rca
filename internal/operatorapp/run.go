@@ -31,6 +31,7 @@ import (
 	"fluxagent/internal/knowledge"
 	"fluxagent/internal/model"
 	"fluxagent/internal/model/heuristic"
+	"fluxagent/internal/model/local"
 	"fluxagent/internal/modelgateway"
 	"fluxagent/internal/notifier/webhook"
 )
@@ -93,6 +94,7 @@ func Run(args []string, out io.Writer) error {
 	)
 	modelProviders := model.NewRegistry(
 		heuristic.Provider{},
+		local.Provider{},
 	)
 	gateway := &modelgateway.Gateway{
 		Base:      knowledge.NewBase(),
