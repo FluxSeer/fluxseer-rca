@@ -55,7 +55,7 @@ Today the runnable path defaults to the heuristic provider. That choice is delib
 - repeatable local demos
 - safer open-source first-run story
 
-The non-heuristic providers are currently contract scaffolds, not fully wired runtime integrations.
+The heuristic provider remains the default runnable path. The local HTTP endpoint is now the first supported non-heuristic runtime path. Hosted vendor providers remain scaffold-oriented.
 
 ## Architecture Diagram
 
@@ -70,7 +70,7 @@ flowchart LR
     C[claude scaffold]
     G[gemini scaffold]
     B[bedrock scaffold]
-    L[local scaffold]
+    L[local endpoint]
     GR[Guardrails]
     EX[Executors]
 
@@ -96,7 +96,7 @@ The model gateway is the seam for:
 - symptom correlation
 - runbook selection
 - remediation proposal formatting
-- future evidence-linked reasoning
+- evidence-linked reasoning with redacted provider context
 
 The provider should not directly own:
 
@@ -121,6 +121,8 @@ Implemented today:
 - provider interface
 - provider registry
 - heuristic provider for runnable local behavior
+- local endpoint provider wired into runtime configuration
+- provider-bound evidence redaction before reasoning calls
 
 Scaffolded today:
 
