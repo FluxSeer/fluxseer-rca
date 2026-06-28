@@ -212,7 +212,7 @@ Expected webhook payload shape:
     {
       "title": "RiskSignal detected: fluxagent-sample-observed-risk",
       "summary": "elevated-5xx-rate crossed threshold for fluxagent-sample | error-logs triggered for fluxagent-sample | unhealthy-events detected 1 matching events for fluxagent-sample",
-      "body": "Summary: elevated-5xx-rate crossed threshold for fluxagent-sample | error-logs triggered for fluxagent-sample | unhealthy-events detected 1 matching events for fluxagent-sample\nRule: fluxagent-sample-latency\nTarget: fluxagent-demo/fluxagent-sample Deployment\n[prometheus] metric value 0.92 matched > 0.20\n[loki] error timeout while calling upstream (matched 2 log lines)\n[kubernetes-events] crash loop (matched 1 events)",
+      "body": "Summary: elevated-5xx-rate crossed threshold for fluxagent-sample | error-logs triggered for fluxagent-sample | unhealthy-events detected 1 matching events for fluxagent-sample\nRule: fluxagent-sample-latency\nTarget: fluxagent-demo/fluxagent-sample Deployment\nRCA Summary: Multiple signals indicate elevated risk for fluxagent-sample: elevated-5xx-rate, error-logs, unhealthy-events.\nRCA Hypothesis: A recent release likely introduced elevated memory or startup failures.\n[prometheus] metric value 0.92 matched > 0.20\n[loki] error timeout while calling upstream (matched 2 log lines)\n[kubernetes-events] crash loop (matched 1 events)",
       "fields": {
         "namespace": "fluxagent-demo",
         "severity": "high",

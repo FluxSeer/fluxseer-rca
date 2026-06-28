@@ -2,7 +2,7 @@ APP=fluxagent
 GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-reset-riskrule demo-degrade-all build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-reset-riskrule demo-degrade-all verify-v0.2-alpha build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -93,6 +93,11 @@ demo-degrade-all:
 	@printf '%s\n' "============================================================"
 	bash examples/kind/degraded-demo.sh reset
 	@printf '\n%s\n' "Recording flow complete."
+
+verify-v0.2-alpha:
+	$(GO) test ./...
+	kubectl kustomize config/default >/tmp/fluxagent-config-default.yaml
+	kubectl kustomize examples/kind >/tmp/fluxagent-kind-example.yaml
 
 build-images:
 	docker build -t fluxagent/operator:latest .

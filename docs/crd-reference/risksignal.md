@@ -60,6 +60,10 @@ Capture a detected workload risk with enough context for notification, review, a
 | `status.message` | string | no | Human-readable status message. |
 | `status.observedGeneration` | integer | no | Last generation observed by the controller. |
 | `status.updatedAt` | string | no | Timestamp of the latest status update. |
+| `status.rcaSummary` | string | no | High-level RCA summary persisted from the reasoning pipeline. |
+| `status.rcaHypothesis` | string | no | Primary RCA hypothesis. |
+| `status.rcaProvider` | string | no | `ModelProvider` name used for RCA generation. |
+| `status.rcaCauses` | array | no | Ranked cause candidates with confidence. |
 | `status.conditions` | array | no | Condition-based readiness for evidence collection and RCA enrichment. |
 
 ## Field Notes

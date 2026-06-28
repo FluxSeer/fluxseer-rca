@@ -123,6 +123,7 @@ See:
 - [config/samples/datasource-loki.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/datasource-loki.yaml:1)
 - [config/samples/datasource-kubernetes-events.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/datasource-kubernetes-events.yaml:1)
 - [config/samples/model-provider.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider.yaml:1)
+- [config/samples/model-provider-local.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-local.yaml:1)
 - [config/samples/risk-signal.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/risk-signal.yaml:1)
 - [config/samples/remediation-plan.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/remediation-plan.yaml:1)
 - [config/samples/agent-action.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-action.yaml:1)
@@ -147,6 +148,7 @@ See:
 cd FluxAgent
 GOWORK=off go run ./cmd/fluxagent
 GOWORK=off go test ./...
+make verify-v0.2-alpha
 ```
 
 ### Run the Operator
@@ -216,13 +218,14 @@ Implemented today:
 - Prometheus, Loki, and Kubernetes Events adapter implementations
 - webhook notification flow
 - provider-neutral model abstractions
+- heuristic and local endpoint model-provider runtime paths
 - optional guarded remediation path
 - kind demo scaffolding
 
 Not implemented yet:
 
 - production-hardened auth, retries, and backoff for all adapters
-- real LLM provider integrations wired into runtime config
+- hosted vendor model integrations wired into runtime config
 - GitOps PR backends and approval UX
 - admission policies and richer multi-cluster support
 
