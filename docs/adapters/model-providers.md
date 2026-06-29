@@ -15,8 +15,83 @@ FluxAgent treats model providers as interchangeable backends, not as core platfo
 
 - The runnable repo defaults to the heuristic provider.
 - A local HTTP model endpoint is supported as the first non-heuristic runtime path.
-- Remote hosted providers still exist mainly as integration seams and scaffolds.
+- Hosted `openai`, `gemini`, and `claude` adapters are wired into the runtime path through `ModelProvider`.
 - No CRD depends on a specific model vendor.
+
+## Multi-provider Usage
+
+FluxAgent expects users to select the AI backend through `ModelProvider`, not by embedding vendor-specific details into `RiskRule`.
+
+Typical pattern:
+
+1. create one `Secret` per provider token
+2. create one `ModelProvider` per hosted model choice
+3. point `RiskRule.spec.ai.providerRef.name` at the desired provider
+
+Example provider choices:
+
+```yaml
+apiVersion: aiops.platform/v1alpha1
+kind: ModelProvider
+metadata:
+  name: openai-provider
+spec:
+  provider: openai
+  model: gpt-5.1
+  apiKeySecretRef:
+    name: openai-secret
+    key: api-key
+```
+
+```yaml
+apiVersion: aiops.platform/v1alpha1
+kind: ModelProvider
+metadata:
+  name: gemini-provider
+spec:
+  provider: gemini
+  model: gemini-2.5-pro
+  apiKeySecretRef:
+    name: gemini-secret
+    key: api-key
+```
+
+```yaml
+apiVersion: aiops.platform/v1alpha1
+kind: ModelProvider
+metadata:
+  name: claude-provider
+spec:
+  provider: claude
+  model: claude-sonnet-4
+  apiKeySecretRef:
+    name: claude-secret
+    key: api-key
+```
+
+Then `RiskRule` chooses one:
+
+```yaml
+ai:
+  rcaEnabled: true
+  providerRef:
+    name: gemini-provider
+```
+
+## Hosted Provider Contract
+
+Hosted providers use a shared response contract. FluxAgent expects the upstream model output to normalize into these fields:
+
+- `riskTitle`
+- `riskSummary`
+- `severity`
+- `confidenceScore`
+- `rationale`
+- `rcaHypothesis`
+- `rcaCauses`
+- `actionType`
+
+If a hosted provider response cannot be normalized to this schema, FluxAgent marks `RCAReady=False` with reason `InvalidProviderResponse`.
 
 ## Local Endpoint Contract
 

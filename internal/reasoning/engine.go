@@ -54,6 +54,13 @@ func (e *Engine) Analyze(ctx context.Context, input domain.IngestionOutput) (dom
 	riskSummary := asString(output["riskSummary"], "Service degradation detected from correlated signals.")
 	rationale := asString(output["rationale"], "default heuristic")
 	rcaHypothesis := asString(output["rcaHypothesis"], "Deployment change increased memory pressure and restart frequency.")
+	rcaCauses := asStringSlice(output["rcaCauses"])
+	if len(rcaCauses) == 0 {
+		rcaCauses = []string{
+			"Recent rollout changed workload behavior",
+			"Pod memory usage crossed safe threshold",
+		}
+	}
 
 	remediation := domain.Remediation{
 		ActionType:  actionType,
@@ -77,11 +84,8 @@ func (e *Engine) Analyze(ctx context.Context, input domain.IngestionOutput) (dom
 		},
 		RCA: domain.RCASummary{
 			Hypothesis: rcaHypothesis,
-			Causes: []string{
-				"Recent rollout changed workload behavior",
-				"Pod memory usage crossed safe threshold",
-			},
-			Evidence: append([]string{}, input.Evidence.Events...),
+			Causes:     rcaCauses,
+			Evidence:   append([]string{}, input.Evidence.Events...),
 		},
 		Remediation: remediation,
 		RunbookRefs: runbooks,
@@ -110,6 +114,24 @@ func asInt(value any, fallback int) int {
 		return int(typed)
 	default:
 		return fallback
+	}
+}
+
+func asStringSlice(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if ok && text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }
 

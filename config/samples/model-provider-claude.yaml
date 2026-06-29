@@ -1,0 +1,13 @@
+apiVersion: aiops.platform/v1alpha1
+kind: ModelProvider
+metadata:
+  name: claude-provider
+  namespace: fluxagent-system
+spec:
+  provider: claude
+  model: claude-sonnet-4
+  apiKeySecretRef:
+    name: claude-secret
+    key: api-key
+  timeout: 30s
+  maxTokens: 1500

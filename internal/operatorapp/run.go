@@ -30,8 +30,11 @@ import (
 	"fluxagent/internal/guardrails"
 	"fluxagent/internal/knowledge"
 	"fluxagent/internal/model"
+	"fluxagent/internal/model/claude"
+	"fluxagent/internal/model/gemini"
 	"fluxagent/internal/model/heuristic"
 	"fluxagent/internal/model/local"
+	"fluxagent/internal/model/openai"
 	"fluxagent/internal/modelgateway"
 	"fluxagent/internal/notifier/webhook"
 )
@@ -93,12 +96,16 @@ func Run(args []string, out io.Writer) error {
 		k8sadapter.Adapter{Client: mgr.GetClient()},
 	)
 	modelProviders := model.NewRegistry(
+		openai.Provider{},
+		gemini.Provider{},
+		claude.Provider{},
 		heuristic.Provider{},
 		local.Provider{},
 	)
 	gateway := &modelgateway.Gateway{
 		Base:      knowledge.NewBase(),
 		Providers: modelProviders,
+		Secrets:   modelgateway.KubeSecretResolver{Client: mgr.GetAPIReader()},
 	}
 	resolver := modelgateway.KubeResolver{
 		Client: mgr.GetClient(),

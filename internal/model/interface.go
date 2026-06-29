@@ -13,13 +13,24 @@ type Provider interface {
 }
 
 type RuntimeConfig struct {
-	Model    string
-	Endpoint string
-	Timeout  time.Duration
+	Model     string
+	Endpoint  string
+	Timeout   time.Duration
+	APIKey    string
+	MaxTokens int
 }
 
 type ConfigurableProvider interface {
 	WithConfig(config RuntimeConfig) Provider
+}
+
+type ProviderError struct {
+	Reason  string
+	Message string
+}
+
+func (e *ProviderError) Error() string {
+	return e.Message
 }
 
 type Registry struct {

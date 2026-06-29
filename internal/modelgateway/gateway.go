@@ -28,6 +28,7 @@ type Gateway struct {
 	Base      *knowledge.Base
 	Providers *model.Registry
 	Redactor  evidence.Redactor
+	Secrets   SecretResolver
 }
 
 func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider, target domain.ResourceRef, matches []rule.Match, now time.Time) (domain.ReasoningOutput, error) {
@@ -52,7 +53,10 @@ func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider,
 			Message: fmt.Sprintf("model provider type %q is not supported by the gateway", provider.Spec.Provider),
 		}
 	}
-	modelProvider = configureProvider(modelProvider, provider.Spec)
+	configuredProvider, err := g.configureProvider(ctx, modelProvider, provider)
+	if err != nil {
+		return domain.ReasoningOutput{}, err
+	}
 
 	base := g.Base
 	if base == nil {
@@ -63,20 +67,56 @@ func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider,
 		defaultRedactor := evidence.NewPatternRedactor()
 		redactor = defaultRedactor
 	}
-	engine := reasoning.NewEngine(base, modelProvider)
-	return engine.Analyze(ctx, redactor.RedactIngestion(buildIngestionOutput(target, matches, now)))
+	engine := reasoning.NewEngine(base, configuredProvider)
+	result, err := engine.Analyze(ctx, redactor.RedactIngestion(buildIngestionOutput(target, matches, now)))
+	if err != nil {
+		if providerErr, ok := err.(*model.ProviderError); ok {
+			return domain.ReasoningOutput{}, &AnalyzeError{
+				Reason:  providerErr.Reason,
+				Message: providerErr.Message,
+			}
+		}
+		return domain.ReasoningOutput{}, err
+	}
+	return result, nil
 }
 
-func configureProvider(provider model.Provider, spec v1alpha1.ModelProviderSpec) model.Provider {
+func (g *Gateway) configureProvider(ctx context.Context, provider model.Provider, obj *v1alpha1.ModelProvider) (model.Provider, error) {
 	configurable, ok := provider.(model.ConfigurableProvider)
 	if !ok {
-		return provider
+		return provider, nil
 	}
-	return configurable.WithConfig(model.RuntimeConfig{
-		Model:    spec.Model,
-		Endpoint: spec.Endpoint,
-		Timeout:  spec.Timeout.Duration,
-	})
+
+	spec := obj.Spec
+	config := model.RuntimeConfig{
+		Model:     spec.Model,
+		Endpoint:  spec.Endpoint,
+		Timeout:   spec.Timeout.Duration,
+		MaxTokens: spec.MaxTokens,
+	}
+	if requiresAPIKey(spec.Provider) {
+		if g.Secrets == nil {
+			return nil, &AnalyzeError{
+				Reason:  "SecretReaderUnavailable",
+				Message: fmt.Sprintf("model provider %q requires apiKeySecretRef but no secret resolver is configured", obj.Name),
+			}
+		}
+		apiKey, err := g.Secrets.ResolveAPIKey(ctx, obj)
+		if err != nil {
+			return nil, err
+		}
+		config.APIKey = apiKey
+	}
+	return configurable.WithConfig(config), nil
+}
+
+func requiresAPIKey(providerType string) bool {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "openai", "gemini", "claude", "bedrock":
+		return true
+	default:
+		return false
+	}
 }
 
 func buildIngestionOutput(target domain.ResourceRef, matches []rule.Match, now time.Time) domain.IngestionOutput {
