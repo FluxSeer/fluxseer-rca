@@ -1,0 +1,13 @@
+apiVersion: aiops.platform/v1alpha1
+kind: ModelProvider
+metadata:
+  name: openai-provider
+  namespace: fluxagent-system
+spec:
+  provider: openai
+  model: gpt-5.1
+  apiKeySecretRef:
+    name: openai-secret
+    key: api-key
+  timeout: 30s
+  maxTokens: 1500

@@ -25,6 +25,7 @@ import (
 	"fluxagent/internal/model"
 	"fluxagent/internal/model/heuristic"
 	"fluxagent/internal/model/local"
+	"fluxagent/internal/model/openai"
 	"fluxagent/internal/modelgateway"
 )
 
@@ -936,6 +937,313 @@ func TestRiskRuleReconcilerUsesReferencedLocalModelProvider(t *testing.T) {
 	}
 	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected RCAReady true condition, got %#v", cond)
+	}
+}
+
+func TestRiskRuleReconcilerUsesReferencedOpenAIModelProvider(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add core scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 6, 29, 9, 0, 0, 0, time.UTC)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer openai-token" {
+			t.Fatalf("expected openai auth header, got %q", got)
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"content": `{"riskTitle":"Crash loop after rollout","riskSummary":"OpenAI correlated crash loops with the latest rollout.","severity":"high","confidenceScore":93,"rationale":"events and logs aligned after deploy","rcaHypothesis":"The new image introduced unstable startup behavior.","rcaCauses":["image regression","startup failure"],"actionType":"notification.sendSlack"}`,
+					},
+				},
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: "prod"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "payments-api"}}},
+		},
+	}
+	ruleObj := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-provider", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.RiskRuleSpec{
+			Severity: "high",
+			TargetSelector: v1alpha1.TargetSelector{
+				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
+				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			},
+			Signals: []v1alpha1.RiskRuleSignal{{Name: "unhealthy-events", Type: "kubernetesEvent", Reasons: []string{"BackOff"}}},
+			AI: v1alpha1.RiskRuleAI{
+				RCAEnabled:  true,
+				ProviderRef: v1alpha1.LocalObjectReference{Name: "openai-provider"},
+			},
+		},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			Model:    "gpt-5.1",
+			Endpoint: server.URL,
+			Timeout:  metav1.Duration{Duration: 2 * time.Second},
+			APIKeySecretRef: &v1alpha1.SecretKeyRef{
+				Name: "openai-secret",
+				Key:  "api-key",
+			},
+		},
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxagent-system"},
+		Data:       map[string][]byte{"api-key": []byte("openai-token")},
+	}
+	eventSource := &fakeRuleDataSource{
+		name:      "kubernetes-events",
+		queryType: domain.QueryTypeEvent,
+		result: &datasource.QueryResult{
+			Source:    "kubernetes-events",
+			QueryType: domain.QueryTypeEvent,
+			Records:   []map[string]any{{"reason": "BackOff", "message": "BackOff restarting failed container"}},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskRule{}, &v1alpha1.RiskSignal{}).
+		WithObjects(ruleObj, deployment, provider, secret).
+		Build()
+	reconciler := &RiskRuleReconciler{
+		Client:   client,
+		Scheme:   scheme,
+		Registry: datasource.NewRegistry(eventSource),
+		Resolver: modelgateway.KubeResolver{Client: client},
+		Gateway: &modelgateway.Gateway{
+			Base:      knowledge.NewBase(),
+			Providers: model.NewRegistry(openai.Provider{}),
+			Secrets:   modelgateway.KubeSecretResolver{Client: client},
+		},
+		Now: func() time.Time { return now },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	var signals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &signals, crclient.InNamespace("prod")); err != nil {
+		t.Fatalf("list risk signals: %v", err)
+	}
+	riskSignal := signals.Items[0]
+	if riskSignal.Status.RCAProvider != "openai-provider" {
+		t.Fatalf("expected openai provider name, got %s", riskSignal.Status.RCAProvider)
+	}
+	if riskSignal.Status.RCASummary != "OpenAI correlated crash loops with the latest rollout." {
+		t.Fatalf("unexpected RCA summary: %q", riskSignal.Status.RCASummary)
+	}
+}
+
+func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderSecretMissing(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add core scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+	now := time.Date(2026, 6, 29, 10, 0, 0, 0, time.UTC)
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: "prod"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "payments-api"}}},
+		},
+	}
+	ruleObj := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-missing-secret", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.RiskRuleSpec{
+			TargetSelector: v1alpha1.TargetSelector{
+				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
+				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			},
+			Signals: []v1alpha1.RiskRuleSignal{{Name: "unhealthy-events", Type: "kubernetesEvent", Reasons: []string{"BackOff"}}},
+			AI: v1alpha1.RiskRuleAI{
+				RCAEnabled:  true,
+				ProviderRef: v1alpha1.LocalObjectReference{Name: "openai-provider"},
+			},
+		},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			Model:    "gpt-5.1",
+			APIKeySecretRef: &v1alpha1.SecretKeyRef{
+				Name: "missing-secret",
+				Key:  "api-key",
+			},
+		},
+	}
+	eventSource := &fakeRuleDataSource{
+		name:      "kubernetes-events",
+		queryType: domain.QueryTypeEvent,
+		result: &datasource.QueryResult{
+			Source:    "kubernetes-events",
+			QueryType: domain.QueryTypeEvent,
+			Records:   []map[string]any{{"reason": "BackOff", "message": "BackOff restarting failed container"}},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskRule{}, &v1alpha1.RiskSignal{}).
+		WithObjects(ruleObj, deployment, provider).
+		Build()
+	reconciler := &RiskRuleReconciler{
+		Client:   client,
+		Scheme:   scheme,
+		Registry: datasource.NewRegistry(eventSource),
+		Resolver: modelgateway.KubeResolver{Client: client},
+		Gateway: &modelgateway.Gateway{
+			Base:      knowledge.NewBase(),
+			Providers: model.NewRegistry(openai.Provider{}),
+			Secrets:   modelgateway.KubeSecretResolver{Client: client},
+		},
+		Now: func() time.Time { return now },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	var signals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &signals, crclient.InNamespace("prod")); err != nil {
+		t.Fatalf("list risk signals: %v", err)
+	}
+	cond := findCondition(signals.Items[0].Status.Conditions, conditionRCAReady)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "SecretNotFound" {
+		t.Fatalf("expected SecretNotFound RCA false condition, got %#v", cond)
+	}
+}
+
+func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderResponseInvalid(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add core scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+	now := time.Date(2026, 6, 29, 11, 0, 0, 0, time.UTC)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{"content": `{"riskSummary":""}`},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: "prod"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "payments-api"}}},
+		},
+	}
+	ruleObj := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-invalid-response", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.RiskRuleSpec{
+			TargetSelector: v1alpha1.TargetSelector{
+				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
+				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			},
+			Signals: []v1alpha1.RiskRuleSignal{{Name: "unhealthy-events", Type: "kubernetesEvent", Reasons: []string{"BackOff"}}},
+			AI: v1alpha1.RiskRuleAI{
+				RCAEnabled:  true,
+				ProviderRef: v1alpha1.LocalObjectReference{Name: "openai-provider"},
+			},
+		},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			Model:    "gpt-5.1",
+			Endpoint: server.URL,
+			APIKeySecretRef: &v1alpha1.SecretKeyRef{
+				Name: "openai-secret",
+				Key:  "api-key",
+			},
+		},
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxagent-system"},
+		Data:       map[string][]byte{"api-key": []byte("openai-token")},
+	}
+	eventSource := &fakeRuleDataSource{
+		name:      "kubernetes-events",
+		queryType: domain.QueryTypeEvent,
+		result: &datasource.QueryResult{
+			Source:    "kubernetes-events",
+			QueryType: domain.QueryTypeEvent,
+			Records:   []map[string]any{{"reason": "BackOff", "message": "BackOff restarting failed container"}},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskRule{}, &v1alpha1.RiskSignal{}).
+		WithObjects(ruleObj, deployment, provider, secret).
+		Build()
+	reconciler := &RiskRuleReconciler{
+		Client:   client,
+		Scheme:   scheme,
+		Registry: datasource.NewRegistry(eventSource),
+		Resolver: modelgateway.KubeResolver{Client: client},
+		Gateway: &modelgateway.Gateway{
+			Base:      knowledge.NewBase(),
+			Providers: model.NewRegistry(openai.Provider{}),
+			Secrets:   modelgateway.KubeSecretResolver{Client: client},
+		},
+		Now: func() time.Time { return now },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	var signals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &signals, crclient.InNamespace("prod")); err != nil {
+		t.Fatalf("list risk signals: %v", err)
+	}
+	cond := findCondition(signals.Items[0].Status.Conditions, conditionRCAReady)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "InvalidProviderResponse" {
+		t.Fatalf("expected InvalidProviderResponse RCA false condition, got %#v", cond)
 	}
 }
 
