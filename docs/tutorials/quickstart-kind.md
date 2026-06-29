@@ -187,6 +187,23 @@ Run both degraded cases in one recording-friendly sequence:
 make demo-degrade-all
 ```
 
+Run the full automated end-to-end validation:
+
+```bash
+make verify-e2e-kind
+```
+
+`verify-e2e-kind` performs:
+
+1. `make demo-up`
+2. wait for the manager, observability service, and sample app
+3. `make inject-fault`
+4. assert `RiskSignal` exists
+5. assert `status.rcaSummary` is not empty
+6. assert the fake webhook received a notification
+7. assert missing datasource and capability mismatch degraded conditions
+8. restore the baseline rule and clean up with `make demo-down`
+
 Adjust the pause between sections when recording:
 
 ```bash

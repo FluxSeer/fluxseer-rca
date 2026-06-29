@@ -86,6 +86,7 @@ git log --oneline -3
 GOWORK=off go test ./...
 kubectl kustomize config/default >/tmp/fluxagent-config-default.yaml
 kubectl kustomize examples/kind >/tmp/fluxagent-kind-example.yaml
+make verify-e2e-kind
 git status --short
 ```
 
