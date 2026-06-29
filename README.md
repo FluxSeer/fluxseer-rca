@@ -177,6 +177,7 @@ make demo-degrade-missing-datasource
 make demo-degrade-capability-mismatch
 make demo-degrade-all
 make demo-reset-riskrule
+make verify-e2e-kind
 make demo-down
 ```
 
@@ -206,6 +207,23 @@ The demo also includes degraded-case helpers so you can intentionally trigger:
 
 - `DataSourceNotFound`
 - `CapabilityMismatch`
+
+For a full end-to-end validation of the kind flow, run:
+
+```bash
+make verify-e2e-kind
+```
+
+This target will:
+
+- create the demo cluster
+- wait for manager and demo workloads to become ready
+- inject a fault
+- assert that a `RiskSignal` exists
+- assert that `status.rcaSummary` is populated
+- assert that the fake webhook received a notification
+- assert degraded conditions for missing datasource and capability mismatch
+- clean up the kind cluster automatically
 
 ## Current Scope
 

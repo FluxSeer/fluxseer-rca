@@ -2,7 +2,7 @@ APP=fluxagent
 GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-reset-riskrule demo-degrade-all verify-v0.2-alpha build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-v0.2-alpha build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -20,7 +20,15 @@ run-manager:
 	$(GO) run ./cmd/manager
 
 install-demo:
+	kubectl create namespace fluxagent-system || true
 	kubectl create namespace fluxagent-demo || true
+	kubectl apply -k config/default
+	kubectl wait --for=condition=Established --timeout=120s crd/agentactions.aiops.platform
+	kubectl wait --for=condition=Established --timeout=120s crd/datasources.aiops.platform
+	kubectl wait --for=condition=Established --timeout=120s crd/modelproviders.aiops.platform
+	kubectl wait --for=condition=Established --timeout=120s crd/remediationplans.aiops.platform
+	kubectl wait --for=condition=Established --timeout=120s crd/riskrules.aiops.platform
+	kubectl wait --for=condition=Established --timeout=120s crd/risksignals.aiops.platform
 	kubectl apply -k examples/kind
 
 apply-riskrule:
@@ -93,6 +101,9 @@ demo-degrade-all:
 	@printf '%s\n' "============================================================"
 	bash examples/kind/degraded-demo.sh reset
 	@printf '\n%s\n' "Recording flow complete."
+
+verify-e2e-kind:
+	bash test/e2e/kind/verify_e2e_kind.sh
 
 verify-v0.2-alpha:
 	$(GO) test ./...
