@@ -20,6 +20,7 @@ const (
 	annotationNotificationSource = "fluxagent.aiops.platform/notification-source"
 	conditionReady               = "Ready"
 	conditionDegraded            = "Degraded"
+	conditionTargetResolved      = "TargetResolved"
 	conditionDatasourceResolved  = "DatasourceResolved"
 	conditionQueryTypeSupported  = "QueryTypeSupported"
 	conditionEvidenceReady       = "EvidenceCollectionReady"
@@ -54,6 +55,10 @@ func setRiskRuleStatus(status *v1alpha1.RiskRuleStatus, phase string, message st
 }
 
 func setDataSourceStatus(status *v1alpha1.DataSourceStatus, phase string, message string, generation int64, now time.Time) {
+	setResourceStatus(&status.ResourceStatus, phase, message, generation, now)
+}
+
+func setInvestigationRequestStatus(status *v1alpha1.InvestigationRequestStatus, phase string, message string, generation int64, now time.Time) {
 	setResourceStatus(&status.ResourceStatus, phase, message, generation, now)
 }
 
