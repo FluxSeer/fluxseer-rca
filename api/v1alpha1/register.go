@@ -21,6 +21,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ModelProviderList{},
 		&RiskRule{},
 		&RiskRuleList{},
+		&InvestigationRequest{},
+		&InvestigationRequestList{},
 		&RiskSignal{},
 		&RiskSignalList{},
 		&RemediationPlan{},

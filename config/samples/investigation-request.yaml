@@ -1,0 +1,23 @@
+apiVersion: aiops.platform/v1alpha1
+kind: InvestigationRequest
+metadata:
+  name: investigate-open-api
+  namespace: fluxagent-system
+spec:
+  target:
+    namespace: prod
+    kind: Deployment
+    name: open-api
+    apiVersion: apps/v1
+  timeRange:
+    lookback: 15m
+  question: |
+    Why did open-api latency increase after the latest rollout?
+  dataSources:
+    - name: kubernetes-events
+    - name: prometheus
+    - name: loki
+  modelProviderRef:
+    name: heuristic-provider
+  mode: readOnly
+  createRiskSignal: false
