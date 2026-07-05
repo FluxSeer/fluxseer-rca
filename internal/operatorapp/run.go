@@ -155,6 +155,13 @@ func Run(args []string, out io.Writer) error {
 		return fmt.Errorf("unable to create RiskRule controller: %w", err)
 	}
 
+	if err := (&controllers.InvestigationRequestReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to create InvestigationRequest controller: %w", err)
+	}
+
 	if webhookURL := os.Getenv("FLUXAGENT_WEBHOOK_URL"); webhookURL != "" {
 		if err := (&controllers.RiskSignalNotificationReconciler{
 			Client:   mgr.GetClient(),
