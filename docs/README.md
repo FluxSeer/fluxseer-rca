@@ -10,13 +10,16 @@ docs/
 │  ├─ overview.md
 │  ├─ dependency-neutrality.md
 │  ├─ read-only-flow.md
+│  ├─ investigation-flow.md
 │  ├─ remediation-flow.md
 │  ├─ v0.2-read-only-rca.md
+│  ├─ v0.3-investigation-experience.md
 │  ├─ v0.2-adapter-neutral-backlog.md
 │  ├─ model-gateway.md
 │  └─ action-executor.md
 ├─ crd-reference/
 │  ├─ datasource.md
+│  ├─ investigationrequest.md
 │  ├─ riskrule.md
 │  ├─ risksignal.md
 │  ├─ remediationplan.md
@@ -39,7 +42,9 @@ docs/
 - [architecture/overview.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/overview.md:1)
 - [architecture/dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1)
 - [architecture/read-only-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/read-only-flow.md:1)
+- [architecture/investigation-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/investigation-flow.md:1)
 - [architecture/v0.2-read-only-rca.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.2-read-only-rca.md:1)
+- [architecture/v0.3-investigation-experience.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.3-investigation-experience.md:1)
 - [architecture/v0.2-adapter-neutral-backlog.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.2-adapter-neutral-backlog.md:1)
 - [release-checkpoint.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/release-checkpoint.md:1)
 - [tutorials/quickstart-kind.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/quickstart-kind.md:1)
@@ -61,3 +66,4 @@ docs/
 - Prometheus, Loki, and Kubernetes Events adapters are wired into the runnable demo path.
 - Prometheus and Loki remain optional adapters even when the demo wires them through a fake observability service.
 - `v0.2` planning is centered on a configurable read-only RCA platform, not autonomous remediation first.
+- the next architecture step is an operator-first investigation layer built around `InvestigationRequest`, not a generic agent surface first.
