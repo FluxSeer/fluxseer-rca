@@ -28,6 +28,7 @@ import (
 	"fluxagent/internal/detector"
 	"fluxagent/internal/executor"
 	"fluxagent/internal/guardrails"
+	"fluxagent/internal/investigation"
 	"fluxagent/internal/knowledge"
 	"fluxagent/internal/model"
 	"fluxagent/internal/model/claude"
@@ -158,6 +159,11 @@ func Run(args []string, out io.Writer) error {
 	if err := (&controllers.InvestigationRequestReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Service: &investigation.Service{
+			Client:   mgr.GetClient(),
+			Registry: registry,
+			Resolver: resolver,
+		},
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create InvestigationRequest controller: %w", err)
 	}
