@@ -13,12 +13,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"fluxagent/api/v1alpha1"
+	"fluxagent/internal/investigation"
 )
 
 type InvestigationRequestReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	Now    func() time.Time
+	Scheme  *runtime.Scheme
+	Service *investigation.Service
+	Now     func() time.Time
 }
 
 func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -33,8 +35,8 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	original := investigation.DeepCopy()
-	message := "investigation request accepted; execution flow not implemented yet"
-	setInvestigationRequestStatus(&investigation.Status, v1alpha1.PhasePending, message, investigation.Generation, now())
+	message := "investigation preflight succeeded; evidence collection and RCA execution are not implemented yet"
+	setInvestigationRequestStatus(&investigation.Status, v1alpha1.PhaseObserved, message, investigation.Generation, now())
 	if investigation.Status.StartedAt == nil {
 		startedAt := metav1.NewTime(now())
 		investigation.Status.StartedAt = &startedAt
@@ -48,18 +50,13 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 	investigation.Status.LinkedRiskSignalRef = nil
 
 	if invalidMessage := validateInvestigationRequestSpec(investigation.Spec); invalidMessage != "" {
-		setInvestigationRequestStatus(&investigation.Status, v1alpha1.PhaseFailed, invalidMessage, investigation.Generation, now())
-		setStatusCondition(&investigation.Status.Conditions, conditionReady, metav1.ConditionFalse, "TargetInvalid", invalidMessage, investigation.Generation, now())
-		setStatusCondition(&investigation.Status.Conditions, conditionTargetResolved, metav1.ConditionFalse, "TargetInvalid", invalidMessage, investigation.Generation, now())
-		setStatusCondition(&investigation.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", investigation.Generation, now())
-		setStatusCondition(&investigation.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", investigation.Generation, now())
-		setStatusCondition(&investigation.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "ValidationFailed", "request failed validation before evidence collection started", investigation.Generation, now())
+		applyInvalidInvestigationStatus(&investigation, invalidMessage, now())
 	} else {
-		setStatusCondition(&investigation.Status.Conditions, conditionReady, metav1.ConditionFalse, "InvestigationPending", message, investigation.Generation, now())
-		setStatusCondition(&investigation.Status.Conditions, conditionTargetResolved, metav1.ConditionTrue, "TargetReferenceAccepted", "target reference passed controller-level validation", investigation.Generation, now())
-		setStatusCondition(&investigation.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "InvestigationNotImplemented", "evidence collection orchestration is not implemented yet", investigation.Generation, now())
-		setStatusCondition(&investigation.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "InvestigationNotImplemented", "RCA generation orchestration is not implemented yet", investigation.Generation, now())
-		setStatusCondition(&investigation.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request is pending implementation work rather than degraded by a runtime dependency", investigation.Generation, now())
+		preflight, preflightErr := r.preflight(ctx, &investigation)
+		if preflightErr != nil {
+			return ctrl.Result{}, preflightErr
+		}
+		applyInvestigationPreflightStatus(&investigation, preflight, message, now())
 	}
 
 	if !reflect.DeepEqual(original.Status, investigation.Status) {
@@ -76,8 +73,20 @@ func (r *InvestigationRequestReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		Complete(r)
 }
 
+func (r *InvestigationRequestReconciler) preflight(ctx context.Context, request *v1alpha1.InvestigationRequest) (investigation.PreflightResult, error) {
+	if r.Service == nil {
+		return investigation.PreflightResult{
+			TargetIssue: &investigation.Issue{
+				Reason:  "InvestigationServiceUnavailable",
+				Message: "investigation service is not configured",
+			},
+		}, nil
+	}
+	return r.Service.Preflight(ctx, request.Namespace, request.Spec)
+}
+
 func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) string {
-	missing := make([]string, 0, 3)
+	missing := make([]string, 0, 4)
 	if strings.TrimSpace(spec.Target.Namespace) == "" {
 		missing = append(missing, "spec.target.namespace")
 	}
@@ -94,4 +103,71 @@ func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) st
 		return "unsupported investigation mode: " + mode
 	}
 	return ""
+}
+
+func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, message string, now time.Time) {
+	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, message, request.Generation, now)
+	completedAt := metav1.NewTime(now)
+	request.Status.CompletedAt = &completedAt
+	request.Status.Provider = ""
+	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, "TargetInvalid", message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionFalse, "TargetInvalid", message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "ValidationFailed", "request failed validation before evidence collection started", request.Generation, now)
+}
+
+func applyInvestigationPreflightStatus(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, message string, now time.Time) {
+	request.Status.Provider = ""
+	if preflight.Provider != nil {
+		request.Status.Provider = preflight.Provider.Name
+	}
+
+	if preflight.TargetIssue != nil {
+		setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionFalse, preflight.TargetIssue.Reason, preflight.TargetIssue.Message, request.Generation, now)
+	} else {
+		setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionTrue, "TargetResolved", "target resource was resolved successfully", request.Generation, now)
+	}
+
+	if preflight.DatasourceIssue != nil {
+		setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionFalse, preflight.DatasourceIssue.Reason, preflight.DatasourceIssue.Message, request.Generation, now)
+		setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, preflight.DatasourceIssue.Reason, preflight.DatasourceIssue.Message, request.Generation, now)
+	} else {
+		setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionTrue, "AllDatasourcesResolved", "all referenced datasources were resolved", request.Generation, now)
+		setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "InvestigationNotImplemented", "evidence collection orchestration is not implemented yet", request.Generation, now)
+	}
+
+	if preflight.ModelProviderIssue != nil {
+		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, preflight.ModelProviderIssue.Reason, preflight.ModelProviderIssue.Message, request.Generation, now)
+	} else {
+		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "InvestigationNotImplemented", "RCA generation orchestration is not implemented yet", request.Generation, now)
+	}
+
+	if issue := preflight.FirstIssue(); issue != nil {
+		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, issue.Message, request.Generation, now)
+		completedAt := metav1.NewTime(now)
+		request.Status.CompletedAt = &completedAt
+		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, issue.Reason, issue.Message, request.Generation, now)
+		if shouldMarkInvestigationDegraded(issue.Reason) {
+			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, issue.Reason, issue.Message, request.Generation, now)
+		} else {
+			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, issue.Reason, "request failed without an optional dependency degradation", request.Generation, now)
+		}
+		return
+	}
+
+	request.Status.CompletedAt = nil
+	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseObserved, message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, "InvestigationNotImplemented", message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request passed preflight and is waiting for evidence collection implementation", request.Generation, now)
+}
+
+func shouldMarkInvestigationDegraded(reason string) bool {
+	switch reason {
+	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound", "ResolverUnavailable", "ProviderNotFound":
+		return true
+	default:
+		return false
+	}
 }
