@@ -2,14 +2,17 @@
 
 FluxAgent adopts a layered plus split-path architecture.
 
-The default runtime path is read-only detection: observe workload risk, create a `RiskSignal`, and notify without mutating the target workload.
+The current runnable default path is read-only detection: observe workload risk, create a `RiskSignal`, and notify without mutating the target workload.
 
-Guarded remediation is an optional expansion path. Only when it is explicitly enabled and passes guardrails can a `RiskSignal` lead to a `RemediationPlan`, an `AgentAction`, and an executed side effect.
+The next planned layer is read-only ad-hoc investigation through a dedicated workflow resource.
+
+Guarded remediation remains a separate optional expansion path. Only when it is explicitly enabled and passes guardrails can a `RiskSignal` lead to a `RemediationPlan`, an `AgentAction`, and an executed side effect.
 
 ## Design Goals
 
 - read-only by default
 - Kubernetes-native workflow
+- operator-first investigation UX
 - pluggable datasources
 - pluggable model providers
 - guarded remediation
@@ -98,11 +101,15 @@ This layer should continue to consume FluxAgent-owned evidence and domain types 
 
 FluxAgent exposes its workflow through Kubernetes-native CRDs:
 
+- `DataSource`
+- `RiskRule`
+- `ModelProvider`
+- `InvestigationRequest` planned for `v0.3` ad-hoc investigation
 - `RiskSignal`
 - `RemediationPlan`
 - `AgentAction`
 
-`v0.2` adds `RiskRule` and `ModelProvider` as read-only RCA configuration contracts.
+`v0.2` establishes `DataSource`, `RiskRule`, and `ModelProvider` as read-only RCA configuration contracts.
 
 The API group is `aiops.platform/v1alpha1`.
 
@@ -115,7 +122,30 @@ This gives FluxAgent:
 - stable contracts for external tooling
 - controller-native separation of concerns
 
-### 5. Model Gateway Layer
+### 5. Investigation Experience Layer
+
+The next architecture step is an operator-first investigation layer.
+
+Planned contract:
+
+- `InvestigationRequest`
+
+Planned responsibility split:
+
+- controller owns request lifecycle and status
+- investigation service owns target resolution, evidence gathering, and orchestration
+- model gateway owns provider-neutral RCA generation
+
+This layer is intended to support:
+
+- ad-hoc RCA on a workload
+- future CLI wrappers
+- future thin UI entrypoints
+- future webhook or chat bridges
+
+Without this layer, FluxAgent remains background-rule oriented. With it, FluxAgent gains an immediate investigation workflow without becoming a generic agent shell.
+
+### 6. Model Gateway Layer
 
 Reasoning and RCA depend on a provider-neutral abstraction rather than a specific LLM vendor.
 
@@ -131,17 +161,17 @@ type Provider interface {
 Current providers:
 
 - heuristic
-- openai scaffold
-- claude scaffold
-- gemini scaffold
+- openai
+- claude
+- gemini
+- local
 - bedrock scaffold
-- local scaffold
 
 The runnable repo defaults to the heuristic provider so the project stays usable without external secrets. The model gateway is a reasoning seam, not an execution authority.
 
 This is the same dependency-neutrality principle as datasources: model vendors are integrations, not core architecture assumptions.
 
-### 6. Guardrails Layer
+### 7. Guardrails Layer
 
 Any transition from risk detection to action planning must pass guardrails.
 
@@ -156,7 +186,7 @@ Responsibilities:
 
 Guardrails exist so model output cannot directly mutate production state.
 
-### 7. Executor Layer
+### 8. Executor Layer
 
 Executors are isolated from reasoning and policy.
 
@@ -178,7 +208,7 @@ The long-term contract for live executors should include:
 - rollback hints
 - audit-friendly execution metadata
 
-### 8. Notification and Audit Layer
+### 9. Notification and Audit Layer
 
 Notification is part of the default read-only story, and status persistence is part of every workflow stage.
 
@@ -189,7 +219,7 @@ This layer makes sure risk detection and guarded execution both leave an observa
 - execution summaries
 - rollback metadata
 
-## Primary Flow: Read-only Detection
+## Primary Flow: Background Read-only Detection
 
 The default path is:
 
@@ -212,6 +242,35 @@ In runtime terms:
 6. `RiskSignalNotificationReconciler` sends a webhook notification when configured.
 
 This is the main open-source entry point and the default runtime truth of `v0.1`.
+
+## Planned Flow: Ad-hoc Read-only Investigation
+
+The next planned path is:
+
+```text
+InvestigationRequest
+→ InvestigationRequestReconciler
+→ Investigation Service
+→ Datasource Adapters
+→ Evidence Redaction
+→ Model Gateway
+→ InvestigationRequest.status
+→ optional RiskSignal
+```
+
+This path is intended to answer:
+
+```text
+Investigate this workload now.
+```
+
+It is deliberately separate from:
+
+- recurring rule evaluation
+- chat-specific UX
+- remediation execution
+
+The CRD should become the common contract that future CLI or UI layers call.
 
 ## Optional Flow: Guarded Remediation
 
@@ -246,6 +305,10 @@ This separation is intentional: risk detection and side-effect execution are not
 
 Represents a detected risk with severity, confidence, target, and evidence. In `v0.1`, this is the core product output.
 
+### `InvestigationRequest`
+
+Planned `v0.3` contract for a human-triggered or system-triggered read-only investigation request.
+
 ### `RemediationPlan`
 
 Represents a reviewable mitigation proposal with summary, steps, references, and rollback hints.
@@ -256,6 +319,7 @@ Represents one executable action after policy evaluation and, when required, hum
 
 Together these CRDs form the workflow contract for the operator:
 
+- `InvestigationRequest` captures ad-hoc investigation intent
 - `RiskSignal` captures observation
 - `RemediationPlan` captures proposal
 - `AgentAction` captures approved execution intent
@@ -277,6 +341,12 @@ Established as contracts or scaffolds:
 - multiple model provider packages
 - guarded remediation controller chain
 - multi-backend executor routing
+
+Planned next contract layer:
+
+- `InvestigationRequest`
+- reusable investigation service orchestration
+- thin CLI and UI wrappers over the CRD workflow
 
 Simulation-oriented today:
 
@@ -318,6 +388,8 @@ FluxAgent is designed to grow through stable seams instead of controller rewrite
 
 ## Mermaid Diagram
 
+The following diagram mixes today's runnable control-plane shape with the next planned investigation layer.
+
 ```mermaid
 flowchart LR
     subgraph Sources[Signal Sources]
@@ -329,8 +401,12 @@ flowchart LR
 
     subgraph Core[FluxAgent Core]
         R1[DeploymentRiskReconciler]
+        RR[RiskRuleReconciler]
+        IR[InvestigationRequestReconciler]
         DET[detector.Service]
+        INV[investigation.Service]
         RS[RiskSignal]
+        IQ[InvestigationRequest]
         N[Notification Reconciler]
         RP[RemediationPlan Reconciler]
         G[Guardrails]
@@ -348,11 +424,18 @@ flowchart LR
     P --> DS
     L --> DS
     DS --> DET
+    DS --> INV
     R1 --> DET
+    RR --> INV
+    IQ --> IR
+    IR --> INV
     DET --> RS
+    INV --> IQ
+    INV -. optional .-> RS
     RS --> N
     RS -. optional .-> RP
     MG -. optional .-> RP
+    MG -. RCA .-> INV
     RP --> G
     G --> AA
     AA --> X
@@ -369,3 +452,7 @@ It should not yet be described as:
 `FluxAgent fully automates AI remediation in production.`
 
 That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.
+
+The next defensible description after the investigation layer lands would be:
+
+`FluxAgent is a CRD-first AI SRE control plane with background detection and ad-hoc read-only investigation workflows.`
