@@ -52,6 +52,28 @@ spec:
                     properties:
                       name:
                         type: string
+                queries:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      datasourceRef:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                      queryType:
+                        type: string
+                      query:
+                        type: string
+                      queryTemplate:
+                        type: string
+                      reasons:
+                        type: array
+                        items:
+                          type: string
                 modelProviderRef:
                   type: object
                   properties:

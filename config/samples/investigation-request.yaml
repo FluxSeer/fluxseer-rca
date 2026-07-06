@@ -13,11 +13,32 @@ spec:
     lookback: 15m
   question: |
     Why did open-api latency increase after the latest rollout?
-  dataSources:
-    - name: kubernetes-events
-    - name: prometheus
-    - name: loki
+  queries:
+    - name: unhealthy-events
+      datasourceRef:
+        name: kubernetes-events
+      queryType: event
+      reasons:
+        - Unhealthy
+        - BackOff
+        - Failed
+    - name: error-rate
+      datasourceRef:
+        name: prometheus
+      queryType: metric
+      queryTemplate: |
+        sum(rate(http_requests_total{
+          namespace="{{ .namespace }}",
+          app="{{ .app }}",
+          status=~"5.."
+        }[5m]))
+    - name: error-logs
+      datasourceRef:
+        name: loki
+      queryType: log
+      queryTemplate: |
+        {namespace="{{ .namespace }}",app="{{ .app }}"} |= "error"
   modelProviderRef:
     name: heuristic-provider
   mode: readOnly
-  createRiskSignal: false
+  createRiskSignal: true
