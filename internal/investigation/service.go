@@ -56,10 +56,16 @@ type EvidenceCollectionResult struct {
 	Issue        *Issue
 }
 
+type RCAResult struct {
+	Reasoning *domain.ReasoningOutput
+	Issue     *Issue
+}
+
 type Service struct {
 	Client   client.Reader
 	Registry *datasource.Registry
 	Resolver modelgateway.ProviderResolver
+	Gateway  *modelgateway.Gateway
 }
 
 func (s *Service) Preflight(ctx context.Context, namespace string, spec v1alpha1.InvestigationRequestSpec) (PreflightResult, error) {
@@ -140,6 +146,46 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 
 	result.EvidenceRefs = evidenceRefs
 	result.Summary = fmt.Sprintf("collected %d evidence records from %d datasources", totalRecords, len(preflight.DatasourceNames))
+	return result, nil
+}
+
+func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRequestSpec, preflight PreflightResult, evidenceResult EvidenceCollectionResult, now time.Time) (RCAResult, error) {
+	result := RCAResult{}
+	if !preflight.Successful() {
+		result.Issue = preflight.FirstIssue()
+		return result, nil
+	}
+	if evidenceResult.Issue != nil {
+		result.Issue = evidenceResult.Issue
+		return result, nil
+	}
+	if preflight.Provider == nil {
+		result.Issue = &Issue{
+			Reason:  "ProviderUnavailable",
+			Message: "model provider is not available for RCA generation",
+		}
+		return result, nil
+	}
+	if s.Gateway == nil {
+		result.Issue = &Issue{
+			Reason:  "GatewayUnavailable",
+			Message: "model gateway is not configured",
+		}
+		return result, nil
+	}
+
+	reasoning, err := s.Gateway.AnalyzeIngestion(ctx, preflight.Provider, buildInvestigationIngestionOutput(spec, preflight, evidenceResult, now))
+	if err != nil {
+		if analyzeErr, ok := err.(*modelgateway.AnalyzeError); ok {
+			result.Issue = &Issue{
+				Reason:  analyzeErr.Reason,
+				Message: analyzeErr.Message,
+			}
+			return result, nil
+		}
+		return result, err
+	}
+	result.Reasoning = &reasoning
 	return result, nil
 }
 
@@ -382,4 +428,95 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func buildInvestigationIngestionOutput(spec v1alpha1.InvestigationRequestSpec, preflight PreflightResult, evidenceResult EvidenceCollectionResult, now time.Time) domain.IngestionOutput {
+	signals := make([]domain.Signal, 0, len(evidenceResult.EvidenceRefs))
+	references := make([]domain.Evidence, 0, len(evidenceResult.EvidenceRefs))
+	logs := []string{}
+	events := []string{}
+	metrics := map[string]float64{}
+	timeline := make([]domain.TimelineEvent, 0, len(evidenceResult.EvidenceRefs))
+
+	for index, evidenceRef := range evidenceResult.EvidenceRefs {
+		kind := normalizeEvidenceKind(evidenceRef.Kind)
+		signals = append(signals, domain.Signal{
+			ID:        fmt.Sprintf("investigation-signal-%d", index+1),
+			Kind:      kind,
+			Source:    firstNonEmpty(evidenceRef.Source, evidenceRef.Kind),
+			Severity:  domain.SeverityMedium,
+			Message:   evidenceRef.Summary,
+			Resource:  preflight.Target,
+			Timestamp: now,
+		})
+		timeline = append(timeline, domain.TimelineEvent{
+			Timestamp: now,
+			Kind:      kind,
+			Summary:   evidenceRef.Summary,
+		})
+		references = append(references, domain.Evidence{
+			Kind:    evidenceRef.Kind,
+			Source:  evidenceRef.Source,
+			Summary: evidenceRef.Summary,
+			Query:   evidenceRef.Query,
+			Reason:  evidenceRef.Reason,
+			Link:    evidenceRef.Link,
+		})
+
+		switch evidenceRef.Kind {
+		case "metric":
+			logicalKey := firstNonEmpty(evidenceRef.Source, fmt.Sprintf("metric-%d", index))
+			metrics[logicalKey] = float64(index + 1)
+		case "log":
+			logs = append(logs, evidenceRef.Summary)
+		case "event":
+			events = append(events, firstNonEmpty(evidenceRef.Reason, evidenceRef.Summary))
+		}
+	}
+
+	contextSummary := evidenceResult.Summary
+	if strings.TrimSpace(spec.Question) != "" {
+		contextSummary = strings.TrimSpace(spec.Question) + " | " + evidenceResult.Summary
+	}
+
+	return domain.IngestionOutput{
+		Context: domain.IncidentContext{
+			ID:       fmt.Sprintf("investigation-%s-%s", preflight.Target.Namespace, preflight.Target.Name),
+			Cluster:  preflight.Target.Cluster,
+			Service:  preflight.Target.Service,
+			Resource: preflight.Target,
+			Summary:  contextSummary,
+			Signals:  signals,
+			Metadata: map[string]string{
+				"question": strings.TrimSpace(spec.Question),
+				"mode":     firstNonEmpty(spec.Mode, v1alpha1.InvestigationModeReadOnly),
+			},
+			GeneratedAt: now,
+		},
+		Evidence: domain.EvidenceBundle{
+			Logs:       logs,
+			Metrics:    metrics,
+			Events:     events,
+			References: references,
+		},
+		Signals: signals,
+		Timeline: domain.ResourceTimeline{
+			Resource: preflight.Target,
+			Events:   timeline,
+		},
+		DedupedFrom: len(evidenceResult.EvidenceRefs),
+	}
+}
+
+func normalizeEvidenceKind(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "metric":
+		return "metric"
+	case "log":
+		return "log"
+	case "event":
+		return "event"
+	default:
+		return "signal"
+	}
 }

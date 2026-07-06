@@ -35,6 +35,7 @@ func (e *Engine) Analyze(ctx context.Context, input domain.IngestionOutput) (dom
 			"service":  input.Context.Service,
 			"resource": input.Context.Resource,
 			"summary":  input.Context.Summary,
+			"metadata": input.Context.Metadata,
 			"signals":  input.Signals,
 			"evidence": input.Evidence,
 			"timeline": input.Timeline.Events,

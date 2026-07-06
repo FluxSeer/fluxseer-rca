@@ -32,6 +32,10 @@ type Gateway struct {
 }
 
 func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider, target domain.ResourceRef, matches []rule.Match, now time.Time) (domain.ReasoningOutput, error) {
+	return g.AnalyzeIngestion(ctx, provider, buildIngestionOutput(target, matches, now))
+}
+
+func (g *Gateway) AnalyzeIngestion(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput) (domain.ReasoningOutput, error) {
 	if provider == nil {
 		return domain.ReasoningOutput{}, &AnalyzeError{
 			Reason:  "ProviderUnavailable",
@@ -68,7 +72,7 @@ func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider,
 		redactor = defaultRedactor
 	}
 	engine := reasoning.NewEngine(base, configuredProvider)
-	result, err := engine.Analyze(ctx, redactor.RedactIngestion(buildIngestionOutput(target, matches, now)))
+	result, err := engine.Analyze(ctx, redactor.RedactIngestion(input))
 	if err != nil {
 		if providerErr, ok := err.(*model.ProviderError); ok {
 			return domain.ReasoningOutput{}, &AnalyzeError{

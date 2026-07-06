@@ -20,6 +20,7 @@ const (
 	PhaseRejected         = "Rejected"
 	PhaseRecommendation   = "Recommendation"
 	PhaseReadyForApproval = "ReadyForApproval"
+	PhaseCompleted        = "Completed"
 )
 
 type TargetRef struct {
