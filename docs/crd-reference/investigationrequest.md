@@ -30,6 +30,7 @@ Current spec fields:
 - `modelProviderRef`
 - `mode`
 - `createRiskSignal`
+- `ttlSeconds`
 
 ### Simple Mode: `dataSources[]`
 
@@ -113,6 +114,7 @@ spec:
     name: heuristic-provider
   mode: readOnly
   createRiskSignal: true
+  ttlSeconds: 3600
 ```
 
 Query field behavior:
@@ -122,6 +124,7 @@ Query field behavior:
 - `query`: literal query text
 - `queryTemplate`: templated query rendered against target metadata
 - `reasons[]`: optional event reason filter for `queryType: event`
+- `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
 
 If `modelProviderRef.name` is empty, FluxAgent falls back to the built-in heuristic provider.
 
@@ -142,6 +145,8 @@ Key status fields:
 - `conditions`
 
 When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to the promoted `RiskSignal`.
+
+If `ttlSeconds` is greater than zero, FluxAgent keeps the completed request for that many seconds after `status.completedAt`, then deletes it automatically.
 
 ## Conditions
 
@@ -176,6 +181,8 @@ Current execution path:
 4. collect and normalize evidence
 5. run RCA
 6. optionally promote into `RiskSignal`
+
+For the same object generation, terminal requests are not re-executed on later reconciles. Spec changes create a new generation and trigger a fresh run.
 
 Boundaries:
 

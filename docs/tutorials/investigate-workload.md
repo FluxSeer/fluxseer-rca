@@ -87,6 +87,8 @@ Useful flags:
 - `--lookback`: evidence window, default `15m`
 - `--timeout`: wait timeout when `--wait=true`, default `90s`
 
+If you set `spec.ttlSeconds`, FluxAgent keeps the finished `InvestigationRequest` until `status.completedAt + ttlSeconds`, then removes it automatically. This does not delete any promoted `RiskSignal`.
+
 ## 5. Inspect Results
 
 ```bash

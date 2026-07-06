@@ -83,6 +83,9 @@ spec:
                   type: string
                 createRiskSignal:
                   type: boolean
+                ttlSeconds:
+                  type: integer
+                  format: int64
             status:
               type: object
               properties:
