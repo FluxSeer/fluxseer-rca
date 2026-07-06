@@ -2,6 +2,7 @@ package modelgateway
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -102,4 +103,140 @@ func containsSecret(input string) bool {
 		}
 	}
 	return false
+}
+
+type failingProvider struct {
+	model string
+}
+
+func (p failingProvider) Name() string {
+	return "broken"
+}
+
+func (p failingProvider) WithConfig(config model.RuntimeConfig) model.Provider {
+	if config.Model != "" {
+		p.model = config.Model
+	}
+	return p
+}
+
+func (p failingProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	return domain.ModelResponse{}, &model.ProviderError{
+		Reason:  "ProviderUnavailable",
+		Message: fmt.Sprintf("provider model %q is unavailable", p.model),
+	}
+}
+
+type resolverStub struct {
+	providers map[string]*v1alpha1.ModelProvider
+	err       error
+}
+
+func (r resolverStub) Resolve(_ context.Context, namespace string, ref *v1alpha1.LocalObjectReference) (*v1alpha1.ModelProvider, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	if ref == nil || ref.Name == "" {
+		return DefaultHeuristicProvider(namespace), nil
+	}
+	provider, ok := r.providers[namespace+"/"+ref.Name]
+	if !ok {
+		return nil, &ResolveError{
+			Reason:  "ProviderNotFound",
+			Message: fmt.Sprintf("ModelProvider %q was not found in namespace %q", ref.Name, namespace),
+		}
+	}
+	return provider, nil
+}
+
+func TestGatewayFallsBackToSecondaryProvider(t *testing.T) {
+	primary := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-openai", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "broken",
+			Model:    "gpt-broken",
+			FallbackProviderRef: v1alpha1.LocalObjectReference{
+				Name: "fallback-capture",
+			},
+		},
+	}
+	fallback := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-capture", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "capture",
+		},
+	}
+	capture := &captureProvider{}
+	gateway := &Gateway{
+		Base:      knowledge.NewBase(),
+		Providers: model.NewRegistry(failingProvider{}, capture),
+		Resolver: resolverStub{
+			providers: map[string]*v1alpha1.ModelProvider{
+				"fluxagent-system/fallback-capture": fallback,
+			},
+		},
+	}
+
+	result, err := gateway.AnalyzeIngestion(context.Background(), primary, domain.IngestionOutput{
+		Context: domain.IncidentContext{
+			Resource: domain.ResourceRef{
+				Namespace: "prod",
+				Name:      "payments-api",
+				Kind:      "Deployment",
+				Service:   "payments-api",
+			},
+			Summary: "error rate increased after rollout",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected analyze error: %v", err)
+	}
+	if result.Provider != "capture" {
+		t.Fatalf("expected fallback provider capture, got %q", result.Provider)
+	}
+	if capture.request.ProviderHint != "capture" {
+		t.Fatalf("expected fallback request to use capture provider, got %q", capture.request.ProviderHint)
+	}
+}
+
+func TestGatewayReturnsFallbackResolutionFailure(t *testing.T) {
+	primary := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-openai", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "broken",
+			Model:    "gpt-broken",
+			FallbackProviderRef: v1alpha1.LocalObjectReference{
+				Name: "missing-provider",
+			},
+		},
+	}
+	gateway := &Gateway{
+		Base:      knowledge.NewBase(),
+		Providers: model.NewRegistry(failingProvider{}),
+		Resolver:  resolverStub{},
+	}
+
+	_, err := gateway.AnalyzeIngestion(context.Background(), primary, domain.IngestionOutput{
+		Context: domain.IncidentContext{
+			Resource: domain.ResourceRef{
+				Namespace: "prod",
+				Name:      "payments-api",
+				Kind:      "Deployment",
+			},
+			Summary: "error rate increased after rollout",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected analyze error")
+	}
+	analyzeErr, ok := err.(*AnalyzeError)
+	if !ok {
+		t.Fatalf("expected AnalyzeError, got %T", err)
+	}
+	if analyzeErr.Reason != "ProviderNotFound" {
+		t.Fatalf("expected ProviderNotFound, got %q", analyzeErr.Reason)
+	}
+	if !strings.Contains(analyzeErr.Message, "fallback provider") {
+		t.Fatalf("expected fallback provider context in error, got %q", analyzeErr.Message)
+	}
 }

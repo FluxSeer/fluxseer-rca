@@ -55,7 +55,7 @@ Today the runnable path defaults to the heuristic provider. That choice is delib
 - repeatable local demos
 - safer open-source first-run story
 
-The heuristic provider remains the default runnable path. The local HTTP endpoint is now the first supported non-heuristic runtime path. Hosted vendor providers remain scaffold-oriented.
+The heuristic provider remains the default runnable path. The local HTTP endpoint is the simplest non-heuristic runtime path, and hosted `openai`, `claude`, and `gemini` adapters are also wired through `ModelProvider`.
 
 ## Architecture Diagram
 
@@ -123,13 +123,11 @@ Implemented today:
 - heuristic provider for runnable local behavior
 - local endpoint provider wired into runtime configuration
 - provider-bound evidence redaction before reasoning calls
+- hosted `openai`, `claude`, and `gemini` adapters
+- `fallbackProviderRef` failover between `ModelProvider` objects for provider and secret related failures
 
 Scaffolded today:
 
-- `openai`
-- `claude`
-- `gemini`
 - `bedrock`
-- `local`
 
-This is why the model gateway should be described as an extensibility seam with a runnable heuristic default, not as a fully integrated multi-provider production inference layer.
+This is why the model gateway should be described as an extensibility seam with a runnable heuristic default and guarded hosted-provider support, not as a fully integrated multi-provider production inference layer.
