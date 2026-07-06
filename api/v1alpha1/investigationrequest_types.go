@@ -18,11 +18,21 @@ type NamespacedObjectReference struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+type InvestigationQuery struct {
+	Name          string               `json:"name,omitempty"`
+	DatasourceRef LocalObjectReference `json:"datasourceRef,omitempty"`
+	QueryType     string               `json:"queryType,omitempty"`
+	Query         string               `json:"query,omitempty"`
+	QueryTemplate string               `json:"queryTemplate,omitempty"`
+	Reasons       []string             `json:"reasons,omitempty"`
+}
+
 type InvestigationRequestSpec struct {
 	Target           TargetRef              `json:"target"`
 	TimeRange        InvestigationTimeRange `json:"timeRange,omitempty"`
 	Question         string                 `json:"question,omitempty"`
 	DataSources      []LocalObjectReference `json:"dataSources,omitempty"`
+	Queries          []InvestigationQuery   `json:"queries,omitempty"`
 	ModelProviderRef LocalObjectReference   `json:"modelProviderRef,omitempty"`
 	Mode             string                 `json:"mode,omitempty"`
 	CreateRiskSignal bool                   `json:"createRiskSignal,omitempty"`
@@ -61,6 +71,15 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
 	if in.Spec.DataSources != nil {
 		out.Spec.DataSources = append([]LocalObjectReference(nil), in.Spec.DataSources...)
+	}
+	if in.Spec.Queries != nil {
+		out.Spec.Queries = make([]InvestigationQuery, len(in.Spec.Queries))
+		copy(out.Spec.Queries, in.Spec.Queries)
+		for i := range out.Spec.Queries {
+			if in.Spec.Queries[i].Reasons != nil {
+				out.Spec.Queries[i].Reasons = append([]string(nil), in.Spec.Queries[i].Reasons...)
+			}
+		}
 	}
 	if in.Status.StartedAt != nil {
 		started := in.Status.StartedAt.DeepCopy()
