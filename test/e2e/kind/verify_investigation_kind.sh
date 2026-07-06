@@ -12,6 +12,8 @@ success_request="investigate-sample-success"
 missing_ds_request="investigate-sample-missing-ds"
 capability_request="investigate-sample-capability-mismatch"
 provider_request="investigate-sample-missing-provider"
+provider_auth_request="investigate-sample-provider-auth-failed"
+provider_rate_request="investigate-sample-provider-rate-limited"
 reuse_cluster="${FLUXAGENT_E2E_REUSE_CLUSTER:-false}"
 
 if [[ "${reuse_cluster}" != "true" ]]; then
@@ -252,6 +254,128 @@ verify_missing_provider_degradation() {
     "ProviderNotFound"
 }
 
+apply_hosted_provider_mocks() {
+  log_section "Prepare Hosted Provider Mock Resources"
+  kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openai-demo-secret
+  namespace: ${request_namespace}
+type: Opaque
+stringData:
+  api-key: demo-openai-token
+---
+apiVersion: aiops.platform/v1alpha1
+kind: ModelProvider
+metadata:
+  name: openai-auth-failed
+  namespace: ${request_namespace}
+spec:
+  provider: openai
+  model: gpt-5.1
+  endpoint: http://fluxagent-observability:8080/demo/providers/openai/auth-failed
+  timeout: 2s
+  maxTokens: 256
+  apiKeySecretRef:
+    name: openai-demo-secret
+    key: api-key
+---
+apiVersion: aiops.platform/v1alpha1
+kind: ModelProvider
+metadata:
+  name: openai-rate-limited
+  namespace: ${request_namespace}
+spec:
+  provider: openai
+  model: gpt-5.1
+  endpoint: http://fluxagent-observability:8080/demo/providers/openai/rate-limited
+  timeout: 2s
+  maxTokens: 256
+  apiKeySecretRef:
+    name: openai-demo-secret
+    key: api-key
+EOF
+}
+
+verify_provider_auth_failed_degradation() {
+  log_section "Verify Investigation Degradation: Provider Auth Failed"
+  (
+    cd "${repo_root}"
+    GOWORK=off go run ./cmd/fluxagent investigate deployment "${target_name}" \
+      --namespace "${target_namespace}" \
+      --request-namespace "${request_namespace}" \
+      --request-name "${provider_auth_request}" \
+      --query-file config/samples/investigation-queries.yaml \
+      --question "Should fail because hosted provider credentials are rejected" \
+      --provider openai-auth-failed \
+      --wait=false
+  )
+
+  wait_for_jsonpath_equals \
+    "investigationrequest/${provider_auth_request}" \
+    "${request_namespace}" \
+    '{.status.phase}' \
+    'Failed'
+
+  wait_for_condition_reason \
+    "investigationrequest/${provider_auth_request}" \
+    "${request_namespace}" \
+    "RCAReady" \
+    "ProviderAuthFailed"
+
+  wait_for_condition_reason \
+    "investigationrequest/${provider_auth_request}" \
+    "${request_namespace}" \
+    "Ready" \
+    "ProviderAuthFailed"
+
+  wait_for_condition_reason \
+    "investigationrequest/${provider_auth_request}" \
+    "${request_namespace}" \
+    "Degraded" \
+    "ProviderAuthFailed"
+}
+
+verify_provider_rate_limited_degradation() {
+  log_section "Verify Investigation Degradation: Provider Rate Limited"
+  (
+    cd "${repo_root}"
+    GOWORK=off go run ./cmd/fluxagent investigate deployment "${target_name}" \
+      --namespace "${target_namespace}" \
+      --request-namespace "${request_namespace}" \
+      --request-name "${provider_rate_request}" \
+      --query-file config/samples/investigation-queries.yaml \
+      --question "Should fail because hosted provider keeps returning 429" \
+      --provider openai-rate-limited \
+      --wait=false
+  )
+
+  wait_for_jsonpath_equals \
+    "investigationrequest/${provider_rate_request}" \
+    "${request_namespace}" \
+    '{.status.phase}' \
+    'Failed'
+
+  wait_for_condition_reason \
+    "investigationrequest/${provider_rate_request}" \
+    "${request_namespace}" \
+    "RCAReady" \
+    "ProviderRateLimited"
+
+  wait_for_condition_reason \
+    "investigationrequest/${provider_rate_request}" \
+    "${request_namespace}" \
+    "Ready" \
+    "ProviderRateLimited"
+
+  wait_for_condition_reason \
+    "investigationrequest/${provider_rate_request}" \
+    "${request_namespace}" \
+    "Degraded" \
+    "ProviderRateLimited"
+}
+
 if [[ "${reuse_cluster}" != "true" ]]; then
   log_section "Prepare Demo Cluster"
   make demo-down >/dev/null 2>&1 || true
@@ -270,6 +394,9 @@ verify_successful_investigation
 verify_missing_datasource_degradation
 verify_capability_mismatch_degradation
 verify_missing_provider_degradation
+apply_hosted_provider_mocks
+verify_provider_auth_failed_degradation
+verify_provider_rate_limited_degradation
 
 log_section "Investigation E2E Verification Complete"
 echo "verify-investigation-kind passed"

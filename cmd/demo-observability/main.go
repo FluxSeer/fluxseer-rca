@@ -31,6 +31,8 @@ func main() {
 	mux.HandleFunc("/loki/api/v1/query_range", state.handleLoki)
 	mux.HandleFunc("/demo/webhook", state.handleWebhook)
 	mux.HandleFunc("/demo/state", state.handleState)
+	mux.HandleFunc("/demo/providers/openai/auth-failed", state.handleOpenAIProviderAuthFailed)
+	mux.HandleFunc("/demo/providers/openai/rate-limited", state.handleOpenAIProviderRateLimited)
 	mux.HandleFunc("/demo/fault/", state.handleFault(true))
 	mux.HandleFunc("/demo/recover/", state.handleFault(false))
 
@@ -148,6 +150,33 @@ func (s *serverState) handleFault(enabled bool) http.HandlerFunc {
 	}
 }
 
+func (s *serverState) handleOpenAIProviderAuthFailed(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSONStatus(w, http.StatusUnauthorized, map[string]any{
+		"error": map[string]any{
+			"message": "demo auth failure",
+			"type":    "invalid_request_error",
+		},
+	})
+}
+
+func (s *serverState) handleOpenAIProviderRateLimited(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Retry-After", "1")
+	writeJSONStatus(w, http.StatusTooManyRequests, map[string]any{
+		"error": map[string]any{
+			"message": "demo rate limit",
+			"type":    "rate_limit_exceeded",
+		},
+	})
+}
+
 func (s *serverState) isFaulted(app string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -168,6 +197,11 @@ func strconvNano(ts time.Time) string {
 }
 
 func writeJSON(w http.ResponseWriter, payload map[string]any) {
+	writeJSONStatus(w, http.StatusOK, payload)
+}
+
+func writeJSONStatus(w http.ResponseWriter, status int, payload map[string]any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
 }
