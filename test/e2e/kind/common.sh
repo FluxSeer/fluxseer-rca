@@ -70,6 +70,16 @@ wait_for_nonempty_jsonpath() {
     bash -c "[[ -n \"\$(kubectl get ${resource} -n ${namespace} -o jsonpath='${jsonpath}' 2>/dev/null)\" ]]"
 }
 
+wait_for_jsonpath_equals() {
+  local resource="$1"
+  local namespace="$2"
+  local jsonpath="$3"
+  local expected="$4"
+
+  wait_for_command "jsonpath ${jsonpath} equals ${expected} on ${resource}" \
+    bash -c "[[ \"\$(kubectl get ${resource} -n ${namespace} -o jsonpath='${jsonpath}' 2>/dev/null)\" == \"${expected}\" ]]"
+}
+
 wait_for_condition() {
   local resource="$1"
   local namespace="$2"
@@ -103,20 +113,56 @@ assert_contains() {
 }
 
 demo_state() {
-  kubectl run curl-status \
-    -n "${FLUXAGENT_DEMO_NAMESPACE}" \
-    --restart=Never \
-    --rm \
-    -i \
-    --image=curlimages/curl:8.8.0 \
-    -- \
-    curl -fsS http://fluxagent-observability:8080/demo/state
+  local port="${FLUXAGENT_DEMO_PORT_FORWARD_PORT:-18080}"
+  local pf_log
+  local pf_pid
+
+  pf_log="$(mktemp)"
+  kubectl port-forward -n "${FLUXAGENT_DEMO_NAMESPACE}" service/fluxagent-observability "${port}:8080" >"${pf_log}" 2>&1 &
+  pf_pid=$!
+
+  cleanup_port_forward() {
+    kill "${pf_pid}" >/dev/null 2>&1 || true
+    wait "${pf_pid}" >/dev/null 2>&1 || true
+    rm -f "${pf_log}"
+  }
+
+  trap cleanup_port_forward RETURN
+
+  for _ in $(seq 1 20); do
+    if curl -fsS "http://127.0.0.1:${port}/demo/state" >/dev/null 2>&1; then
+      curl -fsS "http://127.0.0.1:${port}/demo/state"
+      return 0
+    fi
+    sleep 1
+  done
+
+  cat "${pf_log}" >&2 || true
+  return 1
 }
 
 demo_state_has_webhook() {
   local state
   state="$(demo_state 2>/dev/null || true)"
   [[ -n "${state}" && "${state}" == *"webhookEvents"* && "${state}" == *"RiskSignal detected"* ]]
+}
+
+demo_state_has_event_list() {
+  local state
+  state="$(demo_state 2>/dev/null || true)"
+  [[ -n "${state}" && "${state}" == *"\"webhookEvents\""* ]]
+}
+
+demo_state_has_notification_title() {
+  local state
+  state="$(demo_state 2>/dev/null || true)"
+  [[ -n "${state}" && "${state}" == *"RiskSignal detected"* ]]
+}
+
+demo_state_has_rca_summary() {
+  local state
+  state="$(demo_state 2>/dev/null || true)"
+  [[ -n "${state}" && "${state}" == *"RCA Summary:"* ]]
 }
 
 kind_cluster_exists() {

@@ -15,6 +15,7 @@ Core logic is designed to stay adapter-neutral: Kubernetes, Prometheus, Loki, an
 - Guardrails-first: policy, dry-run, approval, and audit before execution
 - GitOps-first: prefer pull requests over direct production patching
 - Optional adapters: Prometheus, Loki, model APIs, and remediation remain opt-in
+- Operator-first investigation: `InvestigationRequest` turns ad-hoc RCA into a first-class CRD and CLI flow
 
 ## Architecture
 
@@ -110,6 +111,7 @@ Enable this explicitly with `--enable-remediation=true`.
 ## Core CRDs
 
 - `RiskRule`: read-only detection rule definition
+- `InvestigationRequest`: ad-hoc investigation request with RCA and optional `RiskSignal` promotion
 - `DataSource`: optional datasource runtime configuration
 - `ModelProvider`: provider-neutral reasoning backend configuration
 - `RiskSignal`: observed risk with evidence and confidence
@@ -119,6 +121,8 @@ Enable this explicitly with `--enable-remediation=true`.
 See:
 
 - [config/samples/risk-rule.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/risk-rule.yaml:1)
+- [config/samples/investigation-request.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/investigation-request.yaml:1)
+- [config/samples/investigation-queries.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/investigation-queries.yaml:1)
 - [config/samples/datasource-prometheus.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/datasource-prometheus.yaml:1)
 - [config/samples/datasource-loki.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/datasource-loki.yaml:1)
 - [config/samples/datasource-kubernetes-events.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/datasource-kubernetes-events.yaml:1)
@@ -157,6 +161,27 @@ GOWORK=off go test ./...
 make verify-v0.2-alpha
 ```
 
+### Operator-First Investigation
+
+Create an ad-hoc `InvestigationRequest` from CLI:
+
+```bash
+GOWORK=off go run ./cmd/fluxagent investigate deployment open-api \
+  -n prod \
+  --query-file config/samples/investigation-queries.yaml \
+  --question "Why did open-api latency increase after the latest rollout?" \
+  --provider heuristic-provider \
+  --create-risk-signal \
+  --wait
+```
+
+This writes an `InvestigationRequest` CRD, waits for RCA completion, and optionally promotes the result into `RiskSignal`.
+
+See:
+
+- [docs/tutorials/investigate-workload.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/investigate-workload.md:1)
+- [docs/crd-reference/investigationrequest.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/crd-reference/investigationrequest.md:1)
+
 ### Run the Operator
 
 ```bash
@@ -190,6 +215,7 @@ make demo-degrade-capability-mismatch
 make demo-degrade-all
 make demo-reset-riskrule
 make verify-e2e-kind
+make verify-investigation-kind
 make demo-down
 ```
 
@@ -226,6 +252,17 @@ For a full end-to-end validation of the kind flow, run:
 make verify-e2e-kind
 ```
 
+`verify-e2e-kind` is the main `v0.2 alpha` release gate. It now covers both:
+
+- the read-only `RiskRule -> RiskSignal` path
+- the operator-first `InvestigationRequest -> RCA -> RiskSignal` path
+
+For the operator-first investigation path, run:
+
+```bash
+make verify-investigation-kind
+```
+
 This target will:
 
 - create the demo cluster
@@ -244,6 +281,8 @@ FluxAgent is already a working open-source skeleton, but it is not yet a product
 Implemented today:
 
 - read-only `RiskSignal` generation flow
+- `InvestigationRequest` ad-hoc RCA flow with configurable `queries[]`
+- optional `InvestigationRequest -> RiskSignal` promotion path
 - controller-runtime manager and reconcilers
 - Prometheus, Loki, and Kubernetes Events adapter implementations
 - webhook notification flow
