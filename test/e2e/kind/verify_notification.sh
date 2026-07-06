@@ -8,9 +8,10 @@ log_section "Verify Notification"
 
 wait_for_command "webhook event recorded" demo_state_has_webhook
 
-state="$(demo_state)"
-assert_contains "${state}" '"webhookEvents"' "expected webhook event payload in demo state"
-assert_contains "${state}" 'RiskSignal detected' "expected notification title in demo state"
-assert_contains "${state}" 'RCA Summary:' "expected RCA summary in webhook body"
+wait_for_command "webhook payload contains event list" demo_state_has_event_list
+
+wait_for_command "webhook payload contains notification title" demo_state_has_notification_title
+
+wait_for_command "webhook payload contains RCA summary" demo_state_has_rca_summary
 
 echo "verified webhook payload in demo state"

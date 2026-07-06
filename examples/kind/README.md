@@ -25,6 +25,7 @@ make demo-degrade-capability-mismatch
 make demo-degrade-all
 make demo-reset-riskrule
 make demo-status
+make verify-investigation-kind
 make demo-down
 ```
 
@@ -45,3 +46,7 @@ Degraded demo helpers:
   Use `DEMO_PAUSE_SECONDS=<n>` to hold each section longer while recording
 - `make demo-reset-riskrule`
   Reapply the baseline `RiskRule`
+- `make verify-e2e-kind`
+  Run the full `v0.2 alpha` gate, including both read-only `RiskSignal` flow and operator-first `InvestigationRequest` flow
+- `make verify-investigation-kind`
+  Run a dedicated `InvestigationRequest` e2e flow through the `fluxagent investigate` CLI

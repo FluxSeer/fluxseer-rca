@@ -38,6 +38,7 @@ make inject-fault
 bash "${script_dir}/verify_risksignal.sh"
 bash "${script_dir}/verify_notification.sh"
 bash "${script_dir}/verify_degraded_conditions.sh"
+FLUXAGENT_E2E_REUSE_CLUSTER=true bash "${script_dir}/verify_investigation_kind.sh"
 
 log_section "E2E Verification Complete"
 echo "verify-e2e-kind passed"
