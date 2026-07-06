@@ -106,17 +106,23 @@ func TestInvestigationRequestReconcilerMarksObservedAfterSuccessfulPreflight(t *
 	if stored.Status.Provider != "heuristic-provider" {
 		t.Fatalf("expected provider heuristic-provider, got %q", stored.Status.Provider)
 	}
+	if stored.Status.Summary != "collected 1 evidence records from 1 datasources" {
+		t.Fatalf("unexpected summary %q", stored.Status.Summary)
+	}
+	if len(stored.Status.EvidenceRefs) != 1 || stored.Status.EvidenceRefs[0].Kind != "event" {
+		t.Fatalf("expected one event evidence ref, got %#v", stored.Status.EvidenceRefs)
+	}
 	if cond := findCondition(stored.Status.Conditions, conditionTargetResolved); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected TargetResolved true condition, got %#v", cond)
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionDatasourceResolved); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected DatasourceResolved true condition, got %#v", cond)
 	}
-	if cond := findCondition(stored.Status.Conditions, conditionReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "InvestigationNotImplemented" {
-		t.Fatalf("expected Ready false InvestigationNotImplemented, got %#v", cond)
+	if cond := findCondition(stored.Status.Conditions, conditionReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAReadyPending" {
+		t.Fatalf("expected Ready false RCAReadyPending, got %#v", cond)
 	}
-	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "InvestigationNotImplemented" {
-		t.Fatalf("expected EvidenceCollectionReady false InvestigationNotImplemented, got %#v", cond)
+	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "EvidenceCollected" {
+		t.Fatalf("expected EvidenceCollectionReady true EvidenceCollected, got %#v", cond)
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "InvestigationNotImplemented" {
 		t.Fatalf("expected RCAReady false InvestigationNotImplemented, got %#v", cond)
@@ -264,6 +270,21 @@ func (f fakeInvestigationDataSource) Capabilities() datasource.Capabilities {
 	}
 }
 func (f fakeInvestigationDataSource) Query(context.Context, datasource.QueryRequest) (*datasource.QueryResult, error) {
-	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType}, nil
+	records := []map[string]any{}
+	switch f.queryType {
+	case domain.QueryTypeEvent:
+		records = []map[string]any{
+			{"reason": "BackOff", "message": "container crashed"},
+		}
+	case domain.QueryTypeMetric:
+		records = []map[string]any{
+			{"metric": "http_requests_total", "value": "0.95"},
+		}
+	case domain.QueryTypeLog:
+		records = []map[string]any{
+			{"line": "error timeout"},
+		}
+	}
+	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: records}, nil
 }
 func (f fakeInvestigationDataSource) HealthCheck(context.Context) error { return nil }
