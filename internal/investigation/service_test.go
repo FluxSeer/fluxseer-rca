@@ -2,7 +2,9 @@ package investigation
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -134,9 +136,66 @@ func TestServicePreflightReportsMissingDatasource(t *testing.T) {
 	}
 }
 
+func TestServiceCollectEvidenceNormalizesResults(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				records: []map[string]any{
+					{"metric": "http_requests_total", "value": "0.95"},
+				},
+			},
+			fakeDataSource{
+				name:      "kubernetes-events",
+				queryType: domain.QueryTypeEvent,
+				records: []map[string]any{
+					{"reason": "BackOff", "message": "container crashed"},
+				},
+			},
+		),
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 15 * time.Minute}},
+	}, PreflightResult{
+		Target: domain.ResourceRef{
+			Namespace: "prod",
+			Name:      "open-api",
+			Kind:      "Deployment",
+			Service:   "open-api",
+		},
+		Labels: map[string]string{"app": "open-api"},
+		DatasourceNames: []string{
+			"prometheus",
+			"kubernetes-events",
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue != nil {
+		t.Fatalf("expected no issue, got %#v", result.Issue)
+	}
+	if len(result.EvidenceRefs) != 2 {
+		t.Fatalf("expected two evidence refs, got %#v", result.EvidenceRefs)
+	}
+	if result.EvidenceRefs[0].Kind != "metric" {
+		t.Fatalf("expected first evidence kind metric, got %#v", result.EvidenceRefs[0])
+	}
+	if result.EvidenceRefs[1].Kind != "event" || result.EvidenceRefs[1].Reason != "BackOff" {
+		t.Fatalf("expected event evidence with reason BackOff, got %#v", result.EvidenceRefs[1])
+	}
+	if result.Summary != "collected 2 evidence records from 2 datasources" {
+		t.Fatalf("unexpected summary %q", result.Summary)
+	}
+}
+
 type fakeDataSource struct {
 	name      string
 	queryType domain.QueryType
+	records   []map[string]any
+	queryErr  error
 }
 
 func (f fakeDataSource) Name() string { return f.name }
@@ -157,7 +216,10 @@ func (f fakeDataSource) Capabilities() datasource.Capabilities {
 }
 
 func (f fakeDataSource) Query(context.Context, datasource.QueryRequest) (*datasource.QueryResult, error) {
-	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType}, nil
+	if f.queryErr != nil {
+		return nil, f.queryErr
+	}
+	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: f.records, Summary: fmt.Sprintf("%s returned %d records", f.name, len(f.records))}, nil
 }
 
 func (f fakeDataSource) HealthCheck(context.Context) error { return nil }
