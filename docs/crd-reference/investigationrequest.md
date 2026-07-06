@@ -1,29 +1,39 @@
 # `InvestigationRequest`
 
-`InvestigationRequest` is the planned read-only ad-hoc investigation contract for `v0.3` alpha.
+`InvestigationRequest` is the ad-hoc, read-only investigation contract in the current operator-first path.
 
-## Purpose
+It complements `RiskRule`:
 
-Use `InvestigationRequest` to ask FluxAgent to investigate one target now, collect evidence from selected datasources, and generate RCA without moving directly into remediation.
+- `RiskRule`: recurring background detection
+- `InvestigationRequest`: one-shot or externally triggered RCA request
 
-It is intended to complement `RiskRule`, not replace it.
+## What It Does
 
-- `RiskRule`: recurring background checks
-- `InvestigationRequest`: one-off or externally triggered investigation
+`InvestigationRequest` lets you:
 
-## Proposed Spec Fields
+- target one workload now
+- collect evidence from selected datasources
+- run RCA through `ModelProvider` or the built-in heuristic provider
+- optionally promote the result into a `RiskSignal`
 
-Suggested first fields:
+It does not execute remediation.
+
+## Spec
+
+Current spec fields:
 
 - `target`
 - `timeRange.lookback`
 - `question`
 - `dataSources[]`
+- `queries[]`
 - `modelProviderRef`
 - `mode`
 - `createRiskSignal`
 
-Example:
+### Simple Mode: `dataSources[]`
+
+Use `dataSources[]` when you want FluxAgent to infer a default investigation plan from datasource capabilities.
 
 ```yaml
 apiVersion: aiops.platform/v1alpha1
@@ -33,29 +43,94 @@ metadata:
   namespace: fluxagent-system
 spec:
   target:
-    kind: Deployment
     namespace: prod
+    kind: Deployment
+    name: open-api
+    apiVersion: apps/v1
+  timeRange:
+    lookback: 15m
+  question: |
+    Why did open-api error rate increase after the rollout?
+  dataSources:
+    - name: kubernetes-events
+    - name: prometheus
+    - name: loki
+  mode: readOnly
+```
+
+Default behavior:
+
+- event-capable datasource: collect recent events
+- metric-capable datasource: query 5xx rate
+- log-capable datasource: query error logs
+
+### Advanced Mode: `queries[]`
+
+Use `queries[]` when you want a fixed investigation plan.
+
+```yaml
+apiVersion: aiops.platform/v1alpha1
+kind: InvestigationRequest
+metadata:
+  name: investigate-open-api
+  namespace: fluxagent-system
+spec:
+  target:
+    namespace: prod
+    kind: Deployment
     name: open-api
     apiVersion: apps/v1
   timeRange:
     lookback: 15m
   question: |
     Why did open-api latency increase after the latest rollout?
-  dataSources:
-    - name: kubernetes-events
-    - name: prometheus-main
-    - name: loki-main
+  queries:
+    - name: unhealthy-events
+      datasourceRef:
+        name: kubernetes-events
+      queryType: event
+      reasons:
+        - Unhealthy
+        - BackOff
+        - Failed
+    - name: error-rate
+      datasourceRef:
+        name: prometheus
+      queryType: metric
+      queryTemplate: |
+        sum(rate(http_requests_total{
+          namespace="{{ .namespace }}",
+          app="{{ .app }}",
+          status=~"5.."
+        }[5m]))
+    - name: error-logs
+      datasourceRef:
+        name: loki
+      queryType: log
+      queryTemplate: |
+        {namespace="{{ .namespace }}",app="{{ .app }}"} |= "error"
   modelProviderRef:
     name: heuristic-provider
   mode: readOnly
-  createRiskSignal: false
+  createRiskSignal: true
 ```
 
-## Proposed Status Fields
+Query field behavior:
 
-Suggested first status:
+- `datasourceRef.name`: required datasource reference
+- `queryType`: required and must match datasource capability
+- `query`: literal query text
+- `queryTemplate`: templated query rendered against target metadata
+- `reasons[]`: optional event reason filter for `queryType: event`
+
+If `modelProviderRef.name` is empty, FluxAgent falls back to the built-in heuristic provider.
+
+## Status
+
+Key status fields:
 
 - `phase`
+- `message`
 - `summary`
 - `hypothesis`
 - `confidence`
@@ -66,43 +141,52 @@ Suggested first status:
 - `linkedRiskSignalRef`
 - `conditions`
 
-## Proposed Conditions
+When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to the promoted `RiskSignal`.
+
+## Conditions
 
 Condition types:
 
 - `Ready`
 - `TargetResolved`
+- `DatasourceResolved`
+- `QueryTypeSupported`
 - `EvidenceCollectionReady`
 - `RCAReady`
 - `Degraded`
 
-Common failure reasons should align with the rest of the platform:
+Common reasons:
 
+- `TargetNotFound`
 - `DataSourceNotFound`
 - `CapabilityMismatch`
 - `ProviderNotFound`
 - `ProviderUnavailable`
 - `InvalidProviderResponse`
 
+`Degraded=True` is used when the request failed because an optional dependency or adapter path was unavailable or incompatible.
+
 ## Execution Semantics
 
-The initial contract should remain strictly read-only.
+Current execution path:
 
-That means:
+1. resolve target
+2. resolve datasources and collection plan
+3. validate query types against datasource capabilities
+4. collect and normalize evidence
+5. run RCA
+6. optionally promote into `RiskSignal`
 
-- evidence collection only
-- RCA generation only
+Boundaries:
+
+- read-only investigation only
 - no executor routing
 - no `AgentAction`
-- optional promotion into `RiskSignal`
+- no direct remediation mutation
 
-## Design Notes
+## Files And Examples
 
-- The CRD should be the common entrypoint for future CLI and UI experiences.
-- Investigation results should be persisted as Kubernetes workflow state.
-- The first alpha should prefer status summaries and evidence references over large raw payload storage.
-
-See also:
-
-- [../architecture/v0.3-investigation-experience.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.3-investigation-experience.md:1)
+- [config/samples/investigation-request.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/investigation-request.yaml:1)
+- [config/samples/investigation-queries.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/investigation-queries.yaml:1)
+- [../tutorials/investigate-workload.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/investigate-workload.md:1)
 - [../architecture/investigation-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/investigation-flow.md:1)
