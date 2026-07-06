@@ -125,6 +125,7 @@ Implemented today:
 - provider-bound evidence redaction before reasoning calls
 - hosted `openai`, `claude`, and `gemini` adapters
 - `fallbackProviderRef` failover between `ModelProvider` objects for provider and secret related failures
+- shared hosted-provider timeout, HTTP status mapping, and transient retry policy
 
 Scaffolded today:
 
