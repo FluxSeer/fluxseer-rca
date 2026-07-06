@@ -74,7 +74,7 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
 		WithObjects(request, deployment, provider).
 		Build()
 
@@ -133,6 +133,9 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if cond := findCondition(stored.Status.Conditions, conditionDatasourceResolved); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected DatasourceResolved true condition, got %#v", cond)
 	}
+	if cond := findCondition(stored.Status.Conditions, conditionQueryTypeSupported); cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Fatalf("expected QueryTypeSupported true condition, got %#v", cond)
+	}
 	if cond := findCondition(stored.Status.Conditions, conditionReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "InvestigationCompleted" {
 		t.Fatalf("expected Ready true InvestigationCompleted, got %#v", cond)
 	}
@@ -141,6 +144,107 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "ProviderSucceeded" {
 		t.Fatalf("expected RCAReady true ProviderSucceeded, got %#v", cond)
+	}
+}
+
+func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	now := time.Date(2026, 7, 6, 10, 15, 0, 0, time.UTC)
+
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "promote-open-api", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace: "prod",
+				Kind:      "Deployment",
+				Name:      "open-api",
+			},
+			Queries: []v1alpha1.InvestigationQuery{
+				{
+					Name: "unhealthy-events",
+					DatasourceRef: v1alpha1.LocalObjectReference{
+						Name: "kubernetes-events",
+					},
+					QueryType: "event",
+					Reasons:   []string{"BackOff"},
+				},
+			},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "heuristic-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+			CreateRiskSignal: true,
+		},
+	}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}},
+			},
+		},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "heuristic", Model: "built-in"},
+	}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, deployment, provider).
+		Build()
+
+	reconciler := &InvestigationRequestReconciler{
+		Client: client,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client: client,
+			Registry: datasource.NewRegistry(
+				fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent},
+			),
+			Resolver: modelgateway.KubeResolver{Client: client},
+			Gateway: &modelgateway.Gateway{
+				Base: knowledge.NewBase(),
+				Providers: model.NewRegistry(
+					heuristic.Provider{},
+				),
+			},
+		},
+		Now: func() time.Time { return now },
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var storedRequest v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &storedRequest); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if storedRequest.Status.LinkedRiskSignalRef == nil {
+		t.Fatal("expected linked risk signal ref")
+	}
+
+	var riskSignal v1alpha1.RiskSignal
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Name:      storedRequest.Status.LinkedRiskSignalRef.Name,
+		Namespace: storedRequest.Status.LinkedRiskSignalRef.Namespace,
+	}, &riskSignal); err != nil {
+		t.Fatalf("get promoted risk signal: %v", err)
+	}
+	if riskSignal.Spec.Target.Name != "open-api" {
+		t.Fatalf("unexpected risk signal target %#v", riskSignal.Spec.Target)
+	}
+	if riskSignal.Status.RCASummary == "" || riskSignal.Status.RCAHypothesis == "" {
+		t.Fatalf("expected RCA fields on promoted risk signal, got %#v", riskSignal.Status)
+	}
+	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue {
+		t.Fatalf("expected RCAReady true on promoted risk signal, got %#v", cond)
 	}
 }
 
@@ -274,6 +378,82 @@ func TestInvestigationRequestReconcilerMarksDatasourceResolutionFailure(t *testi
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionDegraded); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "DataSourceNotFound" {
 		t.Fatalf("expected Degraded true DataSourceNotFound, got %#v", cond)
+	}
+}
+
+func TestInvestigationRequestReconcilerMarksQueryTypeMismatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	now := time.Date(2026, 7, 6, 10, 20, 0, 0, time.UTC)
+
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "bad-query", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace: "prod",
+				Kind:      "Deployment",
+				Name:      "open-api",
+			},
+			Queries: []v1alpha1.InvestigationQuery{
+				{
+					Name: "metric-on-events",
+					DatasourceRef: v1alpha1.LocalObjectReference{
+						Name: "kubernetes-events",
+					},
+					QueryType: "metric",
+					Query:     "up",
+				},
+			},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "heuristic-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+		},
+	}
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod"}}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "heuristic", Model: "built-in"},
+	}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithObjects(request, deployment, provider).
+		Build()
+
+	reconciler := &InvestigationRequestReconciler{
+		Client: client,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client: client,
+			Registry: datasource.NewRegistry(
+				fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent},
+			),
+			Resolver: modelgateway.KubeResolver{Client: client},
+			Gateway: &modelgateway.Gateway{
+				Base: knowledge.NewBase(),
+				Providers: model.NewRegistry(
+					heuristic.Provider{},
+				),
+			},
+		},
+		Now: func() time.Time { return now },
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionQueryTypeSupported); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "CapabilityMismatch" {
+		t.Fatalf("expected QueryTypeSupported false CapabilityMismatch, got %#v", cond)
 	}
 }
 
