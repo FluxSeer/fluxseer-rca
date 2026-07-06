@@ -60,7 +60,11 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 		if evidenceErr != nil {
 			return ctrl.Result{}, evidenceErr
 		}
-		applyInvestigationExecutionStatus(&investigation, preflight, evidence, message, now())
+		rca, rcaErr := r.generateRCA(ctx, &investigation, preflight, evidence, now())
+		if rcaErr != nil {
+			return ctrl.Result{}, rcaErr
+		}
+		applyInvestigationExecutionStatus(&investigation, preflight, evidence, rca, message, now())
 	}
 
 	if !reflect.DeepEqual(original.Status, investigation.Status) {
@@ -101,6 +105,18 @@ func (r *InvestigationRequestReconciler) collectEvidence(ctx context.Context, re
 	return r.Service.CollectEvidence(ctx, request.Spec, preflight, now)
 }
 
+func (r *InvestigationRequestReconciler) generateRCA(ctx context.Context, request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, now time.Time) (investigation.RCAResult, error) {
+	if r.Service == nil {
+		return investigation.RCAResult{
+			Issue: &investigation.Issue{
+				Reason:  "InvestigationServiceUnavailable",
+				Message: "investigation service is not configured",
+			},
+		}, nil
+	}
+	return r.Service.GenerateRCA(ctx, request.Spec, preflight, evidence, now)
+}
+
 func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) string {
 	missing := make([]string, 0, 4)
 	if strings.TrimSpace(spec.Target.Namespace) == "" {
@@ -134,7 +150,7 @@ func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, mes
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "ValidationFailed", "request failed validation before evidence collection started", request.Generation, now)
 }
 
-func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, message string, now time.Time) {
+func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, message string, now time.Time) {
 	request.Status.Provider = ""
 	if preflight.Provider != nil {
 		request.Status.Provider = preflight.Provider.Name
@@ -163,8 +179,10 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, preflight.ModelProviderIssue.Reason, preflight.ModelProviderIssue.Message, request.Generation, now)
 	} else if evidence.Issue != nil {
 		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, evidence.Issue.Reason, "RCA execution is blocked until evidence collection succeeds", request.Generation, now)
+	} else if rca.Issue != nil {
+		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, rca.Issue.Reason, rca.Issue.Message, request.Generation, now)
 	} else {
-		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "InvestigationNotImplemented", "RCA generation orchestration is not implemented yet", request.Generation, now)
+		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionTrue, "ProviderSucceeded", "RCA generated successfully for investigation request", request.Generation, now)
 	}
 
 	if issue := preflight.FirstIssue(); issue != nil {
@@ -182,6 +200,8 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	if evidence.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, evidence.Issue.Message, request.Generation, now)
 		request.Status.Summary = ""
+		request.Status.Hypothesis = ""
+		request.Status.Confidence = 0
 		completedAt := metav1.NewTime(now)
 		request.Status.CompletedAt = &completedAt
 		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, evidence.Issue.Reason, evidence.Issue.Message, request.Generation, now)
@@ -192,17 +212,40 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		}
 		return
 	}
+	if rca.Issue != nil {
+		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, rca.Issue.Message, request.Generation, now)
+		request.Status.Summary = evidence.Summary
+		request.Status.Hypothesis = ""
+		request.Status.Confidence = 0
+		completedAt := metav1.NewTime(now)
+		request.Status.CompletedAt = &completedAt
+		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, rca.Issue.Reason, rca.Issue.Message, request.Generation, now)
+		if shouldMarkInvestigationDegraded(rca.Issue.Reason) {
+			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, rca.Issue.Reason, rca.Issue.Message, request.Generation, now)
+		} else {
+			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, rca.Issue.Reason, "request failed during RCA generation without an optional dependency degradation", request.Generation, now)
+		}
+		return
+	}
 
-	request.Status.CompletedAt = nil
-	request.Status.Summary = evidence.Summary
-	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseObserved, evidence.Summary, request.Generation, now)
-	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, "RCAReadyPending", "evidence collection succeeded but RCA generation is not implemented yet", request.Generation, now)
-	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request passed preflight and collected evidence successfully", request.Generation, now)
+	if rca.Reasoning != nil {
+		request.Status.Summary = rca.Reasoning.RiskSummary
+		request.Status.Hypothesis = rca.Reasoning.RCA.Hypothesis
+		request.Status.Confidence = float64(rca.Reasoning.Confidence.Score) / 100.0
+		if strings.TrimSpace(rca.Reasoning.Provider) != "" {
+			request.Status.Provider = rca.Reasoning.Provider
+		}
+	}
+	completedAt := metav1.NewTime(now)
+	request.Status.CompletedAt = &completedAt
+	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseCompleted, request.Status.Summary, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request completed successfully without degradation", request.Generation, now)
 }
 
 func shouldMarkInvestigationDegraded(reason string) bool {
 	switch reason {
-	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound", "DatasourceQueryFailed", "CapabilityMismatch", "ResolverUnavailable", "ProviderNotFound":
+	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound", "DatasourceQueryFailed", "CapabilityMismatch", "ResolverUnavailable", "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "SecretReaderUnavailable", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
 		return true
 	default:
 		return false
