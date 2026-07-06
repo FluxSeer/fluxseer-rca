@@ -9,7 +9,7 @@ This is the fastest end-to-end demo path for FluxAgent.
 - a sample application selected by `RiskRule`
 - `DataSource` resources for Prometheus, Loki, and Kubernetes Events
 - a sample `ModelProvider`
-- a fake observability service that simulates Prometheus, Loki, and webhook endpoints
+- a fake observability service that simulates Prometheus, Loki, webhook, and hosted-provider failure endpoints
 - a fault injection flow that produces a read-only `RiskSignal`
 
 ## Prerequisites
@@ -202,7 +202,8 @@ make verify-e2e-kind
 5. assert `status.rcaSummary` is not empty
 6. assert the fake webhook received a notification
 7. assert missing datasource and capability mismatch degraded conditions
-8. restore the baseline rule and clean up with `make demo-down`
+8. assert operator-first investigation degraded cases, including hosted-provider `ProviderAuthFailed` and `ProviderRateLimited`
+9. restore the baseline rule and clean up with `make demo-down`
 
 Adjust the pause between sections when recording:
 

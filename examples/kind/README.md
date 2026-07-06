@@ -47,6 +47,6 @@ Degraded demo helpers:
 - `make demo-reset-riskrule`
   Reapply the baseline `RiskRule`
 - `make verify-e2e-kind`
-  Run the full `v0.2 alpha` gate, including both read-only `RiskSignal` flow and operator-first `InvestigationRequest` flow
+  Run the full `v0.2 alpha` gate, including both read-only `RiskSignal` flow and operator-first `InvestigationRequest` flow, plus hosted-provider degraded reasons such as `ProviderAuthFailed` and `ProviderRateLimited`
 - `make verify-investigation-kind`
   Run a dedicated `InvestigationRequest` e2e flow through the `fluxagent investigate` CLI
