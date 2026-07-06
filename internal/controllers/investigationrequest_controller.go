@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/investigation"
@@ -65,6 +66,13 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, rcaErr
 		}
 		applyInvestigationExecutionStatus(&investigation, preflight, evidence, rca, message, now())
+		if rca.Reasoning != nil && investigation.Spec.CreateRiskSignal {
+			link, promoteErr := r.promoteToRiskSignal(ctx, &investigation, preflight, evidence, rca, now())
+			if promoteErr != nil {
+				return ctrl.Result{}, promoteErr
+			}
+			investigation.Status.LinkedRiskSignalRef = link
+		}
 	}
 
 	if !reflect.DeepEqual(original.Status, investigation.Status) {
@@ -134,6 +142,17 @@ func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) st
 	if mode := strings.TrimSpace(spec.Mode); mode != "" && mode != v1alpha1.InvestigationModeReadOnly {
 		return "unsupported investigation mode: " + mode
 	}
+	if len(spec.DataSources) == 0 && len(spec.Queries) == 0 {
+		return "spec.dataSources or spec.queries must include at least one datasource reference"
+	}
+	for _, query := range spec.Queries {
+		if strings.TrimSpace(query.DatasourceRef.Name) == "" {
+			return "investigation queries require spec.queries[].datasourceRef.name"
+		}
+		if strings.TrimSpace(query.QueryType) == "" {
+			return "investigation queries require spec.queries[].queryType"
+		}
+	}
 	return ""
 }
 
@@ -145,6 +164,7 @@ func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, mes
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, "TargetInvalid", message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionFalse, "TargetInvalid", message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "ValidationFailed", "request failed validation before evidence collection started", request.Generation, now)
@@ -173,6 +193,11 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		} else {
 			setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "EvidenceCollected", evidence.Summary, request.Generation, now)
 		}
+	}
+	if preflight.QueryTypeIssue != nil {
+		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionFalse, preflight.QueryTypeIssue.Reason, preflight.QueryTypeIssue.Message, request.Generation, now)
+	} else {
+		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
 	}
 
 	if preflight.ModelProviderIssue != nil {
@@ -250,4 +275,82 @@ func shouldMarkInvestigationDegraded(reason string) bool {
 	default:
 		return false
 	}
+}
+
+func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context, request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, now time.Time) (*v1alpha1.NamespacedObjectReference, error) {
+	if rca.Reasoning == nil {
+		return nil, nil
+	}
+
+	riskSignal := &v1alpha1.RiskSignal{}
+	riskSignal.Name = investigationRiskSignalName(request.Name, preflight.Target.Name)
+	riskSignal.Namespace = preflight.Target.Namespace
+
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, riskSignal, func() error {
+		if request.Namespace == riskSignal.Namespace {
+			if err := controllerutil.SetControllerReference(request, riskSignal, r.Scheme); err != nil {
+				return err
+			}
+		}
+		if riskSignal.Labels == nil {
+			riskSignal.Labels = map[string]string{}
+		}
+		if riskSignal.Annotations == nil {
+			riskSignal.Annotations = map[string]string{}
+		}
+		riskSignal.Labels[labelManagedBy] = "investigationrequest-controller"
+		riskSignal.Annotations[annotationTargetRef] = preflight.Target.Namespace + "/" + preflight.Target.Name
+		riskSignal.Annotations[annotationDetectionSource] = "investigation-request"
+		riskSignal.Annotations["fluxagent.aiops.platform/investigation-request"] = request.Namespace + "/" + request.Name
+
+		riskSignal.Spec.Target = resourceToTargetRef(preflight.Target)
+		riskSignal.Spec.SignalType = investigationSignalType(preflight)
+		riskSignal.Spec.Severity = string(rca.Reasoning.Severity)
+		riskSignal.Spec.Confidence = rca.Reasoning.Confidence.Score
+		riskSignal.Spec.DryRun = true
+		riskSignal.Spec.TTLSeconds = 3600
+		riskSignal.Spec.Evidence = append([]v1alpha1.EvidenceRef(nil), evidence.EvidenceRefs...)
+		riskSignal.Spec.ActionType = "notification.sendSlack"
+		riskSignal.Spec.Parameters = map[string]string{
+			"channel":              "webhook",
+			"mode":                 "read-only",
+			"investigationRequest": request.Name,
+			"targetRef":            preflight.Target.Namespace + "/" + preflight.Target.Name,
+			"summaryMode":          "investigation-promoted",
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	original := riskSignal.DeepCopy()
+	setRiskSignalStatus(&riskSignal.Status, v1alpha1.PhaseConfirmed, rca.Reasoning.RiskSummary, riskSignal.Generation, now)
+	setStatusCondition(&riskSignal.Status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "EvidenceCollected", evidence.Summary, riskSignal.Generation, now)
+	applyRCAResult(&riskSignal.Status, rcaResult{
+		Reasoning:    rca.Reasoning,
+		ProviderName: request.Status.Provider,
+		Condition:    rcaCondition(metav1.ConditionTrue, "ProviderSucceeded", "RCA promoted from investigation request", now),
+	})
+	if statusChangedRiskSignal(original, riskSignal) {
+		if err := r.Status().Update(ctx, riskSignal); err != nil && !apierrors.IsConflict(err) {
+			return nil, err
+		}
+	}
+
+	return &v1alpha1.NamespacedObjectReference{
+		Name:      riskSignal.Name,
+		Namespace: riskSignal.Namespace,
+	}, nil
+}
+
+func investigationRiskSignalName(requestName, targetName string) string {
+	return riskSignalName(requestName+"-investigation", targetName)
+}
+
+func investigationSignalType(preflight investigation.PreflightResult) string {
+	if len(preflight.CollectionPlan) > 0 {
+		return string(preflight.CollectionPlan[0].QueryType)
+	}
+	return "investigation"
 }
