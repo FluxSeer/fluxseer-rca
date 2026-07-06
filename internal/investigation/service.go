@@ -16,6 +16,7 @@ import (
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
 	"fluxagent/internal/modelgateway"
+	"fluxagent/internal/rule"
 )
 
 type Issue struct {
@@ -27,9 +28,11 @@ type PreflightResult struct {
 	Target             domain.ResourceRef
 	Labels             map[string]string
 	DatasourceNames    []string
+	CollectionPlan     []CollectionStep
 	Provider           *v1alpha1.ModelProvider
 	TargetIssue        *Issue
 	DatasourceIssue    *Issue
+	QueryTypeIssue     *Issue
 	ModelProviderIssue *Issue
 }
 
@@ -39,6 +42,9 @@ func (r PreflightResult) FirstIssue() *Issue {
 	}
 	if r.DatasourceIssue != nil {
 		return r.DatasourceIssue
+	}
+	if r.QueryTypeIssue != nil {
+		return r.QueryTypeIssue
 	}
 	if r.ModelProviderIssue != nil {
 		return r.ModelProviderIssue
@@ -54,6 +60,14 @@ type EvidenceCollectionResult struct {
 	Summary      string
 	EvidenceRefs []v1alpha1.EvidenceRef
 	Issue        *Issue
+}
+
+type CollectionStep struct {
+	Name           string
+	DatasourceName string
+	QueryType      domain.QueryType
+	Query          string
+	Reasons        []string
 }
 
 type RCAResult struct {
@@ -79,9 +93,11 @@ func (s *Service) Preflight(ctx context.Context, namespace string, spec v1alpha1
 	result.Labels = labels
 	result.TargetIssue = targetIssue
 
-	datasourceNames, datasourceIssue := s.resolveDatasources(spec)
+	datasourceNames, collectionPlan, datasourceIssue, queryTypeIssue := s.resolveCollectionPlan(spec, target, labels)
 	result.DatasourceNames = datasourceNames
+	result.CollectionPlan = collectionPlan
 	result.DatasourceIssue = datasourceIssue
+	result.QueryTypeIssue = queryTypeIssue
 
 	provider, providerIssue, err := s.resolveProvider(ctx, namespace, spec.ModelProviderRef)
 	if err != nil {
@@ -112,40 +128,43 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 		window = 15 * time.Minute
 	}
 
-	evidenceRefs := make([]v1alpha1.EvidenceRef, 0, len(preflight.DatasourceNames))
+	evidenceRefs := make([]v1alpha1.EvidenceRef, 0, len(preflight.CollectionPlan))
 	totalRecords := 0
-	for _, datasourceName := range preflight.DatasourceNames {
-		source, ok := s.Registry.Get(datasourceName)
+	for _, step := range preflight.CollectionPlan {
+		source, ok := s.Registry.Get(step.DatasourceName)
 		if !ok {
 			result.Issue = &Issue{
 				Reason:  "DataSourceNotFound",
-				Message: fmt.Sprintf("datasource %q disappeared from the active registry before evidence collection", datasourceName),
+				Message: fmt.Sprintf("datasource %q disappeared from the active registry before evidence collection", step.DatasourceName),
 			}
 			return result, nil
 		}
-
-		queryRequest, unsupportedIssue := buildEvidenceQueryRequest(source, preflight.Target, preflight.Labels, now, window)
-		if unsupportedIssue != nil {
-			result.Issue = unsupportedIssue
-			return result, nil
+		queryRequest := datasource.QueryRequest{
+			Query:     step.Query,
+			StartTime: now.Add(-window),
+			EndTime:   now,
+			Step:      time.Minute,
+			Labels:    preflight.Labels,
+			Target:    preflight.Target,
+			QueryType: step.QueryType,
 		}
 
 		queryResult, err := source.Query(ctx, queryRequest)
 		if err != nil {
 			result.Issue = &Issue{
 				Reason:  "DatasourceQueryFailed",
-				Message: fmt.Sprintf("query datasource %q failed: %v", datasourceName, err),
+				Message: fmt.Sprintf("query datasource %q failed: %v", step.DatasourceName, err),
 			}
 			return result, nil
 		}
-
-		normalized := normalizeEvidenceRefs(queryResult, queryRequest)
+		filtered := filterQueryResult(queryResult, step)
+		normalized := normalizeEvidenceRefs(filtered, queryRequest)
 		evidenceRefs = append(evidenceRefs, normalized...)
-		totalRecords += len(queryResult.Records)
+		totalRecords += len(filtered.Records)
 	}
 
 	result.EvidenceRefs = evidenceRefs
-	result.Summary = fmt.Sprintf("collected %d evidence records from %d datasources", totalRecords, len(preflight.DatasourceNames))
+	result.Summary = fmt.Sprintf("collected %d evidence records from %d investigation queries", totalRecords, len(preflight.CollectionPlan))
 	return result, nil
 }
 
@@ -222,21 +241,29 @@ func (s *Service) resolveTarget(ctx context.Context, targetRef v1alpha1.TargetRe
 	return deploymentToResource(deployment), deploymentLabels(deployment), nil, nil
 }
 
-func (s *Service) resolveDatasources(spec v1alpha1.InvestigationRequestSpec) ([]string, *Issue) {
-	if len(spec.DataSources) == 0 {
-		return nil, &Issue{
+func (s *Service) resolveCollectionPlan(spec v1alpha1.InvestigationRequestSpec, target domain.ResourceRef, labels map[string]string) ([]string, []CollectionStep, *Issue, *Issue) {
+	if len(spec.Queries) == 0 && len(spec.DataSources) == 0 {
+		return nil, nil, &Issue{
 			Reason:  "DataSourceNotSpecified",
-			Message: "spec.dataSources must include at least one datasource reference",
-		}
+			Message: "spec.dataSources or spec.queries must include at least one datasource reference",
+		}, nil
 	}
 	if s.Registry == nil {
-		return nil, &Issue{
+		return nil, nil, &Issue{
 			Reason:  "DatasourceRegistryUnavailable",
 			Message: "datasource registry is not configured",
-		}
+		}, nil
 	}
 
+	if len(spec.Queries) > 0 {
+		return s.resolveQueryPlan(spec, target, labels)
+	}
+	return s.resolveDefaultDatasourcePlan(spec, target, labels)
+}
+
+func (s *Service) resolveDefaultDatasourcePlan(spec v1alpha1.InvestigationRequestSpec, target domain.ResourceRef, labels map[string]string) ([]string, []CollectionStep, *Issue, *Issue) {
 	names := make([]string, 0, len(spec.DataSources))
+	plan := make([]CollectionStep, 0, len(spec.DataSources))
 	missing := make([]string, 0, len(spec.DataSources))
 	for _, ref := range spec.DataSources {
 		name := strings.TrimSpace(ref.Name)
@@ -244,19 +271,78 @@ func (s *Service) resolveDatasources(spec v1alpha1.InvestigationRequestSpec) ([]
 			missing = append(missing, "<empty>")
 			continue
 		}
-		if _, ok := s.Registry.Get(name); !ok {
+		source, ok := s.Registry.Get(name)
+		if !ok {
 			missing = append(missing, name)
 			continue
 		}
+		step, queryTypeIssue := buildDefaultCollectionStep(source, target, labels)
+		if queryTypeIssue != nil {
+			return names, plan, nil, queryTypeIssue
+		}
 		names = append(names, name)
+		plan = append(plan, step)
 	}
 	if len(missing) > 0 {
-		return names, &Issue{
+		return names, plan, &Issue{
 			Reason:  "DataSourceNotFound",
 			Message: fmt.Sprintf("datasource references were not found in the active registry: %s", strings.Join(missing, ", ")),
-		}
+		}, nil
 	}
-	return names, nil
+	return names, plan, nil, nil
+}
+
+func (s *Service) resolveQueryPlan(spec v1alpha1.InvestigationRequestSpec, target domain.ResourceRef, labels map[string]string) ([]string, []CollectionStep, *Issue, *Issue) {
+	names := make([]string, 0, len(spec.Queries))
+	plan := make([]CollectionStep, 0, len(spec.Queries))
+	missing := make([]string, 0, len(spec.Queries))
+	for _, querySpec := range spec.Queries {
+		name := strings.TrimSpace(querySpec.DatasourceRef.Name)
+		if name == "" {
+			missing = append(missing, "<empty>")
+			continue
+		}
+		source, ok := s.Registry.Get(name)
+		if !ok {
+			missing = append(missing, name)
+			continue
+		}
+		queryType, ok := rule.ParseQueryType(querySpec.QueryType)
+		if !ok {
+			return names, plan, nil, &Issue{
+				Reason:  "CapabilityMismatch",
+				Message: fmt.Sprintf("investigation query %q used unsupported queryType %q", firstNonEmpty(querySpec.Name, name), querySpec.QueryType),
+			}
+		}
+		if !source.Capabilities().SupportsQueryType(queryType) {
+			return names, plan, nil, &Issue{
+				Reason:  "CapabilityMismatch",
+				Message: fmt.Sprintf("datasource %q does not support queryType %q for investigation query %q", name, querySpec.QueryType, firstNonEmpty(querySpec.Name, name)),
+			}
+		}
+		queryText, err := rule.RenderQuery(investigationQueryText(querySpec, queryType, target, labels), target, labels)
+		if err != nil {
+			return names, plan, nil, &Issue{
+				Reason:  "QueryTemplateInvalid",
+				Message: fmt.Sprintf("render investigation query %q failed: %v", firstNonEmpty(querySpec.Name, name), err),
+			}
+		}
+		names = appendIfMissing(names, name)
+		plan = append(plan, CollectionStep{
+			Name:           firstNonEmpty(querySpec.Name, name),
+			DatasourceName: name,
+			QueryType:      queryType,
+			Query:          queryText,
+			Reasons:        append([]string(nil), querySpec.Reasons...),
+		})
+	}
+	if len(missing) > 0 {
+		return names, plan, &Issue{
+			Reason:  "DataSourceNotFound",
+			Message: fmt.Sprintf("datasource references were not found in the active registry: %s", strings.Join(missing, ", ")),
+		}, nil
+	}
+	return names, plan, nil, nil
 }
 
 func (s *Service) resolveProvider(ctx context.Context, namespace string, ref v1alpha1.LocalObjectReference) (*v1alpha1.ModelProvider, *Issue, error) {
@@ -316,33 +402,54 @@ func deploymentToResource(deployment appsv1.Deployment) domain.ResourceRef {
 	}
 }
 
-func buildEvidenceQueryRequest(source datasource.DataSource, target domain.ResourceRef, labels map[string]string, now time.Time, window time.Duration) (datasource.QueryRequest, *Issue) {
-	request := datasource.QueryRequest{
-		StartTime: now.Add(-window),
-		EndTime:   now,
-		Step:      time.Minute,
-		Labels:    labels,
-		Target:    target,
-	}
-
+func buildDefaultCollectionStep(source datasource.DataSource, target domain.ResourceRef, labels map[string]string) (CollectionStep, *Issue) {
 	switch {
 	case source.Capabilities().Events:
-		request.QueryType = domain.QueryTypeEvent
-		request.Query = "recent-events"
+		return CollectionStep{
+			Name:           source.Name(),
+			DatasourceName: source.Name(),
+			QueryType:      domain.QueryTypeEvent,
+			Query:          "recent-events",
+		}, nil
 	case source.Capabilities().Metrics:
-		request.QueryType = domain.QueryTypeMetric
-		request.Query = fmt.Sprintf(`sum(rate(http_requests_total{namespace="%s",app="%s",status=~"5.."}[5m]))`, target.Namespace, labelApp(labels, target))
+		return CollectionStep{
+			Name:           source.Name(),
+			DatasourceName: source.Name(),
+			QueryType:      domain.QueryTypeMetric,
+			Query:          fmt.Sprintf(`sum(rate(http_requests_total{namespace="%s",app="%s",status=~"5.."}[5m]))`, target.Namespace, labelApp(labels, target)),
+		}, nil
 	case source.Capabilities().Logs:
-		request.QueryType = domain.QueryTypeLog
-		request.Query = fmt.Sprintf(`{namespace="%s",app="%s"} |= "error"`, target.Namespace, labelApp(labels, target))
+		return CollectionStep{
+			Name:           source.Name(),
+			DatasourceName: source.Name(),
+			QueryType:      domain.QueryTypeLog,
+			Query:          fmt.Sprintf(`{namespace="%s",app="%s"} |= "error"`, target.Namespace, labelApp(labels, target)),
+		}, nil
 	default:
-		return datasource.QueryRequest{}, &Issue{
+		return CollectionStep{}, &Issue{
 			Reason:  "CapabilityMismatch",
 			Message: fmt.Sprintf("datasource %q does not support a default investigation query type", source.Name()),
 		}
 	}
+}
 
-	return request, nil
+func investigationQueryText(querySpec v1alpha1.InvestigationQuery, queryType domain.QueryType, target domain.ResourceRef, labels map[string]string) string {
+	if strings.TrimSpace(querySpec.QueryTemplate) != "" {
+		return querySpec.QueryTemplate
+	}
+	if strings.TrimSpace(querySpec.Query) != "" {
+		return querySpec.Query
+	}
+	switch queryType {
+	case domain.QueryTypeMetric:
+		return fmt.Sprintf(`sum(rate(http_requests_total{namespace="%s",app="%s",status=~"5.."}[5m]))`, target.Namespace, labelApp(labels, target))
+	case domain.QueryTypeLog:
+		return fmt.Sprintf(`{namespace="%s",app="%s"} |= "error"`, target.Namespace, labelApp(labels, target))
+	case domain.QueryTypeEvent:
+		return "recent-events"
+	default:
+		return ""
+	}
 }
 
 func normalizeEvidenceRefs(result *datasource.QueryResult, req datasource.QueryRequest) []v1alpha1.EvidenceRef {
@@ -404,6 +511,33 @@ func normalizeEvidenceRef(record map[string]any, result *datasource.QueryResult,
 	}
 }
 
+func filterQueryResult(result *datasource.QueryResult, step CollectionStep) *datasource.QueryResult {
+	if result == nil {
+		return nil
+	}
+	if step.QueryType != domain.QueryTypeEvent || len(step.Reasons) == 0 {
+		return result
+	}
+
+	records := make([]map[string]any, 0, len(result.Records))
+	for _, record := range result.Records {
+		reason, _ := record["reason"].(string)
+		message, _ := record["message"].(string)
+		lower := strings.ToLower(reason + " " + message)
+		for _, expected := range step.Reasons {
+			if strings.Contains(lower, strings.ToLower(strings.TrimSpace(expected))) {
+				records = append(records, record)
+				break
+			}
+		}
+	}
+
+	filtered := *result
+	filtered.Records = records
+	filtered.Summary = fmt.Sprintf("%s filtered to %d matching records", firstNonEmpty(step.Name, result.Source), len(records))
+	return &filtered
+}
+
 func labelApp(labels map[string]string, target domain.ResourceRef) string {
 	if labels["app"] != "" {
 		return labels["app"]
@@ -428,6 +562,15 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func appendIfMissing(items []string, candidate string) []string {
+	for _, item := range items {
+		if item == candidate {
+			return items
+		}
+	}
+	return append(items, candidate)
 }
 
 func buildInvestigationIngestionOutput(spec v1alpha1.InvestigationRequestSpec, preflight PreflightResult, evidenceResult EvidenceCollectionResult, now time.Time) domain.IngestionOutput {
