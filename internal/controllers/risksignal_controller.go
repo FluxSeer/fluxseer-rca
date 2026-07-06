@@ -87,6 +87,7 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 func (r *RiskSignalReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named("risksignal-remediation").
 		For(&v1alpha1.RiskSignal{}).
 		Owns(&v1alpha1.RemediationPlan{}).
 		Complete(r)

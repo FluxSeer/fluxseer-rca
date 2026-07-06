@@ -12,18 +12,23 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"fluxagent/api/v1alpha1"
+	"fluxagent/internal/datasource"
 	"fluxagent/internal/datasourceconfig"
 )
 
 type DataSourceReconciler struct {
 	client.Client
 	APIReader client.Reader
+	Registry  *datasource.Registry
 	Now       func() time.Time
 }
 
 func (r *DataSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var dataSource v1alpha1.DataSource
 	if err := r.Get(ctx, req.NamespacedName, &dataSource); err != nil {
+		if apierrors.IsNotFound(err) && r.Registry != nil {
+			r.Registry.Unregister(req.Name)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -38,8 +43,11 @@ func (r *DataSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		reader = r.Client
 	}
 
-	_, err := datasourceconfig.BuildSourceFromResource(ctx, reader, dataSource, r.Client)
+	source, err := datasourceconfig.BuildSourceFromResource(ctx, reader, dataSource, r.Client)
 	if err != nil {
+		if r.Registry != nil {
+			r.Registry.Unregister(dataSource.Name)
+		}
 		reason, message, unsupported := classifyDataSourceError(err)
 		setDataSourceStatus(&dataSource.Status, v1alpha1.PhaseFailed, message, dataSource.Generation, now())
 		setStatusCondition(&dataSource.Status.Conditions, conditionReady, metav1.ConditionFalse, reason, message, dataSource.Generation, now())
@@ -49,6 +57,9 @@ func (r *DataSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			setStatusCondition(&dataSource.Status.Conditions, conditionUnsupported, metav1.ConditionFalse, "SupportedType", "datasource type is supported", dataSource.Generation, now())
 		}
 	} else {
+		if r.Registry != nil && source != nil {
+			r.Registry.RegisterNamed(dataSource.Name, source)
+		}
 		setDataSourceStatus(&dataSource.Status, v1alpha1.PhaseObserved, "datasource configuration validated", dataSource.Generation, now())
 		setStatusCondition(&dataSource.Status.Conditions, conditionReady, metav1.ConditionTrue, "ConfigValidated", "datasource configuration validated", dataSource.Generation, now())
 		setStatusCondition(&dataSource.Status.Conditions, conditionUnsupported, metav1.ConditionFalse, "SupportedType", "datasource type is supported", dataSource.Generation, now())

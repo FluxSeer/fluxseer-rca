@@ -131,6 +131,7 @@ func Run(args []string, out io.Writer) error {
 	if err := (&controllers.DataSourceReconciler{
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
+		Registry:  registry,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create DataSource controller: %w", err)
 	}
