@@ -31,6 +31,7 @@ docs/
 │  └─ model-providers.md
 └─ tutorials/
    ├─ quickstart-kind.md
+   ├─ investigate-workload.md
    ├─ enable-prometheus.md
    ├─ enable-loki.md
    ├─ enable-remediation.md
@@ -48,6 +49,7 @@ docs/
 - [architecture/v0.2-adapter-neutral-backlog.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.2-adapter-neutral-backlog.md:1)
 - [release-checkpoint.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/release-checkpoint.md:1)
 - [tutorials/quickstart-kind.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/quickstart-kind.md:1)
+- [tutorials/investigate-workload.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/investigate-workload.md:1)
 - [tutorials/enable-hosted-model-providers.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/enable-hosted-model-providers.md:1)
 - [github-repo.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/github-repo.md:1)
 
@@ -66,4 +68,4 @@ docs/
 - Prometheus, Loki, and Kubernetes Events adapters are wired into the runnable demo path.
 - Prometheus and Loki remain optional adapters even when the demo wires them through a fake observability service.
 - `v0.2` planning is centered on a configurable read-only RCA platform, not autonomous remediation first.
-- the next architecture step is an operator-first investigation layer built around `InvestigationRequest`, not a generic agent surface first.
+- `InvestigationRequest` is now the operator-first investigation entrypoint for ad-hoc RCA and optional `RiskSignal` promotion.
