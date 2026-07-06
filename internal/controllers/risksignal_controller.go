@@ -23,10 +23,6 @@ type RiskSignalReconciler struct {
 }
 
 func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if !r.Enabled {
-		return ctrl.Result{}, nil
-	}
-
 	var riskSignal v1alpha1.RiskSignal
 	if err := r.Get(ctx, req.NamespacedName, &riskSignal); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -37,10 +33,18 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		now = r.Now
 	}
 
+	ttlResult, finished, err := r.handleTTL(ctx, &riskSignal, now())
+	if err != nil || finished {
+		return ttlResult, err
+	}
+	if !r.Enabled {
+		return ttlResult, nil
+	}
+
 	plan := &v1alpha1.RemediationPlan{}
 	plan.Name = riskSignal.Name + "-plan"
 	plan.Namespace = riskSignal.Namespace
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, plan, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, plan, func() error {
 		if err := controllerutil.SetControllerReference(&riskSignal, plan, r.Scheme); err != nil {
 			return err
 		}
@@ -82,7 +86,7 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return ttlResult, nil
 }
 
 func (r *RiskSignalReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -107,4 +111,23 @@ func evidenceSummaries(evidence []v1alpha1.EvidenceRef) []string {
 
 func statusChangedRiskSignal(before, after *v1alpha1.RiskSignal) bool {
 	return !reflect.DeepEqual(before.Status, after.Status)
+}
+
+func (r *RiskSignalReconciler) handleTTL(ctx context.Context, riskSignal *v1alpha1.RiskSignal, now time.Time) (ctrl.Result, bool, error) {
+	if riskSignal.Spec.TTLSeconds <= 0 || !riskSignal.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, false, nil
+	}
+
+	expiresAt := riskSignal.CreationTimestamp.Time.Add(time.Duration(riskSignal.Spec.TTLSeconds) * time.Second)
+	if riskSignal.CreationTimestamp.IsZero() {
+		expiresAt = now.Add(time.Duration(riskSignal.Spec.TTLSeconds) * time.Second)
+	}
+	if !now.Before(expiresAt) {
+		if err := r.Delete(ctx, riskSignal); err != nil && !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, true, err
+		}
+		return ctrl.Result{}, true, nil
+	}
+
+	return ctrl.Result{RequeueAfter: expiresAt.Sub(now)}, false, nil
 }
