@@ -17,10 +17,13 @@ import (
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
 	"fluxagent/internal/investigation"
+	"fluxagent/internal/knowledge"
+	"fluxagent/internal/model"
+	"fluxagent/internal/model/heuristic"
 	"fluxagent/internal/modelgateway"
 )
 
-func TestInvestigationRequestReconcilerMarksObservedAfterSuccessfulPreflight(t *testing.T) {
+func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add apps scheme: %v", err)
@@ -84,6 +87,12 @@ func TestInvestigationRequestReconcilerMarksObservedAfterSuccessfulPreflight(t *
 				fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent},
 			),
 			Resolver: modelgateway.KubeResolver{Client: client},
+			Gateway: &modelgateway.Gateway{
+				Base: knowledge.NewBase(),
+				Providers: model.NewRegistry(
+					heuristic.Provider{},
+				),
+			},
 		},
 		Now: func() time.Time { return now },
 	}
@@ -97,17 +106,23 @@ func TestInvestigationRequestReconcilerMarksObservedAfterSuccessfulPreflight(t *
 	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
 		t.Fatalf("get request: %v", err)
 	}
-	if stored.Status.Phase != v1alpha1.PhaseObserved {
-		t.Fatalf("expected observed phase, got %s", stored.Status.Phase)
+	if stored.Status.Phase != v1alpha1.PhaseCompleted {
+		t.Fatalf("expected completed phase, got %s", stored.Status.Phase)
 	}
 	if stored.Status.StartedAt == nil || !stored.Status.StartedAt.Equal(&metav1.Time{Time: now}) {
 		t.Fatalf("expected startedAt %s, got %#v", now.Format(time.RFC3339), stored.Status.StartedAt)
 	}
-	if stored.Status.Provider != "heuristic-provider" {
-		t.Fatalf("expected provider heuristic-provider, got %q", stored.Status.Provider)
+	if stored.Status.CompletedAt == nil || !stored.Status.CompletedAt.Equal(&metav1.Time{Time: now}) {
+		t.Fatalf("expected completedAt %s, got %#v", now.Format(time.RFC3339), stored.Status.CompletedAt)
 	}
-	if stored.Status.Summary != "collected 1 evidence records from 1 datasources" {
-		t.Fatalf("unexpected summary %q", stored.Status.Summary)
+	if stored.Status.Provider != "heuristic" {
+		t.Fatalf("expected provider heuristic, got %q", stored.Status.Provider)
+	}
+	if stored.Status.Summary == "" || stored.Status.Hypothesis == "" {
+		t.Fatalf("expected RCA summary and hypothesis, got summary=%q hypothesis=%q", stored.Status.Summary, stored.Status.Hypothesis)
+	}
+	if stored.Status.Confidence <= 0 {
+		t.Fatalf("expected positive confidence, got %f", stored.Status.Confidence)
 	}
 	if len(stored.Status.EvidenceRefs) != 1 || stored.Status.EvidenceRefs[0].Kind != "event" {
 		t.Fatalf("expected one event evidence ref, got %#v", stored.Status.EvidenceRefs)
@@ -118,14 +133,14 @@ func TestInvestigationRequestReconcilerMarksObservedAfterSuccessfulPreflight(t *
 	if cond := findCondition(stored.Status.Conditions, conditionDatasourceResolved); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected DatasourceResolved true condition, got %#v", cond)
 	}
-	if cond := findCondition(stored.Status.Conditions, conditionReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAReadyPending" {
-		t.Fatalf("expected Ready false RCAReadyPending, got %#v", cond)
+	if cond := findCondition(stored.Status.Conditions, conditionReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "InvestigationCompleted" {
+		t.Fatalf("expected Ready true InvestigationCompleted, got %#v", cond)
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "EvidenceCollected" {
 		t.Fatalf("expected EvidenceCollectionReady true EvidenceCollected, got %#v", cond)
 	}
-	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "InvestigationNotImplemented" {
-		t.Fatalf("expected RCAReady false InvestigationNotImplemented, got %#v", cond)
+	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "ProviderSucceeded" {
+		t.Fatalf("expected RCAReady true ProviderSucceeded, got %#v", cond)
 	}
 }
 
@@ -161,6 +176,12 @@ func TestInvestigationRequestReconcilerRejectsInvalidTarget(t *testing.T) {
 		Service: &investigation.Service{
 			Client:   client,
 			Registry: datasource.NewRegistry(fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent}),
+			Gateway: &modelgateway.Gateway{
+				Base: knowledge.NewBase(),
+				Providers: model.NewRegistry(
+					heuristic.Provider{},
+				),
+			},
 		},
 		Now: func() time.Time { return now },
 	}
@@ -226,6 +247,12 @@ func TestInvestigationRequestReconcilerMarksDatasourceResolutionFailure(t *testi
 			Client:   client,
 			Registry: datasource.NewRegistry(fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent}),
 			Resolver: modelgateway.KubeResolver{Client: client},
+			Gateway: &modelgateway.Gateway{
+				Base: knowledge.NewBase(),
+				Providers: model.NewRegistry(
+					heuristic.Provider{},
+				),
+			},
 		},
 		Now: func() time.Time { return now },
 	}
