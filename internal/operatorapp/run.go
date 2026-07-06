@@ -163,6 +163,7 @@ func Run(args []string, out io.Writer) error {
 			Client:   mgr.GetClient(),
 			Registry: registry,
 			Resolver: resolver,
+			Gateway:  gateway,
 		},
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create InvestigationRequest controller: %w", err)
