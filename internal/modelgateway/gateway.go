@@ -115,7 +115,7 @@ func shouldAttemptProviderFallback(provider *v1alpha1.ModelProvider, reason stri
 		return false
 	}
 	switch reason {
-	case "ProviderUnavailable", "ProviderUnsupported", "InvalidProviderResponse", "APIKeyMissing", "SecretRefMissing", "SecretReaderUnavailable", "SecretReadFailed", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty":
+	case "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "InvalidProviderResponse", "APIKeyMissing", "SecretRefMissing", "SecretReaderUnavailable", "SecretReadFailed", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty":
 		return true
 	default:
 		return false

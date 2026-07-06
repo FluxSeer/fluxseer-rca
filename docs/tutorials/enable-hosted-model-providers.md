@@ -84,6 +84,9 @@ Common failure reasons surfaced through `RCAReady=False`:
 
 - `ProviderNotFound`
 - `ProviderUnsupported`
+- `ProviderAuthFailed`
+- `ProviderRateLimited`
+- `ProviderRequestInvalid`
 - `SecretRefMissing`
 - `SecretNotFound`
 - `SecretKeyMissing`
@@ -96,6 +99,9 @@ Examples:
 
 - missing Secret: `SecretNotFound`
 - empty or missing key inside Secret: `SecretKeyMissing` or `SecretValueEmpty`
+- invalid or unauthorized token: `ProviderAuthFailed`
+- vendor rate limiting after retry exhaustion: `ProviderRateLimited`
+- rejected model, endpoint path, or unsupported request shape: `ProviderRequestInvalid`
 - provider returned non-JSON or incomplete JSON: `InvalidProviderResponse`
 - endpoint or vendor API unavailable: `ProviderUnavailable`
 
@@ -103,5 +109,7 @@ Examples:
 
 - Hosted providers require real network reachability from the FluxAgent manager pod.
 - FluxAgent redacts evidence before provider-bound reasoning.
+- If `spec.timeout` is omitted, hosted providers default to `15s` per request.
+- Hosted providers retry transient timeout, `429`, and `5xx` failures up to 3 attempts total.
 - `RiskRule` remains read-only even when hosted providers are enabled.
 - This path is suitable for RCA enrichment, not autonomous remediation.

@@ -79,25 +79,14 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 		}
 	}
 
-	httpReq, err := model.NewJSONRequest(ctx, http.MethodPost, firstNonEmpty(p.Endpoint, defaultEndpoint), payload)
-	if err != nil {
-		return domain.ModelResponse{}, &model.ProviderError{
-			Reason:  "ProviderUnavailable",
-			Message: fmt.Sprintf("create openai request: %v", err),
+	body, err := model.DoRequestWithRetry(ctx, p.Name(), p.Timeout, p.Client, func(ctx context.Context) (*http.Request, error) {
+		httpReq, err := model.NewJSONRequest(ctx, http.MethodPost, firstNonEmpty(p.Endpoint, defaultEndpoint), payload)
+		if err != nil {
+			return nil, fmt.Errorf("create openai request: %w", err)
 		}
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+p.APIKey)
-
-	resp, err := model.HTTPClient(p.Timeout, p.Client).Do(httpReq)
-	if err != nil {
-		return domain.ModelResponse{}, &model.ProviderError{
-			Reason:  "ProviderUnavailable",
-			Message: fmt.Sprintf("send openai request: %v", err),
-		}
-	}
-	defer resp.Body.Close()
-
-	body, err := model.ReadHTTPBody(resp, p.Name())
+		httpReq.Header.Set("Authorization", "Bearer "+p.APIKey)
+		return httpReq, nil
+	})
 	if err != nil {
 		return domain.ModelResponse{}, err
 	}

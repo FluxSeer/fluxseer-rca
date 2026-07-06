@@ -83,26 +83,15 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 		}
 	}
 
-	httpReq, err := model.NewJSONRequest(ctx, http.MethodPost, firstNonEmpty(p.Endpoint, defaultEndpoint), payload)
-	if err != nil {
-		return domain.ModelResponse{}, &model.ProviderError{
-			Reason:  "ProviderUnavailable",
-			Message: fmt.Sprintf("create claude request: %v", err),
+	body, err := model.DoRequestWithRetry(ctx, p.Name(), p.Timeout, p.Client, func(ctx context.Context) (*http.Request, error) {
+		httpReq, err := model.NewJSONRequest(ctx, http.MethodPost, firstNonEmpty(p.Endpoint, defaultEndpoint), payload)
+		if err != nil {
+			return nil, fmt.Errorf("create claude request: %w", err)
 		}
-	}
-	httpReq.Header.Set("x-api-key", p.APIKey)
-	httpReq.Header.Set("anthropic-version", "2023-06-01")
-
-	resp, err := model.HTTPClient(p.Timeout, p.Client).Do(httpReq)
-	if err != nil {
-		return domain.ModelResponse{}, &model.ProviderError{
-			Reason:  "ProviderUnavailable",
-			Message: fmt.Sprintf("send claude request: %v", err),
-		}
-	}
-	defer resp.Body.Close()
-
-	body, err := model.ReadHTTPBody(resp, p.Name())
+		httpReq.Header.Set("x-api-key", p.APIKey)
+		httpReq.Header.Set("anthropic-version", "2023-06-01")
+		return httpReq, nil
+	})
 	if err != nil {
 		return domain.ModelResponse{}, err
 	}

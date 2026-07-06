@@ -137,3 +137,109 @@ func TestGeminiProviderCompletesStructuredResponse(t *testing.T) {
 		t.Fatalf("expected gemini provider, got %q", resp.Provider)
 	}
 }
+
+func TestOpenAIProviderRetriesRateLimitAndCompletes(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":"slow down"}`))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"content": `{"riskTitle":"Recovered","riskSummary":"OpenAI responded after retry.","severity":"medium","confidenceScore":65,"rationale":"retry succeeded","rcaHypothesis":"transient rate limit cleared.","rcaCauses":["provider throttling"],"actionType":"notification.sendSlack"}`,
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := openai.Provider{Client: server.Client()}.WithConfig(model.RuntimeConfig{
+		Model:     "gpt-5.1",
+		Endpoint:  server.URL,
+		APIKey:    "openai-token",
+		Timeout:   2 * time.Second,
+		MaxTokens: 512,
+	})
+
+	resp, err := provider.Complete(context.Background(), domain.ModelRequest{
+		SystemPrompt: "RCA",
+		Messages:     []domain.ModelMessage{{Role: "user", Content: "summary"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected openai error: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts, got %d", attempts)
+	}
+	if resp.Output["riskSummary"] != "OpenAI responded after retry." {
+		t.Fatalf("unexpected risk summary after retry: %#v", resp.Output["riskSummary"])
+	}
+}
+
+func TestClaudeProviderMapsUnauthorizedStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"bad api key"}`))
+	}))
+	defer server.Close()
+
+	provider := claude.Provider{Client: server.Client()}.WithConfig(model.RuntimeConfig{
+		Model:     "claude-sonnet-4",
+		Endpoint:  server.URL,
+		APIKey:    "claude-token",
+		Timeout:   2 * time.Second,
+		MaxTokens: 512,
+	})
+
+	_, err := provider.Complete(context.Background(), domain.ModelRequest{
+		SystemPrompt: "RCA",
+		Messages:     []domain.ModelMessage{{Role: "user", Content: "summary"}},
+	})
+	if err == nil {
+		t.Fatal("expected claude error")
+	}
+	providerErr, ok := err.(*model.ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError, got %T", err)
+	}
+	if providerErr.Reason != "ProviderAuthFailed" {
+		t.Fatalf("expected ProviderAuthFailed, got %q", providerErr.Reason)
+	}
+}
+
+func TestGeminiProviderMapsInvalidRequestStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"unsupported model"}`))
+	}))
+	defer server.Close()
+
+	provider := gemini.Provider{Client: server.Client()}.WithConfig(model.RuntimeConfig{
+		Model:     "gemini-2.5-pro",
+		Endpoint:  server.URL,
+		APIKey:    "gemini-token",
+		Timeout:   2 * time.Second,
+		MaxTokens: 512,
+	})
+
+	_, err := provider.Complete(context.Background(), domain.ModelRequest{
+		SystemPrompt: "RCA",
+		Messages:     []domain.ModelMessage{{Role: "user", Content: "summary"}},
+	})
+	if err == nil {
+		t.Fatal("expected gemini error")
+	}
+	providerErr, ok := err.(*model.ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError, got %T", err)
+	}
+	if providerErr.Reason != "ProviderRequestInvalid" {
+		t.Fatalf("expected ProviderRequestInvalid, got %q", providerErr.Reason)
+	}
+}

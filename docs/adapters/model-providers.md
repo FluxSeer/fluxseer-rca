@@ -95,6 +95,15 @@ Hosted providers use a shared response contract. FluxAgent expects the upstream 
 
 If a hosted provider response cannot be normalized to this schema, FluxAgent marks `RCAReady=False` with reason `InvalidProviderResponse`.
 
+Hosted provider runtime behavior is now unified across `openai`, `gemini`, and `claude`:
+
+- default request timeout: `15s` when `spec.timeout` is omitted
+- transient retry budget: 3 attempts total
+- retryable failures: transport timeout, `429`, and `5xx`
+- auth failures: `ProviderAuthFailed`
+- provider throttling after retry exhaustion: `ProviderRateLimited`
+- request or model configuration rejection: `ProviderRequestInvalid`
+
 ## Fallback Behavior
 
 `spec.fallbackProviderRef.name` is optional.
