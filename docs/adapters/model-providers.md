@@ -41,6 +41,8 @@ spec:
   apiKeySecretRef:
     name: openai-secret
     key: api-key
+  fallbackProviderRef:
+    name: heuristic-provider
 ```
 
 ```yaml
@@ -92,6 +94,23 @@ Hosted providers use a shared response contract. FluxAgent expects the upstream 
 - `actionType`
 
 If a hosted provider response cannot be normalized to this schema, FluxAgent marks `RCAReady=False` with reason `InvalidProviderResponse`.
+
+## Fallback Behavior
+
+`spec.fallbackProviderRef.name` is optional.
+
+When it is set, FluxAgent attempts the primary `ModelProvider` first. If the primary path fails because of provider availability, unsupported provider type, secret resolution, or invalid structured response, the model gateway resolves the fallback provider and retries RCA there.
+
+Typical pattern:
+
+- primary: hosted provider such as `openai`, `gemini`, or `claude`
+- fallback: `heuristic-provider` for a no-secret fail-closed path
+
+If the fallback resolution fails, FluxAgent surfaces the fallback failure reason such as:
+
+- `ProviderNotFound`
+- `ResolverUnavailable`
+- `ProviderFallbackLoop`
 
 ## Local Endpoint Contract
 

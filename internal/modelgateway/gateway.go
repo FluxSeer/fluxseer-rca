@@ -29,6 +29,7 @@ type Gateway struct {
 	Providers *model.Registry
 	Redactor  evidence.Redactor
 	Secrets   SecretResolver
+	Resolver  ProviderResolver
 }
 
 func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider, target domain.ResourceRef, matches []rule.Match, now time.Time) (domain.ReasoningOutput, error) {
@@ -36,6 +37,10 @@ func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider,
 }
 
 func (g *Gateway) AnalyzeIngestion(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput) (domain.ReasoningOutput, error) {
+	return g.analyzeIngestionWithFallback(ctx, provider, input, map[string]struct{}{})
+}
+
+func (g *Gateway) analyzeIngestionWithFallback(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput, visited map[string]struct{}) (domain.ReasoningOutput, error) {
 	if provider == nil {
 		return domain.ReasoningOutput{}, &AnalyzeError{
 			Reason:  "ProviderUnavailable",
@@ -49,6 +54,26 @@ func (g *Gateway) AnalyzeIngestion(ctx context.Context, provider *v1alpha1.Model
 		}
 	}
 
+	if key := providerKey(provider); key != "" {
+		visited[key] = struct{}{}
+	}
+
+	result, err := g.analyzeSingleProvider(ctx, provider, input)
+	if err != nil {
+		analyzeErr, ok := err.(*AnalyzeError)
+		if !ok || !shouldAttemptProviderFallback(provider, analyzeErr.Reason) {
+			return domain.ReasoningOutput{}, err
+		}
+		fallbackProvider, fallbackErr := g.resolveFallbackProvider(ctx, provider, analyzeErr, visited)
+		if fallbackErr != nil {
+			return domain.ReasoningOutput{}, fallbackErr
+		}
+		return g.analyzeIngestionWithFallback(ctx, fallbackProvider, input, visited)
+	}
+	return result, nil
+}
+
+func (g *Gateway) analyzeSingleProvider(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput) (domain.ReasoningOutput, error) {
 	providerType := strings.ToLower(strings.TrimSpace(provider.Spec.Provider))
 	modelProvider, ok := g.Providers.Get(providerType)
 	if !ok {
@@ -83,6 +108,51 @@ func (g *Gateway) AnalyzeIngestion(ctx context.Context, provider *v1alpha1.Model
 		return domain.ReasoningOutput{}, err
 	}
 	return result, nil
+}
+
+func shouldAttemptProviderFallback(provider *v1alpha1.ModelProvider, reason string) bool {
+	if provider == nil || strings.TrimSpace(provider.Spec.FallbackProviderRef.Name) == "" {
+		return false
+	}
+	switch reason {
+	case "ProviderUnavailable", "ProviderUnsupported", "InvalidProviderResponse", "APIKeyMissing", "SecretRefMissing", "SecretReaderUnavailable", "SecretReadFailed", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty":
+		return true
+	default:
+		return false
+	}
+}
+
+func (g *Gateway) resolveFallbackProvider(ctx context.Context, provider *v1alpha1.ModelProvider, primaryErr *AnalyzeError, visited map[string]struct{}) (*v1alpha1.ModelProvider, error) {
+	if g.Resolver == nil {
+		return nil, &AnalyzeError{
+			Reason:  "ResolverUnavailable",
+			Message: fmt.Sprintf("ModelProvider %q failed with %s and fallback provider %q cannot be resolved because the gateway resolver is not configured", provider.Name, primaryErr.Reason, provider.Spec.FallbackProviderRef.Name),
+		}
+	}
+
+	fallback, err := g.Resolver.Resolve(ctx, provider.Namespace, refOrNil(provider.Spec.FallbackProviderRef))
+	if err != nil {
+		if resolveErr, ok := err.(*ResolveError); ok {
+			return nil, &AnalyzeError{
+				Reason:  resolveErr.Reason,
+				Message: fmt.Sprintf("ModelProvider %q failed with %s and fallback provider %q could not be resolved: %s", provider.Name, primaryErr.Reason, provider.Spec.FallbackProviderRef.Name, resolveErr.Message),
+			}
+		}
+		return nil, err
+	}
+	if fallback == nil {
+		return nil, &AnalyzeError{
+			Reason:  "ProviderUnavailable",
+			Message: fmt.Sprintf("ModelProvider %q failed with %s and fallback provider %q resolved to nil", provider.Name, primaryErr.Reason, provider.Spec.FallbackProviderRef.Name),
+		}
+	}
+	if _, seen := visited[providerKey(fallback)]; seen {
+		return nil, &AnalyzeError{
+			Reason:  "ProviderFallbackLoop",
+			Message: fmt.Sprintf("ModelProvider %q fallback chain loops through %q", provider.Name, fallback.Name),
+		}
+	}
+	return fallback, nil
 }
 
 func (g *Gateway) configureProvider(ctx context.Context, provider model.Provider, obj *v1alpha1.ModelProvider) (model.Provider, error) {
@@ -121,6 +191,21 @@ func requiresAPIKey(providerType string) bool {
 	default:
 		return false
 	}
+}
+
+func providerKey(provider *v1alpha1.ModelProvider) string {
+	if provider == nil {
+		return ""
+	}
+	return provider.Namespace + "/" + provider.Name
+}
+
+func refOrNil(ref v1alpha1.LocalObjectReference) *v1alpha1.LocalObjectReference {
+	if strings.TrimSpace(ref.Name) == "" {
+		return nil
+	}
+	copy := ref
+	return &copy
 }
 
 func buildIngestionOutput(target domain.ResourceRef, matches []rule.Match, now time.Time) domain.IngestionOutput {

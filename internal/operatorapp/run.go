@@ -111,6 +111,7 @@ func Run(args []string, out io.Writer) error {
 	resolver := modelgateway.KubeResolver{
 		Client: mgr.GetClient(),
 	}
+	gateway.Resolver = resolver
 	if url := os.Getenv("FLUXAGENT_PROMETHEUS_URL"); url != "" {
 		registry.Register(promadapter.Adapter{BaseURL: url})
 	}
