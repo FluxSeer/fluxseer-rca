@@ -7,6 +7,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -245,6 +246,118 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 	}
 	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected RCAReady true on promoted risk signal, got %#v", cond)
+	}
+}
+
+func TestInvestigationRequestReconcilerSkipsCompletedGenerationAndSchedulesTTL(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	completedAt := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
+	now := completedAt.Add(2 * time.Minute)
+
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "ttl-active", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target:     v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "open-api"},
+			TTLSeconds: 300,
+		},
+		Status: v1alpha1.InvestigationRequestStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{
+				Phase:              v1alpha1.PhaseCompleted,
+				Message:            "completed",
+				ObservedGeneration: 1,
+				UpdatedAt:          metav1.NewTime(completedAt),
+			},
+			StartedAt:   &metav1.Time{Time: completedAt.Add(-1 * time.Minute)},
+			CompletedAt: &metav1.Time{Time: completedAt},
+			Summary:     "existing summary",
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithObjects(request).
+		Build()
+
+	reconciler := &InvestigationRequestReconciler{
+		Client: client,
+		Scheme: scheme,
+		Now:    func() time.Time { return now },
+	}
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	})
+	if err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	if result.RequeueAfter != 3*time.Minute {
+		t.Fatalf("expected ttl requeue after 3m, got %s", result.RequeueAfter)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseCompleted {
+		t.Fatalf("expected completed phase to remain unchanged, got %s", stored.Status.Phase)
+	}
+	if stored.Status.CompletedAt == nil || !stored.Status.CompletedAt.Equal(&metav1.Time{Time: completedAt}) {
+		t.Fatalf("expected completedAt %s, got %#v", completedAt.Format(time.RFC3339), stored.Status.CompletedAt)
+	}
+	if stored.Status.Summary != "existing summary" {
+		t.Fatalf("expected summary to be preserved, got %q", stored.Status.Summary)
+	}
+}
+
+func TestInvestigationRequestReconcilerDeletesExpiredCompletedRequest(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	completedAt := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
+	now := completedAt.Add(10 * time.Minute)
+
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "ttl-expired", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target:     v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "open-api"},
+			TTLSeconds: 300,
+		},
+		Status: v1alpha1.InvestigationRequestStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{
+				Phase:              v1alpha1.PhaseFailed,
+				Message:            "provider unavailable",
+				ObservedGeneration: 1,
+				UpdatedAt:          metav1.NewTime(completedAt),
+			},
+			CompletedAt: &metav1.Time{Time: completedAt},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithObjects(request).
+		Build()
+
+	reconciler := &InvestigationRequestReconciler{
+		Client: client,
+		Scheme: scheme,
+		Now:    func() time.Time { return now },
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored)
+	if !apierrors.IsNotFound(err) {
+		t.Fatalf("expected request to be deleted after ttl, got err=%v", err)
 	}
 }
 

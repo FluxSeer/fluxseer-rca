@@ -35,10 +35,19 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 		now = r.Now
 	}
 
+	ttlResult, finished, err := r.handleTTL(ctx, &investigation, now())
+	if err != nil || finished {
+		return ttlResult, err
+	}
+	if shouldSkipInvestigationExecution(&investigation) {
+		return ttlResult, nil
+	}
+
 	original := investigation.DeepCopy()
+	restarting := original.Status.ObservedGeneration != investigation.Generation || isTerminalInvestigationPhase(original.Status.Phase)
 	message := "investigation preflight succeeded; evidence collection and RCA execution are not implemented yet"
 	setInvestigationRequestStatus(&investigation.Status, v1alpha1.PhaseObserved, message, investigation.Generation, now())
-	if investigation.Status.StartedAt == nil {
+	if investigation.Status.StartedAt == nil || restarting {
 		startedAt := metav1.NewTime(now())
 		investigation.Status.StartedAt = &startedAt
 	}
@@ -80,7 +89,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 	}
-	return ctrl.Result{}, nil
+	return ttlResult, nil
 }
 
 func (r *InvestigationRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -275,6 +284,48 @@ func shouldMarkInvestigationDegraded(reason string) bool {
 	default:
 		return false
 	}
+}
+
+func shouldSkipInvestigationExecution(request *v1alpha1.InvestigationRequest) bool {
+	return request.Status.ObservedGeneration == request.Generation && isTerminalInvestigationPhase(request.Status.Phase)
+}
+
+func isTerminalInvestigationPhase(phase string) bool {
+	switch phase {
+	case v1alpha1.PhaseCompleted, v1alpha1.PhaseFailed, v1alpha1.PhaseRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *InvestigationRequestReconciler) handleTTL(ctx context.Context, request *v1alpha1.InvestigationRequest, now time.Time) (ctrl.Result, bool, error) {
+	if request.Spec.TTLSeconds <= 0 || !request.DeletionTimestamp.IsZero() || !shouldSkipInvestigationExecution(request) {
+		return ctrl.Result{}, false, nil
+	}
+
+	expiresAt := investigationExpiryTime(request, now)
+	if !now.Before(expiresAt) {
+		if err := r.Delete(ctx, request); err != nil && !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, true, err
+		}
+		return ctrl.Result{}, true, nil
+	}
+
+	return ctrl.Result{RequeueAfter: expiresAt.Sub(now)}, true, nil
+}
+
+func investigationExpiryTime(request *v1alpha1.InvestigationRequest, now time.Time) time.Time {
+	baseTime := now
+	switch {
+	case request.Status.CompletedAt != nil:
+		baseTime = request.Status.CompletedAt.Time
+	case !request.Status.UpdatedAt.IsZero():
+		baseTime = request.Status.UpdatedAt.Time
+	case !request.CreationTimestamp.IsZero():
+		baseTime = request.CreationTimestamp.Time
+	}
+	return baseTime.Add(time.Duration(request.Spec.TTLSeconds) * time.Second)
 }
 
 func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context, request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, now time.Time) (*v1alpha1.NamespacedObjectReference, error) {

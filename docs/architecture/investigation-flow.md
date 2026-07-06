@@ -79,6 +79,7 @@ spec:
     name: heuristic-provider
   mode: readOnly
   createRiskSignal: false
+  ttlSeconds: 3600
 ```
 
 ## Control Flow
@@ -93,6 +94,7 @@ Suggested sequence:
 6. call the selected `ModelProvider`
 7. persist summary, hypothesis, confidence, provider, and conditions to status
 8. optionally create a linked `RiskSignal`
+9. delete the completed request after `ttlSeconds`, when retention is enabled
 
 ## Status Model
 
@@ -148,3 +150,5 @@ Future entrypoints should be wrappers around it:
 - a chat bridge
 
 All of them should end at `InvestigationRequest`, not bypass it.
+
+For lifecycle consistency with `RiskSignal`, terminal `InvestigationRequest` objects should be retained until `status.completedAt + spec.ttlSeconds` and should not re-run unless the spec changes and Kubernetes issues a new generation.

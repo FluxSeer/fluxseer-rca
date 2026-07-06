@@ -36,6 +36,7 @@ type InvestigationRequestSpec struct {
 	ModelProviderRef LocalObjectReference   `json:"modelProviderRef,omitempty"`
 	Mode             string                 `json:"mode,omitempty"`
 	CreateRiskSignal bool                   `json:"createRiskSignal,omitempty"`
+	TTLSeconds       int64                  `json:"ttlSeconds,omitempty"`
 }
 
 type InvestigationRequestStatus struct {

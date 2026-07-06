@@ -42,3 +42,4 @@ spec:
     name: heuristic-provider
   mode: readOnly
   createRiskSignal: true
+  ttlSeconds: 3600
