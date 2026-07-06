@@ -84,3 +84,10 @@ func (r *Registry) Get(name string) (DataSource, bool) {
 	source, ok := r.sources[name]
 	return source, ok
 }
+
+func (r *Registry) Unregister(name string) {
+	if r == nil || r.sources == nil {
+		return
+	}
+	delete(r.sources, name)
+}
