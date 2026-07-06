@@ -15,6 +15,9 @@ import (
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
+	"fluxagent/internal/knowledge"
+	"fluxagent/internal/model"
+	"fluxagent/internal/model/heuristic"
 	"fluxagent/internal/modelgateway"
 )
 
@@ -188,6 +191,60 @@ func TestServiceCollectEvidenceNormalizesResults(t *testing.T) {
 	}
 	if result.Summary != "collected 2 evidence records from 2 datasources" {
 		t.Fatalf("unexpected summary %q", result.Summary)
+	}
+}
+
+func TestServiceGenerateRCAReturnsReasoningOutput(t *testing.T) {
+	service := &Service{
+		Gateway: &modelgateway.Gateway{
+			Base: knowledge.NewBase(),
+			Providers: model.NewRegistry(
+				heuristic.Provider{},
+			),
+		},
+	}
+
+	reasoning, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{
+		Question: "Why is open-api crashing after rollout?",
+	}, PreflightResult{
+		Target: domain.ResourceRef{
+			Namespace: "prod",
+			Name:      "open-api",
+			Kind:      "Deployment",
+			Service:   "open-api",
+		},
+		Provider: &v1alpha1.ModelProvider{
+			ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+			Spec: v1alpha1.ModelProviderSpec{
+				Provider: "heuristic",
+				Model:    "built-in",
+			},
+		},
+	}, EvidenceCollectionResult{
+		Summary: "collected 1 evidence records from 1 datasources",
+		EvidenceRefs: []v1alpha1.EvidenceRef{
+			{
+				Kind:    "event",
+				Source:  "kubernetes-events",
+				Reason:  "BackOff",
+				Summary: "container crashed",
+			},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("generate RCA failed: %v", err)
+	}
+	if reasoning.Issue != nil {
+		t.Fatalf("expected no RCA issue, got %#v", reasoning.Issue)
+	}
+	if reasoning.Reasoning == nil {
+		t.Fatal("expected reasoning output")
+	}
+	if reasoning.Reasoning.RCA.Hypothesis == "" {
+		t.Fatalf("expected RCA hypothesis, got %#v", reasoning.Reasoning)
+	}
+	if reasoning.Reasoning.Confidence.Score <= 0 {
+		t.Fatalf("expected positive confidence, got %#v", reasoning.Reasoning.Confidence)
 	}
 }
 
