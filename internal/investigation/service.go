@@ -3,7 +3,9 @@ package investigation
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -48,6 +50,12 @@ func (r PreflightResult) Successful() bool {
 	return r.FirstIssue() == nil
 }
 
+type EvidenceCollectionResult struct {
+	Summary      string
+	EvidenceRefs []v1alpha1.EvidenceRef
+	Issue        *Issue
+}
+
 type Service struct {
 	Client   client.Reader
 	Registry *datasource.Registry
@@ -76,6 +84,62 @@ func (s *Service) Preflight(ctx context.Context, namespace string, spec v1alpha1
 	result.Provider = provider
 	result.ModelProviderIssue = providerIssue
 
+	return result, nil
+}
+
+func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.InvestigationRequestSpec, preflight PreflightResult, now time.Time) (EvidenceCollectionResult, error) {
+	result := EvidenceCollectionResult{}
+	if !preflight.Successful() {
+		result.Issue = preflight.FirstIssue()
+		return result, nil
+	}
+	if s.Registry == nil {
+		result.Issue = &Issue{
+			Reason:  "DatasourceRegistryUnavailable",
+			Message: "datasource registry is not configured",
+		}
+		return result, nil
+	}
+
+	window := spec.TimeRange.Lookback.Duration
+	if window <= 0 {
+		window = 15 * time.Minute
+	}
+
+	evidenceRefs := make([]v1alpha1.EvidenceRef, 0, len(preflight.DatasourceNames))
+	totalRecords := 0
+	for _, datasourceName := range preflight.DatasourceNames {
+		source, ok := s.Registry.Get(datasourceName)
+		if !ok {
+			result.Issue = &Issue{
+				Reason:  "DataSourceNotFound",
+				Message: fmt.Sprintf("datasource %q disappeared from the active registry before evidence collection", datasourceName),
+			}
+			return result, nil
+		}
+
+		queryRequest, unsupportedIssue := buildEvidenceQueryRequest(source, preflight.Target, preflight.Labels, now, window)
+		if unsupportedIssue != nil {
+			result.Issue = unsupportedIssue
+			return result, nil
+		}
+
+		queryResult, err := source.Query(ctx, queryRequest)
+		if err != nil {
+			result.Issue = &Issue{
+				Reason:  "DatasourceQueryFailed",
+				Message: fmt.Sprintf("query datasource %q failed: %v", datasourceName, err),
+			}
+			return result, nil
+		}
+
+		normalized := normalizeEvidenceRefs(queryResult, queryRequest)
+		evidenceRefs = append(evidenceRefs, normalized...)
+		totalRecords += len(queryResult.Records)
+	}
+
+	result.EvidenceRefs = evidenceRefs
+	result.Summary = fmt.Sprintf("collected %d evidence records from %d datasources", totalRecords, len(preflight.DatasourceNames))
 	return result, nil
 }
 
@@ -204,4 +268,118 @@ func deploymentToResource(deployment appsv1.Deployment) domain.ResourceRef {
 		APIVersion: "apps/v1",
 		Service:    service,
 	}
+}
+
+func buildEvidenceQueryRequest(source datasource.DataSource, target domain.ResourceRef, labels map[string]string, now time.Time, window time.Duration) (datasource.QueryRequest, *Issue) {
+	request := datasource.QueryRequest{
+		StartTime: now.Add(-window),
+		EndTime:   now,
+		Step:      time.Minute,
+		Labels:    labels,
+		Target:    target,
+	}
+
+	switch {
+	case source.Capabilities().Events:
+		request.QueryType = domain.QueryTypeEvent
+		request.Query = "recent-events"
+	case source.Capabilities().Metrics:
+		request.QueryType = domain.QueryTypeMetric
+		request.Query = fmt.Sprintf(`sum(rate(http_requests_total{namespace="%s",app="%s",status=~"5.."}[5m]))`, target.Namespace, labelApp(labels, target))
+	case source.Capabilities().Logs:
+		request.QueryType = domain.QueryTypeLog
+		request.Query = fmt.Sprintf(`{namespace="%s",app="%s"} |= "error"`, target.Namespace, labelApp(labels, target))
+	default:
+		return datasource.QueryRequest{}, &Issue{
+			Reason:  "CapabilityMismatch",
+			Message: fmt.Sprintf("datasource %q does not support a default investigation query type", source.Name()),
+		}
+	}
+
+	return request, nil
+}
+
+func normalizeEvidenceRefs(result *datasource.QueryResult, req datasource.QueryRequest) []v1alpha1.EvidenceRef {
+	if result == nil {
+		return nil
+	}
+
+	const maxEvidencePerDatasource = 5
+	evidenceRefs := make([]v1alpha1.EvidenceRef, 0, min(len(result.Records), maxEvidencePerDatasource))
+	for index, record := range result.Records {
+		if index >= maxEvidencePerDatasource {
+			break
+		}
+		evidenceRefs = append(evidenceRefs, normalizeEvidenceRef(record, result, req))
+	}
+	return evidenceRefs
+}
+
+func normalizeEvidenceRef(record map[string]any, result *datasource.QueryResult, req datasource.QueryRequest) v1alpha1.EvidenceRef {
+	switch result.QueryType {
+	case domain.QueryTypeMetric:
+		metricName, _ := record["metric"].(string)
+		rawValue := fmt.Sprint(record["value"])
+		summary := fmt.Sprintf("metric %s returned value %s", firstNonEmpty(metricName, "unknown"), rawValue)
+		if parsed, err := strconv.ParseFloat(rawValue, 64); err == nil {
+			summary = fmt.Sprintf("metric %s returned value %.2f", firstNonEmpty(metricName, "unknown"), parsed)
+		}
+		return v1alpha1.EvidenceRef{
+			Kind:    "metric",
+			Source:  result.Source,
+			Query:   req.Query,
+			Summary: summary,
+		}
+	case domain.QueryTypeLog:
+		line, _ := record["line"].(string)
+		return v1alpha1.EvidenceRef{
+			Kind:    "log",
+			Source:  result.Source,
+			Query:   req.Query,
+			Summary: firstNonEmpty(strings.TrimSpace(line), result.Summary),
+		}
+	case domain.QueryTypeEvent:
+		reason, _ := record["reason"].(string)
+		message, _ := record["message"].(string)
+		return v1alpha1.EvidenceRef{
+			Kind:    "event",
+			Source:  result.Source,
+			Query:   req.Query,
+			Reason:  reason,
+			Summary: firstNonEmpty(strings.TrimSpace(message), result.Summary),
+		}
+	default:
+		return v1alpha1.EvidenceRef{
+			Kind:    "signal",
+			Source:  result.Source,
+			Query:   req.Query,
+			Summary: result.Summary,
+		}
+	}
+}
+
+func labelApp(labels map[string]string, target domain.ResourceRef) string {
+	if labels["app"] != "" {
+		return labels["app"]
+	}
+	if target.Service != "" {
+		return target.Service
+	}
+	return target.Name
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
