@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -202,5 +203,183 @@ func TestRiskSignalReconcilerDisabledDoesNotCreateRemediationResources(t *testin
 	}
 	if len(actions.Items) != 0 {
 		t.Fatalf("expected no agent actions, got %d", len(actions.Items))
+	}
+}
+
+func TestRiskSignalReconcilerSchedulesTTLRequeueWhenDisabled(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 6, 17, 9, 10, 0, 0, time.UTC)
+	createdAt := metav1.NewTime(now.Add(-30 * time.Second))
+	riskSignal := &v1alpha1.RiskSignal{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: v1alpha1.SchemeGroupVersion.String(),
+			Kind:       "RiskSignal",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "payments-api-risk",
+			Namespace:         "payments",
+			CreationTimestamp: createdAt,
+		},
+		Spec: v1alpha1.RiskSignalSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace: "payments",
+				Name:      "payments-api",
+				Kind:      "Deployment",
+			},
+			Severity:   "high",
+			Confidence: 90,
+			DryRun:     true,
+			TTLSeconds: 120,
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskSignal{}).
+		WithObjects(riskSignal).
+		Build()
+
+	reconciler := &RiskSignalReconciler{
+		Client:  fakeClient,
+		Scheme:  scheme,
+		Enabled: false,
+		Now:     func() time.Time { return now },
+	}
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: riskSignal.Name, Namespace: riskSignal.Namespace},
+	})
+	if err != nil {
+		t.Fatalf("disabled reconcile failed: %v", err)
+	}
+	if result.RequeueAfter != 90*time.Second {
+		t.Fatalf("expected ttl requeue after 90s, got %s", result.RequeueAfter)
+	}
+}
+
+func TestRiskSignalReconcilerDeletesExpiredSignal(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 6, 17, 9, 10, 0, 0, time.UTC)
+	createdAt := metav1.NewTime(now.Add(-2 * time.Minute))
+	riskSignal := &v1alpha1.RiskSignal{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: v1alpha1.SchemeGroupVersion.String(),
+			Kind:       "RiskSignal",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "payments-api-risk",
+			Namespace:         "payments",
+			CreationTimestamp: createdAt,
+		},
+		Spec: v1alpha1.RiskSignalSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace: "payments",
+				Name:      "payments-api",
+				Kind:      "Deployment",
+			},
+			Severity:   "high",
+			Confidence: 90,
+			DryRun:     true,
+			TTLSeconds: 60,
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskSignal{}).
+		WithObjects(riskSignal).
+		Build()
+
+	reconciler := &RiskSignalReconciler{
+		Client:  fakeClient,
+		Scheme:  scheme,
+		Enabled: false,
+		Now:     func() time.Time { return now },
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: riskSignal.Name, Namespace: riskSignal.Namespace},
+	}); err != nil {
+		t.Fatalf("ttl delete reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.RiskSignal
+	err := fakeClient.Get(context.Background(), types.NamespacedName{Name: riskSignal.Name, Namespace: riskSignal.Namespace}, &stored)
+	if !apierrors.IsNotFound(err) {
+		t.Fatalf("expected expired RiskSignal to be deleted, got err=%v", err)
+	}
+}
+
+func TestRiskSignalReconcilerCreatesPlanAndPreservesTTLRequeue(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 6, 17, 9, 0, 0, 0, time.UTC)
+	createdAt := metav1.NewTime(now.Add(-10 * time.Minute))
+	riskSignal := &v1alpha1.RiskSignal{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: v1alpha1.SchemeGroupVersion.String(),
+			Kind:       "RiskSignal",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "payments-api-risk",
+			Namespace:         "payments",
+			Generation:        1,
+			CreationTimestamp: createdAt,
+		},
+		Spec: v1alpha1.RiskSignalSpec{
+			Target: v1alpha1.TargetRef{
+				Cluster:    "prod",
+				Namespace:  "payments",
+				Kind:       "Deployment",
+				Name:       "payments-api",
+				APIVersion: "apps/v1",
+				Service:    "payments-api",
+			},
+			SignalType: "incident",
+			ActionType: "kubernetes.rolloutPause",
+			Severity:   "high",
+			Confidence: 90,
+			DryRun:     true,
+			TTLSeconds: 1800,
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskSignal{}, &v1alpha1.RemediationPlan{}).
+		WithObjects(riskSignal).
+		Build()
+
+	reconciler := &RiskSignalReconciler{
+		Client:  fakeClient,
+		Scheme:  scheme,
+		Enabled: true,
+		Now:     func() time.Time { return now },
+	}
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: riskSignal.Name, Namespace: riskSignal.Namespace},
+	})
+	if err != nil {
+		t.Fatalf("risk reconcile failed: %v", err)
+	}
+	if result.RequeueAfter != 20*time.Minute {
+		t.Fatalf("expected ttl requeue after 20m, got %s", result.RequeueAfter)
+	}
+
+	var plan v1alpha1.RemediationPlan
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{
+		Name:      "payments-api-risk-plan",
+		Namespace: "payments",
+	}, &plan); err != nil {
+		t.Fatalf("expected remediation plan: %v", err)
 	}
 }

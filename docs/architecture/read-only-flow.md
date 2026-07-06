@@ -102,6 +102,8 @@ The generated `RiskSignal` currently contains:
 - default read-only action metadata:
   `actionType: notification.sendSlack`
 
+When `ttlSeconds` is set, the `RiskSignal` controller also schedules automatic cleanup after the retention window expires.
+
 That last field is a contract placeholder. It allows downstream guarded flows to reuse the same CRD shape without meaning that production remediation has already happened.
 
 ## Architecture Diagram

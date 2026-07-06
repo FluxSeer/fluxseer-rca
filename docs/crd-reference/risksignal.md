@@ -103,7 +103,13 @@ Whether the generated signal is intended for non-mutating or review-first handli
 
 ### `spec.ttlSeconds`
 
-Time-to-live hint for consumers and future cleanup behavior.
+Time-to-live in seconds for `RiskSignal` retention.
+
+Current controller behavior:
+
+- if `ttlSeconds` is greater than zero, FluxAgent requeues the signal for expiry
+- when the TTL window elapses, FluxAgent deletes the `RiskSignal`
+- when remediation is enabled, owner-referenced downstream `RemediationPlan` resources are cleaned up with it
 
 ### `spec.evidence`
 
