@@ -212,6 +212,7 @@ make inject-fault
 make demo-status
 make demo-degrade-missing-datasource
 make demo-degrade-capability-mismatch
+make demo-degrade-provider-auth-failed
 make demo-degrade-all
 make demo-reset-riskrule
 make verify-e2e-kind

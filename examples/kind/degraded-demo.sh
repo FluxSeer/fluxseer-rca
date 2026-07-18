@@ -7,9 +7,37 @@ signal_name="${FLUXAGENT_SIGNAL_NAME:-fluxagent-sample-latency-fluxagent-sample-
 mode="${1:-}"
 
 if [[ -z "${mode}" ]]; then
-  echo "usage: bash examples/kind/degraded-demo.sh <missing-datasource|capability-mismatch|reset>"
+  echo "usage: bash examples/kind/degraded-demo.sh <missing-datasource|capability-mismatch|provider-auth-failed|reset>"
   exit 1
 fi
+
+apply_hosted_provider_mocks() {
+  kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openai-demo-secret
+  namespace: ${namespace}
+type: Opaque
+stringData:
+  api-key: demo-openai-token
+---
+apiVersion: aiops.platform/v1alpha1
+kind: ModelProvider
+metadata:
+  name: openai-auth-failed
+  namespace: ${namespace}
+spec:
+  provider: openai
+  model: gpt-5.1
+  endpoint: http://fluxagent-observability:8080/demo/providers/openai/auth-failed
+  timeout: 2s
+  maxTokens: 256
+  apiKeySecretRef:
+    name: openai-demo-secret
+    key: api-key
+EOF
+}
 
 case "${mode}" in
   missing-datasource)
@@ -30,13 +58,23 @@ case "${mode}" in
     echo "- RiskRule: QueryTypeSupported=False, Ready=False"
     echo "- RiskSignal: EvidenceCollectionReady=False"
     ;;
+  provider-auth-failed)
+    apply_hosted_provider_mocks
+    kubectl patch riskrule "${rule_name}" -n "${namespace}" --type json -p='[
+      {"op":"replace","path":"/spec/ai/providerRef/name","value":"openai-auth-failed"}
+    ]'
+    echo "patched RiskRule RCA provider to hosted provider openai-auth-failed"
+    echo "expected conditions:"
+    echo "- RiskRule: Ready=True"
+    echo "- RiskSignal: EvidenceCollectionReady=True, RCAReady=False (ProviderAuthFailed)"
+    ;;
   reset)
     kubectl apply -k examples/riskrules -n "${namespace}"
     echo "reapplied baseline RiskRule manifests"
     ;;
   *)
     echo "unknown mode: ${mode}"
-    echo "usage: bash examples/kind/degraded-demo.sh <missing-datasource|capability-mismatch|reset>"
+    echo "usage: bash examples/kind/degraded-demo.sh <missing-datasource|capability-mismatch|provider-auth-failed|reset>"
     exit 1
     ;;
 esac
