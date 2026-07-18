@@ -175,6 +175,17 @@ Expected signals:
 - `RiskRule/fluxagent-sample-latency`: `QueryTypeSupported=False`, `Ready=False`
 - `RiskSignal/fluxagent-sample-latency-fluxagent-sample-risk`: `EvidenceCollectionReady=False`
 
+Hosted provider auth failure case:
+
+```bash
+make demo-degrade-provider-auth-failed
+```
+
+Expected signals:
+
+- `RiskRule/fluxagent-sample-latency`: `Ready=True`
+- `RiskSignal/fluxagent-sample-latency-fluxagent-sample-risk`: `EvidenceCollectionReady=True`, `RCAReady=False` with reason `ProviderAuthFailed`
+
 Reset the demo rule:
 
 ```bash
@@ -201,7 +212,7 @@ make verify-e2e-kind
 4. assert `RiskSignal` exists
 5. assert `status.rcaSummary` is not empty
 6. assert the fake webhook received a notification
-7. assert missing datasource and capability mismatch degraded conditions
+7. assert recurring-rule degraded conditions for missing datasource, capability mismatch, and hosted-provider `ProviderAuthFailed`
 8. assert operator-first investigation degraded cases, including hosted-provider `ProviderAuthFailed` and `ProviderRateLimited`
 9. restore the baseline rule and clean up with `make demo-down`
 

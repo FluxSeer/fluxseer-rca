@@ -22,6 +22,7 @@ kubectl describe riskrule fluxagent-sample-latency -n fluxagent-demo
 kubectl describe risksignal fluxagent-sample-latency-fluxagent-sample-risk -n fluxagent-demo
 make demo-degrade-missing-datasource
 make demo-degrade-capability-mismatch
+make demo-degrade-provider-auth-failed
 make demo-degrade-all
 make demo-reset-riskrule
 make demo-status
@@ -41,6 +42,8 @@ Degraded demo helpers:
   Expected: `DatasourceResolved=False`
 - `make demo-degrade-capability-mismatch`
   Expected: `QueryTypeSupported=False`
+- `make demo-degrade-provider-auth-failed`
+  Expected: `RiskSignal` keeps `EvidenceCollectionReady=True` but flips `RCAReady=False` with `ProviderAuthFailed`
 - `make demo-degrade-all`
   Run missing datasource, reset, capability mismatch, then reset again
   Use `DEMO_PAUSE_SECONDS=<n>` to hold each section longer while recording

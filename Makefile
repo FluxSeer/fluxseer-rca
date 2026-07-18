@@ -2,7 +2,7 @@ APP=fluxagent
 GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-v0.2-alpha build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-v0.2-alpha build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -68,6 +68,10 @@ demo-degrade-missing-datasource:
 demo-degrade-capability-mismatch:
 	$(MAKE) inject-fault
 	bash examples/kind/degraded-demo.sh capability-mismatch
+
+demo-degrade-provider-auth-failed:
+	$(MAKE) inject-fault
+	bash examples/kind/degraded-demo.sh provider-auth-failed
 
 demo-reset-riskrule:
 	bash examples/kind/degraded-demo.sh reset
