@@ -2,6 +2,7 @@ APP=fluxagent
 GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
 VERSION ?= dev
+RELEASE_VERSION ?= $(if $(filter dev,$(VERSION)),v0.2.0-beta.1,$(VERSION))
 GIT_COMMIT := $(shell git rev-parse HEAD)
 GIT_DIRTY := $(shell test -z "$$(git status --porcelain)" && echo false || echo true)
 SOURCE_DATE_EPOCH := $(shell git show -s --format=%ct HEAD)
@@ -19,7 +20,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.2-alpha verify-artifact-identity verify-packaging-consistency verify-build-reproducibility build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.2-alpha verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -146,6 +147,26 @@ verify-packaging-consistency:
 
 verify-build-reproducibility:
 	VERSION=$(VERSION) GIT_COMMIT=$(GIT_COMMIT) GIT_DIRTY=$(GIT_DIRTY) BUILD_DATE=$(BUILD_DATE) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) bash hack/verify-build-reproducibility.sh
+
+verify-release-inputs:
+	VERSION=$(RELEASE_VERSION) bash hack/verify-release-inputs.sh
+
+verify-release-cleanup:
+	VERSION=$(RELEASE_VERSION) bash hack/verify-release-cleanup.sh
+
+verify-release-pretag:
+	VERSION=$(RELEASE_VERSION) bash hack/verify-release-pretag.sh
+
+verify-release-v0.2-beta:
+	$(MAKE) verify-release-inputs VERSION=$(RELEASE_VERSION)
+	$(MAKE) verify-v0.2-alpha
+	$(MAKE) verify-e2e-kind VERSION=$(RELEASE_VERSION) IMAGE_TAG=release-e2e-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-investigation-kind VERSION=$(RELEASE_VERSION) IMAGE_TAG=release-investigation-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-artifact-identity VERSION=$(RELEASE_VERSION) IMAGE_TAG=release-identity-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-packaging-consistency VERSION=$(RELEASE_VERSION) IMAGE_TAG=release-packaging-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-build-reproducibility VERSION=$(RELEASE_VERSION) IMAGE_TAG=release-reproducibility-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-lifecycle-kind VERSION=$(RELEASE_VERSION) IMAGE_TAG=release-lifecycle-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-release-cleanup VERSION=$(RELEASE_VERSION)
 
 build-images:
 	docker buildx build --load --platform $(TARGET_PLATFORM) --provenance=false --sbom=false \
