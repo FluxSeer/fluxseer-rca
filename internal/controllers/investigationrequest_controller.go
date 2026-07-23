@@ -45,7 +45,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 
 	original := investigation.DeepCopy()
 	restarting := original.Status.ObservedGeneration != investigation.Generation || isTerminalInvestigationPhase(original.Status.Phase)
-	message := "investigation preflight succeeded; evidence collection and RCA execution are not implemented yet"
+	message := "investigation execution started"
 	setInvestigationRequestStatus(&investigation.Status, v1alpha1.PhaseObserved, message, investigation.Generation, now())
 	if investigation.Status.StartedAt == nil || restarting {
 		startedAt := metav1.NewTime(now())
