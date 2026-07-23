@@ -7,6 +7,7 @@ set -euo pipefail
 : "${BUILD_DATE:?BUILD_DATE is required}"
 : "${OPERATOR_IMAGE_REF:?OPERATOR_IMAGE_REF is required}"
 : "${DEMO_IMAGE_REF:?DEMO_IMAGE_REF is required}"
+TARGET_PLATFORM="${TARGET_PLATFORM:-linux/amd64}"
 
 if [[ -z "${VERSION}" ]]; then
   echo "VERSION must not be empty" >&2
@@ -51,7 +52,7 @@ verify_image() {
   echo "verifying artifact identity for ${image}"
 
   local version_json
-  version_json="$(docker run --rm "${image}" version --output=json)"
+  version_json="$(docker run --rm --platform "${TARGET_PLATFORM}" "${image}" version --output=json)"
 
   assert_equal "${image} binary version" "${VERSION}" "$(json_value "${version_json}" version)"
   assert_equal "${image} binary gitCommit" "${GIT_COMMIT}" "$(json_value "${version_json}" gitCommit)"

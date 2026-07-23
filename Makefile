@@ -8,16 +8,18 @@ SOURCE_DATE_EPOCH := $(shell git show -s --format=%ct HEAD)
 BUILD_DATE := $(shell ./hack/source-date.sh "$(SOURCE_DATE_EPOCH)")
 VERSION_PACKAGE := fluxagent/internal/version
 GO_LDFLAGS := -X $(VERSION_PACKAGE).Version=$(VERSION) -X $(VERSION_PACKAGE).GitCommit=$(GIT_COMMIT) -X $(VERSION_PACKAGE).GitDirty=$(GIT_DIRTY) -X $(VERSION_PACKAGE).BuildDate=$(BUILD_DATE)
+GO_BUILD_FLAGS := -trimpath -buildvcs=false
 OPERATOR_IMAGE ?= fluxagent/operator
 IMAGE_REPOSITORY ?= $(OPERATOR_IMAGE)
 DEMO_IMAGE ?= fluxagent/demo-observability
 DEMO_IMAGE_REPOSITORY ?= $(DEMO_IMAGE)
 IMAGE_TAG ?= $(VERSION)
+TARGET_PLATFORM ?= linux/amd64
 CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-v0.2-alpha verify-artifact-identity verify-packaging-consistency build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-v0.2-alpha verify-artifact-identity verify-packaging-consistency verify-build-reproducibility build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -26,13 +28,13 @@ test:
 	$(GO) test ./...
 
 run:
-	$(GO) run -trimpath -ldflags "$(GO_LDFLAGS)" ./cmd/$(APP)
+	$(GO) run $(GO_BUILD_FLAGS) -ldflags "$(GO_LDFLAGS)" ./cmd/$(APP)
 
 run-operator:
-	$(GO) run -trimpath -ldflags "$(GO_LDFLAGS)" ./cmd/operator
+	$(GO) run $(GO_BUILD_FLAGS) -ldflags "$(GO_LDFLAGS)" ./cmd/operator
 
 run-manager:
-	$(GO) run -trimpath -ldflags "$(GO_LDFLAGS)" ./cmd/manager
+	$(GO) run $(GO_BUILD_FLAGS) -ldflags "$(GO_LDFLAGS)" ./cmd/manager
 
 install-demo:
 	kubectl create namespace fluxagent-system || true
@@ -134,23 +136,28 @@ verify-v0.2-alpha:
 	kubectl kustomize examples/kind >/tmp/fluxagent-kind-example.yaml
 
 verify-artifact-identity: build-images build-demo-images
-	VERSION=$(VERSION) GIT_COMMIT=$(GIT_COMMIT) GIT_DIRTY=$(GIT_DIRTY) BUILD_DATE=$(BUILD_DATE) OPERATOR_IMAGE_REF=$(OPERATOR_IMAGE_REF) DEMO_IMAGE_REF=$(DEMO_IMAGE_REF) bash hack/verify-artifact-identity.sh
+	VERSION=$(VERSION) GIT_COMMIT=$(GIT_COMMIT) GIT_DIRTY=$(GIT_DIRTY) BUILD_DATE=$(BUILD_DATE) TARGET_PLATFORM=$(TARGET_PLATFORM) OPERATOR_IMAGE_REF=$(OPERATOR_IMAGE_REF) DEMO_IMAGE_REF=$(DEMO_IMAGE_REF) bash hack/verify-artifact-identity.sh
 
 verify-packaging-consistency:
 	VERSION=$(VERSION) CHART_VERSION=$(CHART_VERSION) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) bash hack/verify-packaging-consistency.sh
 
+verify-build-reproducibility:
+	VERSION=$(VERSION) GIT_COMMIT=$(GIT_COMMIT) GIT_DIRTY=$(GIT_DIRTY) BUILD_DATE=$(BUILD_DATE) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) bash hack/verify-build-reproducibility.sh
+
 build-images:
-	docker build \
+	docker buildx build --load --platform $(TARGET_PLATFORM) --provenance=false --sbom=false \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg GIT_DIRTY=$(GIT_DIRTY) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) \
 		-t $(OPERATOR_IMAGE_REF) .
 
 build-demo-images:
-	docker build \
+	docker buildx build --load --platform $(TARGET_PLATFORM) --provenance=false --sbom=false \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg GIT_DIRTY=$(GIT_DIRTY) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) \
 		-t $(DEMO_IMAGE_REF) -f examples/fake-observability/Dockerfile .
