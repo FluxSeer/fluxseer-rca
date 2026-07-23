@@ -115,6 +115,24 @@ Current controller behavior:
 
 Evidence is intentionally lightweight. It holds enough metadata to explain why the signal exists without forcing large raw payloads into the CRD.
 
+Recommended persisted evidence fields:
+
+- datasource type and name
+- query type and time range
+- compact summary
+- resource references
+- evidence count or digest
+- redaction metadata
+
+Fields that should not be persisted:
+
+- full Prometheus payloads
+- large Loki log bodies
+- full model prompts
+- provider raw responses
+- secrets, tokens, or authorization headers
+- unredacted Kubernetes objects
+
 ### `spec.parameters`
 
 Optional key-value parameters carried into downstream planning.

@@ -121,6 +121,28 @@ If the fallback resolution fails, FluxAgent surfaces the fallback failure reason
 - `ResolverUnavailable`
 - `ProviderFallbackLoop`
 
+## Fallback Policy Requirement
+
+The fallback contract should remain explicit and narrow as the provider gateway hardens. This is a contract hardening target and may require narrowing currently supported fallback cases before production claims.
+
+Recommended fallback-eligible failures:
+
+- timeout
+- HTTP `429`
+- HTTP `5xx`
+- connection failure
+- provider unavailable
+
+Recommended non-fallback failures:
+
+- invalid credentials
+- malformed provider spec
+- unsupported model
+- invalid provider response schema
+- evidence exceeds configured limits and cannot be truncated safely
+
+Invalid provider responses should remain visible because they may indicate schema drift or an adapter bug. Fallback chains must not loop; `v0.2` should either allow only one fallback level or use runtime visited-provider cycle detection.
+
 ## Local Endpoint Contract
 
 `ModelProvider.spec.provider: local` is the supported `v0.2 alpha` non-heuristic path.

@@ -2,6 +2,14 @@
 
 FluxAgent adopts a layered plus split-path architecture.
 
+Product positioning:
+
+```text
+Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
+```
+
+Current release scope is narrower: `v0.2` focuses on read-only RCA workflows and is currently a beta candidate.
+
 The current runnable default path is read-only detection: observe workload risk, create a `RiskSignal`, and notify without mutating the target workload.
 
 The newest runnable layer is read-only ad-hoc investigation through a dedicated workflow resource.
@@ -28,6 +36,8 @@ FluxAgent treats dependencies in three separate categories:
 - deployment dependency: FluxAgent manifests install FluxAgent itself, not a full monitoring stack on the user's behalf
 
 That distinction matters because the project goal is integration without structural lock-in.
+
+See [../product-requirements.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/product-requirements.md:1) for the product positioning, release-scope, CRD contract, graceful-degradation, evidence-storage, and release-freeze baseline.
 
 ## High-level Architecture
 
@@ -130,7 +140,7 @@ Implemented contract:
 
 - `InvestigationRequest`
 
-Planned responsibility split:
+Current responsibility split:
 
 - controller owns request lifecycle and status
 - investigation service owns target resolution, evidence gathering, and orchestration
@@ -144,6 +154,18 @@ This layer is intended to support:
 - future webhook or chat bridges
 
 Without this layer, FluxAgent remains background-rule oriented. With it, FluxAgent gains an immediate investigation workflow without becoming a generic agent shell.
+
+### Controller Ownership Boundary
+
+Controllers own Kubernetes workflow state transitions. Shared orchestration should live in internal services rather than controller-to-controller calls.
+
+Expected ownership:
+
+- `RiskRule` controller: resolve targets, validate datasource capability, execute detection queries, and create or update `RiskSignal`
+- `InvestigationRequest` controller: resolve targets, collect and normalize evidence, invoke the model provider, update terminal status, and optionally promote to `RiskSignal`
+- `RiskSignal` controller: manage signal lifecycle and optional downstream guarded planning
+- `RemediationPlan` controller: evaluate guardrails and approval state, then create `AgentAction`
+- `AgentAction` controller: execute or simulate approved actions and record execution results
 
 ### 6. Model Gateway Layer
 
@@ -446,7 +468,7 @@ flowchart LR
 
 FluxAgent can already be described externally as:
 
-`FluxAgent is a CRD-first AI SRE control plane with background detection and ad-hoc read-only investigation workflows.`
+`FluxAgent is a Kubernetes-native SRE investigation control plane with background detection, ad-hoc read-only investigation workflows, and optional AI-assisted reasoning.`
 
 It should not yet be described as:
 
@@ -454,4 +476,4 @@ It should not yet be described as:
 
 That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.
 
-The conservative release label is `v0.2 alpha+ / early v0.3 alpha`.
+The conservative release label is `v0.2 read-only RCA beta candidate`.

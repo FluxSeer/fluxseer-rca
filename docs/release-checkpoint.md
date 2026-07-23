@@ -8,6 +8,18 @@ This document records what the repository can actually do today, what remains in
 
 FluxAgent is past the original `v0.1` demo-only stage.
 
+Product positioning:
+
+```text
+Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
+```
+
+Current release scope:
+
+```text
+v0.2 focuses on read-only RCA workflows and is currently a beta candidate.
+```
+
 The repository currently represents a verified `v0.2 read-only RCA beta candidate`:
 
 - runnable read-only `RiskSignal` operator
@@ -209,3 +221,6 @@ Before tagging `v0.2.0-beta.1`:
 3. keep beta claims limited to a read-only RCA beta with guarded remediation as a secondary path
 4. keep OpenTelemetry, CloudWatch, and Bedrock documented as not production-ready paths
 5. keep provider and datasource coverage claims limited to the currently wired and tested behavior
+6. confirm CRD YAML and generated code are consistent
+7. confirm release notes, manifests, and release image references correspond to the same commit
+8. smoke test or explicitly document upgrade and uninstall boundaries
