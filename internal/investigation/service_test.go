@@ -211,6 +211,46 @@ func TestServiceCollectEvidenceNormalizesResults(t *testing.T) {
 	}
 }
 
+func TestServiceCollectEvidencePreservesDatasourceQueryReason(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				queryErr: &datasource.QueryError{
+					Reason:  "DatasourceAuthFailed",
+					Message: "prometheus datasource returned 401",
+				},
+			},
+		),
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target: domain.ResourceRef{
+			Namespace: "prod",
+			Name:      "open-api",
+			Kind:      "Deployment",
+			Service:   "open-api",
+		},
+		Labels:          map[string]string{"app": "open-api"},
+		DatasourceNames: []string{"prometheus"},
+		CollectionPlan: []CollectionStep{
+			{
+				Name:           "prometheus",
+				DatasourceName: "prometheus",
+				QueryType:      domain.QueryTypeMetric,
+				Query:          "metric-query",
+			},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "DatasourceAuthFailed" {
+		t.Fatalf("expected DatasourceAuthFailed issue, got %#v", result.Issue)
+	}
+}
+
 func TestServiceCollectEvidenceUsesConfiguredQueryPlan(t *testing.T) {
 	prom := &capturingDataSource{
 		name:      "prometheus",
