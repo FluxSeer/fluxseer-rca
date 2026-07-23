@@ -2,6 +2,10 @@
 
 Kubernetes-native AI SRE Agent Operator for proactive risk detection, RCA assistance, and guarded remediation.
 
+Current release: `v0.2.0-alpha.2`
+
+Status: `v0.2 alpha+ / early v0.3 alpha`
+
 FluxAgent turns Kubernetes Events, Prometheus metrics, Loki logs, and deployment context into `RiskSignal`, `RemediationPlan`, and guarded `AgentAction` workflows.
 
 Core logic is designed to stay adapter-neutral: Kubernetes, Prometheus, Loki, and model vendors are integrations, not the product's hard-coded identity.
