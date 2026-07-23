@@ -1,6 +1,6 @@
 # Read-only Investigation Flow
 
-This document describes the planned ad-hoc investigation path for `v0.3` alpha.
+This document describes the early ad-hoc investigation path for `v0.3` alpha.
 
 Unlike the default background path, this workflow starts from an explicit investigation request instead of a standing rule or workload annotation.
 
