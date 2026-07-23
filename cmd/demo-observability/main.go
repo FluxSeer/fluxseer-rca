@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"fluxagent/internal/version"
 )
 
 type serverState struct {
@@ -18,6 +20,19 @@ type serverState struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "version" {
+		output, err := version.ParseOutput(os.Args[2:])
+		if err != nil {
+			log.Print(err)
+			os.Exit(1)
+		}
+		if err := version.Write(os.Stdout, output); err != nil {
+			log.Print(err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	state := &serverState{
 		faultedApps: map[string]bool{},
 	}
@@ -41,6 +56,8 @@ func main() {
 		addr = ":" + value
 	}
 
+	info := version.Current()
+	log.Printf("demo observability version=%s gitCommit=%s gitDirty=%s buildDate=%s", info.Version, info.GitCommit, info.GitDirty, info.BuildDate)
 	log.Printf("demo observability listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)

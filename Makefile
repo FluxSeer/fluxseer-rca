@@ -1,8 +1,20 @@
 APP=fluxagent
 GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
+VERSION ?= dev
+GIT_COMMIT := $(shell git rev-parse HEAD)
+GIT_DIRTY := $(shell test -z "$$(git status --porcelain)" && echo false || echo true)
+SOURCE_DATE_EPOCH := $(shell git show -s --format=%ct HEAD)
+BUILD_DATE := $(shell ./hack/source-date.sh "$(SOURCE_DATE_EPOCH)")
+VERSION_PACKAGE := fluxagent/internal/version
+GO_LDFLAGS := -X $(VERSION_PACKAGE).Version=$(VERSION) -X $(VERSION_PACKAGE).GitCommit=$(GIT_COMMIT) -X $(VERSION_PACKAGE).GitDirty=$(GIT_DIRTY) -X $(VERSION_PACKAGE).BuildDate=$(BUILD_DATE)
+OPERATOR_IMAGE ?= fluxagent/operator
+DEMO_IMAGE ?= fluxagent/demo-observability
+IMAGE_TAG ?= latest
+OPERATOR_IMAGE_REF := $(OPERATOR_IMAGE):$(IMAGE_TAG)
+DEMO_IMAGE_REF := $(DEMO_IMAGE):$(IMAGE_TAG)
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-v0.2-alpha build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-v0.2-alpha verify-artifact-identity build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -11,13 +23,13 @@ test:
 	$(GO) test ./...
 
 run:
-	$(GO) run ./cmd/$(APP)
+	$(GO) run -trimpath -ldflags "$(GO_LDFLAGS)" ./cmd/$(APP)
 
 run-operator:
-	$(GO) run ./cmd/operator
+	$(GO) run -trimpath -ldflags "$(GO_LDFLAGS)" ./cmd/operator
 
 run-manager:
-	$(GO) run ./cmd/manager
+	$(GO) run -trimpath -ldflags "$(GO_LDFLAGS)" ./cmd/manager
 
 install-demo:
 	kubectl create namespace fluxagent-system || true
@@ -39,8 +51,8 @@ demo-up:
 	kind create cluster --name fluxagent-demo --config examples/kind/kind-config.yaml
 	$(MAKE) build-images
 	$(MAKE) build-demo-images
-	kind load docker-image fluxagent/operator:latest --name fluxagent-demo
-	kind load docker-image fluxagent/demo-observability:latest --name fluxagent-demo
+	kind load docker-image $(OPERATOR_IMAGE_REF) --name fluxagent-demo
+	kind load docker-image $(DEMO_IMAGE_REF) --name fluxagent-demo
 	$(MAKE) install-demo
 
 demo-down:
@@ -118,8 +130,21 @@ verify-v0.2-alpha:
 	kubectl kustomize config/default >/tmp/fluxagent-config-default.yaml
 	kubectl kustomize examples/kind >/tmp/fluxagent-kind-example.yaml
 
+verify-artifact-identity: build-images build-demo-images
+	VERSION=$(VERSION) GIT_COMMIT=$(GIT_COMMIT) GIT_DIRTY=$(GIT_DIRTY) BUILD_DATE=$(BUILD_DATE) OPERATOR_IMAGE_REF=$(OPERATOR_IMAGE_REF) DEMO_IMAGE_REF=$(DEMO_IMAGE_REF) bash hack/verify-artifact-identity.sh
+
 build-images:
-	docker build -t fluxagent/operator:latest .
+	docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_DIRTY=$(GIT_DIRTY) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-t $(OPERATOR_IMAGE_REF) .
 
 build-demo-images:
-	docker build -t fluxagent/demo-observability:latest -f examples/fake-observability/Dockerfile .
+	docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_DIRTY=$(GIT_DIRTY) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-t $(DEMO_IMAGE_REF) -f examples/fake-observability/Dockerfile .
