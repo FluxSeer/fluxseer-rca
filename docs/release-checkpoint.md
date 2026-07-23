@@ -204,6 +204,8 @@ The kind gates verified:
 
 The beta candidate gate defined in `docs/backlog/v0.2-beta.md` has passed on current `main`.
 
+The latest release freeze pass is recorded in `docs/releases/v0.2.0-beta.1-freeze.md`. The functional gate is green, but tagging is blocked until release image and manifest reproducibility are fixed.
+
 Verified validation commands:
 
 ```sh
@@ -224,3 +226,4 @@ Before tagging `v0.2.0-beta.1`:
 6. confirm CRD YAML and generated code are consistent
 7. confirm release notes, manifests, and release image references correspond to the same commit
 8. smoke test or explicitly document upgrade and uninstall boundaries
+9. rerun the full beta gate against immutable release image references rather than local `latest` images
