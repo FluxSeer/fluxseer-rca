@@ -50,6 +50,7 @@ docs/
 - [product-requirements.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/product-requirements.md:1)
 - [release-checkpoint.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/release-checkpoint.md:1)
 - [backlog/v0.2-beta.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/backlog/v0.2-beta.md:1)
+- [backlog/v0.2-release-reproducibility.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/backlog/v0.2-release-reproducibility.md:1)
 - [releases/v0.2.0-beta.1.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-beta.1.md:1)
 - [releases/v0.2.0-beta.1-freeze.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-beta.1-freeze.md:1)
 - [releases/v0.2.0-alpha.2.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-alpha.2.md:1)

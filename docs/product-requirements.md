@@ -257,5 +257,6 @@ Before tagging `v0.2.0-beta.1`, freeze and confirm:
 - the kind verification uses the image intended for release, not uncommitted local code
 - Kustomize manifests use the intended version or image reference
 - upgrade and uninstall paths have at least smoke-test coverage or are explicitly documented as pending
+- `make verify-release-v0.2-beta` or its documented equivalent passes against the intended release image reference
 
 The release must remain framed as a read-only RCA beta, not as a production remediation platform.
