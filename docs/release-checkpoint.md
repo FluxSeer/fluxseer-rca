@@ -36,6 +36,15 @@ Current `main` has additional post-tag hardening:
   - rejects empty or missing `rcaCauses`
   - validates all provider `ModelResponse` values in the reasoning engine before deriving RCA fields
   - adds tests for incomplete hosted OpenAI content and invalid custom provider responses
+- `cea4ee6` `feat: harden datasource http retries`
+  - standardizes Prometheus and Loki retry and HTTP status classification
+  - maps auth, rate-limit, invalid-payload, unavailable, and invalid-request failures to stable datasource reasons
+  - preserves typed datasource query failures in `InvestigationRequest` status conditions
+- `bf673c1` `feat: surface datasource query degradation`
+  - keeps `RiskRule` reconciliation alive when optional datasource queries fail
+  - surfaces typed datasource query failures through `RiskRule` `Ready`/`Degraded` conditions
+  - carries evidence collection failure reasons into generated `RiskSignal` status
+  - allows partial-evidence `RiskSignal` creation when another optional datasource query fails
 
 ## Verified Working Scope
 
@@ -82,6 +91,7 @@ Current `main` has additional post-tag hardening:
 - hosted providers share timeout, HTTP status mapping, and transient retry behavior
 - secret and hosted-provider failures surface as RCA readiness/degraded reasons
 - `fallbackProviderRef` can fail over between provider objects for supported provider and secret failures
+- Prometheus and Loki datasource adapters share retry, timeout, HTTP status, and payload error classification
 
 ### Demo and Validation Path
 
@@ -125,6 +135,8 @@ The project should not yet be presented as:
 
 The following local checks were run during this checkpoint:
 
+Initial checkpoint commands:
+
 ```sh
 git log --oneline -3
 GOWORK=off go test ./...
@@ -135,7 +147,7 @@ make verify-investigation-kind
 git status --short
 ```
 
-Observed results:
+Initial checkpoint observed results:
 
 - recent commits:
   - `9d3ea96` `test(kind): cover hosted provider auth-failed degradation`
@@ -147,6 +159,24 @@ Observed results:
 - `make verify-e2e-kind` passed
 - `make verify-investigation-kind` passed
 - `git status --short` returned no pending changes before this checkpoint update
+
+Latest post-tag mainline verification after datasource hardening:
+
+```sh
+make verify-v0.2-alpha
+make verify-e2e-kind
+make verify-investigation-kind
+kind get clusters
+git status --short --branch
+```
+
+Latest observed results:
+
+- `make verify-v0.2-alpha` passed
+- `make verify-e2e-kind` passed
+- `make verify-investigation-kind` passed
+- `kind get clusters` returned no remaining kind clusters after cleanup
+- `git status --short --branch` returned a clean branch synchronized with `origin/main`
 
 The kind gates verified:
 
