@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: observability
-          image: fluxagent/demo-observability:latest
+          image: fluxagent/demo-observability:v0.2.0-beta.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

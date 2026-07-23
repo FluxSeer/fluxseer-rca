@@ -9,12 +9,15 @@ BUILD_DATE := $(shell ./hack/source-date.sh "$(SOURCE_DATE_EPOCH)")
 VERSION_PACKAGE := fluxagent/internal/version
 GO_LDFLAGS := -X $(VERSION_PACKAGE).Version=$(VERSION) -X $(VERSION_PACKAGE).GitCommit=$(GIT_COMMIT) -X $(VERSION_PACKAGE).GitDirty=$(GIT_DIRTY) -X $(VERSION_PACKAGE).BuildDate=$(BUILD_DATE)
 OPERATOR_IMAGE ?= fluxagent/operator
+IMAGE_REPOSITORY ?= $(OPERATOR_IMAGE)
 DEMO_IMAGE ?= fluxagent/demo-observability
-IMAGE_TAG ?= latest
-OPERATOR_IMAGE_REF := $(OPERATOR_IMAGE):$(IMAGE_TAG)
-DEMO_IMAGE_REF := $(DEMO_IMAGE):$(IMAGE_TAG)
+DEMO_IMAGE_REPOSITORY ?= $(DEMO_IMAGE)
+IMAGE_TAG ?= $(VERSION)
+CHART_VERSION := $(patsubst v%,%,$(VERSION))
+OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
+DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-v0.2-alpha verify-artifact-identity build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-v0.2-alpha verify-artifact-identity verify-packaging-consistency build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -34,7 +37,7 @@ run-manager:
 install-demo:
 	kubectl create namespace fluxagent-system || true
 	kubectl create namespace fluxagent-demo || true
-	kubectl apply -k config/default
+	IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) bash hack/render-release-kustomize.sh config/default | kubectl apply -f -
 	kubectl wait --for=condition=Established --timeout=120s crd/agentactions.aiops.platform
 	kubectl wait --for=condition=Established --timeout=120s crd/datasources.aiops.platform
 	kubectl wait --for=condition=Established --timeout=120s crd/investigationrequests.aiops.platform
@@ -42,7 +45,7 @@ install-demo:
 	kubectl wait --for=condition=Established --timeout=120s crd/remediationplans.aiops.platform
 	kubectl wait --for=condition=Established --timeout=120s crd/riskrules.aiops.platform
 	kubectl wait --for=condition=Established --timeout=120s crd/risksignals.aiops.platform
-	kubectl apply -k examples/kind
+	IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) bash hack/render-release-kustomize.sh examples/kind | kubectl apply -f -
 
 apply-riskrule:
 	kubectl apply -k examples/riskrules -n fluxagent-demo
@@ -132,6 +135,9 @@ verify-v0.2-alpha:
 
 verify-artifact-identity: build-images build-demo-images
 	VERSION=$(VERSION) GIT_COMMIT=$(GIT_COMMIT) GIT_DIRTY=$(GIT_DIRTY) BUILD_DATE=$(BUILD_DATE) OPERATOR_IMAGE_REF=$(OPERATOR_IMAGE_REF) DEMO_IMAGE_REF=$(DEMO_IMAGE_REF) bash hack/verify-artifact-identity.sh
+
+verify-packaging-consistency:
+	VERSION=$(VERSION) CHART_VERSION=$(CHART_VERSION) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) bash hack/verify-packaging-consistency.sh
 
 build-images:
 	docker build \
