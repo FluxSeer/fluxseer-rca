@@ -4,7 +4,7 @@ FluxAgent adopts a layered plus split-path architecture.
 
 The current runnable default path is read-only detection: observe workload risk, create a `RiskSignal`, and notify without mutating the target workload.
 
-The next planned layer is read-only ad-hoc investigation through a dedicated workflow resource.
+The newest runnable layer is read-only ad-hoc investigation through a dedicated workflow resource.
 
 Guarded remediation remains a separate optional expansion path. Only when it is explicitly enabled and passes guardrails can a `RiskSignal` lead to a `RemediationPlan`, an `AgentAction`, and an executed side effect.
 
@@ -104,12 +104,12 @@ FluxAgent exposes its workflow through Kubernetes-native CRDs:
 - `DataSource`
 - `RiskRule`
 - `ModelProvider`
-- `InvestigationRequest` planned for `v0.3` ad-hoc investigation
+- `InvestigationRequest`
 - `RiskSignal`
 - `RemediationPlan`
 - `AgentAction`
 
-`v0.2` establishes `DataSource`, `RiskRule`, and `ModelProvider` as read-only RCA configuration contracts.
+`v0.2` establishes `DataSource`, `RiskRule`, and `ModelProvider` as read-only RCA configuration contracts. The early `v0.3` layer establishes `InvestigationRequest` as the ad-hoc investigation contract.
 
 The API group is `aiops.platform/v1alpha1`.
 
@@ -124,9 +124,9 @@ This gives FluxAgent:
 
 ### 5. Investigation Experience Layer
 
-The next architecture step is an operator-first investigation layer.
+The newest architecture step is an operator-first investigation layer.
 
-Planned contract:
+Implemented contract:
 
 - `InvestigationRequest`
 
@@ -243,9 +243,9 @@ In runtime terms:
 
 This is the main open-source entry point and the default runtime truth of `v0.1`.
 
-## Planned Flow: Ad-hoc Read-only Investigation
+## Early Flow: Ad-hoc Read-only Investigation
 
-The next planned path is:
+The early investigation path is:
 
 ```text
 InvestigationRequest
@@ -270,7 +270,7 @@ It is deliberately separate from:
 - chat-specific UX
 - remediation execution
 
-The CRD should become the common contract that future CLI or UI layers call.
+The CRD is the common contract that CLI and future UI layers call.
 
 ## Optional Flow: Guarded Remediation
 
@@ -307,7 +307,7 @@ Represents a detected risk with severity, confidence, target, and evidence. In `
 
 ### `InvestigationRequest`
 
-Planned `v0.3` contract for a human-triggered or system-triggered read-only investigation request.
+Early `v0.3` contract for a human-triggered or system-triggered read-only investigation request.
 
 ### `RemediationPlan`
 
@@ -342,11 +342,12 @@ Established as contracts or scaffolds:
 - guarded remediation controller chain
 - multi-backend executor routing
 
-Planned next contract layer:
+Early `v0.3` investigation layer:
 
 - `InvestigationRequest`
 - reusable investigation service orchestration
-- thin CLI and UI wrappers over the CRD workflow
+- thin CLI wrapper over the CRD workflow
+- future UI wrappers over the same CRD workflow
 
 Simulation-oriented today:
 
@@ -388,7 +389,7 @@ FluxAgent is designed to grow through stable seams instead of controller rewrite
 
 ## Mermaid Diagram
 
-The following diagram mixes today's runnable control-plane shape with the next planned investigation layer.
+The following diagram shows today's runnable control-plane shape, including the early investigation layer.
 
 ```mermaid
 flowchart LR
@@ -445,7 +446,7 @@ flowchart LR
 
 FluxAgent can already be described externally as:
 
-`FluxAgent v0.1 is a read-only RiskSignal Operator.`
+`FluxAgent is a CRD-first AI SRE control plane with background detection and ad-hoc read-only investigation workflows.`
 
 It should not yet be described as:
 
@@ -453,6 +454,4 @@ It should not yet be described as:
 
 That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.
 
-The next defensible description after the investigation layer lands would be:
-
-`FluxAgent is a CRD-first AI SRE control plane with background detection and ad-hoc read-only investigation workflows.`
+The conservative release label is `v0.2 alpha+ / early v0.3 alpha`.

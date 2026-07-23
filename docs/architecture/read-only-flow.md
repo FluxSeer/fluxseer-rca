@@ -2,7 +2,7 @@
 
 This document describes the default `v0.1` runtime path. This is the path that should be treated as the main open-source entry point today.
 
-For the planned ad-hoc investigation path, see [investigation-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/investigation-flow.md:1).
+For the ad-hoc investigation path, see [investigation-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/investigation-flow.md:1).
 
 ## Goal
 

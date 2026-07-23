@@ -277,7 +277,7 @@ This target will:
 
 ## Current Scope
 
-FluxAgent is already a working open-source skeleton, but it is not yet a production-grade remediation platform.
+FluxAgent is already a working open-source project, but it is not yet a production-grade remediation platform.
 
 Implemented today:
 

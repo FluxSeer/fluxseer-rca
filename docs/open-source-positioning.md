@@ -27,7 +27,7 @@ FluxAgent is positioned as a Kubernetes-native AI SRE control plane with read-on
 - OpenAI, Claude, Gemini, Bedrock, and local models are provider choices, not platform assumptions.
 - GitOps and notifications are preferred integration points for higher-risk actions.
 - fake observability endpoints in the demo are for validation convenience, not a claim that FluxAgent owns the user's monitoring stack.
-- future CLI or UI surfaces should wrap CRDs such as `RiskRule` and planned `InvestigationRequest` rather than define a separate execution truth.
+- CLI and future UI surfaces should wrap CRDs such as `RiskRule` and `InvestigationRequest` rather than define a separate execution truth.
 
 ## Product Direction
 
@@ -35,10 +35,10 @@ The intended near-term distinction is:
 
 ```text
 general agent platform: not the first goal
-operator-first investigation control plane: the next goal
+operator-first investigation control plane: current early goal
 ```
 
-That means the next missing layer is:
+That means the current early investigation layer is:
 
 - ad-hoc investigation requests
 - reusable investigation orchestration
