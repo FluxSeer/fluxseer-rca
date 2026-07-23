@@ -1,0 +1,14 @@
+.git
+.tmp-kustomize.*
+.DS_Store
+.idea/
+.vscode/
+bin/
+build/
+coverage/
+dist/
+tmp/
+*.out
+*.test
+*.prof
+coverage.*
