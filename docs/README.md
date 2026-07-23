@@ -48,6 +48,7 @@ docs/
 - [architecture/v0.3-investigation-experience.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.3-investigation-experience.md:1)
 - [architecture/v0.2-adapter-neutral-backlog.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.2-adapter-neutral-backlog.md:1)
 - [release-checkpoint.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/release-checkpoint.md:1)
+- [backlog/v0.2-beta.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/backlog/v0.2-beta.md:1)
 - [releases/v0.2.0-alpha.2.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-alpha.2.md:1)
 - [tutorials/quickstart-kind.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/quickstart-kind.md:1)
 - [tutorials/investigate-workload.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/investigate-workload.md:1)
