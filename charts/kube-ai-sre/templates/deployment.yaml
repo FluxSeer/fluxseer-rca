@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluxagent-controller-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller-manager
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "fluxagent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "fluxagent.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "fluxagent.serviceAccountName" . }}
+      containers:
+        - name: manager
+          image: {{ include "fluxagent.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /fluxagent-operator
+          args:
+            - --metrics-bind-address={{ .Values.controller.metricsBindAddress }}
+            - --health-probe-bind-address={{ .Values.controller.healthProbeBindAddress }}
+            - --leader-elect={{ .Values.controller.enableLeaderElection }}
+            - --enable-remediation={{ .Values.controller.enableRemediation }}
+            {{- range .Values.controller.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          {{- with .Values.controller.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: 8080
+              name: metrics
+            - containerPort: 8081
+              name: health
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          {{- with .Values.controller.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

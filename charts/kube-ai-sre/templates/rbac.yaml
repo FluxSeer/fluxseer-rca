@@ -1,0 +1,40 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluxagent-manager-role
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["events", "pods", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["aiops.platform"]
+    resources: ["datasources", "investigationrequests", "modelproviders", "riskrules"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["aiops.platform"]
+    resources: ["risksignals", "remediationplans", "agentactions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["aiops.platform"]
+    resources: ["datasources/status", "investigationrequests/status", "modelproviders/status", "riskrules/status", "risksignals/status", "remediationplans/status", "agentactions/status"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluxagent-manager-rolebinding
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fluxagent-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "fluxagent.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}

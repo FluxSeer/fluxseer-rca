@@ -3,9 +3,20 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
+replicaCount: 1
+
 serviceAccount:
   create: true
   name: fluxagent-controller-manager
+
+controller:
+  metricsBindAddress: ":8080"
+  healthProbeBindAddress: ":8081"
+  enableLeaderElection: false
+  enableRemediation: false
+  extraArgs: []
+  extraEnv: []
+  resources: {}
 
 modelGateway:
   provider: heuristic
