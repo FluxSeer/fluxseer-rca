@@ -38,6 +38,7 @@ import (
 	"fluxagent/internal/model/openai"
 	"fluxagent/internal/modelgateway"
 	"fluxagent/internal/notifier/webhook"
+	"fluxagent/internal/version"
 )
 
 func Run(args []string, out io.Writer) error {
@@ -55,6 +56,8 @@ func Run(args []string, out io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	info := version.Current()
+	_, _ = fmt.Fprintf(out, "fluxagent starting version=%s gitCommit=%s gitDirty=%s buildDate=%s\n", info.Version, info.GitCommit, info.GitDirty, info.BuildDate)
 
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))

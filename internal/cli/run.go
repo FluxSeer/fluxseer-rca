@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+
+	"fluxagent/internal/version"
 )
 
 func Run(args []string, stdout, stderr io.Writer) error {
@@ -15,6 +17,12 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		return runDemo(stdout)
 	case "investigate":
 		return runInvestigate(args[1:], stdout, stderr)
+	case "version":
+		output, err := version.ParseOutput(args[1:])
+		if err != nil {
+			return err
+		}
+		return version.Write(stdout, output)
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return nil
@@ -28,4 +36,5 @@ func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "Usage:")
 	_, _ = fmt.Fprintln(w, "  fluxagent demo")
 	_, _ = fmt.Fprintln(w, "  fluxagent investigate <kind> <name> [flags]")
+	_, _ = fmt.Fprintln(w, "  fluxagent version [--output=json]")
 }

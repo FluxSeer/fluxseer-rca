@@ -168,6 +168,24 @@ func TestParseInvestigateArgsSupportsUsageOrder(t *testing.T) {
 	}
 }
 
+func TestRunVersionJSON(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	if err := Run([]string{"version", "--output=json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	if !bytes.Contains(stdout.Bytes(), []byte(`"version"`)) {
+		t.Fatalf("expected version JSON, got %q", stdout.String())
+	}
+	if !bytes.Contains(stdout.Bytes(), []byte(`"gitCommit"`)) {
+		t.Fatalf("expected gitCommit JSON, got %q", stdout.String())
+	}
+}
+
 func writeTempQueryFile(t *testing.T, content string) string {
 	t.Helper()
 
