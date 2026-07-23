@@ -39,6 +39,7 @@ type evaluationIssue struct {
 type ruleEvaluationSummary struct {
 	MissingDatasource  *evaluationIssue
 	CapabilityMismatch *evaluationIssue
+	QueryFailure       *evaluationIssue
 }
 
 func (r *RiskRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -173,7 +174,11 @@ func (r *RiskRuleReconciler) evaluateTarget(ctx context.Context, riskRule *v1alp
 			QueryType: queryType,
 		})
 		if err != nil {
-			return nil, summary, err
+			summary.QueryFailure = firstIssue(summary.QueryFailure, evaluationIssue{
+				Reason:  datasource.QueryErrorReason(err, "DatasourceQueryFailed"),
+				Message: fmt.Sprintf("query DataSource %q failed for signal %q: %v", sourceName, signal.Name, err),
+			})
+			continue
 		}
 
 		evaluated := rule.EvaluateSignal(signalWithRenderedQuery(signal, renderedQuery), queryType, result, target.Resource, normalizeSeverity(riskRule.Spec.Severity))
@@ -301,6 +306,10 @@ func mergeRuleEvaluationSummary(current, next ruleEvaluationSummary) ruleEvaluat
 		copy := *next.CapabilityMismatch
 		current.CapabilityMismatch = &copy
 	}
+	if current.QueryFailure == nil && next.QueryFailure != nil {
+		copy := *next.QueryFailure
+		current.QueryFailure = &copy
+	}
 	return current
 }
 
@@ -317,10 +326,11 @@ func applyRiskRuleConditions(status *v1alpha1.RiskRuleStatus, generation int64, 
 		setStatusCondition(&status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all datasource query types were supported", generation, now)
 	}
 
-	if summary.MissingDatasource != nil || summary.CapabilityMismatch != nil {
+	if summary.MissingDatasource != nil || summary.CapabilityMismatch != nil || summary.QueryFailure != nil {
 		message := firstNonEmptyIssueMessage(summary)
-		setStatusCondition(&status.Conditions, conditionReady, metav1.ConditionFalse, "EvaluationDegraded", message, generation, now)
-		setStatusCondition(&status.Conditions, conditionDegraded, metav1.ConditionTrue, "EvaluationDegraded", message, generation, now)
+		reason := firstNonEmptyIssueReason(summary)
+		setStatusCondition(&status.Conditions, conditionReady, metav1.ConditionFalse, reason, message, generation, now)
+		setStatusCondition(&status.Conditions, conditionDegraded, metav1.ConditionTrue, reason, message, generation, now)
 		return
 	}
 
@@ -329,13 +339,15 @@ func applyRiskRuleConditions(status *v1alpha1.RiskRuleStatus, generation int64, 
 }
 
 func applyEvidenceConditions(status *v1alpha1.RiskSignalStatus, generation int64, summary ruleEvaluationSummary, now time.Time) {
-	if summary.MissingDatasource != nil || summary.CapabilityMismatch != nil {
+	if summary.MissingDatasource != nil || summary.CapabilityMismatch != nil || summary.QueryFailure != nil {
 		message := firstNonEmptyIssueMessage(summary)
 		reason := "PartialEvidence"
 		if summary.MissingDatasource != nil {
 			reason = summary.MissingDatasource.Reason
 		} else if summary.CapabilityMismatch != nil {
 			reason = summary.CapabilityMismatch.Reason
+		} else if summary.QueryFailure != nil {
+			reason = summary.QueryFailure.Reason
 		}
 		setStatusCondition(&status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, reason, message, generation, now)
 		return
@@ -350,7 +362,23 @@ func firstNonEmptyIssueMessage(summary ruleEvaluationSummary) string {
 	if summary.CapabilityMismatch != nil && strings.TrimSpace(summary.CapabilityMismatch.Message) != "" {
 		return summary.CapabilityMismatch.Message
 	}
+	if summary.QueryFailure != nil && strings.TrimSpace(summary.QueryFailure.Message) != "" {
+		return summary.QueryFailure.Message
+	}
 	return "no evaluation issues recorded"
+}
+
+func firstNonEmptyIssueReason(summary ruleEvaluationSummary) string {
+	if summary.MissingDatasource != nil && strings.TrimSpace(summary.MissingDatasource.Reason) != "" {
+		return summary.MissingDatasource.Reason
+	}
+	if summary.CapabilityMismatch != nil && strings.TrimSpace(summary.CapabilityMismatch.Reason) != "" {
+		return summary.CapabilityMismatch.Reason
+	}
+	if summary.QueryFailure != nil && strings.TrimSpace(summary.QueryFailure.Reason) != "" {
+		return summary.QueryFailure.Reason
+	}
+	return "EvaluationDegraded"
 }
 
 func signalWithRenderedQuery(signal v1alpha1.RiskRuleSignal, renderedQuery string) v1alpha1.RiskRuleSignal {

@@ -33,6 +33,7 @@ type fakeRuleDataSource struct {
 	name      string
 	queryType domain.QueryType
 	result    *datasource.QueryResult
+	queryErr  error
 	requests  []datasource.QueryRequest
 }
 
@@ -49,6 +50,9 @@ func (f *fakeRuleDataSource) Capabilities() datasource.Capabilities {
 func (f *fakeRuleDataSource) HealthCheck(context.Context) error { return nil }
 func (f *fakeRuleDataSource) Query(_ context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {
 	f.requests = append(f.requests, req)
+	if f.queryErr != nil {
+		return nil, f.queryErr
+	}
 	return f.result, nil
 }
 
@@ -542,6 +546,108 @@ func TestRiskRuleReconcilerMarksMissingDatasourceOnRuleAndRiskSignal(t *testing.
 	}
 	if cond := findCondition(signals.Items[0].Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "DataSourceNotFound" {
 		t.Fatalf("expected EvidenceCollectionReady false condition, got %#v", cond)
+	}
+}
+
+func TestRiskRuleReconcilerPreservesDatasourceQueryFailureReason(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+	now := time.Date(2026, 7, 23, 14, 0, 0, 0, time.UTC)
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "open-api"}},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}},
+		},
+	}
+	ruleObj := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{Name: "partial-query-failure", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.RiskRuleSpec{
+			TargetSelector: v1alpha1.TargetSelector{
+				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
+				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "open-api"}},
+			},
+			Signals: []v1alpha1.RiskRuleSignal{
+				{
+					Name:          "good-events",
+					DatasourceRef: v1alpha1.LocalObjectReference{Name: "events-main"},
+					QueryType:     "event",
+					Reasons:       []string{"BackOff"},
+				},
+				{
+					Name:          "auth-failed-metrics",
+					DatasourceRef: v1alpha1.LocalObjectReference{Name: "metrics-main"},
+					QueryType:     "metric",
+					QueryTemplate: `sum(rate(http_requests_total{namespace="{{ .namespace }}"}[5m]))`,
+					Threshold:     v1alpha1.RiskThreshold{Operator: ">", Value: 0.2},
+				},
+			},
+		},
+	}
+	eventSource := &fakeRuleDataSource{
+		name:      "kubernetes-events",
+		queryType: domain.QueryTypeEvent,
+		result: &datasource.QueryResult{
+			Source:    "events-main",
+			QueryType: domain.QueryTypeEvent,
+			Records:   []map[string]any{{"reason": "BackOff", "message": "BackOff restarting failed container"}},
+		},
+	}
+	metricSource := &fakeRuleDataSource{
+		name:      "prometheus",
+		queryType: domain.QueryTypeMetric,
+		queryErr: &datasource.QueryError{
+			Reason:  "DatasourceAuthFailed",
+			Message: "prometheus datasource returned 401",
+		},
+	}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskRule{}, &v1alpha1.RiskSignal{}).
+		WithObjects(ruleObj, deployment).
+		Build()
+	registry := datasource.NewRegistry()
+	registry.RegisterNamed("events-main", eventSource)
+	registry.RegisterNamed("metrics-main", metricSource)
+
+	reconciler := &RiskRuleReconciler{
+		Client:   client,
+		Scheme:   scheme,
+		Registry: registry,
+		Now:      func() time.Time { return now },
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var storedRule v1alpha1.RiskRule
+	if err := client.Get(context.Background(), types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace}, &storedRule); err != nil {
+		t.Fatalf("get rule: %v", err)
+	}
+	if cond := findCondition(storedRule.Status.Conditions, conditionReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "DatasourceAuthFailed" {
+		t.Fatalf("expected Ready false DatasourceAuthFailed, got %#v", cond)
+	}
+	if cond := findCondition(storedRule.Status.Conditions, conditionDegraded); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "DatasourceAuthFailed" {
+		t.Fatalf("expected Degraded true DatasourceAuthFailed, got %#v", cond)
+	}
+
+	var signals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &signals, crclient.InNamespace("prod")); err != nil {
+		t.Fatalf("list signals: %v", err)
+	}
+	if len(signals.Items) != 1 {
+		t.Fatalf("expected partial evidence risk signal, got %d", len(signals.Items))
+	}
+	if cond := findCondition(signals.Items[0].Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "DatasourceAuthFailed" {
+		t.Fatalf("expected EvidenceCollectionReady false DatasourceAuthFailed, got %#v", cond)
 	}
 }
 
