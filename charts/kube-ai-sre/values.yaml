@@ -1,6 +1,6 @@
 image:
   repository: fluxagent/operator
-  tag: latest
+  tag: ""
   pullPolicy: IfNotPresent
 
 serviceAccount:
