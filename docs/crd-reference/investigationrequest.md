@@ -128,6 +128,17 @@ Query field behavior:
 
 If `modelProviderRef.name` is empty, FluxAgent falls back to the built-in heuristic provider.
 
+### Mode Contract
+
+`dataSources[]` and `queries[]` represent different planning modes and should be mutually exclusive.
+
+Contract hardening target:
+
+- exactly one of `dataSources[]` or `queries[]` is set
+- if both are set, the request is rejected or marked `InvalidSpec`
+- if neither is set, the request is rejected or marked `InvalidSpec`
+- controller behavior should not silently prefer one mode over the other
+
 ## Status
 
 Key status fields:
@@ -147,6 +158,12 @@ Key status fields:
 When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to the promoted `RiskSignal`.
 
 If `ttlSeconds` is greater than zero, FluxAgent keeps the completed request for that many seconds after `status.completedAt`, then deletes it automatically.
+
+Status hardening target:
+
+- terminal phase should be explicit and should not require callers to infer completion from conditions alone
+- future terminal phases should distinguish `Succeeded`, `Failed`, `PartiallySucceeded`, `Cancelled`, and `Expired`
+- workflow completion, RCA readiness, notification, and `RiskSignal` promotion should remain separate result dimensions
 
 ## Conditions
 

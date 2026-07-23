@@ -1,6 +1,6 @@
 # FluxAgent Docs
 
-FluxAgent is documented as a Kubernetes-native operator with a safe default path and an optional guarded execution path.
+FluxAgent is documented as a Kubernetes-native SRE investigation control plane with optional AI-assisted reasoning, a safe default path, and an optional guarded execution path.
 
 ## Structure
 
@@ -47,6 +47,7 @@ docs/
 - [architecture/v0.2-read-only-rca.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.2-read-only-rca.md:1)
 - [architecture/v0.3-investigation-experience.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.3-investigation-experience.md:1)
 - [architecture/v0.2-adapter-neutral-backlog.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.2-adapter-neutral-backlog.md:1)
+- [product-requirements.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/product-requirements.md:1)
 - [release-checkpoint.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/release-checkpoint.md:1)
 - [backlog/v0.2-beta.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/backlog/v0.2-beta.md:1)
 - [releases/v0.2.0-beta.1.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-beta.1.md:1)
@@ -66,9 +67,9 @@ docs/
 
 ## Current Product Truth
 
-- `v0.1` is a read-only `RiskSignal` operator by default.
+- Product positioning: Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
+- Current release scope: `v0.2` focuses on read-only RCA workflows and is a verified beta candidate.
 - `RemediationPlan` and `AgentAction` are available as guarded expansion paths.
 - Prometheus, Loki, and Kubernetes Events adapters are wired into the runnable demo path.
 - Prometheus and Loki remain optional adapters even when the demo wires them through a fake observability service.
-- `v0.2` planning is centered on a configurable read-only RCA platform, not autonomous remediation first.
 - `InvestigationRequest` is now the operator-first investigation entrypoint for ad-hoc RCA and optional `RiskSignal` promotion.

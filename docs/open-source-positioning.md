@@ -1,6 +1,6 @@
 # Open Source Positioning
 
-FluxAgent is positioned as a Kubernetes-native AI SRE control plane with read-only investigation workflows, not as a bot tied to one monitoring stack and not as a general-purpose agent shell first.
+FluxAgent is positioned as a Kubernetes-native SRE investigation control plane with optional AI-assisted reasoning, not as a bot tied to one monitoring stack and not as a general-purpose agent shell first.
 
 ## What Is Open Source Here
 
