@@ -25,6 +25,18 @@ The repository currently represents `v0.2 alpha+ / early v0.3 alpha`:
 
 It is past the original `v0.2` alpha checkpoint, but it is not yet a production-hardened `v0.2` release or a complete `v0.3` release.
 
+## Post `v0.2.0-alpha.2` Mainline Work
+
+The `v0.2.0-alpha.2` tag points at `8208049`.
+
+Current `main` has additional post-tag hardening:
+
+- `131c7aa` `feat: harden provider response validation`
+  - rejects structured provider responses missing `confidenceScore`
+  - rejects empty or missing `rcaCauses`
+  - validates all provider `ModelResponse` values in the reasoning engine before deriving RCA fields
+  - adds tests for incomplete hosted OpenAI content and invalid custom provider responses
+
 ## Verified Working Scope
 
 ### Control Plane
@@ -89,7 +101,7 @@ The following items are still incomplete or only partially complete:
 
 - full `v0.2` definition of done is not closed
 - production-grade auth, retry, and backoff behavior is not complete across all adapters
-- production-grade vendor response governance is not complete
+- production-grade vendor response governance is partially hardened after `v0.2.0-alpha.2`, but broader provider response-shape coverage is still pending
 - GitOps PR backends and richer approval UX are not complete
 - broader multi-cluster and policy hardening work is still pending
 - remediation remains guarded and secondary, not the main product truth
@@ -153,6 +165,7 @@ The kind gates verified:
 Before calling `v0.2` complete or cutting a broader `v0.3` alpha, the next gate should be:
 
 1. keep `make verify-v0.2-alpha`, `make verify-e2e-kind`, and `make verify-investigation-kind` green
-2. harden local and hosted provider auth, retry, timeout, and response-governance behavior
-3. expand provider contract coverage beyond heuristic plus the currently wired hosted paths
-4. re-check `v0.2 alpha+ / early v0.3 alpha` exit assumptions before broader beta claims
+2. harden datasource adapter auth, retry, timeout, and backoff behavior
+3. extend hosted provider response-shape coverage beyond the first validation hardening batch
+4. expand provider contract coverage beyond heuristic plus the currently wired hosted paths
+5. re-check `v0.2 alpha+ / early v0.3 alpha` exit assumptions before broader beta claims
