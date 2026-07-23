@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -58,19 +57,25 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 		return nil, fmt.Errorf("create prometheus request: %w", err)
 	}
 
-	resp, err := datasource.DefaultDo(a.Client, httpReq)
+	body, err := datasource.DoRequestWithRetry(ctx, a.Name(), a.Client, func(context.Context) (*http.Request, error) {
+		return httpReq, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("prometheus query failed: %s", strings.TrimSpace(string(body)))
-	}
 
 	var payload promResponse
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("decode prometheus response: %w", err)
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, &datasource.QueryError{
+			Reason:  "InvalidDatasourceResponse",
+			Message: fmt.Sprintf("decode prometheus response: %v", err),
+		}
+	}
+	if payload.Status != "" && payload.Status != "success" {
+		return nil, &datasource.QueryError{
+			Reason:  "InvalidDatasourceResponse",
+			Message: fmt.Sprintf("prometheus response status %q", payload.Status),
+		}
 	}
 
 	records := make([]map[string]any, 0)

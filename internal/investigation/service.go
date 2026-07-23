@@ -152,7 +152,7 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 		queryResult, err := source.Query(ctx, queryRequest)
 		if err != nil {
 			result.Issue = &Issue{
-				Reason:  "DatasourceQueryFailed",
+				Reason:  datasource.QueryErrorReason(err, "DatasourceQueryFailed"),
 				Message: fmt.Sprintf("query datasource %q failed: %v", step.DatasourceName, err),
 			}
 			return result, nil
