@@ -37,6 +37,7 @@ func (p *captureProvider) Complete(_ context.Context, req domain.ModelRequest) (
 			"confidenceScore": 70,
 			"rationale":       "gateway test",
 			"rcaHypothesis":   "Redacted evidence still supports reasoning.",
+			"rcaCauses":       []string{"redacted evidence correlation"},
 			"actionType":      "notification.sendSlack",
 		},
 	}, nil

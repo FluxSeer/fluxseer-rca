@@ -48,6 +48,7 @@ func (p Provider) Complete(_ context.Context, req domain.ModelRequest) (domain.M
 			"confidenceScore": score,
 			"rationale":       rationale,
 			"rcaHypothesis":   rca,
+			"rcaCauses":       []string{"Recent rollout changed workload behavior", "Pod memory usage crossed safe threshold"},
 			"actionType":      actionType,
 		},
 		RawText: riskSummary,

@@ -12,10 +12,10 @@ type StructuredOutput struct {
 	RiskTitle       string   `json:"riskTitle"`
 	RiskSummary     string   `json:"riskSummary"`
 	Severity        string   `json:"severity"`
-	ConfidenceScore int      `json:"confidenceScore"`
+	ConfidenceScore *int     `json:"confidenceScore"`
 	Rationale       string   `json:"rationale"`
 	RCAHypothesis   string   `json:"rcaHypothesis"`
-	RCACauses       []string `json:"rcaCauses,omitempty"`
+	RCACauses       []string `json:"rcaCauses"`
 	ActionType      string   `json:"actionType"`
 }
 
@@ -69,7 +69,7 @@ func buildStructuredResponse(provider, modelName string, payload StructuredOutpu
 			"riskTitle":       payload.RiskTitle,
 			"riskSummary":     payload.RiskSummary,
 			"severity":        payload.Severity,
-			"confidenceScore": payload.ConfidenceScore,
+			"confidenceScore": *payload.ConfidenceScore,
 			"rationale":       payload.Rationale,
 			"rcaHypothesis":   payload.RCAHypothesis,
 			"rcaCauses":       payload.RCACauses,
@@ -123,6 +123,12 @@ func normalizeStructuredOutput(payload StructuredOutput) (StructuredOutput, erro
 			Message: "provider response is missing required RCA fields",
 		}
 	}
+	if payload.ConfidenceScore == nil {
+		return StructuredOutput{}, &ProviderError{
+			Reason:  "InvalidProviderResponse",
+			Message: "provider response is missing confidenceScore",
+		}
+	}
 	switch payload.Severity {
 	case string(domain.SeverityLow), string(domain.SeverityMedium), string(domain.SeverityHigh), string(domain.SeverityUnsafe):
 	default:
@@ -131,18 +137,25 @@ func normalizeStructuredOutput(payload StructuredOutput) (StructuredOutput, erro
 			Message: fmt.Sprintf("provider response used unsupported severity %q", payload.Severity),
 		}
 	}
-	if payload.ConfidenceScore < 0 || payload.ConfidenceScore > 100 {
+	if *payload.ConfidenceScore < 0 || *payload.ConfidenceScore > 100 {
 		return StructuredOutput{}, &ProviderError{
 			Reason:  "InvalidProviderResponse",
-			Message: fmt.Sprintf("provider response confidenceScore %d is out of range", payload.ConfidenceScore),
+			Message: fmt.Sprintf("provider response confidenceScore %d is out of range", *payload.ConfidenceScore),
 		}
 	}
-	for i := range payload.RCACauses {
-		payload.RCACauses[i] = strings.TrimSpace(payload.RCACauses[i])
+	causes := make([]string, 0, len(payload.RCACauses))
+	for _, cause := range payload.RCACauses {
+		if trimmed := strings.TrimSpace(cause); trimmed != "" {
+			causes = append(causes, trimmed)
+		}
 	}
-	if len(payload.RCACauses) == 0 {
-		payload.RCACauses = []string{payload.RCAHypothesis}
+	if len(causes) == 0 {
+		return StructuredOutput{}, &ProviderError{
+			Reason:  "InvalidProviderResponse",
+			Message: "provider response is missing rcaCauses",
+		}
 	}
+	payload.RCACauses = causes
 	return payload, nil
 }
 
