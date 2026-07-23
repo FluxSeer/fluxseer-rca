@@ -192,10 +192,22 @@ The kind gates verified:
 
 ## Recommended Next Milestone Gate
 
-Before calling `v0.2` complete or cutting a broader `v0.3` alpha, the next gate should be:
+Before cutting `v0.2.0-beta.1`, use the beta candidate gate defined in `docs/backlog/v0.2-beta.md`.
 
-1. keep `make verify-v0.2-alpha`, `make verify-e2e-kind`, and `make verify-investigation-kind` green
-2. harden datasource adapter auth, retry, timeout, and backoff behavior
-3. extend hosted provider response-shape coverage beyond the first validation hardening batch
-4. expand provider contract coverage beyond heuristic plus the currently wired hosted paths
-5. re-check `v0.2 alpha+ / early v0.3 alpha` exit assumptions before broader beta claims
+Required validation commands:
+
+```sh
+make verify-v0.2-alpha
+make verify-e2e-kind
+make verify-investigation-kind
+kind get clusters
+git status --short --branch
+```
+
+The release should not be tagged unless:
+
+1. all required validation commands pass on a clean branch synchronized with `origin/main`
+2. beta release notes and this checkpoint use the same product status language
+3. beta claims remain limited to a read-only RCA beta with guarded remediation as a secondary path
+4. OpenTelemetry, CloudWatch, and Bedrock remain clearly documented as not production-ready paths
+5. provider and datasource coverage claims do not exceed the currently wired and tested behavior
