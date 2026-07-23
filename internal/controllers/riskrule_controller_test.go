@@ -850,6 +850,7 @@ func TestRiskRuleReconcilerUsesReferencedLocalModelProvider(t *testing.T) {
 				"confidenceScore": 91,
 				"rationale":       "local endpoint reasoning",
 				"rcaHypothesis":   "The latest image introduced unstable startup behavior.",
+				"rcaCauses":       []string{"image regression", "startup failure"},
 				"actionType":      "notification.sendSlack",
 			},
 		}); err != nil {

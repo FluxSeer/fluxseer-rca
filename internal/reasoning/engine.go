@@ -46,6 +46,9 @@ func (e *Engine) Analyze(ctx context.Context, input domain.IngestionOutput) (dom
 	if err != nil {
 		return domain.ReasoningOutput{}, err
 	}
+	if err := model.ValidateModelResponse(response); err != nil {
+		return domain.ReasoningOutput{}, err
+	}
 
 	output := response.Output
 	severity := domain.Severity(asString(output["severity"], string(domain.SeverityLow)))

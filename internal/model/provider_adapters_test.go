@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -179,6 +180,47 @@ func TestOpenAIProviderRetriesRateLimitAndCompletes(t *testing.T) {
 	}
 	if resp.Output["riskSummary"] != "OpenAI responded after retry." {
 		t.Fatalf("unexpected risk summary after retry: %#v", resp.Output["riskSummary"])
+	}
+}
+
+func TestOpenAIProviderRejectsIncompleteStructuredContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"content": `{"riskTitle":"Incomplete","riskSummary":"missing confidence","severity":"high","rationale":"test","rcaHypothesis":"provider omitted required fields","rcaCauses":["bad shape"],"actionType":"notification.sendSlack"}`,
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := openai.Provider{Client: server.Client()}.WithConfig(model.RuntimeConfig{
+		Model:     "gpt-5.1",
+		Endpoint:  server.URL,
+		APIKey:    "openai-token",
+		Timeout:   2 * time.Second,
+		MaxTokens: 512,
+	})
+
+	_, err := provider.Complete(context.Background(), domain.ModelRequest{
+		SystemPrompt: "RCA",
+		Messages:     []domain.ModelMessage{{Role: "user", Content: "summary"}},
+	})
+	if err == nil {
+		t.Fatal("expected openai invalid response error")
+	}
+	providerErr, ok := err.(*model.ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError, got %T", err)
+	}
+	if providerErr.Reason != "InvalidProviderResponse" {
+		t.Fatalf("expected InvalidProviderResponse, got %q", providerErr.Reason)
+	}
+	if !strings.Contains(providerErr.Message, "confidenceScore") {
+		t.Fatalf("expected confidenceScore message, got %q", providerErr.Message)
 	}
 }
 
