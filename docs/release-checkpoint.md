@@ -8,7 +8,7 @@ This document records what the repository can actually do today, what remains in
 
 FluxAgent is past the original `v0.1` demo-only stage.
 
-The repository currently represents `v0.2 alpha+ / early v0.3 alpha`:
+The repository currently represents a verified `v0.2 read-only RCA beta candidate`:
 
 - runnable read-only `RiskSignal` operator
 - `RiskRule`-driven evidence collection and RCA flow
@@ -23,7 +23,7 @@ The repository currently represents `v0.2 alpha+ / early v0.3 alpha`:
 - optional `InvestigationRequest` to `RiskSignal` promotion
 - `RiskSignal` and `InvestigationRequest` TTL cleanup behavior
 
-It is past the original `v0.2` alpha checkpoint, but it is not yet a production-hardened `v0.2` release or a complete `v0.3` release.
+It is past the original `v0.2` alpha checkpoint and has passed the local and kind beta candidate gates. It is not a production-hardened remediation release or a complete `v0.3` release.
 
 ## Post `v0.2.0-alpha.2` Mainline Work
 
@@ -109,8 +109,7 @@ Current `main` has additional post-tag hardening:
 
 The following items are still incomplete or only partially complete:
 
-- full `v0.2` definition of done is not closed
-- production-grade auth, retry, and backoff behavior is not complete across all adapters
+- production-grade auth, retry, and backoff behavior is not complete across all possible adapters
 - production-grade vendor response governance is partially hardened after `v0.2.0-alpha.2`, but broader provider response-shape coverage is still pending
 - GitOps PR backends and richer approval UX are not complete
 - broader multi-cluster and policy hardening work is still pending
@@ -122,11 +121,10 @@ The following items are still incomplete or only partially complete:
 
 If this repository needs a concise status label today, the defensible description is:
 
-`v0.2 alpha+ / early v0.3 alpha`: runnable read-only RCA platform with datasource contracts, evidence redaction, degraded-state visibility, and CRD-first ad-hoc investigation.
+`v0.2 read-only RCA beta candidate`: runnable read-only RCA platform with datasource contracts, evidence redaction, degraded-state visibility, hosted provider validation, and CRD-first ad-hoc investigation.
 
 The project should not yet be presented as:
 
-- fully complete `v0.2`
 - fully complete `v0.3`
 - production-hardened remediation platform
 - provider-complete multi-backend RCA system
@@ -160,7 +158,7 @@ Initial checkpoint observed results:
 - `make verify-investigation-kind` passed
 - `git status --short` returned no pending changes before this checkpoint update
 
-Latest post-tag mainline verification after datasource hardening:
+Latest beta candidate verification:
 
 ```sh
 make verify-v0.2-alpha
@@ -170,7 +168,7 @@ kind get clusters
 git status --short --branch
 ```
 
-Latest observed results:
+Latest observed results on 2026-07-23:
 
 - `make verify-v0.2-alpha` passed
 - `make verify-e2e-kind` passed
@@ -190,11 +188,11 @@ The kind gates verified:
 - investigation degradation for missing datasource, capability mismatch, missing provider, provider auth failure, and provider rate limiting
 - kind cleanup for `fluxagent-demo`
 
-## Recommended Next Milestone Gate
+## Recommended Next Milestone
 
-Before cutting `v0.2.0-beta.1`, use the beta candidate gate defined in `docs/backlog/v0.2-beta.md`.
+The beta candidate gate defined in `docs/backlog/v0.2-beta.md` has passed on current `main`.
 
-Required validation commands:
+Verified validation commands:
 
 ```sh
 make verify-v0.2-alpha
@@ -204,10 +202,10 @@ kind get clusters
 git status --short --branch
 ```
 
-The release should not be tagged unless:
+Before tagging `v0.2.0-beta.1`:
 
-1. all required validation commands pass on a clean branch synchronized with `origin/main`
-2. beta release notes and this checkpoint use the same product status language
-3. beta claims remain limited to a read-only RCA beta with guarded remediation as a secondary path
-4. OpenTelemetry, CloudWatch, and Bedrock remain clearly documented as not production-ready paths
-5. provider and datasource coverage claims do not exceed the currently wired and tested behavior
+1. confirm `git status --short --branch` is still clean and synchronized with `origin/main`
+2. tag the verified commit, not a later unverified commit
+3. keep beta claims limited to a read-only RCA beta with guarded remediation as a secondary path
+4. keep OpenTelemetry, CloudWatch, and Bedrock documented as not production-ready paths
+5. keep provider and datasource coverage claims limited to the currently wired and tested behavior
