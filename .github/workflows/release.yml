@@ -52,6 +52,32 @@ jobs:
           ref: ${{ steps.release.outputs.version }}
           fetch-depth: 0
 
+      - name: Install runner prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for tool in make jq; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              missing+=("$tool")
+            fi
+          done
+          if [ "${#missing[@]}" -eq 0 ]; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            sudo_cmd=""
+            if command -v sudo >/dev/null 2>&1; then
+              sudo_cmd="sudo"
+            fi
+            $sudo_cmd apt-get update
+            $sudo_cmd apt-get install -y "${missing[@]}"
+          else
+            echo "Missing required tools: ${missing[*]}" >&2
+            echo "Install them in the self-hosted runner image or add an installer for this OS." >&2
+            exit 1
+          fi
+
       - name: Verify tag checkout
         id: git
         shell: bash
