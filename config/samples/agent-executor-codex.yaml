@@ -1,0 +1,24 @@
+apiVersion: aiops.platform/v1alpha1
+kind: AgentExecutor
+metadata:
+  name: codex-cli
+spec:
+  type: codex-cli
+  image: ghcr.io/example/fluxagent/codex-executor:dev
+  command:
+    - /bin/sh
+    - -c
+  args:
+    - |
+      codex exec --json "$(cat "${FLUXAGENT_PROMPT_PATH}")" \
+        < "${FLUXAGENT_EVIDENCE_PATH}" \
+        > "${FLUXAGENT_RESULT_PATH}"
+  credentialEnvName: CODEX_API_KEY
+  credentialSecretRef:
+    name: codex-secret
+    key: api-key
+  serviceAccountName: fluxagent-investigator
+  timeoutSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  maxToolCalls: 40

@@ -23,7 +23,9 @@ docs/
 │  ├─ riskrule.md
 │  ├─ risksignal.md
 │  ├─ remediationplan.md
-│  └─ agentaction.md
+│  ├─ agentaction.md
+│  ├─ agentexecutor.md
+│  └─ agentanalysisresult.md
 ├─ adapters/
 │  ├─ prometheus.md
 │  ├─ loki.md
@@ -72,6 +74,7 @@ docs/
 - Product positioning: Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
 - Current release scope: `v0.2` focuses on read-only RCA workflows and is a verified beta candidate.
 - `RemediationPlan` and `AgentAction` are available as guarded expansion paths.
+- `AgentExecutor` and `AgentAnalysisResult` are opt-in CLI analysis scaffolds for Codex, Claude, and Gemini style runtimes.
 - Prometheus, Loki, and Kubernetes Events adapters are wired into the runnable demo path.
 - Prometheus and Loki remain optional adapters even when the demo wires them through a fake observability service.
 - `InvestigationRequest` is now the operator-first investigation entrypoint for ad-hoc RCA and optional `RiskSignal` promotion.

@@ -1,0 +1,25 @@
+apiVersion: aiops.platform/v1alpha1
+kind: AgentExecutor
+metadata:
+  name: gemini-cli
+spec:
+  type: gemini-cli
+  image: ghcr.io/example/fluxagent/gemini-executor:dev
+  command:
+    - /bin/sh
+    - -c
+  args:
+    - |
+      gemini -p "$(cat "${FLUXAGENT_PROMPT_PATH}")" \
+        --json \
+        < "${FLUXAGENT_EVIDENCE_PATH}" \
+        > "${FLUXAGENT_RESULT_PATH}"
+  credentialEnvName: GEMINI_API_KEY
+  credentialSecretRef:
+    name: gemini-secret
+    key: api-key
+  serviceAccountName: fluxagent-investigator
+  timeoutSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  maxToolCalls: 40

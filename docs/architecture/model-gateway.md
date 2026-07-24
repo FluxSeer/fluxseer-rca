@@ -167,5 +167,6 @@ Implemented today:
 Scaffolded today:
 
 - `bedrock`
+- opt-in `AgentExecutor` CLI job lifecycle for Codex, Claude, and Gemini style runtimes
 
 This is why the model gateway should be described as an extensibility seam with a runnable heuristic default and guarded hosted-provider support, not as a fully integrated multi-provider production inference layer.

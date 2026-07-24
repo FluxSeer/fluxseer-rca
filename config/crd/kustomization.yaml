@@ -1,4 +1,6 @@
 resources:
+  - bases/aiops.platform_agentanalysisresults.yaml
+  - bases/aiops.platform_agentexecutors.yaml
   - bases/aiops.platform_datasources.yaml
   - bases/aiops.platform_investigationrequests.yaml
   - bases/aiops.platform_modelproviders.yaml

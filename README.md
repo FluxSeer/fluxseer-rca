@@ -99,6 +99,7 @@ FluxAgent distinguishes runtime, compile-time, and deployment dependency.
 | Prometheus | optional | isolated to adapter packages | not installed by default | metrics datasource |
 | Loki | optional | isolated to adapter packages | not installed by default | logs datasource |
 | External model APIs | optional | isolated to model-provider packages | not installed by default | RCA enrichment |
+| CLI agent runtimes | optional | isolated to `AgentExecutor` jobs | disabled by default | second-pass analysis |
 | Remediation executors | optional | isolated to executor packages | disabled by default | guarded expansion path |
 
 The longer-form design constraints are documented in [docs/architecture/dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1).
@@ -121,6 +122,8 @@ Enable this explicitly with `--enable-remediation=true`.
 - `RiskSignal`: observed risk with evidence and confidence
 - `RemediationPlan`: proposed, reviewable mitigation workflow
 - `AgentAction`: guarded executable action with approval context
+- `AgentExecutor`: opt-in CLI runtime configuration for second-pass analysis
+- `AgentAnalysisResult`: lifecycle and output record for CLI-based analysis
 
 See:
 
@@ -141,6 +144,9 @@ See:
 - [config/samples/risk-signal.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/risk-signal.yaml:1)
 - [config/samples/remediation-plan.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/remediation-plan.yaml:1)
 - [config/samples/agent-action.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-action.yaml:1)
+- [config/samples/agent-executor-codex.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-executor-codex.yaml:1)
+- [config/samples/agent-executor-claude.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-executor-claude.yaml:1)
+- [config/samples/agent-executor-gemini.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-executor-gemini.yaml:1)
 
 ## Repo Layout
 

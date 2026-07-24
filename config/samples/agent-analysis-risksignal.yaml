@@ -1,0 +1,27 @@
+apiVersion: aiops.platform/v1alpha1
+kind: RiskSignal
+metadata:
+  name: sample-risk-with-agent-analysis
+  annotations:
+    fluxagent.aiops.platform/agent-analysis: enabled
+    fluxagent.aiops.platform/agent-executor: codex-cli
+spec:
+  target:
+    namespace: default
+    kind: Deployment
+    name: sample-api
+    apiVersion: apps/v1
+  signalType: availability
+  actionType: notification.sendSlack
+  severity: warning
+  confidence: 80
+  dryRun: true
+  evidence:
+    - kind: event
+      source: kubernetes-events
+      reason: BackOff
+      summary: Pod entered BackOff
+status:
+  phase: Confirmed
+  rcaSummary: Service degradation detected from correlated signals.
+  rcaProvider: heuristic-provider
