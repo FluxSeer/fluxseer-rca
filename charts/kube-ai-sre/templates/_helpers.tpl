@@ -32,3 +32,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- $tag := default .Chart.AppVersion .Values.image.tag -}}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end -}}
+
+{{- define "fluxagent.investigatorServiceAccountName" -}}
+{{- default "fluxagent-investigator" .Values.agentAnalysis.investigatorServiceAccount.name -}}
+{{- end -}}
