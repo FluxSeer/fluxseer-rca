@@ -1,0 +1,400 @@
+name: FluxAgent Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Existing annotated tag to publish"
+        required: true
+        default: "v0.2.0-beta.1"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fluxagent-release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TARGET_PLATFORM: linux/amd64
+  HARBOR_PROJECT: fluxseer
+  HARBOR_REPOSITORY_PREFIX: fluxagent
+
+jobs:
+  publish:
+    name: Publish Release Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME}"
+          fi
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release version: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "chart_version=${version#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.release.outputs.version }}
+          fetch-depth: 0
+
+      - name: Verify tag checkout
+        id: git
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.release.outputs.version }}"
+          tag_commit="$(git rev-list -n 1 "$version")"
+          head_commit="$(git rev-parse HEAD)"
+          if [ "$tag_commit" != "$head_commit" ]; then
+            echo "Tag commit $tag_commit does not match HEAD $head_commit" >&2
+            exit 1
+          fi
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            echo "Release checkout must be clean" >&2
+            exit 1
+          fi
+          source_date_epoch="$(git show -s --format=%ct HEAD)"
+          build_date="$(./hack/source-date.sh "$source_date_epoch")"
+          echo "git_commit=$tag_commit" >> "$GITHUB_OUTPUT"
+          echo "source_date_epoch=$source_date_epoch" >> "$GITHUB_OUTPUT"
+          echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve Harbor registry
+        id: harbor
+        shell: bash
+        env:
+          SECRET_REGISTRY: ${{ secrets.CI_HARBOR_REGISTRY }}
+          SECRET_USER: ${{ secrets.CI_HARBOR_GHA_USER }}
+          SECRET_TOKEN: ${{ secrets.CI_HARBOR_GHA_TOKEN }}
+        run: |
+          set -euo pipefail
+          registry="${SECRET_REGISTRY:-${CI_HARBOR_REGISTRY:-}}"
+          user="${SECRET_USER:-${CI_HARBOR_GHA_USER:-}}"
+          token="${SECRET_TOKEN:-${CI_HARBOR_GHA_TOKEN:-}}"
+          if [ -z "$registry" ] || [ -z "$user" ] || [ -z "$token" ]; then
+            echo "CI_HARBOR_REGISTRY, CI_HARBOR_GHA_USER, and CI_HARBOR_GHA_TOKEN are required" >&2
+            exit 1
+          fi
+          if [ "$user" = "harbor_registry_user" ]; then
+            echo "Refusing to use Harbor internal registry credentials for release publication" >&2
+            exit 1
+          fi
+          printf '%s' "$token" | docker login "$registry" --username "$user" --password-stdin
+          helm registry login "$registry" --username "$user" --password-stdin <<<"$token"
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+
+      - name: Verify release-managed packaging
+        shell: bash
+        run: |
+          make verify-packaging-consistency \
+            VERSION="${{ steps.release.outputs.version }}" \
+            IMAGE_TAG="${{ steps.release.outputs.version }}" \
+            TARGET_PLATFORM="${TARGET_PLATFORM}" \
+            IMAGE_REPOSITORY="${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/operator" \
+            DEMO_IMAGE_REPOSITORY="${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/demo-observability"
+
+      - name: Check immutable image tags do not exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          registry="${{ steps.harbor.outputs.registry }}"
+          version="${{ steps.release.outputs.version }}"
+          for image in operator demo-observability; do
+            ref="$registry/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/$image:$version"
+            if docker buildx imagetools inspect "$ref" >/tmp/existing-image.txt 2>&1; then
+              echo "Refusing to overwrite existing image tag: $ref" >&2
+              cat /tmp/existing-image.txt >&2
+              exit 1
+            fi
+            if ! grep -qi 'not found' /tmp/existing-image.txt; then
+              echo "Could not prove image tag is absent: $ref" >&2
+              cat /tmp/existing-image.txt >&2
+              exit 1
+            fi
+          done
+
+      - name: Build and push operator image
+        id: operator
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ env.TARGET_PLATFORM }}
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.harbor.outputs.registry }}/${{ env.HARBOR_PROJECT }}/${{ env.HARBOR_REPOSITORY_PREFIX }}/operator:${{ steps.release.outputs.version }}
+          build-args: |
+            VERSION=${{ steps.release.outputs.version }}
+            GIT_COMMIT=${{ steps.git.outputs.git_commit }}
+            GIT_DIRTY=false
+            BUILD_DATE=${{ steps.git.outputs.build_date }}
+            SOURCE_DATE_EPOCH=${{ steps.git.outputs.source_date_epoch }}
+
+      - name: Build and push demo-observability image
+        id: demo
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: examples/fake-observability/Dockerfile
+          platforms: ${{ env.TARGET_PLATFORM }}
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.harbor.outputs.registry }}/${{ env.HARBOR_PROJECT }}/${{ env.HARBOR_REPOSITORY_PREFIX }}/demo-observability:${{ steps.release.outputs.version }}
+          build-args: |
+            VERSION=${{ steps.release.outputs.version }}
+            GIT_COMMIT=${{ steps.git.outputs.git_commit }}
+            GIT_DIRTY=false
+            BUILD_DATE=${{ steps.git.outputs.build_date }}
+            SOURCE_DATE_EPOCH=${{ steps.git.outputs.source_date_epoch }}
+
+      - name: Verify published image metadata
+        id: published
+        shell: bash
+        run: |
+          set -euo pipefail
+          registry="${{ steps.harbor.outputs.registry }}"
+          version="${{ steps.release.outputs.version }}"
+          git_commit="${{ steps.git.outputs.git_commit }}"
+          build_date="${{ steps.git.outputs.build_date }}"
+
+          verify_image() {
+            image="$1"
+            binary="$2"
+            title="$3"
+            ref="$registry/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/$image:$version"
+            docker pull --platform "${TARGET_PLATFORM}" "$ref" >&2
+            json="$(docker run --rm --platform "${TARGET_PLATFORM}" --entrypoint "$binary" "$ref" version --output=json)"
+            test "$(jq -r '.version' <<<"$json")" = "$version"
+            test "$(jq -r '.gitCommit' <<<"$json")" = "$git_commit"
+            test "$(jq -r '.gitDirty' <<<"$json")" = "false"
+            test "$(jq -r '.buildDate' <<<"$json")" = "$build_date"
+            test "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.title" }}')" = "$title"
+            test "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$version"
+            test "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$git_commit"
+            test "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.created" }}')" = "$build_date"
+            docker buildx imagetools inspect "$ref" | awk '/Digest:/ {print $2; exit}'
+          }
+
+          operator_digest="$(verify_image operator /fluxagent-operator FluxAgent)"
+          demo_digest="$(verify_image demo-observability /demo-observability 'FluxAgent Demo Observability')"
+          echo "operator_digest=$operator_digest" >> "$GITHUB_OUTPUT"
+          echo "demo_digest=$demo_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Package Helm chart
+        id: chart
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.release.outputs.version }}"
+          chart_version="${{ steps.release.outputs.chart_version }}"
+          mkdir -p "dist/release-$version"
+          helm lint charts/kube-ai-sre
+          helm package charts/kube-ai-sre --destination "dist/release-$version"
+          package="dist/release-$version/kube-ai-sre-$chart_version.tgz"
+          package_abs="$PWD/$package"
+          shasum -a 256 "$package" | sed "s#  dist/release-$version/#  #" > "dist/release-$version/SHA256SUMS"
+          package_sha="$(cut -d' ' -f1 "dist/release-$version/SHA256SUMS")"
+          helm show chart "$package"
+          cd "dist/release-$version"
+          shasum -a 256 -c SHA256SUMS
+          echo "package=$package_abs" >> "$GITHUB_OUTPUT"
+          echo "sha256=$package_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check immutable Helm chart tag does not exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          chart_version="${{ steps.release.outputs.chart_version }}"
+          chart_ref="oci://${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts/kube-ai-sre"
+          if helm show chart "$chart_ref" --version "$chart_version" >/tmp/existing-chart.txt 2>&1; then
+            echo "Refusing to overwrite existing Helm chart: $chart_ref:$chart_version" >&2
+            cat /tmp/existing-chart.txt >&2
+            exit 1
+          fi
+
+      - name: Push Helm OCI chart
+        id: helm-push
+        shell: bash
+        run: |
+          set -euo pipefail
+          chart_ref="oci://${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts"
+          helm push "${{ steps.chart.outputs.package }}" "$chart_ref" | tee helm-push.txt
+          helm_digest="$(awk '/Digest:/ {print $2; exit}' helm-push.txt)"
+          test -n "$helm_digest"
+          echo "helm_digest=$helm_digest" >> "$GITHUB_OUTPUT"
+          helm show chart "$chart_ref/kube-ai-sre" --version "${{ steps.release.outputs.chart_version }}"
+
+      - name: Write release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.release.outputs.version }}"
+          chart_version="${{ steps.release.outputs.chart_version }}"
+          out_dir="dist/release-$version"
+          cat >"$out_dir/RELEASE_NOTES.md" <<EOF
+          # FluxAgent $version
+
+          FluxAgent $version is a read-only RCA beta release.
+
+          ## Source
+
+          - Tag: $version
+          - Tag type: annotated
+          - Commit: ${{ steps.git.outputs.git_commit }}
+
+          ## Published Images
+
+          - ${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/operator:$version
+            - ${{ steps.published.outputs.operator_digest }}
+          - ${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/demo-observability:$version
+            - ${{ steps.published.outputs.demo_digest }}
+
+          ## Helm Package
+
+          - kube-ai-sre-$chart_version.tgz
+          - SHA256: ${{ steps.chart.outputs.sha256 }}
+          - OCI digest: ${{ steps.helm-push.outputs.helm_digest }}
+
+          ## Provenance
+
+          Binary metadata, OCI labels, Helm appVersion, and the annotated source tag all resolve to:
+
+          \`\`\`text
+          ${{ steps.git.outputs.git_commit }}
+          \`\`\`
+
+          ## Scope
+
+          This release includes the verifiable read-only RCA vertical slice, including RiskRule-driven RiskSignal generation, ad-hoc InvestigationRequest workflows, datasource degradation conditions, hosted provider validation, lifecycle smoke coverage, artifact identity, packaging consistency, and reproducible local image builds.
+
+          Autonomous remediation is not the default product path for this beta.
+          EOF
+          sed -i 's/^          //' "$out_dir/RELEASE_NOTES.md"
+          echo "notes=$out_dir/RELEASE_NOTES.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub prerelease and upload assets
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = '${{ steps.release.outputs.version }}';
+            const target = '${{ steps.git.outputs.git_commit }}';
+            const chartPackage = '${{ steps.chart.outputs.package }}';
+            const releaseDir = path.dirname(chartPackage);
+            const notesPath = '${{ steps.notes.outputs.notes }}';
+            const body = fs.readFileSync(notesPath, 'utf8');
+
+            let release;
+            try {
+              const existing = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              release = existing.data;
+              if (!release.prerelease || release.draft) {
+                throw new Error(`Existing release ${tag} is not a published prerelease.`);
+              }
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              const created = await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tag,
+                target_commitish: target,
+                name: `FluxAgent ${tag}`,
+                body,
+                draft: false,
+                prerelease: true,
+              });
+              release = created.data;
+            }
+
+            if (release.target_commitish !== target) {
+              throw new Error(`Release target mismatch: expected ${target}, got ${release.target_commitish}`);
+            }
+
+            const assets = [
+              chartPackage,
+              path.join(releaseDir, 'SHA256SUMS'),
+              notesPath,
+            ];
+
+            const listed = await github.rest.repos.listReleaseAssets({
+              owner,
+              repo,
+              release_id: release.id,
+              per_page: 100,
+            });
+            const existingNames = new Set(listed.data.map(asset => asset.name));
+
+            for (const assetPath of assets) {
+              const name = path.basename(assetPath);
+              if (existingNames.has(name)) {
+                throw new Error(`Refusing to overwrite existing release asset: ${name}`);
+              }
+              const data = fs.readFileSync(assetPath);
+              await github.rest.repos.uploadReleaseAsset({
+                owner,
+                repo,
+                release_id: release.id,
+                name,
+                data,
+                headers: {
+                  'content-type': name.endsWith('.tgz') ? 'application/gzip' : 'text/plain',
+                  'content-length': data.length,
+                },
+              });
+            }
+
+      - name: Write release summary
+        shell: bash
+        run: |
+          {
+            echo "### FluxAgent ${{ steps.release.outputs.version }} Published"
+            echo "- Source commit: ${{ steps.git.outputs.git_commit }}"
+            echo "- Operator digest: ${{ steps.published.outputs.operator_digest }}"
+            echo "- Demo digest: ${{ steps.published.outputs.demo_digest }}"
+            echo "- Helm OCI digest: ${{ steps.helm-push.outputs.helm_digest }}"
+            echo "- Helm package SHA256: ${{ steps.chart.outputs.sha256 }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Log out of Harbor
+        if: always() && steps.harbor.outputs.registry != ''
+        run: |
+          docker logout "${{ steps.harbor.outputs.registry }}" || true
+          helm registry logout "${{ steps.harbor.outputs.registry }}" || true
