@@ -17,14 +17,30 @@ COPY . .
 RUN GOWORK=off CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -buildvcs=false -ldflags "-X fluxagent/internal/version.Version=${VERSION} -X fluxagent/internal/version.GitCommit=${GIT_COMMIT} -X fluxagent/internal/version.GitDirty=${GIT_DIRTY} -X fluxagent/internal/version.BuildDate=${BUILD_DATE}" -o /out/fluxagent-agent-executor ./cmd/agent-executor \
     && touch -d "@${SOURCE_DATE_EPOCH}" /out/fluxagent-agent-executor
 
-FROM node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57
+FROM node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57 AS codex-installer
+
+ARG CODEX_CLI_VERSION=0.145.0
+ARG SOURCE_DATE_EPOCH=0
+
+RUN npm install -g "@openai/codex@${CODEX_CLI_VERSION}" \
+    && npm cache clean --force \
+    && mkdir -p /out/codex-parts /out/vendor \
+    && cp /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host /out/vendor/codex-code-mode-host \
+    && cp /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path/rg /out/vendor/rg \
+    && cp /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap /out/vendor/bwrap \
+    && cp -R /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/zsh /out/vendor/zsh \
+    && split -b 64m -d -a 2 /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex /out/codex-parts/codex.part. \
+    && test -f /out/codex-parts/codex.part.04 \
+    && test ! -f /out/codex-parts/codex.part.05 \
+    && find /out -exec touch -d "@${SOURCE_DATE_EPOCH}" {} +
+
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 
 ARG VERSION=dev
 ARG GIT_COMMIT=unknown
 ARG GIT_DIRTY=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_DATE_EPOCH=0
-ARG CODEX_CLI_VERSION=0.145.0
 
 LABEL org.opencontainers.image.title="FluxAgent Agent Executor" \
       org.opencontainers.image.version="${VERSION}" \
@@ -32,11 +48,40 @@ LABEL org.opencontainers.image.title="FluxAgent Agent Executor" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       io.fluxagent.git-dirty="${GIT_DIRTY}"
 
-RUN npm install -g "@openai/codex@${CODEX_CLI_VERSION}" \
-    && npm cache clean --force
+RUN apk add --no-cache ca-certificates \
+    && addgroup -S fluxagent \
+    && adduser -S -G fluxagent fluxagent \
+    && mkdir -p /opt/codex/bin /opt/codex/codex-path /opt/codex/codex-resources /opt/codex-parts /tmp/fluxagent-codex /home/fluxagent/.codex \
+    && chown -R fluxagent:fluxagent /tmp/fluxagent-codex /home/fluxagent/.codex
 
 COPY --from=builder /out/fluxagent-agent-executor /fluxagent-agent-executor
-RUN touch -d "@${SOURCE_DATE_EPOCH}" /fluxagent-agent-executor
+COPY --from=codex-installer /out/vendor/codex-code-mode-host /opt/codex/bin/codex-code-mode-host
+COPY --from=codex-installer /out/vendor/rg /opt/codex/codex-path/rg
+COPY --from=codex-installer /out/vendor/bwrap /opt/codex/codex-resources/bwrap
+COPY --from=codex-installer /out/vendor/zsh /opt/codex/codex-resources/zsh
+COPY --from=codex-installer /out/codex-parts/codex.part.00 /opt/codex-parts/codex.part.00
+COPY --from=codex-installer /out/codex-parts/codex.part.01 /opt/codex-parts/codex.part.01
+COPY --from=codex-installer /out/codex-parts/codex.part.02 /opt/codex-parts/codex.part.02
+COPY --from=codex-installer /out/codex-parts/codex.part.03 /opt/codex-parts/codex.part.03
+COPY --from=codex-installer /out/codex-parts/codex.part.04 /opt/codex-parts/codex.part.04
+RUN printf '%s\n' \
+      '#!/bin/sh' \
+      'set -eu' \
+      'codex_bin=/tmp/fluxagent-codex/codex' \
+      'if [ ! -x "${codex_bin}" ]; then' \
+      '  tmp="${codex_bin}.tmp"' \
+      '  cat /opt/codex-parts/codex.part.* > "${tmp}"' \
+      '  chmod 0755 "${tmp}"' \
+      '  mv "${tmp}" "${codex_bin}"' \
+      'fi' \
+      'exec "${codex_bin}" "$@"' \
+      > /usr/local/bin/codex \
+    && chmod 0755 /usr/local/bin/codex /fluxagent-agent-executor /opt/codex/bin/codex-code-mode-host /opt/codex/codex-path/rg /opt/codex/codex-resources/bwrap /opt/codex/codex-resources/zsh/bin/zsh \
+    && touch -d "@${SOURCE_DATE_EPOCH}" /fluxagent-agent-executor /usr/local/bin/codex \
+    && find /opt/codex /opt/codex-parts -exec touch -d "@${SOURCE_DATE_EPOCH}" {} +
 
-USER node
+ENV PATH="/opt/codex/codex-path:/opt/codex/bin:${PATH}" \
+    CODEX_HOME="/home/fluxagent/.codex"
+
+USER fluxagent
 ENTRYPOINT ["/fluxagent-agent-executor"]
