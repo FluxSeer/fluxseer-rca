@@ -36,7 +36,7 @@ env:
 jobs:
   verify:
     name: Verify Source And Packaging
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, fluxagent-test]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -73,7 +73,7 @@ jobs:
 
   image-identity:
     name: Verify Image Identity
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, fluxagent-test]
     needs: [verify]
     steps:
       - name: Checkout
