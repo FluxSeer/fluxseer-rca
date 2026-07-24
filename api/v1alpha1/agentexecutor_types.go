@@ -17,17 +17,18 @@ type SecretKeyReference struct {
 }
 
 type AgentExecutorSpec struct {
-	Type                    string              `json:"type"`
-	Image                   string              `json:"image"`
-	Command                 []string            `json:"command,omitempty"`
-	Args                    []string            `json:"args,omitempty"`
-	CredentialEnvName       string              `json:"credentialEnvName,omitempty"`
-	CredentialSecretRef     *SecretKeyReference `json:"credentialSecretRef,omitempty"`
-	ServiceAccountName      string              `json:"serviceAccountName,omitempty"`
-	TimeoutSeconds          int64               `json:"timeoutSeconds,omitempty"`
-	BackoffLimit            int32               `json:"backoffLimit,omitempty"`
-	TTLSecondsAfterFinished int32               `json:"ttlSecondsAfterFinished,omitempty"`
-	MaxToolCalls            int32               `json:"maxToolCalls,omitempty"`
+	Type                    string                 `json:"type"`
+	Image                   string                 `json:"image"`
+	Command                 []string               `json:"command,omitempty"`
+	Args                    []string               `json:"args,omitempty"`
+	ImagePullSecrets        []LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	CredentialEnvName       string                 `json:"credentialEnvName,omitempty"`
+	CredentialSecretRef     *SecretKeyReference    `json:"credentialSecretRef,omitempty"`
+	ServiceAccountName      string                 `json:"serviceAccountName,omitempty"`
+	TimeoutSeconds          int64                  `json:"timeoutSeconds,omitempty"`
+	BackoffLimit            int32                  `json:"backoffLimit,omitempty"`
+	TTLSecondsAfterFinished int32                  `json:"ttlSecondsAfterFinished,omitempty"`
+	MaxToolCalls            int32                  `json:"maxToolCalls,omitempty"`
 }
 
 type AgentExecutorStatus struct {
@@ -104,6 +105,9 @@ func (in *AgentExecutor) DeepCopyInto(out *AgentExecutor) {
 	}
 	if in.Spec.Args != nil {
 		out.Spec.Args = append([]string(nil), in.Spec.Args...)
+	}
+	if in.Spec.ImagePullSecrets != nil {
+		out.Spec.ImagePullSecrets = append([]LocalObjectReference(nil), in.Spec.ImagePullSecrets...)
 	}
 	if in.Spec.CredentialSecretRef != nil {
 		ref := *in.Spec.CredentialSecretRef

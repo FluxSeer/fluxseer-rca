@@ -45,6 +45,7 @@ The controller only creates a Job when agent analysis is enabled on the manager 
 | `spec.image` | string | yes | Container image that contains the CLI runtime and wrapper dependencies. |
 | `spec.command` | array | no | Container command. |
 | `spec.args` | array | no | Container args. |
+| `spec.imagePullSecrets` | array | no | Optional image pull secrets copied to the executor Job pod. |
 | `spec.credentialEnvName` | string | no | Environment variable name that receives the credential. |
 | `spec.credentialSecretRef` | object | no | Secret key reference for the workload-scoped credential. |
 | `spec.serviceAccountName` | string | no | ServiceAccount used by the Job. Defaults to `fluxagent-investigator`. |

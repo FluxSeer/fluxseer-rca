@@ -43,6 +43,7 @@ func TestAgentAnalysisReconcilerCreatesCLIJobForOptInRiskSignal(t *testing.T) {
 			Image:               "example.com/fluxagent/codex-executor:test",
 			Command:             []string{"/bin/sh", "-c"},
 			Args:                []string{"codex exec --json < ${FLUXAGENT_EVIDENCE_PATH} > ${FLUXAGENT_RESULT_PATH}"},
+			ImagePullSecrets:    []v1alpha1.LocalObjectReference{{Name: "harbor-registry-creds"}},
 			CredentialEnvName:   "CODEX_API_KEY",
 			CredentialSecretRef: &v1alpha1.SecretKeyReference{Name: "codex-secret", Key: "api-key"},
 			ServiceAccountName:  "fluxagent-investigator",
@@ -97,6 +98,9 @@ func TestAgentAnalysisReconcilerCreatesCLIJobForOptInRiskSignal(t *testing.T) {
 	}
 	if job.Spec.Template.Spec.ServiceAccountName != "fluxagent-investigator" {
 		t.Fatalf("unexpected service account %q", job.Spec.Template.Spec.ServiceAccountName)
+	}
+	if len(job.Spec.Template.Spec.ImagePullSecrets) != 1 || job.Spec.Template.Spec.ImagePullSecrets[0].Name != "harbor-registry-creds" {
+		t.Fatalf("expected image pull secret, got %#v", job.Spec.Template.Spec.ImagePullSecrets)
 	}
 	if len(job.Spec.Template.Spec.Containers) != 1 {
 		t.Fatalf("expected one container, got %d", len(job.Spec.Template.Spec.Containers))
