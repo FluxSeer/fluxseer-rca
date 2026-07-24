@@ -19,6 +19,12 @@ controller:
   extraEnv: []
   resources: {}
 
+agentAnalysis:
+  investigatorServiceAccount:
+    create: true
+    name: fluxagent-investigator
+    imagePullSecrets: []
+
 modelGateway:
   provider: heuristic
 

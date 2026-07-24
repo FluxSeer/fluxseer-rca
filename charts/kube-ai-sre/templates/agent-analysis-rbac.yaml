@@ -1,0 +1,50 @@
+{{- if and .Values.controller.enableAgentAnalysis .Values.agentAnalysis.investigatorServiceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "fluxagent.investigatorServiceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+{{- with .Values.agentAnalysis.investigatorServiceAccount.imagePullSecrets }}
+imagePullSecrets:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fluxagent-investigator-role
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["events", "pods", "pods/log", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["aiops.platform"]
+    resources: ["agentanalysisresults", "risksignals"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["aiops.platform"]
+    resources: ["agentanalysisresults/status"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fluxagent-investigator-rolebinding
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fluxagent-investigator-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "fluxagent.investigatorServiceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
