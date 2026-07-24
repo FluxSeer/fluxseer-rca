@@ -27,7 +27,7 @@ env:
 jobs:
   publish:
     name: Publish Release Artifacts
-    runs-on: [self-hosted, Linux, X64, fluxagent-test]
+    runs-on: [self-hosted, Linux, X64, fluxagent-prod]
     steps:
       - name: Resolve release version
         id: release

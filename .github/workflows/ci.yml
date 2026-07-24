@@ -37,7 +37,7 @@ env:
 jobs:
   verify:
     name: Verify Source And Packaging
-    runs-on: [self-hosted, Linux, X64, fluxagent-test]
+    runs-on: [self-hosted, Linux, X64, "${{ (github.ref == 'refs/heads/main' || github.base_ref == 'main') && 'fluxagent-prod' || 'fluxagent-test' }}"]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -100,7 +100,7 @@ jobs:
 
   image-identity:
     name: Verify Image Identity
-    runs-on: [self-hosted, Linux, X64, fluxagent-test]
+    runs-on: [self-hosted, Linux, X64, "${{ (github.ref == 'refs/heads/main' || github.base_ref == 'main') && 'fluxagent-prod' || 'fluxagent-test' }}"]
     needs: [verify]
     steps:
       - name: Checkout
