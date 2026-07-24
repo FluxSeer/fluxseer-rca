@@ -162,10 +162,12 @@ Controllers own Kubernetes workflow state transitions. Shared orchestration shou
 Expected ownership:
 
 - `RiskRule` controller: resolve targets, validate datasource capability, execute detection queries, and create or update `RiskSignal`
-- `InvestigationRequest` controller: resolve targets, collect and normalize evidence, invoke the model provider, update terminal status, and optionally promote to `RiskSignal`
+- `InvestigationRequest` controller: resolve targets, collect and normalize evidence, invoke bounded RCA through the model gateway, update terminal status, and optionally promote to `RiskSignal`
 - `RiskSignal` controller: manage signal lifecycle and optional downstream guarded planning
 - `RemediationPlan` controller: evaluate guardrails and approval state, then create `AgentAction`
 - `AgentAction` controller: execute or simulate approved actions and record execution results
+
+Controllers should not run long-lived LLM or tool-use loops in the reconcile path. Future agentic investigation should be delegated to bounded workers or jobs that the controller observes through CRD status.
 
 ### 6. Model Gateway Layer
 
@@ -192,6 +194,48 @@ Current providers:
 The runnable repo defaults to the heuristic provider so the project stays usable without external secrets. The model gateway is a reasoning seam, not an execution authority.
 
 This is the same dependency-neutrality principle as datasources: model vendors are integrations, not core architecture assumptions.
+
+Model providers and agent runtimes are separate architecture concepts. `ModelProvider` covers a single bounded reasoning call over normalized evidence. Future Codex or Claude agent runtimes belong behind an `InvestigationExecutor` or remediation worker boundary when they can check out repositories, run commands, inspect additional systems, or propose code changes.
+
+Pod or runner based agent runtimes must use independent workload-scoped credentials, such as project-scoped API keys, service-account API keys, enterprise access tokens, or future supported workload identity mechanisms. They must not depend on a developer's local ChatGPT, Codex Remote, OAuth cache, or interactive CLI session.
+
+### Future Investigation Executor Boundary
+
+Deep investigation and remediation proposal flows should use explicit executor contracts rather than expanding `ModelProvider` until it becomes a job orchestrator.
+
+Expected split:
+
+```text
+FluxAgent Controller
+├─ watch resources and signals
+├─ normalize evidence
+├─ create and observe InvestigationRequest state
+└─ never execute long-running LLM loops
+
+RCA Worker
+├─ consume bounded EvidenceBundle
+├─ call OpenAI, Claude, local, or heuristic ModelProvider
+├─ validate structured output
+├─ record token usage and cost
+└─ update RCA status
+
+Investigation Worker
+├─ run Codex SDK/CLI or Claude Agent SDK
+├─ query additional read-only evidence
+├─ inspect repositories and manifests
+├─ execute bounded verification commands
+└─ produce InvestigationResult
+
+Remediation Worker
+├─ checkout an exact commit
+├─ create an isolated worktree
+├─ generate a patch
+├─ run tests and policy checks
+├─ create an issue or pull request
+└─ never apply directly to production
+```
+
+Idempotency should be derived from the request UID, observed generation, evidence digest, executor configuration digest, and repository commit SHA. A controller restart or leader change must not cause the same evidence and configuration to trigger another paid model or agent execution.
 
 ### 7. Guardrails Layer
 

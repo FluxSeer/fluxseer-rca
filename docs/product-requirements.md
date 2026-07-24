@@ -93,6 +93,56 @@ Recommended shared services:
 - `RiskSignalBuilder`
 - `NotificationDispatcher`
 
+## Provider And Agent Runtime Boundary
+
+FluxAgent should keep synchronous model reasoning separate from multi-step agent execution.
+
+`ModelProvider` is the abstraction for bounded, structured, relatively stateless RCA generation:
+
+```text
+EvidenceBundle
+-> ModelProvider
+-> structured RCA output
+```
+
+Expected implementations include:
+
+- `HeuristicProvider`
+- `OpenAIProvider`
+- `ClaudeProvider`
+- other hosted or local completion providers
+
+`InvestigationExecutor` is the future abstraction for long-running, tool-using agent workflows:
+
+```text
+InvestigationRequest
+-> InvestigationExecutor
+-> bounded tool calls, repository inspection, log queries, and verification commands
+-> InvestigationResult
+```
+
+Expected implementations may include:
+
+- `CodexExecutor`
+- `ClaudeAgentExecutor`
+- `StaticExecutor`
+
+Codex SDK, Codex CLI, Claude Agent SDK, and Claude Code can all run in a runner, VM, Kubernetes Job, or pod. They should not be modeled as ordinary `ModelProvider` implementations when they perform multi-turn tool use, repository checkout, shell execution, test execution, or pull-request generation.
+
+Workload credentials for these runtimes must be independent, revocable, and scoped to the workload. Acceptable patterns include project-scoped API keys, service-account API keys, enterprise access tokens, or future supported workload identity mechanisms. FluxAgent must not package a developer's local interactive session, OAuth cache, ChatGPT session, or Codex Remote session as cluster infrastructure credentials.
+
+Long-running LLM or agent loops should not execute inside the controller reconcile path. Controllers should create or observe bounded worker jobs, calculate idempotency from request generation and evidence digests, and record usage and terminal status.
+
+The core permission rule is:
+
+```text
+Production Kubernetes write access
+Git repository write access
+LLM autonomous execution
+```
+
+These capabilities must not all be granted to the same pod or ServiceAccount.
+
 ## CRD Contract Requirements
 
 ### InvestigationRequest Modes

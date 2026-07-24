@@ -45,6 +45,8 @@ Its non-role is equally important:
 - it does not decide approval policy
 - it does not dispatch executors
 - it does not bypass CRD status transitions
+- it does not check out repositories or run shell commands
+- it does not host long-running agent loops
 
 ## Runtime Posture
 
@@ -104,8 +106,41 @@ The provider should not directly own:
 - approval decisions
 - policy enforcement
 - execution routing
+- repository checkout
+- tool execution
+- pull-request creation
 
 Those responsibilities stay in CRD controllers, guardrails, and executors.
+
+## Agent Runtime Boundary
+
+Codex SDK, Codex CLI, Claude Agent SDK, and Claude Code can be deployed in runners, VMs, Kubernetes Jobs, or pods. When they perform multi-turn tool use, repository inspection, command execution, test execution, or patch proposal, they are agent runtimes rather than model providers.
+
+FluxAgent should model those runtimes behind a separate future executor contract:
+
+```go
+type InvestigationExecutor interface {
+    Execute(ctx context.Context, request InvestigationRequest) (*InvestigationResult, error)
+}
+```
+
+The model gateway remains for bounded reasoning:
+
+```text
+EvidenceBundle
+-> ModelProvider
+-> structured RCA output
+```
+
+Agent runtime credentials must be workload-scoped and revocable. Do not package developer-local ChatGPT sessions, Codex Remote sessions, OAuth caches, or interactive CLI auth files as Kubernetes secrets.
+
+At minimum, runtime identities should be separated by role:
+
+- `fluxagent-controller`: manages FluxAgent CRDs and bounded worker jobs, but does not read provider secret contents or mutate business workloads
+- `fluxagent-investigator`: reads approved namespaces, logs, events, and metrics, but does not modify workloads or push to Git
+- `fluxagent-remediator`: operates on repositories and pull requests, but does not directly write to production clusters
+
+Production Kubernetes write access, Git repository write access, and autonomous LLM execution must not be combined in the same pod identity.
 
 ## Design Rules
 
@@ -113,6 +148,8 @@ Those responsibilities stay in CRD controllers, guardrails, and executors.
 - Guardrails must evaluate actions after reasoning, not inside the provider.
 - Runtime should stay functional when no remote model is configured.
 - Provider integrations should be swappable without CRD schema changes.
+- Agent runtimes should use executor contracts, not `ModelProvider`, when they run tools or inspect repositories.
+- Paid model or agent execution must be idempotent across controller restarts and leader transitions.
 
 ## Implementation Status
 
