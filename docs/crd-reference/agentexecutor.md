@@ -55,6 +55,8 @@ The controller only creates a Job when agent analysis is enabled on the manager 
 
 ## Runtime Contract
 
+The executor image should contain `/fluxagent-agent-executor` plus the selected CLI runtime.
+
 FluxAgent mounts:
 
 - `/var/run/fluxagent/evidence/risk-signal.json`
@@ -69,7 +71,22 @@ FluxAgent also sets:
 - `FLUXAGENT_RESULT_PATH`
 - `FLUXAGENT_MAX_TOOL_CALLS`, when configured
 
-The first scaffold tracks Job lifecycle. A future worker should validate structured output and write the parsed result into `AgentAnalysisResult.status`.
+The wrapper executes the configured CLI, stores raw CLI output at `FLUXAGENT_RESULT_PATH`, parses structured JSON from stdout, and writes parsed fields into `AgentAnalysisResult.status`.
+
+Expected structured output:
+
+```json
+{
+  "summary": "Short investigation summary.",
+  "rootCause": "Most likely root cause.",
+  "confidence": 0.82,
+  "validationSteps": ["Check the latest rollout."],
+  "recommendations": ["Rollback the bad image."],
+  "missingEvidence": ["Application startup logs before restart."]
+}
+```
+
+The parser accepts direct JSON, JSONL lines containing the same fields, or JSON embedded in a text field or fenced block.
 
 ## Credential Boundary
 

@@ -1,0 +1,42 @@
+FROM --platform=$BUILDPLATFORM golang:1.26.2@sha256:b54cbf583d390341599d7bcbc062425c081105cc5ef6d170ced98ef9d047c716 AS builder
+
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG GIT_DIRTY=unknown
+ARG BUILD_DATE=unknown
+ARG SOURCE_DATE_EPOCH=0
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+WORKDIR /workspace
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN GOWORK=off CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -buildvcs=false -ldflags "-X fluxagent/internal/version.Version=${VERSION} -X fluxagent/internal/version.GitCommit=${GIT_COMMIT} -X fluxagent/internal/version.GitDirty=${GIT_DIRTY} -X fluxagent/internal/version.BuildDate=${BUILD_DATE}" -o /out/fluxagent-agent-executor ./cmd/agent-executor \
+    && touch -d "@${SOURCE_DATE_EPOCH}" /out/fluxagent-agent-executor
+
+FROM node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57
+
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG GIT_DIRTY=unknown
+ARG BUILD_DATE=unknown
+ARG SOURCE_DATE_EPOCH=0
+ARG CODEX_CLI_VERSION=0.145.0
+
+LABEL org.opencontainers.image.title="FluxAgent Agent Executor" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      io.fluxagent.git-dirty="${GIT_DIRTY}"
+
+RUN npm install -g "@openai/codex@${CODEX_CLI_VERSION}" \
+    && npm cache clean --force
+
+COPY --from=builder /out/fluxagent-agent-executor /fluxagent-agent-executor
+RUN touch -d "@${SOURCE_DATE_EPOCH}" /fluxagent-agent-executor
+
+USER node
+ENTRYPOINT ["/fluxagent-agent-executor"]

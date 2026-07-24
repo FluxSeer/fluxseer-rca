@@ -148,6 +148,12 @@ See:
 - [config/samples/agent-executor-claude.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-executor-claude.yaml:1)
 - [config/samples/agent-executor-gemini.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-executor-gemini.yaml:1)
 
+Build the Codex executor image locally:
+
+```sh
+make build-agent-executor-image VERSION=dev IMAGE_TAG=dev
+```
+
 ## Repo Layout
 
 - `cmd/manager`: canonical controller-runtime manager entrypoint

@@ -12,7 +12,7 @@ Source schema: [api/v1alpha1/agentexecutor_types.go](/Users/czhuang/Chongzhe-wor
 
 ## Purpose
 
-Represent the result contract for `AgentExecutor` jobs. The current scaffold creates the object, records the execution key, links the Kubernetes Job, and tracks Job completion or failure.
+Represent the result contract for `AgentExecutor` jobs. The controller creates the object, records the execution key, links the Kubernetes Job, and tracks Job completion or failure. The executor wrapper parses CLI JSON output and updates the analysis fields in status.
 
 ## YAML Schema
 
@@ -53,6 +53,7 @@ Typical phases:
 Current condition types:
 
 - `AgentJobReady`
+- `AgentOutputReady`
 
 ## Idempotency
 

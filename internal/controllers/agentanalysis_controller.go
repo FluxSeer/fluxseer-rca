@@ -307,9 +307,13 @@ func agentAnalysisResultName(riskSignal *v1alpha1.RiskSignal, executorName, exec
 func agentExecutorContainer(executor *v1alpha1.AgentExecutor, resultName string) corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "FLUXAGENT_ANALYSIS_RESULT_NAME", Value: resultName},
+		{Name: "FLUXAGENT_EXECUTOR_TYPE", Value: executor.Spec.Type},
 		{Name: "FLUXAGENT_EVIDENCE_PATH", Value: "/var/run/fluxagent/evidence/risk-signal.json"},
 		{Name: "FLUXAGENT_PROMPT_PATH", Value: "/var/run/fluxagent/evidence/prompt.txt"},
 		{Name: "FLUXAGENT_RESULT_PATH", Value: "/var/run/fluxagent/result/result.json"},
+	}
+	if executor.Spec.TimeoutSeconds > 0 {
+		env = append(env, corev1.EnvVar{Name: "FLUXAGENT_TIMEOUT_SECONDS", Value: fmt.Sprintf("%d", executor.Spec.TimeoutSeconds)})
 	}
 	if executor.Spec.MaxToolCalls > 0 {
 		env = append(env, corev1.EnvVar{Name: "FLUXAGENT_MAX_TOOL_CALLS", Value: fmt.Sprintf("%d", executor.Spec.MaxToolCalls)})

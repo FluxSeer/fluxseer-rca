@@ -14,13 +14,16 @@ OPERATOR_IMAGE ?= fluxagent/operator
 IMAGE_REPOSITORY ?= $(OPERATOR_IMAGE)
 DEMO_IMAGE ?= fluxagent/demo-observability
 DEMO_IMAGE_REPOSITORY ?= $(DEMO_IMAGE)
+AGENT_EXECUTOR_IMAGE ?= fluxagent/agent-executor-codex
+AGENT_EXECUTOR_IMAGE_REPOSITORY ?= $(AGENT_EXECUTOR_IMAGE)
 IMAGE_TAG ?= $(VERSION)
 TARGET_PLATFORM ?= linux/amd64
 CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
+AGENT_EXECUTOR_IMAGE_REF := $(AGENT_EXECUTOR_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.2-alpha verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.2-alpha verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta build-images build-demo-images build-agent-executor-image
 
 fmt:
 	$(GO) fmt ./...
@@ -185,3 +188,12 @@ build-demo-images:
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		--build-arg SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) \
 		-t $(DEMO_IMAGE_REF) -f examples/fake-observability/Dockerfile .
+
+build-agent-executor-image:
+	docker buildx build --load --platform $(TARGET_PLATFORM) --provenance=false --sbom=false \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_DIRTY=$(GIT_DIRTY) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH) \
+		-t $(AGENT_EXECUTOR_IMAGE_REF) -f Dockerfile.agent-executor .
