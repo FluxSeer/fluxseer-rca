@@ -2,9 +2,9 @@ name: FluxAgent CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, test]
   pull_request:
-    branches: [main]
+    branches: [main, test]
     paths:
       - "api/**"
       - "charts/**"
@@ -99,5 +99,82 @@ jobs:
             echo "### FluxAgent CI"
             echo "- Version input: ${RELEASE_VERSION}"
             echo "- Target platform: ${TARGET_PLATFORM}"
+            echo "- Commit: ${GITHUB_SHA}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-test-image:
+    name: Publish Test Operator Image
+    runs-on: [self-hosted, Linux, X64, fluxagent-test]
+    needs: [verify, image-identity]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/test'
+    env:
+      HARBOR_PROJECT: fluxseer
+      HARBOR_REPOSITORY_PREFIX: fluxagent
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve test image metadata
+        id: meta
+        shell: bash
+        env:
+          SECRET_REGISTRY: ${{ secrets.CI_HARBOR_REGISTRY }}
+          SECRET_USER: ${{ secrets.CI_HARBOR_GHA_USER }}
+          SECRET_TOKEN: ${{ secrets.CI_HARBOR_GHA_TOKEN }}
+        run: |
+          set -euo pipefail
+          registry="${SECRET_REGISTRY:-${CI_HARBOR_REGISTRY:-}}"
+          user="${SECRET_USER:-${CI_HARBOR_GHA_USER:-}}"
+          token="${SECRET_TOKEN:-${CI_HARBOR_GHA_TOKEN:-}}"
+          if [ -z "$registry" ] || [ -z "$user" ] || [ -z "$token" ]; then
+            echo "CI_HARBOR_REGISTRY, CI_HARBOR_GHA_USER, and CI_HARBOR_GHA_TOKEN are required" >&2
+            exit 1
+          fi
+          if [ "$user" = "harbor_registry_user" ]; then
+            echo "Refusing to use Harbor internal registry credentials for CI publication" >&2
+            exit 1
+          fi
+          source_date_epoch="$(git show -s --format=%ct HEAD)"
+          build_date="$(./hack/source-date.sh "$source_date_epoch")"
+          image_tag="ci-$(date -u '+%Y%m%d%H%M%S')-${GITHUB_SHA::7}"
+          printf '%s' "$token" | docker login "$registry" --username "$user" --password-stdin
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+          echo "source_date_epoch=$source_date_epoch" >> "$GITHUB_OUTPUT"
+          echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push test operator image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ env.TARGET_PLATFORM }}
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.meta.outputs.registry }}/${{ env.HARBOR_PROJECT }}/${{ env.HARBOR_REPOSITORY_PREFIX }}/operator:${{ steps.meta.outputs.image_tag }}
+          labels: |
+            com.fluxseer.ci.image-tag=${{ steps.meta.outputs.image_tag }}
+            com.fluxseer.ci.branch=test
+            com.fluxseer.ci.run-id=${{ github.run_id }}
+            com.fluxseer.ci.run-attempt=${{ github.run_attempt }}
+          build-args: |
+            VERSION=test
+            GIT_COMMIT=${{ github.sha }}
+            GIT_DIRTY=false
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
+            SOURCE_DATE_EPOCH=${{ steps.meta.outputs.source_date_epoch }}
+
+      - name: Write test image summary
+        run: |
+          {
+            echo "### FluxAgent test image"
+            echo "- Image: ${{ steps.meta.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/operator:${{ steps.meta.outputs.image_tag }}"
+            echo "- Branch: test"
             echo "- Commit: ${GITHUB_SHA}"
           } >> "$GITHUB_STEP_SUMMARY"
