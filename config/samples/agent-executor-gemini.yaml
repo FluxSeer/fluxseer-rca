@@ -5,6 +5,7 @@ metadata:
 spec:
   type: gemini-cli
   image: fluxagent/agent-executor-gemini:dev
+  imagePullSecrets: []
   command:
     - /fluxagent-agent-executor
   args:

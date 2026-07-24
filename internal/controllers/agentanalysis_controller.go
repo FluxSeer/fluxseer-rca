@@ -188,6 +188,7 @@ func (r *AgentAnalysisReconciler) ensureAgentJob(ctx context.Context, riskSignal
 		job.Spec.TTLSecondsAfterFinished = &ttl
 		job.Spec.Template.Spec.RestartPolicy = corev1.RestartPolicyNever
 		job.Spec.Template.Spec.ServiceAccountName = serviceAccountName
+		job.Spec.Template.Spec.ImagePullSecrets = agentExecutorImagePullSecrets(executor)
 		job.Spec.Template.Spec.Containers = []corev1.Container{agentExecutorContainer(executor, resultName)}
 		job.Spec.Template.Spec.Volumes = []corev1.Volume{
 			{
@@ -302,6 +303,20 @@ func agentAnalysisResultName(riskSignal *v1alpha1.RiskSignal, executorName, exec
 		base = strings.Trim(base, "-")
 	}
 	return fmt.Sprintf("%s-%s", base, executionKey[:10])
+}
+
+func agentExecutorImagePullSecrets(executor *v1alpha1.AgentExecutor) []corev1.LocalObjectReference {
+	if len(executor.Spec.ImagePullSecrets) == 0 {
+		return nil
+	}
+	out := make([]corev1.LocalObjectReference, 0, len(executor.Spec.ImagePullSecrets))
+	for _, ref := range executor.Spec.ImagePullSecrets {
+		if ref.Name == "" {
+			continue
+		}
+		out = append(out, corev1.LocalObjectReference{Name: ref.Name})
+	}
+	return out
 }
 
 func agentExecutorContainer(executor *v1alpha1.AgentExecutor, resultName string) corev1.Container {

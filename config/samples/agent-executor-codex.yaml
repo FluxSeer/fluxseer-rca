@@ -5,6 +5,7 @@ metadata:
 spec:
   type: codex-cli
   image: fluxagent/agent-executor-codex:dev
+  imagePullSecrets: []
   command:
     - /fluxagent-agent-executor
   args:
