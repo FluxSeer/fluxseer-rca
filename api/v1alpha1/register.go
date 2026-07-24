@@ -29,6 +29,10 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&RemediationPlanList{},
 		&AgentAction{},
 		&AgentActionList{},
+		&AgentExecutor{},
+		&AgentExecutorList{},
+		&AgentAnalysisResult{},
+		&AgentAnalysisResultList{},
 	)
 
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)

@@ -49,10 +49,12 @@ func Run(args []string, out io.Writer) error {
 	var probeAddr string
 	var enableLeaderElection bool
 	var enableRemediation bool
+	var enableAgentAnalysis bool
 	fs.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	fs.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	fs.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	fs.BoolVar(&enableRemediation, "enable-remediation", false, "Enable RemediationPlan and AgentAction reconciliation.")
+	fs.BoolVar(&enableAgentAnalysis, "enable-agent-analysis", false, "Enable opt-in AgentExecutor job reconciliation for RiskSignal analysis.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -207,6 +209,14 @@ func Run(args []string, out io.Writer) error {
 		Enabled: enableRemediation,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create RiskSignal controller: %w", err)
+	}
+
+	if err := (&controllers.AgentAnalysisReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Enabled: enableAgentAnalysis,
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to create AgentAnalysis controller: %w", err)
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

@@ -1,0 +1,25 @@
+apiVersion: aiops.platform/v1alpha1
+kind: AgentExecutor
+metadata:
+  name: claude-cli
+spec:
+  type: claude-cli
+  image: ghcr.io/example/fluxagent/claude-executor:dev
+  command:
+    - /bin/sh
+    - -c
+  args:
+    - |
+      claude -p "$(cat "${FLUXAGENT_PROMPT_PATH}")" \
+        --output-format json \
+        < "${FLUXAGENT_EVIDENCE_PATH}" \
+        > "${FLUXAGENT_RESULT_PATH}"
+  credentialEnvName: ANTHROPIC_API_KEY
+  credentialSecretRef:
+    name: claude-secret
+    key: api-key
+  serviceAccountName: fluxagent-investigator
+  timeoutSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  maxToolCalls: 40
