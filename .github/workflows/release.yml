@@ -131,7 +131,7 @@ jobs:
           set -euo pipefail
           registry="${{ steps.harbor.outputs.registry }}"
           version="${{ steps.release.outputs.version }}"
-          for image in operator demo-observability; do
+          for image in operator demo-observability agent-executor-codex; do
             ref="$registry/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/$image:$version"
             if docker buildx imagetools inspect "$ref" >/tmp/existing-image.txt 2>&1; then
               echo "Refusing to overwrite existing image tag: $ref" >&2
@@ -181,6 +181,24 @@ jobs:
             BUILD_DATE=${{ steps.git.outputs.build_date }}
             SOURCE_DATE_EPOCH=${{ steps.git.outputs.source_date_epoch }}
 
+      - name: Build and push Codex agent executor image
+        id: agent-executor
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.agent-executor
+          platforms: ${{ env.TARGET_PLATFORM }}
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.harbor.outputs.registry }}/${{ env.HARBOR_PROJECT }}/${{ env.HARBOR_REPOSITORY_PREFIX }}/agent-executor-codex:${{ steps.release.outputs.version }}
+          build-args: |
+            VERSION=${{ steps.release.outputs.version }}
+            GIT_COMMIT=${{ steps.git.outputs.git_commit }}
+            GIT_DIRTY=false
+            BUILD_DATE=${{ steps.git.outputs.build_date }}
+            SOURCE_DATE_EPOCH=${{ steps.git.outputs.source_date_epoch }}
+
       - name: Verify published image metadata
         id: published
         shell: bash
@@ -211,8 +229,10 @@ jobs:
 
           operator_digest="$(verify_image operator /fluxagent-operator FluxAgent)"
           demo_digest="$(verify_image demo-observability /demo-observability 'FluxAgent Demo Observability')"
+          agent_executor_digest="$(verify_image agent-executor-codex /fluxagent-agent-executor 'FluxAgent Agent Executor')"
           echo "operator_digest=$operator_digest" >> "$GITHUB_OUTPUT"
           echo "demo_digest=$demo_digest" >> "$GITHUB_OUTPUT"
+          echo "agent_executor_digest=$agent_executor_digest" >> "$GITHUB_OUTPUT"
 
       - name: Package Helm chart
         id: chart
@@ -283,6 +303,8 @@ jobs:
             - ${{ steps.published.outputs.operator_digest }}
           - ${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/demo-observability:$version
             - ${{ steps.published.outputs.demo_digest }}
+          - ${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/agent-executor-codex:$version
+            - ${{ steps.published.outputs.agent_executor_digest }}
 
           ## Helm Package
 
