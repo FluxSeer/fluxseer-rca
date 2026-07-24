@@ -34,6 +34,7 @@ docs/
 └─ tutorials/
    ├─ quickstart-kind.md
    ├─ investigate-workload.md
+   ├─ use-codex-subscription-runner.md
    ├─ enable-prometheus.md
    ├─ enable-loki.md
    ├─ enable-remediation.md
@@ -58,6 +59,7 @@ docs/
 - [releases/v0.2.0-alpha.2.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-alpha.2.md:1)
 - [tutorials/quickstart-kind.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/quickstart-kind.md:1)
 - [tutorials/investigate-workload.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/investigate-workload.md:1)
+- [tutorials/use-codex-subscription-runner.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/use-codex-subscription-runner.md:1)
 - [tutorials/enable-hosted-model-providers.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/enable-hosted-model-providers.md:1)
 - [github-repo.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/github-repo.md:1)
 

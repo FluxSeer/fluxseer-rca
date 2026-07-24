@@ -100,6 +100,7 @@ FluxAgent distinguishes runtime, compile-time, and deployment dependency.
 | Loki | optional | isolated to adapter packages | not installed by default | logs datasource |
 | External model APIs | optional | isolated to model-provider packages | not installed by default | RCA enrichment |
 | CLI agent runtimes | optional | isolated to `AgentExecutor` jobs | disabled by default | second-pass analysis |
+| Subscription Codex runner | optional | isolated to GitHub workflow + persistent runner | manual by default | second-pass analysis without API key |
 | Remediation executors | optional | isolated to executor packages | disabled by default | guarded expansion path |
 
 The longer-form design constraints are documented in [docs/architecture/dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1).
