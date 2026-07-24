@@ -4,16 +4,16 @@ metadata:
   name: claude-cli
 spec:
   type: claude-cli
-  image: ghcr.io/example/fluxagent/claude-executor:dev
+  image: fluxagent/agent-executor-claude:dev
   command:
-    - /bin/sh
-    - -c
+    - /fluxagent-agent-executor
   args:
-    - |
-      claude -p "$(cat "${FLUXAGENT_PROMPT_PATH}")" \
-        --output-format json \
-        < "${FLUXAGENT_EVIDENCE_PATH}" \
-        > "${FLUXAGENT_RESULT_PATH}"
+    - --type=claude-cli
+    - --command=claude
+    - --arg=-p
+    - --arg=--output-format
+    - --arg=json
+    - --prompt-arg
   credentialEnvName: ANTHROPIC_API_KEY
   credentialSecretRef:
     name: claude-secret

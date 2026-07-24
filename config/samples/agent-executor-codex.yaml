@@ -4,15 +4,15 @@ metadata:
   name: codex-cli
 spec:
   type: codex-cli
-  image: ghcr.io/example/fluxagent/codex-executor:dev
+  image: fluxagent/agent-executor-codex:dev
   command:
-    - /bin/sh
-    - -c
+    - /fluxagent-agent-executor
   args:
-    - |
-      codex exec --json "$(cat "${FLUXAGENT_PROMPT_PATH}")" \
-        < "${FLUXAGENT_EVIDENCE_PATH}" \
-        > "${FLUXAGENT_RESULT_PATH}"
+    - --type=codex-cli
+    - --command=codex
+    - --arg=exec
+    - --arg=--json
+    - --prompt-arg
   credentialEnvName: CODEX_API_KEY
   credentialSecretRef:
     name: codex-secret

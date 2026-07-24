@@ -4,16 +4,15 @@ metadata:
   name: gemini-cli
 spec:
   type: gemini-cli
-  image: ghcr.io/example/fluxagent/gemini-executor:dev
+  image: fluxagent/agent-executor-gemini:dev
   command:
-    - /bin/sh
-    - -c
+    - /fluxagent-agent-executor
   args:
-    - |
-      gemini -p "$(cat "${FLUXAGENT_PROMPT_PATH}")" \
-        --json \
-        < "${FLUXAGENT_EVIDENCE_PATH}" \
-        > "${FLUXAGENT_RESULT_PATH}"
+    - --type=gemini-cli
+    - --command=gemini
+    - --arg=-p
+    - --arg=--json
+    - --prompt-arg
   credentialEnvName: GEMINI_API_KEY
   credentialSecretRef:
     name: gemini-secret
