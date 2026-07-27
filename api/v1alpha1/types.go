@@ -33,6 +33,7 @@ type TargetRef struct {
 }
 
 type EvidenceRef struct {
+	ID      string `json:"id,omitempty"`
 	Kind    string `json:"kind,omitempty"`
 	Source  string `json:"source,omitempty"`
 	Summary string `json:"summary,omitempty"`

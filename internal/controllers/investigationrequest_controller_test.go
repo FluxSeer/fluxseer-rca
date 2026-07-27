@@ -128,6 +128,30 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if len(stored.Status.EvidenceRefs) != 1 || stored.Status.EvidenceRefs[0].Kind != "event" {
 		t.Fatalf("expected one event evidence ref, got %#v", stored.Status.EvidenceRefs)
 	}
+	if stored.Status.EvidenceRefs[0].ID != "evidence-001" {
+		t.Fatalf("expected evidence id evidence-001, got %#v", stored.Status.EvidenceRefs[0])
+	}
+	if stored.Status.Verdict == nil {
+		t.Fatal("expected structured RCA verdict")
+	}
+	if stored.Status.Verdict.RootCauseEntity.Name != "open-api" {
+		t.Fatalf("expected root cause entity open-api, got %#v", stored.Status.Verdict.RootCauseEntity)
+	}
+	if stored.Status.Verdict.RootCauseType == "" {
+		t.Fatalf("expected root cause type, got %#v", stored.Status.Verdict)
+	}
+	if len(stored.Status.Claims) == 0 {
+		t.Fatalf("expected structured claims, got %#v", stored.Status.Claims)
+	}
+	if stored.Status.Claims[0].Verification != "Supported" {
+		t.Fatalf("expected first claim supported, got %#v", stored.Status.Claims[0])
+	}
+	if len(stored.Status.Claims[0].EvidenceRefs) != 1 || stored.Status.Claims[0].EvidenceRefs[0] != "evidence-001" {
+		t.Fatalf("expected claim to cite evidence-001, got %#v", stored.Status.Claims[0])
+	}
+	if stored.Status.Execution == nil || stored.Status.Execution.Provider != "heuristic" || stored.Status.Execution.Attempts != 1 {
+		t.Fatalf("expected RCA execution metadata, got %#v", stored.Status.Execution)
+	}
 	if cond := findCondition(stored.Status.Conditions, conditionTargetResolved); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected TargetResolved true condition, got %#v", cond)
 	}

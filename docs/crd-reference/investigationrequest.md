@@ -145,15 +145,62 @@ Key status fields:
 
 - `phase`
 - `message`
-- `summary`
-- `hypothesis`
-- `confidence`
 - `provider`
+- `verdict`
+- `claims[]`
+- `alternativeHypotheses[]`
+- `missingEvidence[]`
+- `degradation`
+- `execution`
 - `startedAt`
 - `completedAt`
 - `evidenceRefs`
 - `linkedRiskSignalRef`
 - `conditions`
+
+Compatibility status fields remain available:
+
+- `summary`
+- `hypothesis`
+- `confidence`
+
+These fields preserve the v0.2 read-only RCA surface for humans and existing scripts. New integrations should prefer the structured RCA status fields because they are easier to validate without parsing prose.
+
+### Structured RCA Contract
+
+`status.verdict` is the top-level RCA conclusion:
+
+- `summary`: compact human-readable conclusion
+- `rootCauseEntity`: Kubernetes target most directly associated with the conclusion
+- `rootCauseType`: coarse category such as `CrashLoop`, `LatencyRegression`, `ResourcePressure`, `ConfigurationMismatch`, or `WorkloadDegradation`
+- `confidence`: normalized score from `0.0` to `1.0`
+
+`status.claims[]` stores machine-addressable RCA claims:
+
+- `id`: stable claim identifier such as `claim-001`
+- `statement`: one conclusion or cause statement
+- `evidenceRefs[]`: referenced evidence IDs
+- `verification`: current verification state, for example `Supported` or `Inferred`
+
+`status.evidenceRefs[]` stores compact evidence references. Each entry may include:
+
+- `id`: stable evidence identifier such as `evidence-001`
+- `kind`
+- `source`
+- `summary`
+- `query`
+- `reason`
+- `link`
+
+`status.alternativeHypotheses[]`, `status.missingEvidence[]`, and `status.degradation` are reserved for partial-failure and claim-hardening semantics. They let FluxAgent report uncertainty explicitly instead of silently presenting an incomplete RCA as fully proven.
+
+`status.execution` records RCA execution metadata:
+
+- `provider`
+- `attempts`
+- `durationSeconds`
+- `inputTokens`
+- `outputTokens`
 
 When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to the promoted `RiskSignal`.
 

@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,6 +57,12 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 	investigation.Status.Hypothesis = ""
 	investigation.Status.Confidence = 0
 	investigation.Status.Provider = ""
+	investigation.Status.Verdict = nil
+	investigation.Status.Claims = nil
+	investigation.Status.AlternativeHypotheses = nil
+	investigation.Status.MissingEvidence = nil
+	investigation.Status.Degradation = nil
+	investigation.Status.Execution = nil
 	investigation.Status.EvidenceRefs = nil
 	investigation.Status.LinkedRiskSignalRef = nil
 
@@ -269,12 +276,123 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		if strings.TrimSpace(rca.Reasoning.Provider) != "" {
 			request.Status.Provider = rca.Reasoning.Provider
 		}
+		applyStructuredRCAStatus(request, preflight, evidence, rca, now)
 	}
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseCompleted, request.Status.Summary, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request completed successfully without degradation", request.Generation, now)
+}
+
+func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, now time.Time) {
+	if rca.Reasoning == nil {
+		return
+	}
+
+	confidence := float64(rca.Reasoning.Confidence.Score) / 100.0
+	request.Status.Verdict = &v1alpha1.RCAVerdict{
+		Summary:         rca.Reasoning.RiskSummary,
+		RootCauseEntity: resourceToTargetRef(preflight.Target),
+		RootCauseType:   inferRootCauseType(rca.Reasoning.RCA.Hypothesis, rca.Reasoning.RCA.Causes),
+		Confidence:      confidence,
+	}
+	request.Status.Claims = buildRCAClaims(rca, evidence)
+	request.Status.AlternativeHypotheses = nil
+	request.Status.MissingEvidence = nil
+	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
+	request.Status.Execution = &v1alpha1.RCAExecution{
+		Provider:        request.Status.Provider,
+		Attempts:        1,
+		DurationSeconds: investigationDurationSeconds(request, now),
+	}
+}
+
+func buildRCAClaims(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult) []v1alpha1.RCAClaim {
+	claimRefs := evidenceIDs(evidence.EvidenceRefs)
+	verification := "Inferred"
+	if len(claimRefs) > 0 {
+		verification = "Supported"
+	}
+
+	claims := make([]v1alpha1.RCAClaim, 0, 1+len(rca.Reasoning.RCA.Causes))
+	if strings.TrimSpace(rca.Reasoning.RiskSummary) != "" {
+		claims = append(claims, v1alpha1.RCAClaim{
+			ID:           "claim-001",
+			Statement:    rca.Reasoning.RiskSummary,
+			EvidenceRefs: append([]string(nil), claimRefs...),
+			Verification: verification,
+		})
+	}
+	for _, cause := range rca.Reasoning.RCA.Causes {
+		if strings.TrimSpace(cause) == "" {
+			continue
+		}
+		claims = append(claims, v1alpha1.RCAClaim{
+			ID:           claimID(len(claims) + 1),
+			Statement:    cause,
+			EvidenceRefs: append([]string(nil), claimRefs...),
+			Verification: verification,
+		})
+	}
+	return claims
+}
+
+func evidenceIDs(refs []v1alpha1.EvidenceRef) []string {
+	ids := make([]string, 0, len(refs))
+	for index, ref := range refs {
+		id := strings.TrimSpace(ref.ID)
+		if id == "" {
+			id = evidenceID(index + 1)
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func inferRootCauseType(hypothesis string, causes []string) string {
+	text := strings.ToLower(hypothesis + " " + strings.Join(causes, " "))
+	switch {
+	case strings.Contains(text, "config"):
+		return "ConfigurationMismatch"
+	case strings.Contains(text, "backoff") || strings.Contains(text, "crash") || strings.Contains(text, "restart"):
+		return "CrashLoop"
+	case strings.Contains(text, "latency"):
+		return "LatencyRegression"
+	case strings.Contains(text, "memory") || strings.Contains(text, "oom"):
+		return "ResourcePressure"
+	default:
+		return "WorkloadDegradation"
+	}
+}
+
+func investigationDurationSeconds(request *v1alpha1.InvestigationRequest, now time.Time) int64 {
+	if request.Status.StartedAt == nil {
+		return 0
+	}
+	duration := now.Sub(request.Status.StartedAt.Time)
+	if duration < 0 {
+		return 0
+	}
+	return int64(duration.Seconds())
+}
+
+func claimID(index int) string {
+	return "claim-" + zeroPad3(index)
+}
+
+func evidenceID(index int) string {
+	return "evidence-" + zeroPad3(index)
+}
+
+func zeroPad3(index int) string {
+	if index < 10 {
+		return "00" + strconv.Itoa(index)
+	}
+	if index < 100 {
+		return "0" + strconv.Itoa(index)
+	}
+	return strconv.Itoa(index)
 }
 
 func shouldMarkInvestigationDegraded(reason string) bool {

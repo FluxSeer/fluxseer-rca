@@ -39,17 +39,61 @@ type InvestigationRequestSpec struct {
 	TTLSeconds       int64                  `json:"ttlSeconds,omitempty"`
 }
 
+type RCAVerdict struct {
+	Summary         string    `json:"summary,omitempty"`
+	RootCauseEntity TargetRef `json:"rootCauseEntity,omitempty"`
+	RootCauseType   string    `json:"rootCauseType,omitempty"`
+	Confidence      float64   `json:"confidence,omitempty"`
+}
+
+type RCAClaim struct {
+	ID           string   `json:"id,omitempty"`
+	Statement    string   `json:"statement,omitempty"`
+	EvidenceRefs []string `json:"evidenceRefs,omitempty"`
+	Verification string   `json:"verification,omitempty"`
+}
+
+type RCAAlternativeHypothesis struct {
+	Statement    string   `json:"statement,omitempty"`
+	Disposition  string   `json:"disposition,omitempty"`
+	EvidenceRefs []string `json:"evidenceRefs,omitempty"`
+}
+
+type RCAMissingEvidence struct {
+	Source string `json:"source,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
+type RCADegradation struct {
+	Partial            bool     `json:"partial,omitempty"`
+	UnavailableSources []string `json:"unavailableSources,omitempty"`
+}
+
+type RCAExecution struct {
+	Provider        string `json:"provider,omitempty"`
+	Attempts        int32  `json:"attempts,omitempty"`
+	DurationSeconds int64  `json:"durationSeconds,omitempty"`
+	InputTokens     int64  `json:"inputTokens,omitempty"`
+	OutputTokens    int64  `json:"outputTokens,omitempty"`
+}
+
 type InvestigationRequestStatus struct {
-	ResourceStatus      `json:",inline"`
-	Summary             string                     `json:"summary,omitempty"`
-	Hypothesis          string                     `json:"hypothesis,omitempty"`
-	Confidence          float64                    `json:"confidence,omitempty"`
-	Provider            string                     `json:"provider,omitempty"`
-	StartedAt           *metav1.Time               `json:"startedAt,omitempty"`
-	CompletedAt         *metav1.Time               `json:"completedAt,omitempty"`
-	EvidenceRefs        []EvidenceRef              `json:"evidenceRefs,omitempty"`
-	LinkedRiskSignalRef *NamespacedObjectReference `json:"linkedRiskSignalRef,omitempty"`
-	Conditions          []metav1.Condition         `json:"conditions,omitempty"`
+	ResourceStatus        `json:",inline"`
+	Summary               string                     `json:"summary,omitempty"`
+	Hypothesis            string                     `json:"hypothesis,omitempty"`
+	Confidence            float64                    `json:"confidence,omitempty"`
+	Provider              string                     `json:"provider,omitempty"`
+	Verdict               *RCAVerdict                `json:"verdict,omitempty"`
+	Claims                []RCAClaim                 `json:"claims,omitempty"`
+	AlternativeHypotheses []RCAAlternativeHypothesis `json:"alternativeHypotheses,omitempty"`
+	MissingEvidence       []RCAMissingEvidence       `json:"missingEvidence,omitempty"`
+	Degradation           *RCADegradation            `json:"degradation,omitempty"`
+	Execution             *RCAExecution              `json:"execution,omitempty"`
+	StartedAt             *metav1.Time               `json:"startedAt,omitempty"`
+	CompletedAt           *metav1.Time               `json:"completedAt,omitempty"`
+	EvidenceRefs          []EvidenceRef              `json:"evidenceRefs,omitempty"`
+	LinkedRiskSignalRef   *NamespacedObjectReference `json:"linkedRiskSignalRef,omitempty"`
+	Conditions            []metav1.Condition         `json:"conditions,omitempty"`
 }
 
 type InvestigationRequest struct {
@@ -92,6 +136,42 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 	}
 	if in.Status.EvidenceRefs != nil {
 		out.Status.EvidenceRefs = append([]EvidenceRef(nil), in.Status.EvidenceRefs...)
+	}
+	if in.Status.Verdict != nil {
+		verdict := *in.Status.Verdict
+		out.Status.Verdict = &verdict
+	}
+	if in.Status.Claims != nil {
+		out.Status.Claims = make([]RCAClaim, len(in.Status.Claims))
+		copy(out.Status.Claims, in.Status.Claims)
+		for i := range out.Status.Claims {
+			if in.Status.Claims[i].EvidenceRefs != nil {
+				out.Status.Claims[i].EvidenceRefs = append([]string(nil), in.Status.Claims[i].EvidenceRefs...)
+			}
+		}
+	}
+	if in.Status.AlternativeHypotheses != nil {
+		out.Status.AlternativeHypotheses = make([]RCAAlternativeHypothesis, len(in.Status.AlternativeHypotheses))
+		copy(out.Status.AlternativeHypotheses, in.Status.AlternativeHypotheses)
+		for i := range out.Status.AlternativeHypotheses {
+			if in.Status.AlternativeHypotheses[i].EvidenceRefs != nil {
+				out.Status.AlternativeHypotheses[i].EvidenceRefs = append([]string(nil), in.Status.AlternativeHypotheses[i].EvidenceRefs...)
+			}
+		}
+	}
+	if in.Status.MissingEvidence != nil {
+		out.Status.MissingEvidence = append([]RCAMissingEvidence(nil), in.Status.MissingEvidence...)
+	}
+	if in.Status.Degradation != nil {
+		degradation := *in.Status.Degradation
+		if in.Status.Degradation.UnavailableSources != nil {
+			degradation.UnavailableSources = append([]string(nil), in.Status.Degradation.UnavailableSources...)
+		}
+		out.Status.Degradation = &degradation
+	}
+	if in.Status.Execution != nil {
+		execution := *in.Status.Execution
+		out.Status.Execution = &execution
 	}
 	if in.Status.LinkedRiskSignalRef != nil {
 		ref := *in.Status.LinkedRiskSignalRef
