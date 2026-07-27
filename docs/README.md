@@ -48,10 +48,12 @@ docs/
 - [architecture/v0.3-investigation-experience.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.3-investigation-experience.md:1)
 - [architecture/v0.2-adapter-neutral-backlog.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.2-adapter-neutral-backlog.md:1)
 - [product-requirements.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/product-requirements.md:1)
+- [competitive-positioning.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/competitive-positioning.md:1)
 - [helm-rulepacks.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/helm-rulepacks.md:1)
 - [release-checkpoint.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/release-checkpoint.md:1)
 - [backlog/v0.2-beta.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/backlog/v0.2-beta.md:1)
 - [backlog/v0.2-release-reproducibility.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/backlog/v0.2-release-reproducibility.md:1)
+- [backlog/v0.3-trustworthy-rca-contract.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/backlog/v0.3-trustworthy-rca-contract.md:1)
 - [releases/v0.2.0-beta.1.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-beta.1.md:1)
 - [releases/v0.2.0-beta.1-freeze.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-beta.1-freeze.md:1)
 - [releases/v0.2.0-alpha.2.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-alpha.2.md:1)
@@ -70,10 +72,10 @@ docs/
 
 ## Current Product Truth
 
-- Product positioning: Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
+- Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
 - Current release scope: `v0.2` focuses on read-only RCA workflows and is a verified beta candidate.
-- `RemediationPlan` and `AgentAction` are available as guarded expansion paths.
+- `RemediationPlan` and `AgentAction` remain guarded experimental expansion paths.
 - Hosted model integrations are limited to OpenAI API, Claude API, and Gemini API; heuristic remains the no-secret default.
 - Prometheus, Loki, and Kubernetes Events adapters are wired into the runnable demo path.
 - Prometheus and Loki remain optional adapters even when the demo wires them through a fake observability service.
-- `InvestigationRequest` is now the operator-first investigation entrypoint for ad-hoc RCA and optional `RiskSignal` promotion.
+- `InvestigationRequest` is the primary operator-first entrypoint for ad-hoc or externally triggered RCA.

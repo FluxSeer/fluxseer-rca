@@ -6,12 +6,12 @@ This document consolidates the product requirements that should guide README, ar
 
 ## Product Positioning
 
-FluxAgent is a Kubernetes-native SRE investigation control plane with optional AI-assisted reasoning.
+FluxAgent is a Kubernetes-native control plane for evidence-verifiable root cause analysis.
 
 Long-term positioning:
 
 ```text
-Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
+Kubernetes-native, evidence-verifiable RCA control plane.
 ```
 
 Current release scope:
@@ -20,13 +20,14 @@ Current release scope:
 v0.2 focuses on read-only RCA workflows and is currently a beta candidate.
 ```
 
-The long-term product positioning is intentionally broader than the current release scope. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it.
+The long-term product positioning is intentionally narrower than a general AI SRE agent. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it.
 
 ## Product Principles
 
 - read-only by default
 - security-first and secret-minimizing by design
 - evidence-first investigation and RCA
+- evidence-linked claims and verification status
 - Kubernetes-native workflow state through CRDs
 - explicit configuration over black-box discovery
 - optional AI-assisted reasoning, with heuristic default plus OpenAI, Claude, and Gemini API providers
@@ -36,9 +37,47 @@ The long-term product positioning is intentionally broader than the current rele
 - guarded remediation as an opt-in secondary path
 - stable status and condition reasons for CLI, dashboard, alerting, and GitOps consumers
 
+## Product Boundaries
+
+FluxAgent should not compete on the breadth of built-in Kubernetes analyzers, autonomous agent tool use, full observability ownership, or production self-healing.
+
+Primary product ownership:
+
+```text
+InvestigationRequest
+-> bounded evidence collection
+-> structured hypotheses
+-> evidence-linked claims
+-> independent verification
+-> auditable RCA status
+```
+
+Secondary entrypoint:
+
+```text
+RiskRule
+-> RiskSignal
+-> optional InvestigationRequest
+```
+
+`RiskRule` is an optional bootstrap signal source. It exists to help users create initial signals from Kubernetes Events, Prometheus, or Loki, but it should not become the center of product identity or a replacement for Alertmanager.
+
+Experimental extension:
+
+```text
+RCA Result
+-> Remediation Proposal
+-> Policy Evaluation
+-> Human Approval
+-> Deterministic Execution
+-> Post-action Verification
+```
+
+Remediation must remain downstream from RCA and must not grant reasoning providers direct executor credentials.
+
 ## Existence And Value
 
-FluxAgent exists to give Kubernetes platform teams an auditable RCA workflow substrate without requiring them to adopt a black-box AI monitoring agent or a specific model vendor.
+FluxAgent exists to give Kubernetes platform teams an auditable RCA workflow substrate without requiring them to adopt a black-box AI monitoring agent, a full replacement observability stack, or a specific model vendor.
 
 The intended value is:
 
@@ -48,6 +87,7 @@ The intended value is:
 - heuristic mode remains usable without external API calls
 - hosted OpenAI, Claude, and Gemini providers are opt-in through workload-scoped credentials
 - RCA output is stored in CRD status for GitOps, dashboards, alerting, and automation
+- important RCA claims should become linked to compact evidence references and explicit verification status
 - optional remediation remains guarded and secondary
 
 This project intentionally accepts some YAML and CRD learning cost in exchange for high customizability, provider neutrality, lower default resource usage, and security-first data boundaries.
@@ -77,15 +117,17 @@ The current verified beta candidate includes:
 - `RiskSignal` output with evidence and RCA status
 - `InvestigationRequest` ad-hoc read-only investigation
 - `fluxagent investigate` as a CLI wrapper around `InvestigationRequest`
-- optional `InvestigationRequest` promotion into `RiskSignal`
+- optional linked `RiskSignal` materialization from `InvestigationRequest`
 - webhook notification
 - TTL cleanup for `RiskSignal` and `InvestigationRequest`
 
 The current scope does not include production-grade autonomous remediation.
 
+The current scope also does not yet include the full trustworthy RCA contract. `v0.3` should add root cause verdicts, claims, evidence provenance, alternative hypotheses, missing evidence, degradation metadata, provider execution metadata, and claim verification.
+
 ## Baseline Rule Pack Contract
 
-FluxAgent should not require users to hand-write every initial `RiskRule`, but built-in rules must remain explicit and bounded.
+FluxAgent should not require users to hand-write every initial `RiskRule`, but built-in rules must remain explicit, bounded, and secondary to the RCA workflow.
 
 Rule pack principles:
 
@@ -135,14 +177,15 @@ RiskRule Controller
   -> validate datasource capability
   -> execute detection query
   -> create/update RiskSignal
+  -> optionally trigger InvestigationRequest in future
 
 InvestigationRequest Controller
   -> resolve target
   -> execute evidence queries
   -> redact and normalize evidence
   -> invoke ModelProvider
-  -> update terminal status
-  -> optionally create RiskSignal
+  -> update terminal RCA status
+  -> optionally emit discovered RiskSignal in future
 
 RiskSignal Controller
   -> manage RiskSignal lifecycle and optional downstream guarded planning
@@ -188,6 +231,8 @@ Expected implementations include:
 
 FluxAgent's open-source product line intentionally does not include CLI agent runtimes, subscription-session runners, or Kubernetes pods that mount developer-local interactive auth caches. RCA reasoning is provided through `ModelProvider` using either the no-secret heuristic provider or workload-scoped API credentials for OpenAI, Claude, and Gemini.
 
+`ModelProvider` is the current `v1alpha1` name. Before a breaking API cut, evaluate whether the abstraction should become `ReasoningProvider` to cover heuristic, hosted model APIs, and future RCA runtime providers without implying that every provider is a model.
+
 The core permission rule is:
 
 ```text
@@ -197,6 +242,56 @@ LLM autonomous execution
 ```
 
 These capabilities must not all be granted to the same pod or ServiceAccount.
+
+## Trustworthy RCA Contract
+
+The next major product hardening target is a structured RCA contract.
+
+The contract should make this relationship explicit:
+
+```text
+Claim
+-> Evidence reference
+-> Verification status
+```
+
+Required status concepts:
+
+- verdict summary
+- root cause entity
+- root cause type
+- confidence
+- claims
+- evidence references
+- alternative hypotheses
+- missing evidence
+- degradation and partial failure metadata
+- provider execution metadata
+
+Verification values should distinguish at least:
+
+- `Supported`
+- `Inferred`
+- `Unsupported`
+- `Contradicted`
+- `Unverified`
+
+Important RCA statements without evidence references must not be represented as fully supported conclusions.
+
+Evidence provenance should preserve compact metadata even when raw payloads are not stored:
+
+- datasource
+- capability
+- query digest
+- time range
+- collected timestamp
+- content digest
+- redaction profile
+- truncation flag
+- original size
+- retention policy
+
+The first verifier can be heuristic. It should check whether each claim cites evidence, whether the evidence type is relevant, whether contradictory evidence exists, and whether confidence is consistent with evidence coverage.
 
 ## CRD Contract Requirements
 
@@ -285,9 +380,9 @@ Expected matrix:
 | Primary and fallback provider both fail | Mark provider unavailable or specific provider failure |
 | Provider response has invalid schema | Mark `InvalidProviderResponse`; do not persist incorrect RCA |
 | Notification fails | Preserve successful RCA; mark notification degraded |
-| RiskSignal promotion fails | Preserve successful investigation; mark promotion failed |
+| Linked RiskSignal creation fails | Preserve successful investigation; mark signal creation failed |
 
-Workflow success, RCA success, notification success, and promotion success must remain separate dimensions.
+Workflow success, RCA success, notification success, and linked signal creation success must remain separate dimensions.
 
 ## Evidence Storage Boundary
 
