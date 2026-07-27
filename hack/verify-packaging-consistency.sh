@@ -17,8 +17,14 @@ fi
 chart_yaml="$root/charts/kube-ai-sre/Chart.yaml"
 values_yaml="$root/charts/kube-ai-sre/values.yaml"
 
+actual_chart_name="$(awk -F': *' '$1 == "name" {print $2; exit}' "$chart_yaml" | tr -d '"')"
 actual_chart_version="$(awk -F': *' '$1 == "version" {print $2; exit}' "$chart_yaml" | tr -d '"')"
 actual_app_version="$(awk -F': *' '$1 == "appVersion" {print $2; exit}' "$chart_yaml" | tr -d '"')"
+
+if [[ "$actual_chart_name" != "fluxagent" ]]; then
+  echo "chart name mismatch: expected fluxagent, got $actual_chart_name" >&2
+  exit 1
+fi
 
 if [[ "$actual_chart_version" != "$chart_version" ]]; then
   echo "chart version mismatch: expected $chart_version, got $actual_chart_version" >&2

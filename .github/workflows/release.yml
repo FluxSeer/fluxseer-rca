@@ -23,6 +23,7 @@ env:
   TARGET_PLATFORM: linux/amd64
   HARBOR_PROJECT: fluxseer
   HARBOR_REPOSITORY_PREFIX: fluxagent
+  CHART_NAME: fluxagent
 
 jobs:
   publish:
@@ -250,7 +251,7 @@ jobs:
           mkdir -p "dist/release-$version"
           helm lint charts/kube-ai-sre
           helm package charts/kube-ai-sre --destination "dist/release-$version"
-          package="dist/release-$version/kube-ai-sre-$chart_version.tgz"
+          package="dist/release-$version/${CHART_NAME}-$chart_version.tgz"
           package_abs="$PWD/$package"
           shasum -a 256 "$package" | sed "s#  dist/release-$version/#  #" > "dist/release-$version/SHA256SUMS"
           package_sha="$(cut -d' ' -f1 "dist/release-$version/SHA256SUMS")"
@@ -265,7 +266,7 @@ jobs:
         run: |
           set -euo pipefail
           chart_version="${{ steps.release.outputs.chart_version }}"
-          chart_ref="oci://${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts/kube-ai-sre"
+          chart_ref="oci://${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts/${CHART_NAME}"
           if helm show chart "$chart_ref" --version "$chart_version" >/tmp/existing-chart.txt 2>&1; then
             echo "Refusing to overwrite existing Helm chart: $chart_ref:$chart_version" >&2
             cat /tmp/existing-chart.txt >&2
@@ -282,7 +283,7 @@ jobs:
           helm_digest="$(awk '/Digest:/ {print $2; exit}' helm-push.txt)"
           test -n "$helm_digest"
           echo "helm_digest=$helm_digest" >> "$GITHUB_OUTPUT"
-          helm show chart "$chart_ref/kube-ai-sre" --version "${{ steps.release.outputs.chart_version }}"
+          helm show chart "$chart_ref/${CHART_NAME}" --version "${{ steps.release.outputs.chart_version }}"
 
       - name: Write release notes
         id: notes
@@ -311,7 +312,7 @@ jobs:
             - ${{ steps.published.outputs.demo_digest }}
           ## Helm Package
 
-          - kube-ai-sre-$chart_version.tgz
+          - ${CHART_NAME}-$chart_version.tgz
           - SHA256: ${{ steps.chart.outputs.sha256 }}
           - OCI digest: ${{ steps.helm-push.outputs.helm_digest }}
 

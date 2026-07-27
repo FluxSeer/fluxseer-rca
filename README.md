@@ -81,6 +81,27 @@ status:
       name: checkout
     rootCauseType: ConfigurationMismatch
     confidence: 0.91
+  evidenceRefs:
+    - id: evidence-001
+      kind: Log
+      source: prod-loki
+      summary: "checkout attempted Redis connections on port 6379."
+      query: "{namespace=\"prod\",app=\"checkout\"} |= \"redis\""
+      queryDigest: sha256:31d9...
+      timeRange:
+        start: "2026-07-27T06:00:00Z"
+        end: "2026-07-27T06:15:00Z"
+      collectedAt: "2026-07-27T06:16:04Z"
+      contentDigest: sha256:77aa...
+      redacted: true
+      truncated: false
+    - id: evidence-002
+      kind: KubernetesObject
+      source: kubernetes-api
+      summary: "redis Service exposes port 6380."
+      contentDigest: sha256:ab42...
+      redacted: true
+      truncated: false
   claims:
     - id: claim-001
       statement: "checkout connects to Redis on port 6379."
@@ -110,7 +131,9 @@ status:
     durationSeconds: 4
 ```
 
-The current status implements the first structured RCA contract: `verdict`, `claims`, evidence IDs, `degradation`, and `execution` metadata are persisted alongside the compatibility `summary`, `hypothesis`, and `confidence` fields. Deeper claim verification, alternative hypothesis ranking, and richer partial-failure semantics remain `v0.3` hardening work.
+The current status implements the first structured RCA contract: `verdict`, `claims`, evidence IDs, `degradation`, and `execution` metadata are persisted alongside the compatibility `summary`, `hypothesis`, and `confidence` fields. Rich evidence provenance, deeper claim verification, alternative hypothesis ranking, and richer partial-failure semantics remain `v0.3` hardening work.
+
+`confidence` is a provider- or verifier-derived ranking score, not a calibrated probability of correctness.
 
 ## Security Posture
 
@@ -132,12 +155,10 @@ Target RCA architecture:
 
 ```mermaid
 flowchart LR
-    subgraph Inputs[Inputs]
-        Alert[External Alert]
-        Event[Kubernetes Event]
-        Webhook[Webhook]
-        Manual[Manual Question]
-        Rule[RiskRule bootstrap signal]
+    subgraph Producers[InvestigationRequest Producers]
+        Manual[kubectl / CLI]
+        External[Alert or Incident Adapter]
+        Rule[Optional RiskRule]
     end
 
     subgraph Operator[FluxAgent Operator]
@@ -160,12 +181,9 @@ flowchart LR
         Notify[Optional Notification]
     end
 
-    Alert --> IR
-    Event --> IR
-    Webhook --> IR
     Manual --> IR
-    Rule -. optional .-> Risk
-    Risk -. trigger .-> IR
+    External -. external / planned adapter .-> IR
+    Rule -. optional .-> IR
 
     IR --> Collector
     K8s --> Collector
@@ -180,6 +198,8 @@ flowchart LR
 ```
 
 Current `v0.2` implements bounded evidence collection, provider reasoning, status conditions, compact evidence references, and the first structured RCA status fields. Evidence-linked claim verification is the `v0.3` hardening target.
+
+In `v0.2`, external alerting systems integrate by creating `InvestigationRequest` resources through the Kubernetes API. Built-in alert receivers, webhook ingress, Kubernetes Event to `InvestigationRequest` adapters, and `RiskSignal`-triggered reinvestigation are future producer adapters. Reinvestigation must be policy-gated to avoid loops.
 
 Read the long-form architecture in [docs/architecture/overview.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/overview.md:1).
 
@@ -211,17 +231,13 @@ FluxAgent distinguishes runtime, compile-time, and deployment dependency.
 
 The longer-form design constraints are documented in [docs/architecture/dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1).
 
-## Baseline Rule Packs
-
-FluxAgent includes an optional Kubernetes baseline rule pack for first-run bootstrap. It helps a new install surface common workload failure events without requiring users to write their first `RiskRule` by hand, but it is not intended to replace Alertmanager or a production detection platform.
-
-The default chart enables only the Kubernetes Events baseline for Deployments in the release namespace. Prometheus and Loki baselines are opt-in and require user-provided `DataSource` resources. See [docs/helm-rulepacks.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/helm-rulepacks.md:1) for values, rule lists, override examples, and verification commands.
-
 ## Optional Extensions
 
 ### Bootstrap Rule Packs
 
-`RiskRule` and built-in rule packs are optional signal sources. They help a new install produce value without requiring every first rule to be written by hand, but they are not meant to replace a monitoring platform or Alertmanager.
+FluxAgent includes an optional Kubernetes Events rule pack for first-run bootstrap. It helps a new install surface common workload failure events without requiring users to write their first `RiskRule` by hand, but it is not intended to replace Alertmanager or a production detection platform.
+
+See [docs/helm-rulepacks.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/helm-rulepacks.md:1) for configuration and supported rules.
 
 ### Guarded Remediation
 
@@ -243,6 +259,8 @@ Enable this explicitly with `--enable-remediation=true`.
 - `AgentAction`: experimental guarded executable action with approval context
 
 `ModelProvider` is the current `v1alpha1` API name for reasoning backends, including the built-in heuristic path. `v0.3` will review whether this should become `ReasoningProvider` before a breaking API cut.
+
+The current API group is `aiops.platform/v1alpha1`. `v0.3` should review whether the public API group should move to a project-owned group such as `fluxagent.io/v1alpha1` or `aiops.fluxseer.com/v1alpha1` before a `v1beta1` contract.
 
 See:
 
@@ -281,7 +299,7 @@ See:
 
 ```bash
 helm install fluxagent \
-  oci://test-harbor.fluxseer.com/fluxseer/fluxagent/charts/kube-ai-sre \
+  oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent \
   --version 0.2.0-beta.1 \
   --namespace fluxagent-system \
   --create-namespace
@@ -289,9 +307,9 @@ helm install fluxagent \
 kubectl -n fluxagent-system rollout status deployment/fluxagent-controller-manager
 ```
 
-### Run A Read-only Investigation
+### Install Smoke Investigation
 
-Create a Kubernetes Events datasource and a first investigation. Leaving `modelProviderRef` empty uses the built-in heuristic provider, so this path does not require OpenAI, Claude, or Gemini credentials:
+Create a Kubernetes Events datasource and a first smoke investigation. Leaving `modelProviderRef` empty uses the built-in heuristic provider, so this path does not require OpenAI, Claude, or Gemini credentials:
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -331,6 +349,73 @@ kubectl -n fluxagent-system get investigationrequest investigate-fluxagent -o ya
 ```
 
 This writes an `InvestigationRequest`, collects bounded Kubernetes evidence, and stores the RCA in `status.verdict`, `status.claims`, `status.evidenceRefs`, and compatibility summary fields.
+
+`Ready=True` means the workflow produced a consumable terminal status. It does not mean a root cause was confirmed. Inspect `status.phase`, `status.verdict`, `status.claims`, `status.degradation`, and the `RCAReady` / `Degraded` conditions before acting on the result.
+
+### Deterministic RCA Demo
+
+For a more useful first RCA, create a workload with a deterministic readiness failure:
+
+```bash
+kubectl create namespace fluxagent-demo
+
+kubectl -n fluxagent-demo apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken-checkout
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: broken-checkout
+  template:
+    metadata:
+      labels:
+        app: broken-checkout
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /does-not-exist
+              port: 80
+            periodSeconds: 2
+            failureThreshold: 1
+EOF
+
+kubectl -n fluxagent-demo rollout status deployment/broken-checkout --timeout=45s || true
+
+kubectl apply -f - <<'EOF'
+apiVersion: aiops.platform/v1alpha1
+kind: InvestigationRequest
+metadata:
+  name: investigate-broken-checkout
+  namespace: fluxagent-system
+spec:
+  target:
+    namespace: fluxagent-demo
+    kind: Deployment
+    name: broken-checkout
+    apiVersion: apps/v1
+  timeRange:
+    lookback: 15m
+  question: |
+    Why is broken-checkout unavailable?
+  dataSources:
+    - name: kubernetes-events
+  mode: readOnly
+EOF
+
+kubectl -n fluxagent-system wait investigationrequest/investigate-broken-checkout \
+  --for=condition=Ready \
+  --timeout=120s
+
+kubectl -n fluxagent-system get investigationrequest investigate-broken-checkout -o yaml
+```
 
 See:
 
@@ -426,19 +511,19 @@ This target will:
 
 ## Current Scope
 
-FluxAgent is already a working open-source project, but it is not yet a production-grade remediation platform.
+FluxAgent is a working open-source RCA control plane, but its RCA contract and adapter reliability are not yet production-hardened across all environments.
 
 Implemented today:
 
-- read-only `RiskSignal` generation flow
-- `InvestigationRequest` ad-hoc RCA flow with configurable `queries[]`
-- optional discovered `RiskSignal` materialization from an `InvestigationRequest`
+- `InvestigationRequest`-based read-only RCA workflow with configurable `queries[]`
+- first structured RCA status contract with verdicts, claims, evidence IDs, degradation, and execution metadata
+- bounded Kubernetes Events, Prometheus, and Loki evidence collection
+- heuristic, OpenAI, Claude, and Gemini reasoning paths
+- optional discovered `RiskSignal` materialization
+- optional bootstrap `RiskRule -> RiskSignal` flow
 - controller-runtime manager and reconcilers
-- Prometheus, Loki, and Kubernetes Events adapter implementations
 - webhook notification flow
 - provider-neutral model abstractions
-- heuristic model-provider runtime path
-- hosted OpenAI, Gemini, and Claude model-provider runtime adapters
 - optional guarded remediation path
 - kind demo scaffolding
 

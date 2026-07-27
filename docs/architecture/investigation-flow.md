@@ -37,6 +37,8 @@ InvestigationRequest
 
 This path is the current bounded read-only RCA flow. It calls `ModelProvider` for structured reasoning over collected evidence. FluxAgent's supported open-source path does not run long-lived CLI agent runtimes or reuse developer-local interactive sessions.
 
+In `v0.2`, external alerting systems integrate by creating `InvestigationRequest` resources through the Kubernetes API. Built-in alert receivers, webhook ingress, and Kubernetes Event to `InvestigationRequest` adapters are future producer adapters.
+
 ## Why This Path Exists
 
 `RiskRule` answers recurring policy questions:
@@ -127,6 +129,12 @@ That default is important because:
 - read-only investigation should stay cheap and low-side-effect
 
 When `createRiskSignal: true`, FluxAgent can emit a discovered `RiskSignal` for downstream workflows. The RCA itself remains on `InvestigationRequest.status`; the linked `RiskSignal` is a materialized finding, not a replacement for the investigation result.
+
+Discovered `RiskSignal` emission must preserve lineage and avoid loops:
+
+- emitted signals should reference the source investigation through annotation or status metadata
+- discovered signals should not automatically trigger another `InvestigationRequest` by default
+- future reinvestigation policies must enforce fingerprint deduplication, maximum investigation depth, and cooldowns
 
 ## Safety Boundary
 
