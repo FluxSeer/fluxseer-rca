@@ -27,7 +27,7 @@ The long-term product positioning is intentionally broader than the current rele
 - read-only by default
 - evidence-first investigation and RCA
 - Kubernetes-native workflow state through CRDs
-- optional AI-assisted reasoning, with heuristic and local providers remaining valid paths
+- optional AI-assisted reasoning, with heuristic default plus OpenAI, Claude, and Gemini API providers
 - datasource and model-provider neutrality through adapter contracts
 - graceful degradation for optional integrations
 - guarded remediation as an opt-in secondary path
@@ -110,28 +110,9 @@ Expected implementations include:
 - `HeuristicProvider`
 - `OpenAIProvider`
 - `ClaudeProvider`
-- other hosted or local completion providers
+- `GeminiProvider`
 
-`InvestigationExecutor` is the future abstraction for long-running, tool-using agent workflows:
-
-```text
-InvestigationRequest
--> InvestigationExecutor
--> bounded tool calls, repository inspection, log queries, and verification commands
--> InvestigationResult
-```
-
-Expected implementations may include:
-
-- `CodexExecutor`
-- `ClaudeAgentExecutor`
-- `StaticExecutor`
-
-Codex SDK, Codex CLI, Claude Agent SDK, and Claude Code can all run in a runner, VM, Kubernetes Job, or pod. They should not be modeled as ordinary `ModelProvider` implementations when they perform multi-turn tool use, repository checkout, shell execution, test execution, or pull-request generation.
-
-Workload credentials for these runtimes must be independent, revocable, and scoped to the workload. Acceptable patterns include project-scoped API keys, service-account API keys, enterprise access tokens, or future supported workload identity mechanisms. FluxAgent must not package a developer's local interactive session, OAuth cache, ChatGPT session, or Codex Remote session as cluster infrastructure credentials.
-
-Long-running LLM or agent loops should not execute inside the controller reconcile path. Controllers should create or observe bounded worker jobs, calculate idempotency from request generation and evidence digests, and record usage and terminal status.
+FluxAgent's open-source product line intentionally does not include CLI agent runtimes, subscription-session runners, or Kubernetes pods that mount developer-local interactive auth caches. RCA reasoning is provided through `ModelProvider` using either the no-secret heuristic provider or workload-scoped API credentials for OpenAI, Claude, and Gemini.
 
 The core permission rule is:
 

@@ -35,20 +35,7 @@ InvestigationRequest
 → optional RiskSignal
 ```
 
-This path is the current bounded read-only RCA flow. It calls `ModelProvider` for structured reasoning over collected evidence, but it does not run a long-lived agent runtime.
-
-Future deep investigation should add an explicit executor boundary:
-
-```text
-InvestigationRequest
-→ controller-owned execution key
-→ Investigation Worker / Kubernetes Job
-→ Codex SDK/CLI, Claude Agent SDK, or static executor
-→ InvestigationResult
-→ InvestigationRequest.status
-```
-
-That executor path is separate from `ModelProvider` because it may perform multi-turn tool use, repository checkout, additional read-only cluster inspection, command execution, or test execution.
+This path is the current bounded read-only RCA flow. It calls `ModelProvider` for structured reasoning over collected evidence. FluxAgent's supported open-source path does not run long-lived CLI agent runtimes or reuse developer-local interactive sessions.
 
 ## Why This Path Exists
 
@@ -150,40 +137,29 @@ This path should not:
 - call executors
 - mutate workloads
 - require chat or UI infrastructure
-- depend on a developer's local interactive Codex, Claude, or ChatGPT session
+- depend on a developer's local interactive model or CLI session
 
 It should produce investigation output only.
 
-Pod or runner based investigation executors must use independent workload-scoped credentials. Acceptable patterns include project-scoped API keys, service-account API keys, enterprise access tokens, or future supported workload identity mechanisms. Local OAuth caches, interactive CLI auth files, ChatGPT sessions, and Codex Remote sessions should not become Kubernetes secrets.
+Investigation workflows use `ModelProvider` with heuristic output by default or workload-scoped OpenAI, Claude, and Gemini API credentials when hosted RCA is enabled. Local OAuth caches, interactive CLI auth files, and personal chat sessions are not supported Kubernetes credentials.
 
-## Future Executor Controls
+## Provider Controls
 
-Future `InvestigationExecutor` requests should carry explicit scope and budget controls.
+Hosted `ModelProvider` requests should carry explicit provider and budget controls.
 
 Example shape:
 
 ```yaml
 spec:
   evidenceDigest: sha256:...
-  executor:
-    type: codex
-    model: codex-capable-model
-  scope:
-    clusterAccess: read-only
-    namespaces:
-      - production
-    repository:
-      url: github.com/example/payment-api
-      revision: 7d21c3f
-      writeAccess: false
+  providerRef:
+    name: openai-provider
   budget:
-    maxInputTokens: 500000
-    maxOutputTokens: 50000
-    maxToolCalls: 40
-    maxDurationSeconds: 900
+    maxInputTokens: 20000
+    maxOutputTokens: 2000
+    maxDurationSeconds: 30
   output:
-    mode: rca-and-patch-proposal
-    createPullRequest: false
+    mode: rca
 ```
 
 Execution idempotency should include:
@@ -192,11 +168,10 @@ Execution idempotency should include:
 InvestigationRequest UID
 + metadata.generation
 + evidenceDigest
-+ executorConfigDigest
-+ repositoryCommitSHA
++ providerConfigDigest
 ```
 
-For the same execution key, the controller should observe the existing result instead of starting another paid model or agent run. If evidence, spec, executor configuration, or repository revision changes, FluxAgent can create a new execution key and attempt.
+For the same execution key, the controller should observe the existing result instead of starting another paid model call. If evidence, spec, or provider configuration changes, FluxAgent can create a new execution key and attempt.
 
 ## Future Entry Points
 

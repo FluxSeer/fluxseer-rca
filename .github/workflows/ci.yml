@@ -16,7 +16,6 @@ on:
       - "internal/**"
       - "test/**"
       - "Dockerfile"
-      - "Dockerfile.agent-executor"
       - "Makefile"
       - "go.mod"
       - "go.sum"
@@ -249,34 +248,11 @@ jobs:
             BUILD_DATE=${{ steps.meta.outputs.build_date }}
             SOURCE_DATE_EPOCH=${{ steps.meta.outputs.source_date_epoch }}
 
-      - name: Build and push test Codex agent executor image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.agent-executor
-          platforms: ${{ env.TARGET_PLATFORM }}
-          push: true
-          provenance: false
-          sbom: false
-          tags: ${{ steps.meta.outputs.registry }}/${{ env.HARBOR_PROJECT }}/${{ env.HARBOR_REPOSITORY_PREFIX }}/agent-executor-codex:${{ steps.meta.outputs.image_tag }}
-          labels: |
-            com.fluxseer.ci.image-tag=${{ steps.meta.outputs.image_tag }}
-            com.fluxseer.ci.branch=test
-            com.fluxseer.ci.run-id=${{ github.run_id }}
-            com.fluxseer.ci.run-attempt=${{ github.run_attempt }}
-          build-args: |
-            VERSION=test
-            GIT_COMMIT=${{ github.sha }}
-            GIT_DIRTY=false
-            BUILD_DATE=${{ steps.meta.outputs.build_date }}
-            SOURCE_DATE_EPOCH=${{ steps.meta.outputs.source_date_epoch }}
-
       - name: Write test image summary
         run: |
           {
             echo "### FluxAgent test image"
             echo "- Operator image: ${{ steps.meta.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/operator:${{ steps.meta.outputs.image_tag }}"
-            echo "- Codex executor image: ${{ steps.meta.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/agent-executor-codex:${{ steps.meta.outputs.image_tag }}"
             echo "- Branch: test"
             echo "- Commit: ${GITHUB_SHA}"
           } >> "$GITHUB_STEP_SUMMARY"

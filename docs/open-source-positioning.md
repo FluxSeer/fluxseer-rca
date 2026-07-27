@@ -24,7 +24,7 @@ FluxAgent is positioned as a Kubernetes-native SRE investigation control plane w
 ## What Stays Neutral
 
 - Prometheus, Loki, CloudWatch, and OpenTelemetry are adapters, not hard dependencies.
-- OpenAI, Claude, Gemini, Bedrock, and local models are provider choices, not platform assumptions.
+- OpenAI API, Claude API, and Gemini API are provider choices, not platform assumptions.
 - GitOps and notifications are preferred integration points for higher-risk actions.
 - fake observability endpoints in the demo are for validation convenience, not a claim that FluxAgent owns the user's monitoring stack.
 - CLI and future UI surfaces should wrap CRDs such as `RiskRule` and `InvestigationRequest` rather than define a separate execution truth.

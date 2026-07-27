@@ -28,9 +28,6 @@ spec:
             - --health-probe-bind-address={{ .Values.controller.healthProbeBindAddress }}
             - --leader-elect={{ .Values.controller.enableLeaderElection }}
             - --enable-remediation={{ .Values.controller.enableRemediation }}
-            {{- if .Values.controller.enableAgentAnalysis }}
-            - --enable-agent-analysis={{ .Values.controller.enableAgentAnalysis }}
-            {{- end }}
             {{- range .Values.controller.extraArgs }}
             - {{ . | quote }}
             {{- end }}

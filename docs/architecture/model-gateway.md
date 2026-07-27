@@ -21,8 +21,6 @@ Implemented provider packages:
 - `openai`
 - `claude`
 - `gemini`
-- `bedrock`
-- `local`
 
 See [internal/model](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/model:1).
 
@@ -57,7 +55,7 @@ Today the runnable path defaults to the heuristic provider. That choice is delib
 - repeatable local demos
 - safer open-source first-run story
 
-The heuristic provider remains the default runnable path. The local HTTP endpoint is the simplest non-heuristic runtime path, and hosted `openai`, `claude`, and `gemini` adapters are also wired through `ModelProvider`.
+The heuristic provider remains the default runnable path. Hosted `openai`, `claude`, and `gemini` adapters are the supported external API paths through `ModelProvider`.
 
 ## Architecture Diagram
 
@@ -68,11 +66,9 @@ flowchart LR
     MG[Model Gateway]
     PR[Provider Interface]
     H[heuristic]
-    O[openai scaffold]
-    C[claude scaffold]
-    G[gemini scaffold]
-    B[bedrock scaffold]
-    L[local endpoint]
+    O[openai api]
+    C[claude api]
+    G[gemini api]
     GR[Guardrails]
     EX[Executors]
 
@@ -83,8 +79,6 @@ flowchart LR
     PR --> O
     PR --> C
     PR --> G
-    PR --> B
-    PR --> L
     MG --> CRD
     CRD --> GR
     GR --> EX
@@ -112,17 +106,7 @@ The provider should not directly own:
 
 Those responsibilities stay in CRD controllers, guardrails, and executors.
 
-## Agent Runtime Boundary
-
-Codex SDK, Codex CLI, Claude Agent SDK, and Claude Code can be deployed in runners, VMs, Kubernetes Jobs, or pods. When they perform multi-turn tool use, repository inspection, command execution, test execution, or patch proposal, they are agent runtimes rather than model providers.
-
-FluxAgent should model those runtimes behind a separate future executor contract:
-
-```go
-type InvestigationExecutor interface {
-    Execute(ctx context.Context, request InvestigationRequest) (*InvestigationResult, error)
-}
-```
+## Execution Boundary
 
 The model gateway remains for bounded reasoning:
 
@@ -132,15 +116,7 @@ EvidenceBundle
 -> structured RCA output
 ```
 
-Agent runtime credentials must be workload-scoped and revocable. Do not package developer-local ChatGPT sessions, Codex Remote sessions, OAuth caches, or interactive CLI auth files as Kubernetes secrets.
-
-At minimum, runtime identities should be separated by role:
-
-- `fluxagent-controller`: manages FluxAgent CRDs and bounded worker jobs, but does not read provider secret contents or mutate business workloads
-- `fluxagent-investigator`: reads approved namespaces, logs, events, and metrics, but does not modify workloads or push to Git
-- `fluxagent-remediator`: operates on repositories and pull requests, but does not directly write to production clusters
-
-Production Kubernetes write access, Git repository write access, and autonomous LLM execution must not be combined in the same pod identity.
+FluxAgent does not package CLI agent runtimes or developer-local interactive auth caches as a supported path. Hosted providers must use workload-scoped API credentials referenced by `ModelProvider`.
 
 ## Design Rules
 
@@ -148,8 +124,7 @@ Production Kubernetes write access, Git repository write access, and autonomous 
 - Guardrails must evaluate actions after reasoning, not inside the provider.
 - Runtime should stay functional when no remote model is configured.
 - Provider integrations should be swappable without CRD schema changes.
-- Agent runtimes should use executor contracts, not `ModelProvider`, when they run tools or inspect repositories.
-- Paid model or agent execution must be idempotent across controller restarts and leader transitions.
+- Paid model execution must be idempotent across controller restarts and leader transitions.
 
 ## Implementation Status
 
@@ -158,15 +133,9 @@ Implemented today:
 - provider interface
 - provider registry
 - heuristic provider for runnable local behavior
-- local endpoint provider wired into runtime configuration
 - provider-bound evidence redaction before reasoning calls
 - hosted `openai`, `claude`, and `gemini` adapters
 - `fallbackProviderRef` failover between `ModelProvider` objects for provider and secret related failures
 - shared hosted-provider timeout, HTTP status mapping, and transient retry policy
-
-Scaffolded today:
-
-- `bedrock`
-- opt-in `AgentExecutor` CLI job lifecycle for Codex, Claude, and Gemini style runtimes
 
 This is why the model gateway should be described as an extensibility seam with a runnable heuristic default and guarded hosted-provider support, not as a fully integrated multi-provider production inference layer.

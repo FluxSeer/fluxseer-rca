@@ -23,9 +23,7 @@ docs/
 │  ├─ riskrule.md
 │  ├─ risksignal.md
 │  ├─ remediationplan.md
-│  ├─ agentaction.md
-│  ├─ agentexecutor.md
-│  └─ agentanalysisresult.md
+│  └─ agentaction.md
 ├─ adapters/
 │  ├─ prometheus.md
 │  ├─ loki.md
@@ -34,7 +32,6 @@ docs/
 └─ tutorials/
    ├─ quickstart-kind.md
    ├─ investigate-workload.md
-   ├─ use-codex-subscription-runner.md
    ├─ enable-prometheus.md
    ├─ enable-loki.md
    ├─ enable-remediation.md
@@ -59,7 +56,6 @@ docs/
 - [releases/v0.2.0-alpha.2.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-alpha.2.md:1)
 - [tutorials/quickstart-kind.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/quickstart-kind.md:1)
 - [tutorials/investigate-workload.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/investigate-workload.md:1)
-- [tutorials/use-codex-subscription-runner.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/use-codex-subscription-runner.md:1)
 - [tutorials/enable-hosted-model-providers.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/enable-hosted-model-providers.md:1)
 - [github-repo.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/github-repo.md:1)
 
@@ -76,7 +72,7 @@ docs/
 - Product positioning: Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
 - Current release scope: `v0.2` focuses on read-only RCA workflows and is a verified beta candidate.
 - `RemediationPlan` and `AgentAction` are available as guarded expansion paths.
-- `AgentExecutor` and `AgentAnalysisResult` are opt-in CLI analysis scaffolds for Codex, Claude, and Gemini style runtimes.
+- Hosted model integrations are limited to OpenAI API, Claude API, and Gemini API; heuristic remains the no-secret default.
 - Prometheus, Loki, and Kubernetes Events adapters are wired into the runnable demo path.
 - Prometheus and Loki remain optional adapters even when the demo wires them through a fake observability service.
 - `InvestigationRequest` is now the operator-first investigation entrypoint for ad-hoc RCA and optional `RiskSignal` promotion.

@@ -161,7 +161,7 @@ Target outcomes:
 5. Build an internal `EvidenceBundle` model.
 6. Redact evidence before any model-provider request.
 7. Support heuristic mode as a first-class `ModelProvider` path.
-8. Support at least one non-heuristic provider or local model endpoint.
+8. Support at least one hosted API provider through `ModelProvider`.
 9. Generate structured RCA summaries and persist them into `RiskSignal`.
 10. Include RCA summary content in notification output.
 11. Update the kind demo to be `RiskRule`-driven.
