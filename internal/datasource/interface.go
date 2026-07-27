@@ -25,13 +25,14 @@ type QueryResult struct {
 }
 
 type Capabilities struct {
-	Metrics      bool
-	Logs         bool
-	Events       bool
-	Traces       bool
-	RangeQuery   bool
-	InstantQuery bool
-	LabelQuery   bool
+	Metrics              bool
+	Logs                 bool
+	Events               bool
+	DeploymentConditions bool
+	Traces               bool
+	RangeQuery           bool
+	InstantQuery         bool
+	LabelQuery           bool
 }
 
 func (c Capabilities) SupportsQueryType(queryType domain.QueryType) bool {
@@ -42,6 +43,8 @@ func (c Capabilities) SupportsQueryType(queryType domain.QueryType) bool {
 		return c.Logs
 	case domain.QueryTypeEvent:
 		return c.Events
+	case domain.QueryTypeDeploymentCondition:
+		return c.DeploymentConditions
 	case domain.QueryTypeTrace:
 		return c.Traces
 	default:

@@ -12,13 +12,19 @@ Implementation source: [internal/datasource/kubernetes/adapter.go](/Users/czhuan
 
 ## Query Behavior
 
-Current behavior:
+Current event behavior:
 
 - list `Event` objects in the target namespace
 - match by involved object name or kind
 - return `reason`, `message`, `type`, and `object`
 
-This is intentionally simple for `v0.1`, but already sufficient for a runnable risk path.
+Deployment condition behavior:
+
+- read the selected `Deployment` status directly
+- return condition `type`, `status`, `reason`, and `message`
+- support `queryType: deploymentCondition`
+
+The Kubernetes adapter stays read-only and does not require a separate in-cluster service.
 
 ## Event Keywords
 
