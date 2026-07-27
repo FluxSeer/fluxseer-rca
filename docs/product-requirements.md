@@ -118,6 +118,11 @@ rulePacks:
 
 The Kubernetes baseline may rely on the built-in Kubernetes Events datasource adapter. Prometheus and Loki baselines may reference `DataSource` names but must not create those datasources or install those systems.
 
+Verification contract:
+
+- `make verify-rule-packs` validates Helm rendering, stable rule names, labels, disabled-by-default optional packs, and absence of implicit datasource or provider creation.
+- `make verify-rule-packs-kind` installs the chart into kind, triggers a Kubernetes baseline event, and verifies `RiskSignal` plus heuristic RCA status.
+
 ## Workflow Ownership
 
 Controllers own Kubernetes workflow state transitions. Shared orchestration should live in internal services instead of controller-to-controller calls.
