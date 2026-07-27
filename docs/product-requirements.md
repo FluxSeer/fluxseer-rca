@@ -258,6 +258,7 @@ Claim
 Required status concepts:
 
 - verdict summary: implemented
+- verdict outcome: target
 - root cause entity: implemented
 - root cause type: implemented
 - confidence: implemented
@@ -300,6 +301,21 @@ Evidence provenance should preserve compact metadata even when raw payloads are 
 - retention policy
 
 The first verifier can be heuristic. It should check whether each claim cites evidence, whether the evidence type is relevant, whether contradictory evidence exists, and whether confidence is consistent with evidence coverage.
+
+Confidence is a ranking signal from the provider or verifier. It must not be documented as a calibrated probability of correctness unless a future evaluator explicitly calibrates it.
+
+Execution metadata should support audit and comparison:
+
+- provider reference and generation
+- provider type
+- model name
+- reasoning policy version
+- controller version
+- attempt count
+- duration
+- token usage when available
+
+Discovered-signal emission must carry lineage and avoid investigation loops. By default, a `RiskSignal` emitted from an `InvestigationRequest` should not automatically trigger another investigation unless an explicit reinvestigation policy opts in and maximum depth, fingerprint deduplication, and cooldown constraints are satisfied.
 
 ## CRD Contract Requirements
 
