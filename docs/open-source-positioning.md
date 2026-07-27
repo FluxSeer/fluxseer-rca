@@ -1,6 +1,6 @@
 # Open Source Positioning
 
-FluxAgent is positioned as a Kubernetes-native SRE investigation control plane with optional AI-assisted reasoning, not as a bot tied to one monitoring stack and not as a general-purpose agent shell first.
+FluxAgent is positioned as a Kubernetes-native control plane for evidence-verifiable RCA, not as a bot tied to one monitoring stack and not as a general-purpose agent shell first.
 
 FluxAgent favors explicit Kubernetes-native configuration over automatic discovery. It is for teams that want to define investigation scope, datasource boundaries, and model-provider choices themselves, accepting some CRD learning cost in exchange for customizability, low default resource usage, and auditability.
 
@@ -8,7 +8,7 @@ Security is part of the product positioning. FluxAgent is read-only by default, 
 
 ## What Is Open Source Here
 
-- CRD contracts: `DataSource`, `RiskRule`, `ModelProvider`, `RiskSignal`, `RemediationPlan`, `AgentAction`
+- CRD contracts: `InvestigationRequest`, `DataSource`, `RiskRule`, `ModelProvider`, `RiskSignal`, `RemediationPlan`, `AgentAction`
 - controller-runtime reconciliation loop
 - read-only investigation workflow contracts
 - datasource adapter interfaces
@@ -34,7 +34,8 @@ Security is part of the product positioning. FluxAgent is read-only by default, 
 - OpenAI API, Claude API, and Gemini API are provider choices, not platform assumptions.
 - GitOps and notifications are preferred integration points for higher-risk actions.
 - fake observability endpoints in the demo are for validation convenience, not a claim that FluxAgent owns the user's monitoring stack.
-- CLI and future UI surfaces should wrap CRDs such as `RiskRule` and `InvestigationRequest` rather than define a separate execution truth.
+- CLI and future UI surfaces should wrap `InvestigationRequest` rather than define a separate execution truth.
+- `RiskRule` remains an optional bootstrap signal source rather than the center of product identity.
 - raw secrets, authorization headers, unredacted evidence, provider prompts, and provider raw responses should not be stored as default CRD status.
 
 ## Product Direction
@@ -43,7 +44,7 @@ The intended near-term distinction is:
 
 ```text
 general agent platform: not the first goal
-operator-first investigation control plane: current early goal
+evidence-verifiable RCA control plane: current product goal
 ```
 
 That means the current early investigation layer is:
@@ -51,9 +52,11 @@ That means the current early investigation layer is:
 - ad-hoc investigation requests
 - reusable investigation orchestration
 - auditable RCA results
+- evidence-linked claims and verification status
 
 It does not mean:
 
 - direct model-to-tool execution
 - large chat-first UX work
 - remediation-first expansion
+- competing on the largest rule catalog

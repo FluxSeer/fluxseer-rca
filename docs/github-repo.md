@@ -10,11 +10,11 @@ This file contains suggested GitHub repository settings for FluxAgent.
 
 Short description:
 
-`Kubernetes-native AI SRE Agent Operator for proactive risk detection, RCA assistance, and guarded remediation.`
+`Kubernetes-native control plane for evidence-verifiable root cause analysis.`
 
 Alternative shorter version:
 
-`Kubernetes-native AI SRE operator for RiskSignal, RCA, and guarded remediation workflows.`
+`CRD-first RCA workflow and audit contract for Kubernetes platforms.`
 
 ## Suggested Topics
 
@@ -38,8 +38,7 @@ Alternative shorter version:
 ```markdown
 # FluxAgent
 
-Kubernetes-native AI SRE Agent Operator for proactive risk detection,
-RCA assistance, and guarded remediation.
+Kubernetes-native control plane for evidence-verifiable RCA.
 ```
 
 ## Release Plan
@@ -84,12 +83,15 @@ RCA assistance, and guarded remediation.
 
 For the first public release, lead with:
 
-- read-only risk detection
-- operator-native CRD contracts
-- provider-neutral architecture
-- safe, demoable kind workflow
+- read-only RCA workflows
+- `InvestigationRequest` as the primary operator-native entrypoint
+- evidence collection through explicit datasource contracts
+- compact evidence and RCA status in Kubernetes
+- provider-neutral reasoning with heuristic default
 
 Do not lead with:
 
 - full autonomous remediation
 - production-ready self-healing claims
+- largest Kubernetes analyzer catalog
+- all-in-one observability ownership

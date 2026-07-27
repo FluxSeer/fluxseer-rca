@@ -2,29 +2,115 @@
 
 Kubernetes-native SRE RCA control plane for teams that want explicit, auditable, and security-first AI-assisted investigation.
 
-Current release: `v0.2.0-alpha.2`
+Current release: `v0.2.0-beta.1`
 
-Status: `v0.2 alpha+ / early v0.3 alpha`
+Status: `v0.2 read-only RCA beta / early v0.3 RCA contract hardening`
 
-FluxAgent turns Kubernetes Events, Prometheus metrics, Loki logs, and deployment context into `RiskSignal`, `InvestigationRequest`, and optional guarded remediation workflows.
+FluxAgent turns production signals and operator questions into structured, evidence-linked RCA resources in Kubernetes.
 
-FluxAgent exists for platform teams that prefer native Kubernetes configuration over a black-box AI agent. Users declare what matters through CRDs such as `RiskRule`, `DataSource`, `ModelProvider`, and `InvestigationRequest`; FluxAgent collects bounded evidence, redacts it, and produces RCA status that can be audited, rendered in dashboards, or consumed by GitOps and alerting systems.
+FluxAgent exists for platform teams that need to answer:
 
-Core logic is designed to stay adapter-neutral: Kubernetes, Prometheus, Loki, and model vendors are integrations, not the product's hard-coded identity. FluxAgent does not install or own your observability stack, does not assume a preferred AI model, and does not run autonomous CLI agents in the cluster.
+```text
+What evidence did this RCA use?
+Which claims are supported, inferred, or missing evidence?
+Which datasources failed or degraded?
+Can this investigation be audited, replayed, and compared later?
+```
+
+FluxAgent is the Kubernetes control plane and audit contract around RCA. It is not an all-in-one monitoring stack, not a free-form cluster agent, and not an autonomous production remediation system.
 
 ## Why FluxAgent
 
-- Kubernetes-native: CRD + Controller + Reconcile Loop
-- Explicit configuration over black-box discovery: users define targets, datasources, and AI providers through Kubernetes resources
-- Read-only first: the default path does not mutate workloads
-- Security-first: evidence is redacted before hosted model calls, and heuristic RCA works without external data transfer
-- Provider-neutral: OpenAI API, Claude API, Gemini API, and heuristic fallback
-- Low default footprint: optional adapters remain opt-in instead of installing a full monitoring or agent stack
-- Observability-native: Prometheus, Loki, Kubernetes Events, OpenTelemetry
-- Guardrails-first: policy, dry-run, approval, and audit before execution
-- GitOps-first: prefer pull requests over direct production patching
-- Optional adapters: Prometheus, Loki, model APIs, and remediation remain opt-in
-- Operator-first investigation: `InvestigationRequest` turns ad-hoc RCA into a first-class CRD and CLI flow
+FluxAgent is built around four product decisions:
+
+- Evidence-linked RCA over free-form incident prose.
+- Kubernetes CRD status as the durable workflow and audit surface.
+- Dependency-neutral evidence collection from existing Kubernetes, Prometheus, and Loki sources.
+- Read-only default behavior with heuristic RCA available without external API calls.
+
+This positioning is intentionally narrower than a general AI SRE agent. `RiskRule` is an optional bootstrap signal source, not an attempt to replace Alertmanager or own all Kubernetes detection. Remediation CRDs are optional extensions, not the default product path.
+
+## Minimum Flow
+
+```mermaid
+flowchart LR
+    Signal[Alert / Event / Webhook / Manual Question]
+    IR[InvestigationRequest]
+    Evidence[Bounded Evidence Collection]
+    Reasoning[Reasoning Provider]
+    Verify[Claim Verification]
+    RCA[Structured RCA Status]
+
+    Signal --> IR
+    IR --> Evidence
+    Evidence --> Reasoning
+    Reasoning --> Verify
+    Verify --> RCA
+```
+
+The current `v0.2` release already supports the operator-first part of this flow:
+
+```text
+InvestigationRequest
+-> Kubernetes Events / Prometheus / Loki evidence
+-> heuristic, OpenAI, Claude, or Gemini RCA
+-> status conditions and compact evidence references
+```
+
+The `v0.3` direction is to harden this into a trustworthy RCA contract:
+
+```text
+Claim
+-> Evidence reference
+-> Verification status
+```
+
+## Example RCA Status
+
+The long-term status contract should make important claims machine-checkable instead of returning only Markdown prose:
+
+```yaml
+status:
+  phase: Completed
+  verdict:
+    summary: "checkout is failing because it is configured for the wrong Redis port."
+    rootCauseEntity:
+      apiVersion: apps/v1
+      kind: Deployment
+      namespace: prod
+      name: checkout
+    rootCauseType: ConfigurationMismatch
+    confidence: 0.91
+  claims:
+    - id: claim-1
+      statement: "checkout connects to Redis on port 6379."
+      evidenceRefs:
+        - evidence-logs-001
+      verification: Supported
+    - id: claim-2
+      statement: "redis Service exposes port 6380."
+      evidenceRefs:
+        - evidence-k8s-003
+      verification: Supported
+  alternativeHypotheses:
+    - statement: "Redis is unavailable."
+      disposition: Rejected
+      evidenceRefs:
+        - evidence-prom-004
+  missingEvidence:
+    - source: traces
+      reason: DataSourceNotConfigured
+  degradation:
+    partial: true
+    unavailableSources:
+      - loki-secondary
+  execution:
+    provider: heuristic-provider
+    attempts: 1
+    durationSeconds: 4
+```
+
+The current status is smaller than this target contract. The example above defines the direction for `v0.3`.
 
 ## Security Posture
 
@@ -42,70 +128,73 @@ This trades some first-run convenience for lower default resource usage, stronge
 
 ## Architecture
 
+Target RCA architecture:
+
 ```mermaid
 flowchart LR
-    subgraph Sources[Signal Sources]
-        K8sEvents[Kubernetes Events]
-        Prom[Prometheus]
-        Loki[Loki]
-        DeployCtx[Deployment Context]
+    subgraph Inputs[Inputs]
+        Alert[External Alert]
+        Event[Kubernetes Event]
+        Webhook[Webhook]
+        Manual[Manual Question]
+        Rule[RiskRule bootstrap signal]
     end
 
     subgraph Operator[FluxAgent Operator]
-        Scan[Deployment Risk Scanner]
-        Detect[Read-only Detector]
-        Risk[RiskSignal CRD]
-        Notify[Webhook Notifier]
-        Plan[RemediationPlan Controller]
-        Action[AgentAction Controller]
-        Guard[Guardrails Engine]
-        Exec[Executor Router]
+        IR[InvestigationRequest Controller]
+        Collector[Evidence Collector]
+        Redactor[Redactor]
+        Gateway[Reasoning Gateway]
+        Verifier[Claim Verifier]
     end
 
-    subgraph Adapters[Adapter Layer]
-        DS[Datasource Registry]
-        MG[Model Gateway]
+    subgraph Sources[Evidence Sources]
+        K8s[Kubernetes API / Events]
+        Prom[Prometheus]
+        Loki[Loki]
     end
 
     subgraph Outputs[Outputs]
-        Webhook[Slack / LINE / Teams Webhook]
-        GitOps[GitOps PR]
-        K8sExec[Kubernetes / Runbook Action]
+        Status[Structured RCA Status]
+        Risk[Optional RiskSignal]
+        Notify[Optional Notification]
     end
 
-    K8sEvents --> DS
-    Prom --> DS
-    Loki --> DS
-    DeployCtx --> Scan
-    DS --> Detect
-    Scan --> Detect
-    Detect --> Risk
-    Risk --> Notify
-    Notify --> Webhook
+    Alert --> IR
+    Event --> IR
+    Webhook --> IR
+    Manual --> IR
+    Rule -. optional .-> Risk
+    Risk -. trigger .-> IR
 
-    Risk -. optional .-> Plan
-    MG -. supports .-> Plan
-    Plan --> Guard
-    Guard --> Action
-    Action --> Exec
-    Exec --> GitOps
-    Exec --> K8sExec
+    IR --> Collector
+    K8s --> Collector
+    Prom --> Collector
+    Loki --> Collector
+    Collector --> Redactor
+    Redactor --> Gateway
+    Gateway --> Verifier
+    Verifier --> Status
+    Status --> Risk
+    Status --> Notify
 ```
+
+Current `v0.2` implements bounded evidence collection, provider reasoning, status conditions, and compact RCA summaries. Evidence-linked claim verification is the `v0.3` hardening target.
 
 Read the long-form architecture in [docs/architecture/overview.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/overview.md:1).
 
 ## Runtime Modes
 
-### `v0.1` Read-only RiskSignal Operator
+### Read-only RCA Control Plane
 
-This is the default mode when you run `cmd/manager`.
+This is the default mode when you run the operator.
 
-- watches annotated `Deployment` resources and `RiskRule` resources
-- queries Kubernetes Events
-- optionally queries Prometheus and Loki when manager env vars or `DataSource` resources are configured
-- creates `RiskSignal`
-- sends webhook notifications
-- does not create `RemediationPlan` or `AgentAction`
+- accepts `InvestigationRequest` objects for ad-hoc or externally triggered RCA
+- collects bounded evidence from declared datasources
+- redacts evidence before hosted provider calls
+- stores RCA output in CRD status
+- may create `RiskSignal` from optional bootstrap rules or investigation results
+- does not create `RemediationPlan` or `AgentAction` unless guarded remediation is explicitly enabled
 
 ## Dependency Matrix
 
@@ -158,7 +247,13 @@ make verify-rule-packs       # Helm render contract
 make verify-rule-packs-kind  # kind smoke: baseline evidence -> RiskSignal -> heuristic RCA
 ```
 
-### Optional Guarded Remediation
+## Optional Extensions
+
+### Bootstrap Rule Packs
+
+`RiskRule` and built-in rule packs are optional signal sources. They help a new install produce value without requiring every first rule to be written by hand, but they are not meant to replace a monitoring platform or Alertmanager.
+
+### Guarded Remediation
 
 Enable this explicitly with `--enable-remediation=true`.
 
@@ -170,12 +265,12 @@ Enable this explicitly with `--enable-remediation=true`.
 ## Core CRDs
 
 - `RiskRule`: read-only detection rule definition
-- `InvestigationRequest`: ad-hoc investigation request with RCA and optional `RiskSignal` promotion
+- `InvestigationRequest`: ad-hoc investigation request with RCA and optional linked `RiskSignal`
 - `DataSource`: optional datasource runtime configuration
 - `ModelProvider`: provider-neutral reasoning backend configuration
 - `RiskSignal`: observed risk with evidence and confidence
-- `RemediationPlan`: proposed, reviewable mitigation workflow
-- `AgentAction`: guarded executable action with approval context
+- `RemediationPlan`: experimental proposed mitigation workflow
+- `AgentAction`: experimental guarded executable action with approval context
 
 See:
 
@@ -233,7 +328,7 @@ GOWORK=off go run ./cmd/fluxagent investigate deployment open-api \
   --wait
 ```
 
-This writes an `InvestigationRequest` CRD, waits for RCA completion, and optionally promotes the result into `RiskSignal`.
+This writes an `InvestigationRequest` CRD, waits for RCA completion, and can optionally materialize a linked `RiskSignal` for downstream workflows.
 
 See:
 
@@ -311,10 +406,10 @@ For a full end-to-end validation of the kind flow, run:
 make verify-e2e-kind
 ```
 
-`verify-e2e-kind` is the main `v0.2 alpha` release gate. It now covers both:
+`verify-e2e-kind` is part of the `v0.2` beta validation set. It covers both:
 
 - the read-only `RiskRule -> RiskSignal` path
-- the operator-first `InvestigationRequest -> RCA -> RiskSignal` path
+- the operator-first `InvestigationRequest -> RCA -> linked RiskSignal` path
 
 For the operator-first investigation path, run:
 
@@ -341,7 +436,7 @@ Implemented today:
 
 - read-only `RiskSignal` generation flow
 - `InvestigationRequest` ad-hoc RCA flow with configurable `queries[]`
-- optional `InvestigationRequest -> RiskSignal` promotion path
+- optional linked `RiskSignal` materialization from an `InvestigationRequest`
 - controller-runtime manager and reconcilers
 - Prometheus, Loki, and Kubernetes Events adapter implementations
 - webhook notification flow
