@@ -155,7 +155,7 @@ Verification is split by cost:
 
 ```sh
 make verify-rule-packs       # Helm render contract
-make verify-rule-packs-kind  # kind smoke: baseline event -> RiskSignal -> heuristic RCA
+make verify-rule-packs-kind  # kind smoke: baseline evidence -> RiskSignal -> heuristic RCA
 ```
 
 ### Optional Guarded Remediation
