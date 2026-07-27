@@ -149,6 +149,13 @@ The Kubernetes baseline detects common workload failure events:
 
 Prometheus and Loki baselines are opt-in and require users to provide matching `DataSource` resources. This keeps FluxAgent useful after install while preserving explicit scope, low default resource usage, and control over which evidence can leave the cluster.
 
+Verification is split by cost:
+
+```sh
+make verify-rule-packs       # Helm render contract
+make verify-rule-packs-kind  # kind smoke: baseline event -> RiskSignal -> heuristic RCA
+```
+
 ### Optional Guarded Remediation
 
 Enable this explicitly with `--enable-remediation=true`.
