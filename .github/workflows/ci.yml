@@ -261,7 +261,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish-main-image:
-    name: Publish Main Image
+    name: Publish Main Artifacts
     runs-on: [self-hosted, Linux, X64, fluxagent-prod]
     needs: [verify, image-identity]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -271,6 +271,7 @@ jobs:
     env:
       OCI_REGISTRY: ghcr.io
       OCI_REPOSITORY_NAME: fluxagent
+      CHART_NAME: fluxagent
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -306,7 +307,10 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Resolve main image metadata
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Resolve main artifact metadata
         id: meta
         shell: bash
         env:
@@ -317,12 +321,15 @@ jobs:
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           repository_prefix="$owner/${OCI_REPOSITORY_NAME}"
           image_tag="main-${GITHUB_SHA::7}"
+          chart_version="0.2.0-main.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}.g${GITHUB_SHA::7}"
           source_date_epoch="$(git show -s --format=%ct HEAD)"
           build_date="$(./hack/source-date.sh "$source_date_epoch")"
           printf '%s' "$GHCR_TOKEN" | docker login "$registry" --username "$GITHUB_ACTOR" --password-stdin
+          printf '%s' "$GHCR_TOKEN" | helm registry login "$registry" --username "$GITHUB_ACTOR" --password-stdin
           echo "registry=$registry" >> "$GITHUB_OUTPUT"
           echo "repository_prefix=$repository_prefix" >> "$GITHUB_OUTPUT"
           echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+          echo "chart_version=$chart_version" >> "$GITHUB_OUTPUT"
           echo "source_date_epoch=$source_date_epoch" >> "$GITHUB_OUTPUT"
           echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
 
@@ -348,11 +355,29 @@ jobs:
             BUILD_DATE=${{ steps.meta.outputs.build_date }}
             SOURCE_DATE_EPOCH=${{ steps.meta.outputs.source_date_epoch }}
 
-      - name: Write main image summary
+      - name: Package and push main Helm chart
+        shell: bash
+        run: |
+          set -euo pipefail
+          chart_ref="oci://${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.repository_prefix }}/charts"
+          mkdir -p "dist/main-${GITHUB_SHA::7}"
+          helm lint charts/kube-ai-sre
+          helm package charts/kube-ai-sre \
+            --version "${{ steps.meta.outputs.chart_version }}" \
+            --app-version "${{ steps.meta.outputs.image_tag }}" \
+            --destination "dist/main-${GITHUB_SHA::7}"
+          helm push "dist/main-${GITHUB_SHA::7}/${CHART_NAME}-${{ steps.meta.outputs.chart_version }}.tgz" "$chart_ref" | tee helm-push.txt
+          helm_digest="$(awk '/Digest:/ {print $2; exit}' helm-push.txt)"
+          test -n "$helm_digest"
+          echo "HELM_DIGEST=$helm_digest" >> "$GITHUB_ENV"
+
+      - name: Write main artifact summary
         run: |
           {
-            echo "### FluxAgent main image"
+            echo "### FluxAgent main artifacts"
             echo "- Operator image: ${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.repository_prefix }}/operator:${{ steps.meta.outputs.image_tag }}"
+            echo "- Helm chart: oci://${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.repository_prefix }}/charts/${CHART_NAME} --version ${{ steps.meta.outputs.chart_version }}"
+            echo "- Helm digest: ${HELM_DIGEST}"
             echo "- Branch: main"
             echo "- Commit: ${GITHUB_SHA}"
           } >> "$GITHUB_STEP_SUMMARY"
