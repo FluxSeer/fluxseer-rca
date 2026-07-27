@@ -14,6 +14,9 @@ on:
 
 permissions:
   contents: write
+  packages: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: fluxagent-release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
@@ -21,8 +24,8 @@ concurrency:
 
 env:
   TARGET_PLATFORM: linux/amd64
-  HARBOR_PROJECT: fluxseer
-  HARBOR_REPOSITORY_PREFIX: fluxagent
+  OCI_REGISTRY: ghcr.io
+  OCI_REPOSITORY_NAME: fluxagent
   CHART_NAME: fluxagent
 
 jobs:
@@ -118,29 +121,24 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Resolve Harbor registry
-        id: harbor
+      - name: Log in to GHCR
+        id: registry
         shell: bash
         env:
-          SECRET_REGISTRY: ${{ secrets.CI_HARBOR_REGISTRY }}
-          SECRET_USER: ${{ secrets.CI_HARBOR_GHA_USER }}
-          SECRET_TOKEN: ${{ secrets.CI_HARBOR_GHA_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          registry="${SECRET_REGISTRY:-${CI_HARBOR_REGISTRY:-}}"
-          user="${SECRET_USER:-${CI_HARBOR_GHA_USER:-}}"
-          token="${SECRET_TOKEN:-${CI_HARBOR_GHA_TOKEN:-}}"
-          if [ -z "$registry" ] || [ -z "$user" ] || [ -z "$token" ]; then
-            echo "CI_HARBOR_REGISTRY, CI_HARBOR_GHA_USER, and CI_HARBOR_GHA_TOKEN are required" >&2
+          registry="${OCI_REGISTRY}"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repository_prefix="$owner/${OCI_REPOSITORY_NAME}"
+          if [ -z "$GHCR_TOKEN" ]; then
+            echo "GitHub token is required for GHCR release publication" >&2
             exit 1
           fi
-          if [ "$user" = "harbor_registry_user" ]; then
-            echo "Refusing to use Harbor internal registry credentials for release publication" >&2
-            exit 1
-          fi
-          printf '%s' "$token" | docker login "$registry" --username "$user" --password-stdin
-          helm registry login "$registry" --username "$user" --password-stdin <<<"$token"
+          printf '%s' "$GHCR_TOKEN" | docker login "$registry" --username "$GITHUB_ACTOR" --password-stdin
+          printf '%s' "$GHCR_TOKEN" | helm registry login "$registry" --username "$GITHUB_ACTOR" --password-stdin
           echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "repository_prefix=$repository_prefix" >> "$GITHUB_OUTPUT"
 
       - name: Verify release-managed packaging
         shell: bash
@@ -149,17 +147,18 @@ jobs:
             VERSION="${{ steps.release.outputs.version }}" \
             IMAGE_TAG="${{ steps.release.outputs.version }}" \
             TARGET_PLATFORM="${TARGET_PLATFORM}" \
-            IMAGE_REPOSITORY="${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/operator" \
-            DEMO_IMAGE_REPOSITORY="${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/demo-observability"
+            IMAGE_REPOSITORY="${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/operator" \
+            DEMO_IMAGE_REPOSITORY="${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/demo-observability"
 
       - name: Check immutable image tags do not exist
         shell: bash
         run: |
           set -euo pipefail
-          registry="${{ steps.harbor.outputs.registry }}"
+          registry="${{ steps.registry.outputs.registry }}"
+          repository_prefix="${{ steps.registry.outputs.repository_prefix }}"
           version="${{ steps.release.outputs.version }}"
           for image in operator demo-observability; do
-            ref="$registry/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/$image:$version"
+            ref="$registry/$repository_prefix/$image:$version"
             if docker buildx imagetools inspect "$ref" >/tmp/existing-image.txt 2>&1; then
               echo "Refusing to overwrite existing image tag: $ref" >&2
               cat /tmp/existing-image.txt >&2
@@ -182,7 +181,7 @@ jobs:
           push: true
           provenance: false
           sbom: false
-          tags: ${{ steps.harbor.outputs.registry }}/${{ env.HARBOR_PROJECT }}/${{ env.HARBOR_REPOSITORY_PREFIX }}/operator:${{ steps.release.outputs.version }}
+          tags: ${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/operator:${{ steps.release.outputs.version }}
           build-args: |
             VERSION=${{ steps.release.outputs.version }}
             GIT_COMMIT=${{ steps.git.outputs.git_commit }}
@@ -200,7 +199,7 @@ jobs:
           push: true
           provenance: false
           sbom: false
-          tags: ${{ steps.harbor.outputs.registry }}/${{ env.HARBOR_PROJECT }}/${{ env.HARBOR_REPOSITORY_PREFIX }}/demo-observability:${{ steps.release.outputs.version }}
+          tags: ${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/demo-observability:${{ steps.release.outputs.version }}
           build-args: |
             VERSION=${{ steps.release.outputs.version }}
             GIT_COMMIT=${{ steps.git.outputs.git_commit }}
@@ -213,7 +212,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          registry="${{ steps.harbor.outputs.registry }}"
+          registry="${{ steps.registry.outputs.registry }}"
+          repository_prefix="${{ steps.registry.outputs.repository_prefix }}"
           version="${{ steps.release.outputs.version }}"
           git_commit="${{ steps.git.outputs.git_commit }}"
           build_date="${{ steps.git.outputs.build_date }}"
@@ -222,7 +222,7 @@ jobs:
             image="$1"
             binary="$2"
             title="$3"
-            ref="$registry/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/$image:$version"
+            ref="$registry/$repository_prefix/$image:$version"
             docker pull --platform "${TARGET_PLATFORM}" "$ref" >&2
             json="$(docker run --rm --platform "${TARGET_PLATFORM}" --entrypoint "$binary" "$ref" version --output=json)"
             test "$(jq -r '.version' <<<"$json")" = "$version"
@@ -266,7 +266,7 @@ jobs:
         run: |
           set -euo pipefail
           chart_version="${{ steps.release.outputs.chart_version }}"
-          chart_ref="oci://${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts/${CHART_NAME}"
+          chart_ref="oci://${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/charts/${CHART_NAME}"
           if helm show chart "$chart_ref" --version "$chart_version" >/tmp/existing-chart.txt 2>&1; then
             echo "Refusing to overwrite existing Helm chart: $chart_ref:$chart_version" >&2
             cat /tmp/existing-chart.txt >&2
@@ -278,7 +278,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          chart_ref="oci://${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts"
+          chart_ref="oci://${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/charts"
           helm push "${{ steps.chart.outputs.package }}" "$chart_ref" | tee helm-push.txt
           helm_digest="$(awk '/Digest:/ {print $2; exit}' helm-push.txt)"
           test -n "$helm_digest"
@@ -306,9 +306,9 @@ jobs:
 
           ## Published Images
 
-          - ${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/operator:$version
+          - ${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/operator:$version
             - ${{ steps.published.outputs.operator_digest }}
-          - ${{ steps.harbor.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/demo-observability:$version
+          - ${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/demo-observability:$version
             - ${{ steps.published.outputs.demo_digest }}
           ## Helm Package
 
@@ -419,8 +419,8 @@ jobs:
             echo "- Helm package SHA256: ${{ steps.chart.outputs.sha256 }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Log out of Harbor
-        if: always() && steps.harbor.outputs.registry != ''
+      - name: Log out of GHCR
+        if: always() && steps.registry.outputs.registry != ''
         run: |
-          docker logout "${{ steps.harbor.outputs.registry }}" || true
-          helm registry logout "${{ steps.harbor.outputs.registry }}" || true
+          docker logout "${{ steps.registry.outputs.registry }}" || true
+          helm registry logout "${{ steps.registry.outputs.registry }}" || true
