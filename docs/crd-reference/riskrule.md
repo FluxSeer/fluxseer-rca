@@ -14,9 +14,16 @@ Current preferred signal fields:
 - `queryType`
 - `queryTemplate`
 - `threshold`
-- `reasons` for event-oriented rules
+- `reasons` for event-oriented or deployment-condition rules
 
 Legacy `type` and `query` fields are still accepted as a compatibility path.
+
+Supported query types include:
+
+- `metric`
+- `log`
+- `event`
+- `deploymentCondition`
 
 ## Status Conditions
 

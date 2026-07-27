@@ -38,6 +38,8 @@ func ParseQueryType(raw string) (domain.QueryType, bool) {
 		return domain.QueryTypeLog, true
 	case "event", "events", "kubernetesevent":
 		return domain.QueryTypeEvent, true
+	case "deploymentcondition", "deploymentconditions":
+		return domain.QueryTypeDeploymentCondition, true
 	case "trace", "traces", "opentelemetry":
 		return domain.QueryTypeTrace, true
 	default:
@@ -92,6 +94,8 @@ func EvaluateSignal(signal v1alpha1.RiskRuleSignal, queryType domain.QueryType, 
 		return evaluateLokiSignal(signal, result, target, severity)
 	case domain.QueryTypeEvent:
 		return evaluateKubernetesEventSignal(signal, result, target, severity)
+	case domain.QueryTypeDeploymentCondition:
+		return evaluateDeploymentConditionSignal(signal, result, target, severity)
 	default:
 		return nil
 	}
@@ -204,6 +208,66 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 				Source:  result.Source,
 				Reason:  firstReason,
 				Summary: fmt.Sprintf("%s (matched %d events)", firstMessage, matchCount),
+			},
+		}, evidence...),
+	}
+}
+
+func evaluateDeploymentConditionSignal(signal v1alpha1.RiskRuleSignal, result *datasource.QueryResult, target domain.ResourceRef, severity string) *Match {
+	reasons := make([]string, 0, len(signal.Reasons))
+	for _, reason := range signal.Reasons {
+		reasons = append(reasons, strings.ToLower(strings.TrimSpace(reason)))
+	}
+	if len(reasons) == 0 {
+		reasons = []string{"available=false", "progressing=false", "replicafailure=true", "progressdeadlineexceeded", "minimumreplicasunavailable"}
+	}
+
+	evidence := make([]v1alpha1.EvidenceRef, 0, 3)
+	matchCount := 0
+	firstSummary := ""
+	firstReason := ""
+	for _, record := range result.Records {
+		conditionType, _ := record["type"].(string)
+		status, _ := record["status"].(string)
+		reason, _ := record["reason"].(string)
+		message, _ := record["message"].(string)
+		lower := strings.ToLower(fmt.Sprintf("%s=%s %s %s", conditionType, status, reason, message))
+		for _, expected := range reasons {
+			if !strings.Contains(lower, expected) {
+				continue
+			}
+			matchCount++
+			if firstSummary == "" {
+				firstReason = reason
+				firstSummary = fmt.Sprintf("%s=%s %s", conditionType, status, message)
+			}
+			if len(evidence) < 3 {
+				evidence = append(evidence, v1alpha1.EvidenceRef{
+					Kind:    "deploymentCondition",
+					Source:  result.Source,
+					Reason:  reason,
+					Summary: fmt.Sprintf("%s=%s %s", conditionType, status, message),
+				})
+			}
+			break
+		}
+	}
+	if !compareThreshold(float64(matchCount), normalizeCountThreshold(signal.Threshold)) {
+		return nil
+	}
+	if matchCount == 0 {
+		return nil
+	}
+	return &Match{
+		Signal:   signal,
+		Severity: severity,
+		Summary:  fmt.Sprintf("%s detected %d matching deployment conditions for %s", signal.Name, matchCount, target.Name),
+		Evidence: append([]v1alpha1.EvidenceRef{
+			{
+				Kind:    "deploymentCondition",
+				Source:  result.Source,
+				Reason:  firstReason,
+				Summary: fmt.Sprintf("%s (matched %d deployment conditions)", firstSummary, matchCount),
 			},
 		}, evidence...),
 	}

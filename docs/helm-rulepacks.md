@@ -75,6 +75,8 @@ When `defaultTargetSelector.namespaceSelector.matchNames` is omitted, the chart 
 
 ## Override Examples
 
+The Kubernetes baseline combines Kubernetes Events with `deploymentCondition` checks, so it can detect an unavailable Deployment even when the relevant Event stream is incomplete.
+
 Limit scanning to app namespaces:
 
 ```yaml

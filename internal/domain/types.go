@@ -34,10 +34,11 @@ type Signal struct {
 type QueryType string
 
 const (
-	QueryTypeMetric QueryType = "metric"
-	QueryTypeLog    QueryType = "log"
-	QueryTypeTrace  QueryType = "trace"
-	QueryTypeEvent  QueryType = "event"
+	QueryTypeMetric              QueryType = "metric"
+	QueryTypeLog                 QueryType = "log"
+	QueryTypeTrace               QueryType = "trace"
+	QueryTypeEvent               QueryType = "event"
+	QueryTypeDeploymentCondition QueryType = "deploymentCondition"
 )
 
 type TimelineEvent struct {

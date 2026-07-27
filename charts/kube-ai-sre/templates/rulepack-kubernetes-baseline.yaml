@@ -68,10 +68,11 @@ spec:
     - name: deployment-unavailable
       datasourceRef:
         name: kubernetes-events
-      queryType: event
+      queryType: deploymentCondition
       reasons:
-        - FailedCreate
-        - FailedReplicaCreate
+        - Available=False
+        - Progressing=False
+        - ReplicaFailure=True
         - ProgressDeadlineExceeded
         - MinimumReplicasUnavailable
       threshold:
