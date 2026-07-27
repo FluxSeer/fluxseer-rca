@@ -14,7 +14,7 @@ It complements `RiskRule`:
 - target one workload now
 - collect evidence from selected datasources
 - run RCA through `ModelProvider` or the built-in heuristic provider
-- optionally promote the result into a `RiskSignal`
+- optionally emit a discovered `RiskSignal` when the investigation finds a materialized risk
 
 It does not execute remediation.
 
@@ -202,7 +202,7 @@ These fields preserve the v0.2 read-only RCA surface for humans and existing scr
 - `inputTokens`
 - `outputTokens`
 
-When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to the promoted `RiskSignal`.
+When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to the emitted `RiskSignal`. The RCA itself remains on `InvestigationRequest.status`; the linked `RiskSignal` represents a materialized finding for downstream workflows, not the canonical RCA result.
 
 If `ttlSeconds` is greater than zero, FluxAgent keeps the completed request for that many seconds after `status.completedAt`, then deletes it automatically.
 
@@ -210,7 +210,7 @@ Status hardening target:
 
 - terminal phase should be explicit and should not require callers to infer completion from conditions alone
 - future terminal phases should distinguish `Succeeded`, `Failed`, `PartiallySucceeded`, `Cancelled`, and `Expired`
-- workflow completion, RCA readiness, notification, and `RiskSignal` promotion should remain separate result dimensions
+- workflow completion, RCA readiness, notification, and discovered-signal emission should remain separate result dimensions
 
 ## Conditions
 
@@ -244,7 +244,7 @@ Current execution path:
 3. validate query types against datasource capabilities
 4. collect and normalize evidence
 5. run RCA
-6. optionally promote into `RiskSignal`
+6. optionally emit a discovered `RiskSignal`
 
 For the same object generation, terminal requests are not re-executed on later reconciles. Spec changes create a new generation and trigger a fresh run.
 

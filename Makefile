@@ -20,7 +20,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.2-alpha verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.2-alpha verify-v0.2-beta verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -134,10 +134,12 @@ verify-investigation-kind:
 verify-lifecycle-kind:
 	VERSION=$(VERSION) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) bash test/e2e/kind/verify_lifecycle_kind.sh
 
-verify-v0.2-alpha:
+verify-v0.2-beta:
 	$(GO) test ./...
 	kubectl kustomize config/default >/tmp/fluxagent-config-default.yaml
 	kubectl kustomize examples/kind >/tmp/fluxagent-kind-example.yaml
+
+verify-v0.2-alpha: verify-v0.2-beta
 
 verify-rule-packs:
 	bash hack/verify-rule-packs.sh
@@ -165,7 +167,7 @@ verify-release-pretag:
 
 verify-release-v0.2-beta:
 	$(MAKE) verify-release-inputs VERSION=$(RELEASE_VERSION)
-	$(MAKE) verify-v0.2-alpha
+	$(MAKE) verify-v0.2-beta
 	$(MAKE) verify-rule-packs
 	$(MAKE) verify-rule-packs-kind VERSION=$(RELEASE_VERSION) IMAGE_TAG=release-rulepack-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
 	$(MAKE) verify-e2e-kind VERSION=$(RELEASE_VERSION) IMAGE_TAG=release-e2e-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)

@@ -32,7 +32,7 @@ InvestigationRequest
 → Evidence Redaction
 → Model Gateway
 → InvestigationRequest.status
-→ optional RiskSignal
+→ optional discovered RiskSignal
 ```
 
 This path is the current bounded read-only RCA flow. It calls `ModelProvider` for structured reasoning over collected evidence. FluxAgent's supported open-source path does not run long-lived CLI agent runtimes or reuse developer-local interactive sessions.
@@ -95,7 +95,7 @@ Suggested sequence:
 5. redact sensitive evidence
 6. call the selected `ModelProvider`
 7. persist summary, hypothesis, confidence, provider, and conditions to status
-8. optionally create a linked `RiskSignal`
+8. optionally emit a linked discovered `RiskSignal`
 9. delete the completed request after `ttlSeconds`, when retention is enabled
 
 ## Status Model
@@ -126,7 +126,7 @@ That default is important because:
 - users may want RCA without opening another workflow object
 - read-only investigation should stay cheap and low-side-effect
 
-When `createRiskSignal: true`, FluxAgent can promote the result into the standard risk workflow.
+When `createRiskSignal: true`, FluxAgent can emit a discovered `RiskSignal` for downstream workflows. The RCA itself remains on `InvestigationRequest.status`; the linked `RiskSignal` is a materialized finding, not a replacement for the investigation result.
 
 ## Safety Boundary
 

@@ -114,16 +114,16 @@ The current verified beta candidate includes:
 - `RiskRule`-driven recurring detection
 - `DataSource`-backed evidence collection
 - `ModelProvider`-backed RCA generation
-- `RiskSignal` output with evidence and RCA status
+- `RiskSignal` output with evidence and RCA status for read-only rule evaluation
 - `InvestigationRequest` ad-hoc read-only investigation
 - `fluxagent investigate` as a CLI wrapper around `InvestigationRequest`
-- optional linked `RiskSignal` materialization from `InvestigationRequest`
+- optional discovered `RiskSignal` materialization from `InvestigationRequest`
 - webhook notification
 - TTL cleanup for `RiskSignal` and `InvestigationRequest`
 
 The current scope does not include production-grade autonomous remediation.
 
-The current scope also does not yet include the full trustworthy RCA contract. `v0.3` should add root cause verdicts, claims, evidence provenance, alternative hypotheses, missing evidence, degradation metadata, provider execution metadata, and claim verification.
+The current scope includes the first structured `InvestigationRequest.status` contract. `v0.3` should harden claim verification, richer evidence provenance, abstention semantics, alternative hypothesis disposition, missing-evidence semantics, and partial-failure behavior.
 
 ## Baseline Rule Pack Contract
 
@@ -163,7 +163,7 @@ The Kubernetes baseline may rely on the built-in Kubernetes Events datasource ad
 Verification contract:
 
 - `make verify-rule-packs` validates Helm rendering, stable rule names, labels, disabled-by-default optional packs, and absence of implicit datasource or provider creation.
-- `make verify-rule-packs-kind` installs the chart into kind, triggers Kubernetes Events, Prometheus, and Loki baseline evidence through fake observability, and verifies `RiskSignal` plus heuristic RCA status.
+- `make verify-rule-packs-kind` installs the chart into kind, triggers Kubernetes Events, Prometheus, and Loki baseline evidence through fake observability, and verifies baseline `RiskSignal` plus heuristic RCA status.
 
 ## Workflow Ownership
 
@@ -278,6 +278,14 @@ Verification values should distinguish at least:
 
 Important RCA statements without evidence references must not be represented as fully supported conclusions.
 
+Verdict outcomes should support abstention instead of forcing a confident answer when evidence is insufficient. Target outcomes:
+
+- `Confirmed`
+- `Probable`
+- `Inconclusive`
+- `NoIssueFound`
+- `ExecutionFailed`
+
 Evidence provenance should preserve compact metadata even when raw payloads are not stored:
 
 - datasource
@@ -368,7 +376,7 @@ Existing reason names should be preserved where already published or tested. New
 
 ## Graceful Degradation Semantics
 
-Graceful degradation means more than avoiding reconcile crashes. Each workflow should distinguish evidence collection, RCA generation, notification, and promotion as separate result dimensions.
+Graceful degradation means more than avoiding reconcile crashes. Each workflow should distinguish evidence collection, RCA generation, notification, and discovered-signal emission as separate result dimensions.
 
 Expected matrix:
 
@@ -380,9 +388,9 @@ Expected matrix:
 | Primary and fallback provider both fail | Mark provider unavailable or specific provider failure |
 | Provider response has invalid schema | Mark `InvalidProviderResponse`; do not persist incorrect RCA |
 | Notification fails | Preserve successful RCA; mark notification degraded |
-| Linked RiskSignal creation fails | Preserve successful investigation; mark signal creation failed |
+| Discovered RiskSignal creation fails | Preserve successful investigation; mark signal creation failed |
 
-Workflow success, RCA success, notification success, and linked signal creation success must remain separate dimensions.
+Workflow success, RCA success, notification success, and discovered-signal emission success must remain separate dimensions.
 
 ## Evidence Storage Boundary
 
