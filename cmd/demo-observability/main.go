@@ -201,12 +201,31 @@ func (s *serverState) isFaulted(app string) bool {
 }
 
 func inferApp(query string) string {
+	for _, marker := range []string{`app="`, `app='`} {
+		if value := valueAfterMarker(query, marker); value != "" {
+			return value
+		}
+	}
 	for _, candidate := range []string{"fluxagent-sample", "payments-api"} {
 		if strings.Contains(query, candidate) {
 			return candidate
 		}
 	}
 	return "unknown-app"
+}
+
+func valueAfterMarker(input, marker string) string {
+	start := strings.Index(input, marker)
+	if start < 0 {
+		return ""
+	}
+	start += len(marker)
+	quote := marker[len(marker)-1]
+	end := strings.IndexByte(input[start:], quote)
+	if end < 0 {
+		return ""
+	}
+	return strings.TrimSpace(input[start : start+end])
 }
 
 func strconvNano(ts time.Time) string {

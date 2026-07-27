@@ -157,4 +157,4 @@ make verify-rule-packs
 make verify-rule-packs-kind
 ```
 
-`verify-rule-packs` checks rendered Helm output. `verify-rule-packs-kind` verifies the Kubernetes Events baseline in a real kind cluster.
+`verify-rule-packs` checks rendered Helm output. `verify-rule-packs-kind` verifies Kubernetes Events, Prometheus, and Loki baselines in a real kind cluster with fake observability.

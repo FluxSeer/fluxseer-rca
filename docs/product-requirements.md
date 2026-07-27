@@ -121,7 +121,7 @@ The Kubernetes baseline may rely on the built-in Kubernetes Events datasource ad
 Verification contract:
 
 - `make verify-rule-packs` validates Helm rendering, stable rule names, labels, disabled-by-default optional packs, and absence of implicit datasource or provider creation.
-- `make verify-rule-packs-kind` installs the chart into kind, triggers a Kubernetes baseline event, and verifies `RiskSignal` plus heuristic RCA status.
+- `make verify-rule-packs-kind` installs the chart into kind, triggers Kubernetes Events, Prometheus, and Loki baseline evidence through fake observability, and verifies `RiskSignal` plus heuristic RCA status.
 
 ## Workflow Ownership
 
