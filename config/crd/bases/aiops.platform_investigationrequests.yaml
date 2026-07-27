@@ -107,6 +107,93 @@ spec:
                   type: number
                 provider:
                   type: string
+                verdict:
+                  type: object
+                  properties:
+                    summary:
+                      type: string
+                    rootCauseEntity:
+                      type: object
+                      properties:
+                        cluster:
+                          type: string
+                        namespace:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        apiVersion:
+                          type: string
+                        service:
+                          type: string
+                    rootCauseType:
+                      type: string
+                    confidence:
+                      type: number
+                claims:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      statement:
+                        type: string
+                      evidenceRefs:
+                        type: array
+                        items:
+                          type: string
+                      verification:
+                        type: string
+                alternativeHypotheses:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      statement:
+                        type: string
+                      disposition:
+                        type: string
+                      evidenceRefs:
+                        type: array
+                        items:
+                          type: string
+                missingEvidence:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      source:
+                        type: string
+                      reason:
+                        type: string
+                degradation:
+                  type: object
+                  properties:
+                    partial:
+                      type: boolean
+                    unavailableSources:
+                      type: array
+                      items:
+                        type: string
+                execution:
+                  type: object
+                  properties:
+                    provider:
+                      type: string
+                    attempts:
+                      type: integer
+                      format: int32
+                    durationSeconds:
+                      type: integer
+                      format: int64
+                    inputTokens:
+                      type: integer
+                      format: int64
+                    outputTokens:
+                      type: integer
+                      format: int64
                 startedAt:
                   type: string
                   format: date-time
@@ -118,6 +205,8 @@ spec:
                   items:
                     type: object
                     properties:
+                      id:
+                        type: string
                       kind:
                         type: string
                       source:

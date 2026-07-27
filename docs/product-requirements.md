@@ -245,7 +245,7 @@ These capabilities must not all be granted to the same pod or ServiceAccount.
 
 ## Trustworthy RCA Contract
 
-The next major product hardening target is a structured RCA contract.
+FluxAgent now includes the first structured RCA status contract for `InvestigationRequest`. The next major product hardening target is to make this contract stricter and more evidence-verifiable across provider adapters and partial-failure cases.
 
 The contract should make this relationship explicit:
 
@@ -257,16 +257,16 @@ Claim
 
 Required status concepts:
 
-- verdict summary
-- root cause entity
-- root cause type
-- confidence
-- claims
-- evidence references
-- alternative hypotheses
-- missing evidence
-- degradation and partial failure metadata
-- provider execution metadata
+- verdict summary: implemented
+- root cause entity: implemented
+- root cause type: implemented
+- confidence: implemented
+- claims: implemented
+- evidence references: implemented with stable IDs
+- degradation and partial failure metadata: first field shape implemented, semantics still hardening
+- provider execution metadata: first field shape implemented
+- alternative hypotheses: field shape implemented, richer ranking still hardening
+- missing evidence: field shape implemented, richer datasource semantics still hardening
 
 Verification values should distinguish at least:
 

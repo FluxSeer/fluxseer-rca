@@ -159,6 +159,7 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 		}
 		filtered := filterQueryResult(queryResult, step)
 		normalized := normalizeEvidenceRefs(filtered, queryRequest)
+		assignEvidenceIDs(normalized, len(evidenceRefs))
 		evidenceRefs = append(evidenceRefs, normalized...)
 		totalRecords += len(filtered.Records)
 	}
@@ -508,6 +509,15 @@ func normalizeEvidenceRef(record map[string]any, result *datasource.QueryResult,
 			Query:   req.Query,
 			Summary: result.Summary,
 		}
+	}
+}
+
+func assignEvidenceIDs(refs []v1alpha1.EvidenceRef, offset int) {
+	for index := range refs {
+		if strings.TrimSpace(refs[index].ID) != "" {
+			continue
+		}
+		refs[index].ID = fmt.Sprintf("evidence-%03d", offset+index+1)
 	}
 }
 

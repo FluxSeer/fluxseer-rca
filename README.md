@@ -82,21 +82,21 @@ status:
     rootCauseType: ConfigurationMismatch
     confidence: 0.91
   claims:
-    - id: claim-1
+    - id: claim-001
       statement: "checkout connects to Redis on port 6379."
       evidenceRefs:
-        - evidence-logs-001
+        - evidence-001
       verification: Supported
-    - id: claim-2
+    - id: claim-002
       statement: "redis Service exposes port 6380."
       evidenceRefs:
-        - evidence-k8s-003
+        - evidence-002
       verification: Supported
   alternativeHypotheses:
     - statement: "Redis is unavailable."
       disposition: Rejected
       evidenceRefs:
-        - evidence-prom-004
+        - evidence-003
   missingEvidence:
     - source: traces
       reason: DataSourceNotConfigured
@@ -110,7 +110,7 @@ status:
     durationSeconds: 4
 ```
 
-The current status is smaller than this target contract. The example above defines the direction for `v0.3`.
+The current status implements the first structured RCA contract: `verdict`, `claims`, evidence IDs, `degradation`, and `execution` metadata are persisted alongside the compatibility `summary`, `hypothesis`, and `confidence` fields. Deeper claim verification, alternative hypothesis ranking, and richer partial-failure semantics remain `v0.3` hardening work.
 
 ## Security Posture
 

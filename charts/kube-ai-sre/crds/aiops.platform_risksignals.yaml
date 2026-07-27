@@ -43,6 +43,7 @@ spec:
                   items:
                     type: object
                     properties:
+                      id: {type: string}
                       kind: {type: string}
                       source: {type: string}
                       summary: {type: string}
