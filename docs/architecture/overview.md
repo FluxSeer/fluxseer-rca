@@ -188,16 +188,12 @@ Current providers:
 - openai
 - claude
 - gemini
-- local
-- bedrock scaffold
 
 The runnable repo defaults to the heuristic provider so the project stays usable without external secrets. The model gateway is a reasoning seam, not an execution authority.
 
 This is the same dependency-neutrality principle as datasources: model vendors are integrations, not core architecture assumptions.
 
-Model providers and agent runtimes are separate architecture concepts. `ModelProvider` covers a single bounded reasoning call over normalized evidence. Future Codex or Claude agent runtimes belong behind an `InvestigationExecutor` or remediation worker boundary when they can check out repositories, run commands, inspect additional systems, or propose code changes.
-
-Pod or runner based agent runtimes must use independent workload-scoped credentials, such as project-scoped API keys, service-account API keys, enterprise access tokens, or future supported workload identity mechanisms. They must not depend on a developer's local ChatGPT, Codex Remote, OAuth cache, or interactive CLI session.
+`ModelProvider` covers a single bounded reasoning call over normalized evidence. The supported external provider surface is limited to workload-scoped OpenAI, Claude, and Gemini API credentials.
 
 ### Future Investigation Executor Boundary
 
@@ -214,17 +210,10 @@ FluxAgent Controller
 
 RCA Worker
 ├─ consume bounded EvidenceBundle
-├─ call OpenAI, Claude, local, or heuristic ModelProvider
+├─ call OpenAI, Claude, Gemini, or heuristic ModelProvider
 ├─ validate structured output
 ├─ record token usage and cost
 └─ update RCA status
-
-Investigation Worker
-├─ run Codex SDK/CLI or Claude Agent SDK
-├─ query additional read-only evidence
-├─ inspect repositories and manifests
-├─ execute bounded verification commands
-└─ produce InvestigationResult
 
 Remediation Worker
 ├─ checkout an exact commit

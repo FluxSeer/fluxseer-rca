@@ -186,7 +186,7 @@ func (g *Gateway) configureProvider(ctx context.Context, provider model.Provider
 
 func requiresAPIKey(providerType string) bool {
 	switch strings.ToLower(strings.TrimSpace(providerType)) {
-	case "openai", "gemini", "claude", "bedrock":
+	case "openai", "gemini", "claude":
 		return true
 	default:
 		return false

@@ -14,7 +14,7 @@ Core logic is designed to stay adapter-neutral: Kubernetes, Prometheus, Loki, an
 
 - Kubernetes-native: CRD + Controller + Reconcile Loop
 - Read-only first: the default `v0.1` path does not mutate production
-- Provider-neutral: OpenAI, Claude, Gemini, Bedrock, Local Model
+- Provider-neutral: OpenAI API, Claude API, Gemini API, and heuristic fallback
 - Observability-native: Prometheus, Loki, Kubernetes Events, OpenTelemetry
 - Guardrails-first: policy, dry-run, approval, and audit before execution
 - GitOps-first: prefer pull requests over direct production patching
@@ -99,8 +99,6 @@ FluxAgent distinguishes runtime, compile-time, and deployment dependency.
 | Prometheus | optional | isolated to adapter packages | not installed by default | metrics datasource |
 | Loki | optional | isolated to adapter packages | not installed by default | logs datasource |
 | External model APIs | optional | isolated to model-provider packages | not installed by default | RCA enrichment |
-| CLI agent runtimes | optional | isolated to `AgentExecutor` jobs | disabled by default | second-pass analysis |
-| Subscription Codex runner | optional | isolated to GitHub workflow + persistent runner | manual by default | second-pass analysis without API key |
 | Remediation executors | optional | isolated to executor packages | disabled by default | guarded expansion path |
 
 The longer-form design constraints are documented in [docs/architecture/dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1).
@@ -123,8 +121,6 @@ Enable this explicitly with `--enable-remediation=true`.
 - `RiskSignal`: observed risk with evidence and confidence
 - `RemediationPlan`: proposed, reviewable mitigation workflow
 - `AgentAction`: guarded executable action with approval context
-- `AgentExecutor`: opt-in CLI runtime configuration for second-pass analysis
-- `AgentAnalysisResult`: lifecycle and output record for CLI-based analysis
 
 See:
 
@@ -135,7 +131,6 @@ See:
 - [config/samples/datasource-loki.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/datasource-loki.yaml:1)
 - [config/samples/datasource-kubernetes-events.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/datasource-kubernetes-events.yaml:1)
 - [config/samples/model-provider.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider.yaml:1)
-- [config/samples/model-provider-local.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-local.yaml:1)
 - [config/samples/model-provider-openai.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-openai.yaml:1)
 - [config/samples/model-provider-gemini.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-gemini.yaml:1)
 - [config/samples/model-provider-claude.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-claude.yaml:1)
@@ -145,15 +140,6 @@ See:
 - [config/samples/risk-signal.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/risk-signal.yaml:1)
 - [config/samples/remediation-plan.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/remediation-plan.yaml:1)
 - [config/samples/agent-action.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-action.yaml:1)
-- [config/samples/agent-executor-codex.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-executor-codex.yaml:1)
-- [config/samples/agent-executor-claude.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-executor-claude.yaml:1)
-- [config/samples/agent-executor-gemini.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-executor-gemini.yaml:1)
-
-Build the Codex executor image locally:
-
-```sh
-make build-agent-executor-image VERSION=dev IMAGE_TAG=dev
-```
 
 ## Repo Layout
 
@@ -305,7 +291,7 @@ Implemented today:
 - Prometheus, Loki, and Kubernetes Events adapter implementations
 - webhook notification flow
 - provider-neutral model abstractions
-- heuristic and local endpoint model-provider runtime paths
+- heuristic model-provider runtime path
 - hosted OpenAI, Gemini, and Claude model-provider runtime adapters
 - optional guarded remediation path
 - kind demo scaffolding

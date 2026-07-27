@@ -14,16 +14,9 @@ controller:
   healthProbeBindAddress: ":8081"
   enableLeaderElection: false
   enableRemediation: false
-  enableAgentAnalysis: false
   extraArgs: []
   extraEnv: []
   resources: {}
-
-agentAnalysis:
-  investigatorServiceAccount:
-    create: true
-    name: fluxagent-investigator
-    imagePullSecrets: []
 
 modelGateway:
   provider: heuristic

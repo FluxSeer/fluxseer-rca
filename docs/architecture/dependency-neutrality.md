@@ -76,7 +76,7 @@ Adapters
   ├─ Kubernetes Events
   ├─ Prometheus
   ├─ Loki
-  ├─ OpenAI / Claude / Gemini / local
+  ├─ OpenAI API / Claude API / Gemini API
   ├─ Webhook
   └─ Kubernetes / GitOps executors
 ```

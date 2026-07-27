@@ -28,7 +28,7 @@ The repository currently represents a verified `v0.2 read-only RCA beta candidat
 - degraded status conditions for missing or incompatible optional dependencies
 - kind demo path that includes happy-path and degraded-path walkthroughs
 - evidence redaction before provider-bound reasoning
-- local endpoint and hosted model-provider runtime support
+- hosted OpenAI, Gemini, and Claude model-provider runtime support
 - hosted provider fallback support through `ModelProvider.spec.fallbackProviderRef`
 - operator-first `InvestigationRequest` workflow for ad-hoc read-only RCA
 - `fluxagent investigate` CLI wrapper around `InvestigationRequest`
@@ -98,7 +98,6 @@ Current `main` has additional post-tag hardening:
 ### Model Providers
 
 - heuristic provider remains the no-secret default path
-- local HTTP endpoint provider is wired into runtime configuration
 - hosted OpenAI, Gemini, and Claude adapters are wired through `ModelProvider`
 - hosted providers share timeout, HTTP status mapping, and transient retry behavior
 - secret and hosted-provider failures surface as RCA readiness/degraded reasons
@@ -127,7 +126,6 @@ The following items are still incomplete or only partially complete:
 - broader multi-cluster and policy hardening work is still pending
 - remediation remains guarded and secondary, not the main product truth
 - OpenTelemetry and CloudWatch remain scaffold-level integrations
-- Bedrock remains scaffolded compared with the currently wired hosted provider paths
 
 ## Practical Version Judgment
 
@@ -221,7 +219,7 @@ Before tagging `v0.2.0-beta.1`:
 1. confirm `git status --short --branch` is still clean and synchronized with `origin/main`
 2. tag the verified commit, not a later unverified commit
 3. keep beta claims limited to a read-only RCA beta with guarded remediation as a secondary path
-4. keep OpenTelemetry, CloudWatch, and Bedrock documented as not production-ready paths
+4. keep OpenTelemetry and CloudWatch documented as not production-ready paths
 5. keep provider and datasource coverage claims limited to the currently wired and tested behavior
 6. confirm CRD YAML and generated code are consistent
 7. confirm release notes, manifests, and release image references correspond to the same commit
