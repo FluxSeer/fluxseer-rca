@@ -29,5 +29,40 @@ dataSources:
     enabled: false
     url: ""
 
+rulePacks:
+  defaultTargetSelector:
+    namespaceSelector: {}
+    workloadSelector:
+      kinds:
+        - Deployment
+  kubernetesBaseline:
+    enabled: true
+    interval: 2m
+    window: 10m
+    severity: warning
+    rcaEnabled: true
+    providerRef:
+      name: ""
+  prometheusBaseline:
+    enabled: false
+    datasourceRef:
+      name: prometheus
+    interval: 2m
+    window: 10m
+    severity: warning
+    rcaEnabled: true
+    providerRef:
+      name: ""
+  lokiBaseline:
+    enabled: false
+    datasourceRef:
+      name: loki
+    interval: 2m
+    window: 10m
+    severity: warning
+    rcaEnabled: true
+    providerRef:
+      name: ""
+
 notification:
   slackWebhookSecretRef: ""

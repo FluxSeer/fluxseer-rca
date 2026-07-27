@@ -94,6 +94,9 @@ jobs:
             IMAGE_REPOSITORY="fluxagent/operator" \
             DEMO_IMAGE_REPOSITORY="fluxagent/demo-observability"
 
+      - name: Verify rule packs
+        run: make verify-rule-packs
+
       - name: Helm lint
         run: helm lint charts/kube-ai-sre
 

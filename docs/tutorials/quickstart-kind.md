@@ -12,6 +12,8 @@ This is the fastest end-to-end demo path for FluxAgent.
 - a fake observability service that simulates Prometheus, Loki, webhook, and hosted-provider failure endpoints
 - a fault injection flow that produces a read-only `RiskSignal`
 
+Helm installs also include a Kubernetes Events baseline rule pack by default. The kind demo keeps its explicit sample `RiskRule` so the walkthrough remains deterministic, but the chart baseline is available for users who want immediate coverage without writing their first rule from scratch.
+
 ## Prerequisites
 
 - Docker

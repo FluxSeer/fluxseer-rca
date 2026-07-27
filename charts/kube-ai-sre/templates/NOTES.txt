@@ -1,7 +1,8 @@
-FluxAgent is installed as a Kubernetes-native AI SRE Agent Operator.
+FluxAgent is installed as a Kubernetes-native RCA control plane.
 
 Next steps:
 
-1. Create datasource and model secrets or config.
-2. Apply a RiskSignal sample.
-3. Watch RemediationPlan and AgentAction resources.
+1. Inspect the default Kubernetes Events baseline RiskRule:
+   kubectl get riskrule -n {{ .Release.Namespace }}
+2. Create optional Prometheus, Loki, or hosted model provider resources only when you want those integrations.
+3. Watch RiskSignal and InvestigationRequest status for read-only RCA output.
