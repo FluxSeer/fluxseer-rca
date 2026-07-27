@@ -14,7 +14,7 @@ FluxAgent exists for platform teams that need to answer:
 What evidence did this RCA use?
 Which claims are supported, inferred, or missing evidence?
 Which datasources failed or degraded?
-Can this investigation be audited, replayed, and compared later?
+Can this investigation be audited, reproduced from recorded query metadata, and compared later?
 ```
 
 FluxAgent is the Kubernetes control plane and audit contract around RCA. It is not an all-in-one monitoring stack, not a free-form cluster agent, and not an autonomous production remediation system.
@@ -38,7 +38,7 @@ flowchart LR
     IR[InvestigationRequest]
     Evidence[Bounded Evidence Collection]
     Reasoning[Reasoning Provider]
-    Verify[Claim Verification]
+    Verify["Claim Verification<br/>(v0.3 target)"]
     RCA[Structured RCA Status]
 
     Signal --> IR
@@ -48,16 +48,16 @@ flowchart LR
     Verify --> RCA
 ```
 
-The current `v0.2` release already supports the operator-first part of this flow:
+The current `v0.2` release supports the operator-first RCA path:
 
 ```text
 InvestigationRequest
 -> Kubernetes Events / Prometheus / Loki evidence
 -> heuristic, OpenAI, Claude, or Gemini RCA
--> status conditions and compact evidence references
+-> structured status with compact evidence references
 ```
 
-The `v0.3` direction is to harden this into a trustworthy RCA contract:
+The `v0.3` direction is to harden claim verification into a stricter RCA contract:
 
 ```text
 Claim
@@ -67,7 +67,7 @@ Claim
 
 ## Example RCA Status
 
-The long-term status contract should make important claims machine-checkable instead of returning only Markdown prose:
+The v0.3 target status contract makes important RCA claims machine-checkable instead of returning only Markdown prose:
 
 ```yaml
 status:
@@ -156,7 +156,7 @@ flowchart LR
 
     subgraph Outputs[Outputs]
         Status[Structured RCA Status]
-        Risk[Optional RiskSignal]
+        Risk[Optional Discovered RiskSignal]
         Notify[Optional Notification]
     end
 
@@ -175,11 +175,11 @@ flowchart LR
     Redactor --> Gateway
     Gateway --> Verifier
     Verifier --> Status
-    Status --> Risk
+    Status -. discovered risk .-> Risk
     Status --> Notify
 ```
 
-Current `v0.2` implements bounded evidence collection, provider reasoning, status conditions, and compact RCA summaries. Evidence-linked claim verification is the `v0.3` hardening target.
+Current `v0.2` implements bounded evidence collection, provider reasoning, status conditions, compact evidence references, and the first structured RCA status fields. Evidence-linked claim verification is the `v0.3` hardening target.
 
 Read the long-form architecture in [docs/architecture/overview.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/overview.md:1).
 
@@ -193,7 +193,7 @@ This is the default mode when you run the operator.
 - collects bounded evidence from declared datasources
 - redacts evidence before hosted provider calls
 - stores RCA output in CRD status
-- may create `RiskSignal` from optional bootstrap rules or investigation results
+- may emit a newly discovered `RiskSignal` from optional bootstrap rules or investigation findings
 - does not create `RemediationPlan` or `AgentAction` unless guarded remediation is explicitly enabled
 
 ## Dependency Matrix
@@ -213,39 +213,9 @@ The longer-form design constraints are documented in [docs/architecture/dependen
 
 ## Baseline Rule Packs
 
-FluxAgent supports built-in baseline rule packs so users do not have to write every first `RiskRule` by hand.
+FluxAgent includes an optional Kubernetes baseline rule pack for first-run bootstrap. It helps a new install surface common workload failure events without requiring users to write their first `RiskRule` by hand, but it is not intended to replace Alertmanager or a production detection platform.
 
-The default chart enables only the Kubernetes Events baseline. It is intentionally narrow: it scans Deployments in the release namespace and does not install Prometheus, Loki, hosted model providers, or external agents.
-
-```yaml
-rulePacks:
-  kubernetesBaseline:
-    enabled: true
-  prometheusBaseline:
-    enabled: false
-  lokiBaseline:
-    enabled: false
-```
-
-The Kubernetes baseline detects common workload failure events:
-
-- `CrashLoopBackOff`
-- `ImagePullBackOff`
-- `FailedScheduling`
-- `OOMKilled`
-- unhealthy probes
-- deployment availability failures
-
-Prometheus and Loki baselines are opt-in and require users to provide matching `DataSource` resources. This keeps FluxAgent useful after install while preserving explicit scope, low default resource usage, and control over which evidence can leave the cluster.
-
-See [docs/helm-rulepacks.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/helm-rulepacks.md:1) for the complete values reference and override examples.
-
-Verification is split by cost:
-
-```sh
-make verify-rule-packs       # Helm render contract
-make verify-rule-packs-kind  # kind smoke: baseline evidence -> RiskSignal -> heuristic RCA
-```
+The default chart enables only the Kubernetes Events baseline for Deployments in the release namespace. Prometheus and Loki baselines are opt-in and require user-provided `DataSource` resources. See [docs/helm-rulepacks.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/helm-rulepacks.md:1) for values, rule lists, override examples, and verification commands.
 
 ## Optional Extensions
 
@@ -265,12 +235,14 @@ Enable this explicitly with `--enable-remediation=true`.
 ## Core CRDs
 
 - `RiskRule`: read-only detection rule definition
-- `InvestigationRequest`: ad-hoc investigation request with RCA and optional linked `RiskSignal`
+- `InvestigationRequest`: ad-hoc investigation request with structured RCA status and optional discovered `RiskSignal`
 - `DataSource`: optional datasource runtime configuration
 - `ModelProvider`: provider-neutral reasoning backend configuration
 - `RiskSignal`: observed risk with evidence and confidence
 - `RemediationPlan`: experimental proposed mitigation workflow
 - `AgentAction`: experimental guarded executable action with approval context
+
+`ModelProvider` is the current `v1alpha1` API name for reasoning backends, including the built-in heuristic path. `v0.3` will review whether this should become `ReasoningProvider` before a breaking API cut.
 
 See:
 
@@ -305,49 +277,72 @@ See:
 
 ## Quickstart
 
-### Local Demo Pipeline
+### Install The Beta Chart
 
 ```bash
-cd FluxAgent
-GOWORK=off go run ./cmd/fluxagent
-GOWORK=off go test ./...
-make verify-v0.2-alpha
+helm install fluxagent \
+  oci://test-harbor.fluxseer.com/fluxseer/fluxagent/charts/kube-ai-sre \
+  --version 0.2.0-beta.1 \
+  --namespace fluxagent-system \
+  --create-namespace
+
+kubectl -n fluxagent-system rollout status deployment/fluxagent-controller-manager
 ```
 
-### Operator-First Investigation
+### Run A Read-only Investigation
 
-Create an ad-hoc `InvestigationRequest` from CLI:
+Create a Kubernetes Events datasource and a first investigation. Leaving `modelProviderRef` empty uses the built-in heuristic provider, so this path does not require OpenAI, Claude, or Gemini credentials:
 
 ```bash
-GOWORK=off go run ./cmd/fluxagent investigate deployment open-api \
-  -n prod \
-  --query-file config/samples/investigation-queries.yaml \
-  --question "Why did open-api latency increase after the latest rollout?" \
-  --provider heuristic-provider \
-  --create-risk-signal \
-  --wait
+kubectl apply -f - <<'EOF'
+apiVersion: aiops.platform/v1alpha1
+kind: DataSource
+metadata:
+  name: kubernetes-events
+  namespace: fluxagent-system
+spec:
+  type: kubernetesEvents
+---
+apiVersion: aiops.platform/v1alpha1
+kind: InvestigationRequest
+metadata:
+  name: investigate-fluxagent
+  namespace: fluxagent-system
+spec:
+  target:
+    namespace: fluxagent-system
+    kind: Deployment
+    name: fluxagent-controller-manager
+    apiVersion: apps/v1
+  timeRange:
+    lookback: 15m
+  question: |
+    Is the FluxAgent controller healthy after install?
+  dataSources:
+    - name: kubernetes-events
+  mode: readOnly
+EOF
+
+kubectl -n fluxagent-system wait investigationrequest/investigate-fluxagent \
+  --for=condition=Ready \
+  --timeout=120s
+
+kubectl -n fluxagent-system get investigationrequest investigate-fluxagent -o yaml
 ```
 
-This writes an `InvestigationRequest` CRD, waits for RCA completion, and can optionally materialize a linked `RiskSignal` for downstream workflows.
+This writes an `InvestigationRequest`, collects bounded Kubernetes evidence, and stores the RCA in `status.verdict`, `status.claims`, `status.evidenceRefs`, and compatibility summary fields.
 
 See:
 
 - [docs/tutorials/investigate-workload.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/investigate-workload.md:1)
 - [docs/crd-reference/investigationrequest.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/crd-reference/investigationrequest.md:1)
 
-### Run the Operator
+### Development
 
 ```bash
 cd FluxAgent
-GOWORK=off go run ./cmd/manager
-```
-
-### Deploy to a Cluster
-
-```bash
-cd FluxAgent
-kubectl create namespace fluxagent-system
-kubectl apply -k config/default
+GOWORK=off go test ./...
+make verify-v0.2-beta
 ```
 
 ### Enable Hosted RCA Providers
@@ -409,7 +404,7 @@ make verify-e2e-kind
 `verify-e2e-kind` is part of the `v0.2` beta validation set. It covers both:
 
 - the read-only `RiskRule -> RiskSignal` path
-- the operator-first `InvestigationRequest -> RCA -> linked RiskSignal` path
+- the operator-first `InvestigationRequest -> structured RCA status` path with optional discovered-signal materialization
 
 For the operator-first investigation path, run:
 
@@ -422,10 +417,11 @@ This target will:
 - create the demo cluster
 - wait for manager and demo workloads to become ready
 - inject a fault
-- assert that a `RiskSignal` exists
-- assert that `status.rcaSummary` is populated
-- assert that the fake webhook received a notification
-- assert degraded conditions for missing datasource and capability mismatch
+- create an `InvestigationRequest`
+- wait for terminal RCA status
+- assert that evidence references and RCA summary fields are populated
+- assert optional discovered `RiskSignal` materialization remains functional
+- assert degraded investigation conditions for missing datasource and capability mismatch
 - clean up the kind cluster automatically
 
 ## Current Scope
@@ -436,7 +432,7 @@ Implemented today:
 
 - read-only `RiskSignal` generation flow
 - `InvestigationRequest` ad-hoc RCA flow with configurable `queries[]`
-- optional linked `RiskSignal` materialization from an `InvestigationRequest`
+- optional discovered `RiskSignal` materialization from an `InvestigationRequest`
 - controller-runtime manager and reconcilers
 - Prometheus, Loki, and Kubernetes Events adapter implementations
 - webhook notification flow
@@ -446,7 +442,17 @@ Implemented today:
 - optional guarded remediation path
 - kind demo scaffolding
 
-Not implemented yet:
+RCA contract gaps:
+
+- stricter evidence-linked claim verification
+- alternative hypothesis disposition beyond the initial field shape
+- richer evidence provenance with query digests, redaction flags, truncation flags, and content digests
+- replay modes that distinguish metadata replay, re-query replay, and snapshot replay
+- RCA evaluation harness for provider and heuristic regressions
+- bounded adaptive investigation beyond static datasource plans
+- explicit abstention outcomes such as `Inconclusive` or `InsufficientEvidence`
+
+Operational gaps:
 
 - production-hardened auth, retries, and backoff for all adapters
 - production-hardened vendor auth, retry, and response-governance coverage

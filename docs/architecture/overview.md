@@ -162,7 +162,7 @@ Controllers own Kubernetes workflow state transitions. Shared orchestration shou
 Expected ownership:
 
 - `RiskRule` controller: resolve targets, validate datasource capability, execute detection queries, and create or update `RiskSignal`
-- `InvestigationRequest` controller: resolve targets, collect and normalize evidence, invoke bounded RCA through the model gateway, update terminal status, and optionally promote to `RiskSignal`
+- `InvestigationRequest` controller: resolve targets, collect and normalize evidence, invoke bounded RCA through the model gateway, update terminal status, and optionally emit a discovered `RiskSignal`
 - `RiskSignal` controller: manage signal lifecycle and optional downstream guarded planning
 - `RemediationPlan` controller: evaluate guardrails and approval state, then create `AgentAction`
 - `AgentAction` controller: execute or simulate approved actions and record execution results
@@ -210,7 +210,7 @@ FluxAgent Controller
 
 RCA Worker
 ├─ consume bounded EvidenceBundle
-├─ call OpenAI, Claude, Gemini, or heuristic ModelProvider
+├─ call OpenAI, Claude, Gemini, or heuristic reasoning provider
 ├─ validate structured output
 ├─ record token usage and cost
 └─ update RCA status
