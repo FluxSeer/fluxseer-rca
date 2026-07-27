@@ -2,6 +2,10 @@
 
 FluxAgent is positioned as a Kubernetes-native SRE investigation control plane with optional AI-assisted reasoning, not as a bot tied to one monitoring stack and not as a general-purpose agent shell first.
 
+FluxAgent favors explicit Kubernetes-native configuration over automatic discovery. It is for teams that want to define investigation scope, datasource boundaries, and model-provider choices themselves, accepting some CRD learning cost in exchange for customizability, low default resource usage, and auditability.
+
+Security is part of the product positioning. FluxAgent is read-only by default, secret-minimizing by design, and usable in heuristic-only mode without sending evidence to an external model provider.
+
 ## What Is Open Source Here
 
 - CRD contracts: `DataSource`, `RiskRule`, `ModelProvider`, `RiskSignal`, `RemediationPlan`, `AgentAction`
@@ -17,8 +21,11 @@ FluxAgent is positioned as a Kubernetes-native SRE investigation control plane w
 - Kubernetes is the control-plane substrate, not a reason to leak Kubernetes API types through the whole core.
 - Prometheus, Loki, OpenTelemetry, CloudWatch, and future backends are adapters, not hard product dependencies.
 - model vendors are replaceable providers, not the system boundary.
+- hosted model providers require explicit workload-scoped credentials.
+- heuristic mode must remain useful for users that do not want external model calls.
 - remediation is an optional guarded path, not the default truth of the project.
 - install manifests should not pull in a full observability stack by default.
+- install manifests should not run autonomous CLI agents or package developer-local auth caches.
 - investigation entrypoints should collapse into Kubernetes workflow resources rather than bypass the control plane.
 
 ## What Stays Neutral
@@ -28,6 +35,7 @@ FluxAgent is positioned as a Kubernetes-native SRE investigation control plane w
 - GitOps and notifications are preferred integration points for higher-risk actions.
 - fake observability endpoints in the demo are for validation convenience, not a claim that FluxAgent owns the user's monitoring stack.
 - CLI and future UI surfaces should wrap CRDs such as `RiskRule` and `InvestigationRequest` rather than define a separate execution truth.
+- raw secrets, authorization headers, unredacted evidence, provider prompts, and provider raw responses should not be stored as default CRD status.
 
 ## Product Direction
 

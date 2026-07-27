@@ -1,25 +1,44 @@
 # FluxAgent
 
-Kubernetes-native AI SRE Agent Operator for proactive risk detection, RCA assistance, and guarded remediation.
+Kubernetes-native SRE RCA control plane for teams that want explicit, auditable, and security-first AI-assisted investigation.
 
 Current release: `v0.2.0-alpha.2`
 
 Status: `v0.2 alpha+ / early v0.3 alpha`
 
-FluxAgent turns Kubernetes Events, Prometheus metrics, Loki logs, and deployment context into `RiskSignal`, `RemediationPlan`, and guarded `AgentAction` workflows.
+FluxAgent turns Kubernetes Events, Prometheus metrics, Loki logs, and deployment context into `RiskSignal`, `InvestigationRequest`, and optional guarded remediation workflows.
 
-Core logic is designed to stay adapter-neutral: Kubernetes, Prometheus, Loki, and model vendors are integrations, not the product's hard-coded identity.
+FluxAgent exists for platform teams that prefer native Kubernetes configuration over a black-box AI agent. Users declare what matters through CRDs such as `RiskRule`, `DataSource`, `ModelProvider`, and `InvestigationRequest`; FluxAgent collects bounded evidence, redacts it, and produces RCA status that can be audited, rendered in dashboards, or consumed by GitOps and alerting systems.
+
+Core logic is designed to stay adapter-neutral: Kubernetes, Prometheus, Loki, and model vendors are integrations, not the product's hard-coded identity. FluxAgent does not install or own your observability stack, does not assume a preferred AI model, and does not run autonomous CLI agents in the cluster.
 
 ## Why FluxAgent
 
 - Kubernetes-native: CRD + Controller + Reconcile Loop
-- Read-only first: the default `v0.1` path does not mutate production
+- Explicit configuration over black-box discovery: users define targets, datasources, and AI providers through Kubernetes resources
+- Read-only first: the default path does not mutate workloads
+- Security-first: evidence is redacted before hosted model calls, and heuristic RCA works without external data transfer
 - Provider-neutral: OpenAI API, Claude API, Gemini API, and heuristic fallback
+- Low default footprint: optional adapters remain opt-in instead of installing a full monitoring or agent stack
 - Observability-native: Prometheus, Loki, Kubernetes Events, OpenTelemetry
 - Guardrails-first: policy, dry-run, approval, and audit before execution
 - GitOps-first: prefer pull requests over direct production patching
 - Optional adapters: Prometheus, Loki, model APIs, and remediation remain opt-in
 - Operator-first investigation: `InvestigationRequest` turns ad-hoc RCA into a first-class CRD and CLI flow
+
+## Security Posture
+
+FluxAgent is security-first by default:
+
+- runs read-only unless guarded remediation is explicitly enabled
+- uses heuristic RCA without external model calls by default
+- requires explicit `ModelProvider` and provider credentials before sending evidence to OpenAI, Claude, or Gemini
+- redacts provider-bound evidence before hosted API calls
+- does not persist raw observability payloads, model prompts, provider responses, Kubernetes Secret values, tokens, or authorization headers
+- does not package CLI agent runtimes, developer-local OAuth caches, or subscription sessions as cluster credentials
+- does not automatically inspect every namespace; scope is declared through `RiskRule`, `DataSource`, and `InvestigationRequest`
+
+This trades some first-run convenience for lower default resource usage, stronger auditability, and clearer control over what data can leave the cluster.
 
 ## Architecture
 
