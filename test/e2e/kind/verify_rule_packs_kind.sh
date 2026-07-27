@@ -95,6 +95,8 @@ rulePacks:
     workloadSelector:
       kinds:
         - Deployment
+      matchLabels:
+        app: ${TARGET_NAME}
   kubernetesBaseline:
     enabled: true
     interval: 10s
@@ -190,7 +192,7 @@ verify_baseline_rule() {
 wait_for_crashloop_event() {
   log_section "Wait For Kubernetes Event"
   wait_for_command "CrashLoop BackOff event for ${TARGET_NAME}" \
-    bash -c "kubectl get events -n ${RELEASE_NAMESPACE} --field-selector involvedObject.kind=Pod 2>/dev/null | grep -E '${TARGET_NAME}.*(BackOff|CrashLoopBackOff)'"
+    bash -c "kubectl get events -n ${RELEASE_NAMESPACE} --field-selector involvedObject.kind=Pod 2>/dev/null | grep '${TARGET_NAME}' | grep -E 'BackOff|CrashLoopBackOff'"
 }
 
 inject_observability_fault() {
