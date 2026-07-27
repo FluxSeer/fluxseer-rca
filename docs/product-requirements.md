@@ -25,13 +25,47 @@ The long-term product positioning is intentionally broader than the current rele
 ## Product Principles
 
 - read-only by default
+- security-first and secret-minimizing by design
 - evidence-first investigation and RCA
 - Kubernetes-native workflow state through CRDs
+- explicit configuration over black-box discovery
 - optional AI-assisted reasoning, with heuristic default plus OpenAI, Claude, and Gemini API providers
 - datasource and model-provider neutrality through adapter contracts
+- low default footprint; optional integrations must remain opt-in
 - graceful degradation for optional integrations
 - guarded remediation as an opt-in secondary path
 - stable status and condition reasons for CLI, dashboard, alerting, and GitOps consumers
+
+## Existence And Value
+
+FluxAgent exists to give Kubernetes platform teams an auditable RCA workflow substrate without requiring them to adopt a black-box AI monitoring agent or a specific model vendor.
+
+The intended value is:
+
+- teams define what matters through native Kubernetes resources
+- FluxAgent collects bounded evidence from declared datasources
+- evidence is normalized and redacted before model reasoning
+- heuristic mode remains usable without external API calls
+- hosted OpenAI, Claude, and Gemini providers are opt-in through workload-scoped credentials
+- RCA output is stored in CRD status for GitOps, dashboards, alerting, and automation
+- optional remediation remains guarded and secondary
+
+This project intentionally accepts some YAML and CRD learning cost in exchange for high customizability, provider neutrality, lower default resource usage, and security-first data boundaries.
+
+## Security Principles
+
+Read-only does not automatically prevent data exposure. Logs, events, pod specs, ConfigMaps, and error messages can still contain tokens or connection strings. FluxAgent therefore treats evidence minimization and redaction as core product requirements, not implementation details.
+
+Required security posture:
+
+- never send Kubernetes Secret values to model providers
+- redact sensitive-looking evidence before hosted API calls
+- do not persist raw model prompts, provider responses, large log bodies, or unredacted Kubernetes objects
+- do not run autonomous CLI agents or shell-based model runtimes in the cluster
+- do not package developer-local OAuth caches, subscription sessions, or interactive CLI auth files as workload credentials
+- do not mutate workloads unless guarded remediation is explicitly enabled
+- allow heuristic-only operation for zero external model data transfer
+- keep provider credentials explicit, scoped, revocable, and referenced through `ModelProvider`
 
 ## Current Runtime Scope
 
