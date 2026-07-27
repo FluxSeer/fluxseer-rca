@@ -1,0 +1,70 @@
+{{- if .Values.rulePacks.prometheusBaseline.enabled }}
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: fluxagent-prometheus-baseline
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rule-pack
+    aiops.platform/rule-pack: prometheus-baseline
+  annotations:
+    aiops.platform/rule-pack.description: "Prometheus baseline for common workload metric symptoms"
+spec:
+  {{- include "fluxagent.rulePackTargetSelector" (dict "root" . "selector" .Values.rulePacks.defaultTargetSelector) | nindent 2 }}
+  interval: {{ .Values.rulePacks.prometheusBaseline.interval | quote }}
+  window: {{ .Values.rulePacks.prometheusBaseline.window | quote }}
+  severity: {{ .Values.rulePacks.prometheusBaseline.severity | quote }}
+  signals:
+    - name: high-error-rate
+      datasourceRef:
+        name: {{ .Values.rulePacks.prometheusBaseline.datasourceRef.name | quote }}
+      queryType: metric
+      queryTemplate: |
+        sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}",status=~"5.."}[5m]))
+      threshold:
+        operator: ">"
+        value: 0
+    - name: high-latency
+      datasourceRef:
+        name: {{ .Values.rulePacks.prometheusBaseline.datasourceRef.name | quote }}
+      queryType: metric
+      queryTemplate: |
+        histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m])) by (le))
+      threshold:
+        operator: ">"
+        value: 1
+    - name: pod-restart-rate
+      datasourceRef:
+        name: {{ .Values.rulePacks.prometheusBaseline.datasourceRef.name | quote }}
+      queryType: metric
+      queryTemplate: |
+        sum(rate(kube_pod_container_status_restarts_total{namespace="{{ "{{ .namespace }}" }}",pod=~"{{ "{{ .name }}" }}.*"}[5m]))
+      threshold:
+        operator: ">"
+        value: 0
+    - name: cpu-saturation
+      datasourceRef:
+        name: {{ .Values.rulePacks.prometheusBaseline.datasourceRef.name | quote }}
+      queryType: metric
+      queryTemplate: |
+        sum(rate(container_cpu_usage_seconds_total{namespace="{{ "{{ .namespace }}" }}",pod=~"{{ "{{ .name }}" }}.*"}[5m]))
+      threshold:
+        operator: ">"
+        value: 0.8
+    - name: memory-saturation
+      datasourceRef:
+        name: {{ .Values.rulePacks.prometheusBaseline.datasourceRef.name | quote }}
+      queryType: metric
+      queryTemplate: |
+        sum(container_memory_working_set_bytes{namespace="{{ "{{ .namespace }}" }}",pod=~"{{ "{{ .name }}" }}.*"})
+      threshold:
+        operator: ">"
+        value: 1073741824
+  ai:
+    rcaEnabled: {{ .Values.rulePacks.prometheusBaseline.rcaEnabled }}
+    {{- if .Values.rulePacks.prometheusBaseline.providerRef.name }}
+    providerRef:
+      name: {{ .Values.rulePacks.prometheusBaseline.providerRef.name | quote }}
+    {{- end }}
+{{- end }}

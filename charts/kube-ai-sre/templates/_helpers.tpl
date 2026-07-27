@@ -33,6 +33,38 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end -}}
 
-{{- define "fluxagent.investigatorServiceAccountName" -}}
-{{- default "fluxagent-investigator" .Values.agentAnalysis.investigatorServiceAccount.name -}}
+{{- define "fluxagent.rulePackTargetSelector" -}}
+{{- $root := .root -}}
+{{- $selector := default dict .selector -}}
+{{- $namespaceSelector := default dict $selector.namespaceSelector -}}
+{{- $workloadSelector := default dict $selector.workloadSelector -}}
+targetSelector:
+  namespaceSelector:
+{{- if hasKey $namespaceSelector "matchNames" }}
+{{- if empty $namespaceSelector.matchNames }}
+    matchNames: []
+{{- else }}
+    matchNames:
+{{ toYaml $namespaceSelector.matchNames | nindent 6 }}
+{{- end }}
+{{- else }}
+    matchNames:
+      - {{ $root.Release.Namespace | quote }}
+{{- end }}
+  workloadSelector:
+{{- if hasKey $workloadSelector "matchLabels" }}
+    matchLabels:
+{{ toYaml $workloadSelector.matchLabels | nindent 6 }}
+{{- end }}
+{{- if hasKey $workloadSelector "kinds" }}
+{{- if empty $workloadSelector.kinds }}
+    kinds: []
+{{- else }}
+    kinds:
+{{ toYaml $workloadSelector.kinds | nindent 6 }}
+{{- end }}
+{{- else }}
+    kinds:
+      - Deployment
+{{- end }}
 {{- end -}}

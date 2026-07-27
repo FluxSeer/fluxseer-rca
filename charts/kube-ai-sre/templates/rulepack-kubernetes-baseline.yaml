@@ -1,0 +1,86 @@
+{{- if .Values.rulePacks.kubernetesBaseline.enabled }}
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: fluxagent-kubernetes-baseline
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rule-pack
+    aiops.platform/rule-pack: kubernetes-baseline
+  annotations:
+    aiops.platform/rule-pack.description: "Kubernetes Events baseline for common workload failures"
+spec:
+  {{- include "fluxagent.rulePackTargetSelector" (dict "root" . "selector" .Values.rulePacks.defaultTargetSelector) | nindent 2 }}
+  interval: {{ .Values.rulePacks.kubernetesBaseline.interval | quote }}
+  window: {{ .Values.rulePacks.kubernetesBaseline.window | quote }}
+  severity: {{ .Values.rulePacks.kubernetesBaseline.severity | quote }}
+  signals:
+    - name: crashloop-backoff
+      datasourceRef:
+        name: kubernetes-events
+      queryType: event
+      reasons:
+        - CrashLoopBackOff
+        - BackOff
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: image-pull-failure
+      datasourceRef:
+        name: kubernetes-events
+      queryType: event
+      reasons:
+        - ImagePullBackOff
+        - ErrImagePull
+        - InvalidImageName
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: failed-scheduling
+      datasourceRef:
+        name: kubernetes-events
+      queryType: event
+      reasons:
+        - FailedScheduling
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: oom-killed
+      datasourceRef:
+        name: kubernetes-events
+      queryType: event
+      reasons:
+        - OOMKilled
+        - OOM
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: unhealthy-probe
+      datasourceRef:
+        name: kubernetes-events
+      queryType: event
+      reasons:
+        - Unhealthy
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: deployment-unavailable
+      datasourceRef:
+        name: kubernetes-events
+      queryType: event
+      reasons:
+        - FailedCreate
+        - FailedReplicaCreate
+        - ProgressDeadlineExceeded
+        - MinimumReplicasUnavailable
+      threshold:
+        operator: count_gt
+        value: 0
+  ai:
+    rcaEnabled: {{ .Values.rulePacks.kubernetesBaseline.rcaEnabled }}
+    {{- if .Values.rulePacks.kubernetesBaseline.providerRef.name }}
+    providerRef:
+      name: {{ .Values.rulePacks.kubernetesBaseline.providerRef.name | quote }}
+    {{- end }}
+{{- end }}

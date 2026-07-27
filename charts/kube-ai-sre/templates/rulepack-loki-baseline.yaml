@@ -1,0 +1,71 @@
+{{- if .Values.rulePacks.lokiBaseline.enabled }}
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: fluxagent-loki-baseline
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rule-pack
+    aiops.platform/rule-pack: loki-baseline
+  annotations:
+    aiops.platform/rule-pack.description: "Loki baseline for common error log patterns"
+    aiops.platform/rule-pack.sensitive-data: "logs may contain sensitive data; hosted RCA uses provider-bound redaction"
+spec:
+  {{- include "fluxagent.rulePackTargetSelector" (dict "root" . "selector" .Values.rulePacks.defaultTargetSelector) | nindent 2 }}
+  interval: {{ .Values.rulePacks.lokiBaseline.interval | quote }}
+  window: {{ .Values.rulePacks.lokiBaseline.window | quote }}
+  severity: {{ .Values.rulePacks.lokiBaseline.severity | quote }}
+  signals:
+    - name: panic
+      datasourceRef:
+        name: {{ .Values.rulePacks.lokiBaseline.datasourceRef.name | quote }}
+      queryType: log
+      queryTemplate: |
+        {namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"} |~ "(?i)panic"
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: fatal
+      datasourceRef:
+        name: {{ .Values.rulePacks.lokiBaseline.datasourceRef.name | quote }}
+      queryType: log
+      queryTemplate: |
+        {namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"} |~ "(?i)fatal"
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: exception
+      datasourceRef:
+        name: {{ .Values.rulePacks.lokiBaseline.datasourceRef.name | quote }}
+      queryType: log
+      queryTemplate: |
+        {namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"} |~ "(?i)exception"
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: timeout
+      datasourceRef:
+        name: {{ .Values.rulePacks.lokiBaseline.datasourceRef.name | quote }}
+      queryType: log
+      queryTemplate: |
+        {namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"} |~ "(?i)timeout"
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: connection-refused
+      datasourceRef:
+        name: {{ .Values.rulePacks.lokiBaseline.datasourceRef.name | quote }}
+      queryType: log
+      queryTemplate: |
+        {namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"} |~ "(?i)connection refused"
+      threshold:
+        operator: count_gt
+        value: 0
+  ai:
+    rcaEnabled: {{ .Values.rulePacks.lokiBaseline.rcaEnabled }}
+    {{- if .Values.rulePacks.lokiBaseline.providerRef.name }}
+    providerRef:
+      name: {{ .Values.rulePacks.lokiBaseline.providerRef.name | quote }}
+    {{- end }}
+{{- end }}

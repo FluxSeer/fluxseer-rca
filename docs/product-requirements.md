@@ -83,6 +83,41 @@ The current verified beta candidate includes:
 
 The current scope does not include production-grade autonomous remediation.
 
+## Baseline Rule Pack Contract
+
+FluxAgent should not require users to hand-write every initial `RiskRule`, but built-in rules must remain explicit and bounded.
+
+Rule pack principles:
+
+- provide immediate value after install without taking over the user's observability stack
+- keep Kubernetes Events baseline enabled by default with a narrow namespace scope
+- keep Prometheus and Loki baselines disabled by default
+- never install external datasource backends as a side effect of enabling a rule pack
+- never install hosted `ModelProvider` resources or provider secrets as a side effect of enabling a rule pack
+- allow users to override target namespace, workload labels, interval, window, severity, RCA enablement, datasource names, and provider reference
+- use stable names, labels, and annotations so GitOps and dashboards can recognize generated rules
+
+Initial Helm contract:
+
+```yaml
+rulePacks:
+  defaultTargetSelector:
+    namespaceSelector:
+      matchNames:
+        - <release namespace>
+    workloadSelector:
+      kinds:
+        - Deployment
+  kubernetesBaseline:
+    enabled: true
+  prometheusBaseline:
+    enabled: false
+  lokiBaseline:
+    enabled: false
+```
+
+The Kubernetes baseline may rely on the built-in Kubernetes Events datasource adapter. Prometheus and Loki baselines may reference `DataSource` names but must not create those datasources or install those systems.
+
 ## Workflow Ownership
 
 Controllers own Kubernetes workflow state transitions. Shared orchestration should live in internal services instead of controller-to-controller calls.

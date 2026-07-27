@@ -122,6 +122,33 @@ FluxAgent distinguishes runtime, compile-time, and deployment dependency.
 
 The longer-form design constraints are documented in [docs/architecture/dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1).
 
+## Baseline Rule Packs
+
+FluxAgent supports built-in baseline rule packs so users do not have to write every first `RiskRule` by hand.
+
+The default chart enables only the Kubernetes Events baseline. It is intentionally narrow: it scans Deployments in the release namespace and does not install Prometheus, Loki, hosted model providers, or external agents.
+
+```yaml
+rulePacks:
+  kubernetesBaseline:
+    enabled: true
+  prometheusBaseline:
+    enabled: false
+  lokiBaseline:
+    enabled: false
+```
+
+The Kubernetes baseline detects common workload failure events:
+
+- `CrashLoopBackOff`
+- `ImagePullBackOff`
+- `FailedScheduling`
+- `OOMKilled`
+- unhealthy probes
+- deployment availability failures
+
+Prometheus and Loki baselines are opt-in and require users to provide matching `DataSource` resources. This keeps FluxAgent useful after install while preserving explicit scope, low default resource usage, and control over which evidence can leave the cluster.
+
 ### Optional Guarded Remediation
 
 Enable this explicitly with `--enable-remediation=true`.
