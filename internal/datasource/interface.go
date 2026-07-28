@@ -18,10 +18,13 @@ type QueryRequest struct {
 }
 
 type QueryResult struct {
-	Source    string
-	QueryType domain.QueryType
-	Summary   string
-	Records   []map[string]any
+	Source              string
+	QueryType           domain.QueryType
+	Summary             string
+	Records             []map[string]any
+	Truncated           bool
+	OriginalRecordCount int
+	RetainedRecordCount int
 }
 
 type Capabilities struct {

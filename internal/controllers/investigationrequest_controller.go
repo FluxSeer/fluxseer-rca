@@ -456,6 +456,18 @@ func validateInvestigationQueryBudget(spec v1alpha1.InvestigationRequestSpec) st
 	if budget.MaxCumulativeResponseBytes < 0 {
 		return "queryBudget.maxCumulativeResponseBytes must not be negative"
 	}
+	if budget.ResultLimits.Metrics.MaxSeries < 0 {
+		return "queryBudget.resultLimits.metrics.maxSeries must not be negative"
+	}
+	if budget.ResultLimits.Metrics.MaxSamples < 0 {
+		return "queryBudget.resultLimits.metrics.maxSamples must not be negative"
+	}
+	if budget.ResultLimits.Logs.MaxLines < 0 {
+		return "queryBudget.resultLimits.logs.maxLines must not be negative"
+	}
+	if budget.ResultLimits.Events.MaxRecords < 0 {
+		return "queryBudget.resultLimits.events.maxRecords must not be negative"
+	}
 	if budget.MaxTimeRange.Duration > 0 && spec.TimeRange.Lookback.Duration > budget.MaxTimeRange.Duration {
 		return fmt.Sprintf("spec.timeRange.lookback %s exceeds queryBudget.maxTimeRange %s", spec.TimeRange.Lookback.Duration, budget.MaxTimeRange.Duration)
 	}

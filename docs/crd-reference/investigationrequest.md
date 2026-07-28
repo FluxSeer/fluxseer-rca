@@ -138,6 +138,10 @@ Query field behavior:
 - `queryBudget.maxConcurrentQueries`: maximum active datasource queries allowed for this investigation. Unset or zero keeps the default sequential collector; values above `1` enable bounded parallel datasource queries while preserving deterministic evidence ordering.
 - `queryBudget.maxCumulativeDuration`: maximum cumulative datasource query runtime before evidence collection stops
 - `queryBudget.maxCumulativeResponseBytes`: maximum cumulative datasource response payload size before evidence collection stops
+- `queryBudget.resultLimits.metrics.maxSeries`: maximum retained metric result records for the first flat-record implementation. Native Prometheus series counting remains adapter-specific follow-up work.
+- `queryBudget.resultLimits.metrics.maxSamples`: maximum retained metric sample records for the first flat-record implementation.
+- `queryBudget.resultLimits.logs.maxLines`: maximum retained log line records
+- `queryBudget.resultLimits.events.maxRecords`: maximum retained event records, including deployment-condition records
 - `loopPolicy.maxDepth`: maximum allowed lineage depth before execution is blocked; default is `1`
 - `loopPolicy.allowRiskSignalSource`: opt-in escape hatch for investigations sourced from `RiskSignal`; default is `false`
 
@@ -147,7 +151,7 @@ When an evidence requirements profile is configured, FluxAgent checks required e
 
 External evidence storage is disabled by default. FluxAgent currently accepts only the default `MetadataOnly` retention behavior. `NormalizedSnapshot` and `RawSnapshot` are reserved contract values and are rejected by validation until a secure external evidence storage adapter is implemented.
 
-When `queryBudget` is configured, FluxAgent rejects invalid limits, excessive lookback windows, or excessive query counts during validation before contacting datasources. It also stops evidence collection when cumulative datasource duration or response-byte limits are exceeded.
+When `queryBudget` is configured, FluxAgent rejects invalid limits, excessive lookback windows, or excessive query counts during validation before contacting datasources. It stops evidence collection when cumulative datasource duration or response-byte limits are exceeded. Result-kind limits are enforced after datasource responses are parsed and before normalization; exceeded result limits retain bounded partial evidence, set truncation metadata, and preserve deterministic record order.
 
 ### Mode Contract
 

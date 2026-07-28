@@ -146,11 +146,12 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 	observations := make([]domain.Observation, 0, len(preflight.CollectionPlan))
 	totalRecords := 0
 	for _, collected := range collectedQueries {
-		filtered := filterQueryResult(collected.result, collected.step)
+		limited := applyQueryResultLimits(collected.result, collected.step.QueryType, spec.QueryBudget.ResultLimits)
+		filtered := filterQueryResult(limited, collected.step)
 		normalized := normalizeObservations(filtered, collected.request, len(observations), now)
 		for _, observation := range normalized {
 			if observation.Truncated {
-				rcametrics.RecordEvidenceTruncated(string(observation.Type))
+				rcametrics.RecordEvidenceTruncated(string(observation.Type), evidenceTruncationReason(filtered, observation))
 			}
 		}
 		observations = append(observations, normalized...)
@@ -330,6 +331,60 @@ func queryResultResponseBytes(result *datasource.QueryResult) int64 {
 		return 0
 	}
 	return int64(len(payload))
+}
+
+func applyQueryResultLimits(result *datasource.QueryResult, queryType domain.QueryType, limits v1alpha1.QueryResultLimits) *datasource.QueryResult {
+	if result == nil || len(result.Records) == 0 {
+		return result
+	}
+	maxRecords := maxQueryResultRecords(queryType, limits)
+	if maxRecords <= 0 || int64(len(result.Records)) <= maxRecords {
+		return result
+	}
+
+	limited := *result
+	limited.Records = append([]map[string]any(nil), result.Records[:maxRecords]...)
+	limited.Truncated = true
+	limited.OriginalRecordCount = len(result.Records)
+	limited.RetainedRecordCount = len(limited.Records)
+	limited.Summary = fmt.Sprintf("%s; result limit retained %d of %d records", result.Summary, len(limited.Records), len(result.Records))
+	return &limited
+}
+
+func evidenceTruncationReason(result *datasource.QueryResult, observation domain.Observation) string {
+	if result != nil && result.Truncated {
+		return "result_limit"
+	}
+	if observation.OriginalBytes > observation.RetainedBytes {
+		return "status_budget"
+	}
+	return "evidence_limit"
+}
+
+func maxQueryResultRecords(queryType domain.QueryType, limits v1alpha1.QueryResultLimits) int64 {
+	switch queryType {
+	case domain.QueryTypeMetric:
+		return minPositiveLimit(limits.Metrics.MaxSamples, limits.Metrics.MaxSeries)
+	case domain.QueryTypeLog:
+		return limits.Logs.MaxLines
+	case domain.QueryTypeEvent, domain.QueryTypeDeploymentCondition:
+		return limits.Events.MaxRecords
+	default:
+		return 0
+	}
+}
+
+func minPositiveLimit(limits ...int64) int64 {
+	minLimit := int64(0)
+	for _, limit := range limits {
+		if limit <= 0 {
+			continue
+		}
+		if minLimit == 0 || limit < minLimit {
+			minLimit = limit
+		}
+	}
+	return minLimit
 }
 
 func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRequestSpec, preflight PreflightResult, evidenceResult EvidenceCollectionResult, now time.Time) (RCAResult, error) {
@@ -740,7 +795,13 @@ func normalizeObservations(result *datasource.QueryResult, req datasource.QueryR
 	const maxEvidencePerDatasource = 5
 	originalCount := len(result.Records)
 	retainedCount := min(originalCount, maxEvidencePerDatasource)
-	truncated := originalCount > retainedCount
+	truncated := result.Truncated || originalCount > retainedCount
+	if result.OriginalRecordCount > originalCount {
+		originalCount = result.OriginalRecordCount
+	}
+	if result.RetainedRecordCount > 0 && result.RetainedRecordCount < retainedCount {
+		retainedCount = result.RetainedRecordCount
+	}
 	observations := make([]domain.Observation, 0, retainedCount)
 	for index, record := range result.Records {
 		if index >= maxEvidencePerDatasource {

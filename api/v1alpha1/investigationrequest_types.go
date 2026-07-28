@@ -90,12 +90,32 @@ type EvidenceRetentionAccessPolicy struct {
 }
 
 type InvestigationQueryBudget struct {
-	MaxTimeRange               metav1.Duration `json:"maxTimeRange,omitempty"`
-	MaxQueriesTotal            int32           `json:"maxQueriesTotal,omitempty"`
-	MaxQueriesPerSource        int32           `json:"maxQueriesPerSource,omitempty"`
-	MaxConcurrentQueries       int32           `json:"maxConcurrentQueries,omitempty"`
-	MaxCumulativeDuration      metav1.Duration `json:"maxCumulativeDuration,omitempty"`
-	MaxCumulativeResponseBytes int64           `json:"maxCumulativeResponseBytes,omitempty"`
+	MaxTimeRange               metav1.Duration   `json:"maxTimeRange,omitempty"`
+	MaxQueriesTotal            int32             `json:"maxQueriesTotal,omitempty"`
+	MaxQueriesPerSource        int32             `json:"maxQueriesPerSource,omitempty"`
+	MaxConcurrentQueries       int32             `json:"maxConcurrentQueries,omitempty"`
+	MaxCumulativeDuration      metav1.Duration   `json:"maxCumulativeDuration,omitempty"`
+	MaxCumulativeResponseBytes int64             `json:"maxCumulativeResponseBytes,omitempty"`
+	ResultLimits               QueryResultLimits `json:"resultLimits,omitempty"`
+}
+
+type QueryResultLimits struct {
+	Metrics MetricResultLimits `json:"metrics,omitempty"`
+	Logs    LogResultLimits    `json:"logs,omitempty"`
+	Events  EventResultLimits  `json:"events,omitempty"`
+}
+
+type MetricResultLimits struct {
+	MaxSeries  int64 `json:"maxSeries,omitempty"`
+	MaxSamples int64 `json:"maxSamples,omitempty"`
+}
+
+type LogResultLimits struct {
+	MaxLines int64 `json:"maxLines,omitempty"`
+}
+
+type EventResultLimits struct {
+	MaxRecords int64 `json:"maxRecords,omitempty"`
 }
 
 type InvestigationLoopPolicy struct {
