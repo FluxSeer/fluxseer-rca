@@ -8,7 +8,7 @@
 - Version: `v1alpha1`
 - Kind: `RiskSignal`
 
-Source schema: [api/v1alpha1/types.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/api/v1alpha1/types.go:1)
+Source schema: [api/v1alpha1/types.go](../../api/v1alpha1/types.go)
 
 ## Purpose
 
@@ -24,7 +24,7 @@ Capture a detected workload risk with enough context for notification, review, a
 | `spec.signalType` | string | yes | Semantic finding type such as event, logs, or metric regression. |
 | `spec.actionType` | string | no | Suggested downstream action contract. |
 | `spec.severity` | string | yes | Severity string used by guardrails and downstream planning. |
-| `spec.confidence` | integer | yes | Confidence score for the merged finding. |
+| `spec.confidence` | integer | yes | Confidence score from `0` to `100` for the merged finding. |
 | `spec.dryRun` | boolean | yes | Whether the signal is intended for non-mutating handling. |
 | `spec.ttlSeconds` | integer | no | Lifecycle hint for retention or cleanup. |
 | `spec.evidence` | array | no | List of evidence records attached to the signal. |
@@ -63,7 +63,7 @@ Capture a detected workload risk with enough context for notification, review, a
 | `status.rcaSummary` | string | no | High-level RCA summary persisted from the reasoning pipeline. |
 | `status.rcaHypothesis` | string | no | Primary RCA hypothesis. |
 | `status.rcaProvider` | string | no | `ModelProvider` name used for RCA generation. |
-| `status.rcaCauses` | array | no | Ranked cause candidates with confidence. |
+| `status.rcaCauses` | array | no | Ranked cause candidates with integer confidence scores from `0` to `100`. |
 | `status.conditions` | array | no | Condition-based readiness for evidence collection and RCA enrichment. |
 
 ## Field Notes
@@ -95,7 +95,7 @@ Current severity strings used by the repo:
 
 ### `spec.confidence`
 
-Integer confidence score for the merged finding.
+Integer confidence score from `0` to `100` for the merged finding. This is a heuristic or provider-derived ranking score, not a calibrated probability that the RCA is correct.
 
 ### `spec.dryRun`
 
@@ -148,6 +148,8 @@ Current condition types:
 - `EvidenceCollectionReady`
 - `RCAReady`
 
+`RCAReady=True` means an RCA result is available. It does not indicate that the target workload is healthy, recovered, or remediated.
+
 ## Sample
 
-See [config/samples/risk-signal.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/risk-signal.yaml:1).
+See [config/samples/risk-signal.yaml](../../config/samples/risk-signal.yaml).
