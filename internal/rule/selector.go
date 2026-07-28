@@ -15,6 +15,7 @@ import (
 type Target struct {
 	Resource domain.ResourceRef
 	Labels   map[string]string
+	UID      string
 }
 
 func DiscoverTargets(ctx context.Context, kubeClient client.Client, selector v1alpha1.TargetSelector) ([]Target, error) {
@@ -49,6 +50,7 @@ func DiscoverTargets(ctx context.Context, kubeClient client.Client, selector v1a
 		targets = append(targets, Target{
 			Resource: deploymentToResource(deployment),
 			Labels:   labels,
+			UID:      string(deployment.UID),
 		})
 	}
 	sort.Slice(targets, func(i, j int) bool {

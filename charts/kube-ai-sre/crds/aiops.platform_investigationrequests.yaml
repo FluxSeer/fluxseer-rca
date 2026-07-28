@@ -269,6 +269,32 @@ spec:
                         type: string
                       link:
                         type: string
+                lineage:
+                  type: object
+                  properties:
+                    source:
+                      type: object
+                      properties:
+                        apiVersion:
+                          type: string
+                        kind:
+                          type: string
+                        namespace:
+                          type: string
+                        name:
+                          type: string
+                        uid:
+                          type: string
+                        generation:
+                          type: integer
+                          format: int64
+                    targetUID:
+                      type: string
+                    findingFingerprint:
+                      type: string
+                    investigationDepth:
+                      type: integer
+                      format: int32
                 linkedRiskSignalRef:
                   type: object
                   properties:

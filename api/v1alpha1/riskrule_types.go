@@ -53,14 +53,25 @@ type RiskRuleAI struct {
 	ProviderRef LocalObjectReference `json:"providerRef,omitempty"`
 }
 
+const (
+	RiskRuleInvestigationModeDirectRiskSignal = "DirectRiskSignal"
+	RiskRuleInvestigationModeCreateRequest    = "CreateRequest"
+)
+
+type RiskRuleInvestigationPolicy struct {
+	Mode             string `json:"mode,omitempty"`
+	CreateRiskSignal bool   `json:"createRiskSignal,omitempty"`
+}
+
 type RiskRuleSpec struct {
-	TargetSelector TargetSelector       `json:"targetSelector"`
-	Interval       metav1.Duration      `json:"interval,omitempty"`
-	Window         metav1.Duration      `json:"window,omitempty"`
-	Severity       string               `json:"severity,omitempty"`
-	Signals        []RiskRuleSignal     `json:"signals,omitempty"`
-	Notification   RiskRuleNotification `json:"notification,omitempty"`
-	AI             RiskRuleAI           `json:"ai,omitempty"`
+	TargetSelector      TargetSelector              `json:"targetSelector"`
+	Interval            metav1.Duration             `json:"interval,omitempty"`
+	Window              metav1.Duration             `json:"window,omitempty"`
+	Severity            string                      `json:"severity,omitempty"`
+	Signals             []RiskRuleSignal            `json:"signals,omitempty"`
+	Notification        RiskRuleNotification        `json:"notification,omitempty"`
+	AI                  RiskRuleAI                  `json:"ai,omitempty"`
+	InvestigationPolicy RiskRuleInvestigationPolicy `json:"investigationPolicy,omitempty"`
 }
 
 type RiskRuleStatus struct {

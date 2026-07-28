@@ -102,6 +102,13 @@ spec:
                       properties:
                         name:
                           type: string
+                investigationPolicy:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                    createRiskSignal:
+                      type: boolean
             status:
               type: object
               properties:
