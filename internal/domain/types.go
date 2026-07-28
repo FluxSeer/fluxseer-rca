@@ -118,6 +118,8 @@ type Observation struct {
 	Truncated              bool             `json:"truncated"`
 	OriginalCount          int              `json:"originalCount"`
 	RetainedCount          int              `json:"retainedCount"`
+	OriginalBytes          int              `json:"originalBytes"`
+	RetainedBytes          int              `json:"retainedBytes"`
 	CollectedAt            time.Time        `json:"collectedAt"`
 }
 

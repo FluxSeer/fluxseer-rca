@@ -125,6 +125,7 @@ Recommended persisted evidence fields:
 - digest algorithm and canonicalization version
 - redaction profile
 - truncation metadata
+- original and retained byte counts
 - collection timestamp
 
 Evidence digests use the same `sha256` / `fluxagent-observation-json-v1` contract as `InvestigationRequest.status.evidenceRefs`.

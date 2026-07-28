@@ -211,6 +211,8 @@ FluxAgent applies a deterministic heuristic verifier before writing claims. In t
 - `truncated`
 - `originalCount`
 - `retainedCount`
+- `originalBytes`
+- `retainedBytes`
 - `collectedAt`
 - `reason`
 - `link`
@@ -218,6 +220,17 @@ FluxAgent applies a deterministic heuristic verifier before writing claims. In t
 These fields are compact normalized-observation metadata. They let consumers audit which query and redacted observation supported the RCA without storing raw Prometheus payloads, large Loki excerpts, or unredacted Kubernetes objects in status.
 
 `queryDigest` and `contentDigest` use `digestAlgorithm: sha256` and `digestCanonicalization: fluxagent-observation-json-v1`. The v1 canonicalization contract uses deterministic JSON object keys, preserves array order unless a field-specific contract says otherwise, normalizes strings to Unicode NFC, excludes non-semantic collection timestamps from content digests, and expects timestamp producers to write UTC timestamps.
+
+Status budget limits are intentionally conservative:
+
+- `maxEvidenceRefs`: 32
+- `maxClaims`: 16
+- `maxEvidenceSummaryBytes`: 1024
+- `maxClaimStatementBytes`: 1024
+- `maxSummaryBytes`: 2048
+- `maxStatusBytes`: 65536
+
+When status budget enforcement is required, FluxAgent preserves canonical state before descriptive detail: `phase`, `outcome`, `failure.code`, verdict, execution identity, degradation metadata, evidence digests, claim IDs, claim verification, and truncation metadata have priority over long summaries, extra evidence refs, and extra claims.
 
 `status.failure` records workflow failure details when an investigation cannot reach a completed RCA state:
 

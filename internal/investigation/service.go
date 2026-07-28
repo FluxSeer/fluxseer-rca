@@ -20,6 +20,7 @@ import (
 	evidencepkg "fluxagent/internal/evidence"
 	"fluxagent/internal/modelgateway"
 	"fluxagent/internal/rule"
+	"fluxagent/internal/statusbudget"
 )
 
 type Issue struct {
@@ -542,6 +543,20 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 	}
 	obs.DigestAlgorithm = canonicaldigest.AlgorithmSHA256
 	obs.DigestCanonicalization = canonicaldigest.ObservationJSONV1
+	summary, originalBytes, retainedBytes, summaryTruncated := statusbudget.TruncateUTF8(obs.Summary, statusbudget.MaxEvidenceSummaryBytes)
+	obs.Summary = summary
+	obs.OriginalBytes = int(originalBytes)
+	obs.RetainedBytes = int(retainedBytes)
+	obs.Truncated = obs.Truncated || summaryTruncated
+	if obs.Value.Log != nil {
+		obs.Value.Log.Line = obs.Summary
+	}
+	if obs.Value.Event != nil {
+		obs.Value.Event.Message = obs.Summary
+	}
+	if obs.Value.DeploymentCondition != nil {
+		obs.Value.DeploymentCondition.Message = obs.Summary
+	}
 	obs.ContentDigest = canonicaldigest.String(canonicaldigest.ObservationJSONV1, map[string]any{
 		"schemaVersion":    obs.SchemaVersion,
 		"dataSourceRef":    obs.DataSourceRef,
@@ -555,6 +570,8 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 		"truncated":        obs.Truncated,
 		"originalCount":    obs.OriginalCount,
 		"retainedCount":    obs.RetainedCount,
+		"originalBytes":    obs.OriginalBytes,
+		"retainedBytes":    obs.RetainedBytes,
 	})
 	return obs
 }
@@ -577,6 +594,8 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 			Truncated:              observation.Truncated,
 			OriginalCount:          int32(observation.OriginalCount),
 			RetainedCount:          int32(observation.RetainedCount),
+			OriginalBytes:          int32(observation.OriginalBytes),
+			RetainedBytes:          int32(observation.RetainedBytes),
 			CollectedAt:            &collectedAt,
 		}
 		if observation.Value.Event != nil {
