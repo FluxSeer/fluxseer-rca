@@ -105,7 +105,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 			applyEvidenceRequirementInconclusiveStatus(&investigation, evidence, *gate, now())
 			applyInvestigationStatusBudget(&investigation, now())
 			if !reflect.DeepEqual(original.Status, investigation.Status) {
-				if err := r.Status().Update(ctx, &investigation); err != nil && !apierrors.IsConflict(err) {
+				if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
 					return ctrl.Result{}, err
 				}
 			}
@@ -123,7 +123,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 			rca = generatedRCA
 			if rca.Reasoning != nil {
 				persistErr := r.persistProviderCompletedCheckpoint(ctx, &investigation, preflight, evidence, rca, executionID, now())
-				if persistErr != nil && !apierrors.IsConflict(persistErr) {
+				if persistErr != nil && !recordStatusUpdateConflict("InvestigationRequest", persistErr) {
 					return ctrl.Result{}, persistErr
 				}
 			}
@@ -140,7 +140,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 
 	applyInvestigationStatusBudget(&investigation, now())
 	if !reflect.DeepEqual(original.Status, investigation.Status) {
-		if err := r.Status().Update(ctx, &investigation); err != nil && !apierrors.IsConflict(err) {
+		if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
 			return ctrl.Result{}, err
 		}
 	}
@@ -321,6 +321,7 @@ func (r *InvestigationRequestReconciler) persistProviderCompletedCheckpoint(ctx 
 	setInvestigationRequestStatus(&checkpoint.Status, v1alpha1.PhaseReasoning, "provider result persisted for RCA verification", checkpoint.Generation, now)
 	applyInvestigationStatusBudget(checkpoint, now)
 	if err := r.Status().Update(ctx, checkpoint); err != nil {
+		recordStatusUpdateConflict("InvestigationRequest", err)
 		return err
 	}
 	request.ResourceVersion = checkpoint.ResourceVersion
@@ -1321,7 +1322,7 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 		Condition:    rcaCondition(metav1.ConditionTrue, "ProviderSucceeded", "RCA promoted from investigation request", now),
 	})
 	if statusChangedRiskSignal(original, riskSignal) {
-		if err := r.Status().Update(ctx, riskSignal); err != nil && !apierrors.IsConflict(err) {
+		if err := r.Status().Update(ctx, riskSignal); err != nil && !recordStatusUpdateConflict("RiskSignal", err) {
 			return nil, err
 		}
 	}

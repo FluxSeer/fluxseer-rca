@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,7 +74,7 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		setResourceStatus(&plan.Status, v1alpha1.PhaseRejected, decision.Reason, plan.Generation, now())
 	}
 	if statusChangedPlan(originalPlan, &plan) {
-		if err := r.Status().Update(ctx, &plan); err != nil && !apierrors.IsConflict(err) {
+		if err := r.Status().Update(ctx, &plan); err != nil && !recordStatusUpdateConflict("RemediationPlan", err) {
 			return ctrl.Result{}, err
 		}
 	}
@@ -90,7 +89,7 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		setResourceStatus(&action.Status, v1alpha1.PhaseRejected, decision.Reason, action.Generation, now())
 	}
 	if statusChangedAction(originalAction, action) {
-		if err := r.Status().Update(ctx, action); err != nil && !apierrors.IsConflict(err) {
+		if err := r.Status().Update(ctx, action); err != nil && !recordStatusUpdateConflict("AgentAction", err) {
 			return ctrl.Result{}, err
 		}
 	}
