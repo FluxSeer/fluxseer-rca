@@ -88,6 +88,37 @@ spec:
                   properties:
                     profile:
                       type: string
+                evidenceRetention:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                      enum:
+                        - MetadataOnly
+                        - NormalizedSnapshot
+                        - RawSnapshot
+                    retention:
+                      type: string
+                    storageRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                    encryption:
+                      type: object
+                      properties:
+                        required:
+                          type: boolean
+                    deletionPolicy:
+                      type: string
+                      enum:
+                        - Retain
+                        - Delete
+                    accessPolicy:
+                      type: object
+                      properties:
+                        namespaceScoped:
+                          type: boolean
                 queryBudget:
                   type: object
                   properties:
@@ -447,6 +478,20 @@ spec:
                       collectedAt:
                         type: string
                         format: date-time
+                      payloadRef:
+                        type: object
+                        properties:
+                          scheme:
+                            type: string
+                          digest:
+                            type: string
+                          encrypted:
+                            type: boolean
+                          expiresAt:
+                            type: string
+                            format: date-time
+                          retentionClass:
+                            type: string
                       reason:
                         type: string
                       link:

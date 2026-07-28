@@ -126,6 +126,12 @@ Query field behavior:
 - `reasons[]`: optional event reason filter for `queryType: event`
 - `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
 - `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `LatencyRegression`, and `RolloutLatencyRegression`.
+- `evidenceRetention.mode`: external evidence retention mode. Current supported runtime behavior is `MetadataOnly`.
+- `evidenceRetention.retention`: requested external payload retention duration for future snapshot modes.
+- `evidenceRetention.storageRef.name`: external evidence storage configuration reference for future snapshot modes.
+- `evidenceRetention.encryption.required`: whether future retained payloads must be encrypted.
+- `evidenceRetention.deletionPolicy`: future external payload deletion behavior, `Retain` or `Delete`.
+- `evidenceRetention.accessPolicy.namespaceScoped`: whether future payload access must remain namespace-scoped.
 - `queryBudget.maxTimeRange`: maximum allowed `timeRange.lookback` before query execution starts
 - `queryBudget.maxQueriesTotal`: maximum total datasource queries for this investigation
 - `queryBudget.maxQueriesPerSource`: maximum queries referencing the same datasource
@@ -135,6 +141,8 @@ Query field behavior:
 If `modelProviderRef.name` is empty, FluxAgent falls back to the built-in heuristic provider.
 
 When an evidence requirements profile is configured, FluxAgent checks required evidence before calling the model provider. Missing required evidence produces `phase: Completed`, `outcome: Inconclusive`, `status.missingEvidence[]`, and a `RequiredEvidenceMissing` degradation reason. This is not a workflow failure. `ImagePullBackOff` requires event evidence. `LatencyRegression` and `RolloutLatencyRegression` require metric evidence. `NoIssueFound` is only valid after required evidence is complete.
+
+External evidence storage is disabled by default. FluxAgent currently accepts only the default `MetadataOnly` retention behavior. `NormalizedSnapshot` and `RawSnapshot` are reserved contract values and are rejected by validation until a secure external evidence storage adapter is implemented.
 
 When `queryBudget` is configured, FluxAgent rejects excessive lookback windows or query counts during validation before contacting datasources.
 
@@ -225,10 +233,13 @@ FluxAgent applies a deterministic heuristic verifier before writing claims. In t
 - `originalBytes`
 - `retainedBytes`
 - `collectedAt`
+- `payloadRef`
 - `reason`
 - `link`
 
 These fields are compact normalized-observation metadata. They let consumers audit which query and redacted observation supported the RCA without storing raw Prometheus payloads, large Loki excerpts, or unredacted Kubernetes objects in status.
+
+When future retention adapters create external evidence payloads, `payloadRef` may record `scheme`, `digest`, `encrypted`, `expiresAt`, and `retentionClass`. `payloadRef` must not contain signed URLs, credentials, bearer tokens, inline secrets, or provider-specific authorization material. It is a verifiable pointer, not an access credential.
 
 `queryDigest` and `contentDigest` use `digestAlgorithm: sha256` and `digestCanonicalization: fluxagent-observation-json-v1`. The v1 canonicalization contract uses deterministic JSON object keys, preserves array order unless a field-specific contract says otherwise, normalizes strings to Unicode NFC, excludes non-semantic collection timestamps from content digests, and expects timestamp producers to write UTC timestamps.
 

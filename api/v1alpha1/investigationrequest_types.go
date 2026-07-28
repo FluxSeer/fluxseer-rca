@@ -8,6 +8,13 @@ import (
 const (
 	InvestigationModeReadOnly = "readOnly"
 
+	EvidenceRetentionModeMetadataOnly       = "MetadataOnly"
+	EvidenceRetentionModeNormalizedSnapshot = "NormalizedSnapshot"
+	EvidenceRetentionModeRawSnapshot        = "RawSnapshot"
+
+	EvidenceRetentionDeletionPolicyRetain = "Retain"
+	EvidenceRetentionDeletionPolicyDelete = "Delete"
+
 	InvestigationOutcomeConfirmed    = "Confirmed"
 	InvestigationOutcomeInconclusive = "Inconclusive"
 	InvestigationOutcomeNoIssueFound = "NoIssueFound"
@@ -55,6 +62,7 @@ type InvestigationRequestSpec struct {
 	Mode                 string                   `json:"mode,omitempty"`
 	CreateRiskSignal     bool                     `json:"createRiskSignal,omitempty"`
 	EvidenceRequirements EvidenceRequirements     `json:"evidenceRequirements,omitempty"`
+	EvidenceRetention    EvidenceRetentionPolicy  `json:"evidenceRetention,omitempty"`
 	QueryBudget          InvestigationQueryBudget `json:"queryBudget,omitempty"`
 	LoopPolicy           InvestigationLoopPolicy  `json:"loopPolicy,omitempty"`
 	TTLSeconds           int64                    `json:"ttlSeconds,omitempty"`
@@ -62,6 +70,23 @@ type InvestigationRequestSpec struct {
 
 type EvidenceRequirements struct {
 	Profile string `json:"profile,omitempty"`
+}
+
+type EvidenceRetentionPolicy struct {
+	Mode           string                        `json:"mode,omitempty"`
+	Retention      metav1.Duration               `json:"retention,omitempty"`
+	StorageRef     LocalObjectReference          `json:"storageRef,omitempty"`
+	Encryption     EvidenceRetentionEncryption   `json:"encryption,omitempty"`
+	DeletionPolicy string                        `json:"deletionPolicy,omitempty"`
+	AccessPolicy   EvidenceRetentionAccessPolicy `json:"accessPolicy,omitempty"`
+}
+
+type EvidenceRetentionEncryption struct {
+	Required bool `json:"required,omitempty"`
+}
+
+type EvidenceRetentionAccessPolicy struct {
+	NamespaceScoped bool `json:"namespaceScoped,omitempty"`
 }
 
 type InvestigationQueryBudget struct {
