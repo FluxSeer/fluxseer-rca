@@ -46,16 +46,21 @@ type InvestigationQuery struct {
 }
 
 type InvestigationRequestSpec struct {
-	Target           TargetRef               `json:"target"`
-	TimeRange        InvestigationTimeRange  `json:"timeRange,omitempty"`
-	Question         string                  `json:"question,omitempty"`
-	DataSources      []LocalObjectReference  `json:"dataSources,omitempty"`
-	Queries          []InvestigationQuery    `json:"queries,omitempty"`
-	ModelProviderRef LocalObjectReference    `json:"modelProviderRef,omitempty"`
-	Mode             string                  `json:"mode,omitempty"`
-	CreateRiskSignal bool                    `json:"createRiskSignal,omitempty"`
-	LoopPolicy       InvestigationLoopPolicy `json:"loopPolicy,omitempty"`
-	TTLSeconds       int64                   `json:"ttlSeconds,omitempty"`
+	Target               TargetRef               `json:"target"`
+	TimeRange            InvestigationTimeRange  `json:"timeRange,omitempty"`
+	Question             string                  `json:"question,omitempty"`
+	DataSources          []LocalObjectReference  `json:"dataSources,omitempty"`
+	Queries              []InvestigationQuery    `json:"queries,omitempty"`
+	ModelProviderRef     LocalObjectReference    `json:"modelProviderRef,omitempty"`
+	Mode                 string                  `json:"mode,omitempty"`
+	CreateRiskSignal     bool                    `json:"createRiskSignal,omitempty"`
+	EvidenceRequirements EvidenceRequirements    `json:"evidenceRequirements,omitempty"`
+	LoopPolicy           InvestigationLoopPolicy `json:"loopPolicy,omitempty"`
+	TTLSeconds           int64                   `json:"ttlSeconds,omitempty"`
+}
+
+type EvidenceRequirements struct {
+	Profile string `json:"profile,omitempty"`
 }
 
 type InvestigationLoopPolicy struct {

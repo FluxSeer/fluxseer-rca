@@ -125,10 +125,13 @@ Query field behavior:
 - `queryTemplate`: templated query rendered against target metadata
 - `reasons[]`: optional event reason filter for `queryType: event`
 - `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
+- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `LatencyRegression`, and `RolloutLatencyRegression`.
 - `loopPolicy.maxDepth`: maximum allowed lineage depth before execution is blocked; default is `1`
 - `loopPolicy.allowRiskSignalSource`: opt-in escape hatch for investigations sourced from `RiskSignal`; default is `false`
 
 If `modelProviderRef.name` is empty, FluxAgent falls back to the built-in heuristic provider.
+
+When an evidence requirements profile is configured, FluxAgent checks required evidence before calling the model provider. Missing required evidence produces `phase: Completed`, `outcome: Inconclusive`, `status.missingEvidence[]`, and a `RequiredEvidenceMissing` degradation reason. This is not a workflow failure. `ImagePullBackOff` requires event evidence. `LatencyRegression` and `RolloutLatencyRegression` require metric evidence. `NoIssueFound` is only valid after required evidence is complete.
 
 ### Mode Contract
 
