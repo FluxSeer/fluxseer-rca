@@ -662,8 +662,30 @@ func lineageFromAnnotations(annotations map[string]string) *v1alpha1.Investigati
 		},
 		TargetUID:          targetUID,
 		FindingFingerprint: fingerprint,
+		FindingIdentity:    findingIdentityFromAnnotations(annotations),
 		InvestigationDepth: int32(depth),
 	}
+}
+
+func findingIdentityFromAnnotations(annotations map[string]string) *v1alpha1.FindingIdentity {
+	if annotations == nil {
+		return nil
+	}
+	identity := &v1alpha1.FindingIdentity{
+		SchemaVersion:          strings.TrimSpace(annotations[annotationFindingSchema]),
+		ObjectFindingIdentity:  strings.TrimSpace(annotations[annotationObjectFindingID]),
+		LogicalFindingIdentity: strings.TrimSpace(annotations[annotationLogicalFindingID]),
+		IncidentOccurrence:     strings.TrimSpace(annotations[annotationIncidentOccurrence]),
+		FindingType:            strings.TrimSpace(annotations[annotationFindingType]),
+		WindowBucket:           strings.TrimSpace(annotations[annotationWindowBucket]),
+	}
+	if targetGeneration, err := strconv.ParseInt(strings.TrimSpace(annotations[annotationTargetGeneration]), 10, 64); err == nil {
+		identity.TargetGeneration = targetGeneration
+	}
+	if identity.SchemaVersion == "" && identity.ObjectFindingIdentity == "" && identity.LogicalFindingIdentity == "" && identity.IncidentOccurrence == "" {
+		return nil
+	}
+	return identity
 }
 
 func splitNamespacedName(value string) (string, string) {
@@ -882,9 +904,16 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 		riskSignal.Annotations[annotationTargetRef] = preflight.Target.Namespace + "/" + preflight.Target.Name
 		riskSignal.Annotations[annotationDetectionSource] = "investigation-request"
 		riskSignal.Annotations["fluxagent.aiops.platform/investigation-request"] = request.Namespace + "/" + request.Name
+		if request.Status.Lineage != nil {
+			applyFindingIdentityAnnotations(riskSignal.Annotations, request.Status.Lineage.FindingIdentity)
+		}
 
 		riskSignal.Spec.Target = resourceToTargetRef(preflight.Target)
 		riskSignal.Spec.SignalType = investigationSignalType(preflight)
+		if request.Status.Lineage != nil && request.Status.Lineage.FindingIdentity != nil {
+			identity := *request.Status.Lineage.FindingIdentity
+			riskSignal.Spec.FindingIdentity = &identity
+		}
 		riskSignal.Spec.Severity = string(rca.Reasoning.Severity)
 		riskSignal.Spec.Confidence = rca.Reasoning.Confidence.Score
 		riskSignal.Spec.DryRun = true
@@ -897,6 +926,11 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 			"investigationRequest": request.Name,
 			"targetRef":            preflight.Target.Namespace + "/" + preflight.Target.Name,
 			"summaryMode":          "investigation-promoted",
+		}
+		if request.Status.Lineage != nil && request.Status.Lineage.FindingIdentity != nil {
+			riskSignal.Spec.Parameters["objectFindingIdentity"] = request.Status.Lineage.FindingIdentity.ObjectFindingIdentity
+			riskSignal.Spec.Parameters["logicalFindingIdentity"] = request.Status.Lineage.FindingIdentity.LogicalFindingIdentity
+			riskSignal.Spec.Parameters["incidentOccurrence"] = request.Status.Lineage.FindingIdentity.IncidentOccurrence
 		}
 		return nil
 	})

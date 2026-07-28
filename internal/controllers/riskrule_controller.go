@@ -47,6 +47,8 @@ type ruleEvaluationSummary struct {
 	QueryFailure       *evaluationIssue
 }
 
+const findingIdentitySchemaVersion = "fluxagent-finding-identity-v1"
+
 func (r *RiskRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var rule v1alpha1.RiskRule
 	if err := r.Get(ctx, req.NamespacedName, &rule); err != nil {
@@ -254,6 +256,7 @@ func (r *RiskRuleReconciler) upsertRiskSignal(ctx context.Context, riskRule *v1a
 	riskSignal := &v1alpha1.RiskSignal{}
 	riskSignal.Name = riskSignalName(riskRule.Name, target.Resource.Name)
 	riskSignal.Namespace = target.Resource.Namespace
+	identity := findingIdentity(riskRule, target, matches, normalizedWindowBucket(riskRule.Spec.Window.Duration, now))
 
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, riskSignal, func() error {
 		if riskSignal.Labels == nil {
@@ -266,9 +269,11 @@ func (r *RiskRuleReconciler) upsertRiskSignal(ctx context.Context, riskRule *v1a
 		riskSignal.Labels[labelRiskRule] = riskRule.Name
 		riskSignal.Annotations[annotationTargetRef] = target.Resource.Namespace + "/" + target.Resource.Name
 		riskSignal.Annotations[annotationDetectionSource] = "risk-rule"
+		applyFindingIdentityAnnotations(riskSignal.Annotations, identity)
 
 		riskSignal.Spec.Target = resourceToTargetRef(target.Resource)
 		riskSignal.Spec.SignalType = rule.SignalTypeForSignal(matches[0].Signal)
+		riskSignal.Spec.FindingIdentity = identity
 		riskSignal.Spec.Severity = normalizeSeverity(riskRule.Spec.Severity)
 		riskSignal.Spec.Confidence = confidenceForSeverity(riskSignal.Spec.Severity, len(matches))
 		riskSignal.Spec.DryRun = true
@@ -276,11 +281,14 @@ func (r *RiskRuleReconciler) upsertRiskSignal(ctx context.Context, riskRule *v1a
 		riskSignal.Spec.Evidence = flattenEvidence(matches)
 		riskSignal.Spec.ActionType = "notification.sendSlack"
 		riskSignal.Spec.Parameters = map[string]string{
-			"channel":     "webhook",
-			"mode":        "read-only",
-			"riskRule":    riskRule.Name,
-			"targetRef":   target.Resource.Namespace + "/" + target.Resource.Name,
-			"summaryMode": "rule-evaluated",
+			"channel":                "webhook",
+			"mode":                   "read-only",
+			"riskRule":               riskRule.Name,
+			"targetRef":              target.Resource.Namespace + "/" + target.Resource.Name,
+			"summaryMode":            "rule-evaluated",
+			"objectFindingIdentity":  identity.ObjectFindingIdentity,
+			"logicalFindingIdentity": identity.LogicalFindingIdentity,
+			"incidentOccurrence":     identity.IncidentOccurrence,
 		}
 		return nil
 	})
@@ -303,7 +311,8 @@ func (r *RiskRuleReconciler) upsertRiskSignal(ctx context.Context, riskRule *v1a
 func (r *RiskRuleReconciler) upsertInvestigationRequest(ctx context.Context, riskRule *v1alpha1.RiskRule, target rule.Target, matches []rule.Match, now time.Time) error {
 	fingerprint := findingFingerprint(matches)
 	windowBucket := normalizedWindowBucket(riskRule.Spec.Window.Duration, now)
-	name := investigationRequestName(riskRule.Name, target.Resource.Name, fingerprint, windowBucket)
+	identity := findingIdentity(riskRule, target, matches, windowBucket)
+	name := investigationRequestName(riskRule.Name, target.Resource.Name, identity.IncidentOccurrence)
 
 	request := &v1alpha1.InvestigationRequest{}
 	request.Name = name
@@ -325,6 +334,7 @@ func (r *RiskRuleReconciler) upsertInvestigationRequest(ctx context.Context, ris
 		request.Annotations[annotationLineageGeneration] = strconv.FormatInt(riskRule.Generation, 10)
 		request.Annotations[annotationTargetUID] = targetUID(target)
 		request.Annotations[annotationFindingFingerprint] = fingerprint
+		applyFindingIdentityAnnotations(request.Annotations, identity)
 		request.Annotations[annotationInvestigationDepth] = "0"
 		request.Annotations[annotationWindowBucket] = windowBucket
 
@@ -511,8 +521,8 @@ func findingFingerprint(matches []rule.Match) string {
 	return canonicaldigest.String(canonicaldigest.ObservationJSONV1, payload)
 }
 
-func investigationRequestName(ruleName, targetName, fingerprint, windowBucket string) string {
-	suffixSource := fingerprint + ":" + windowBucket
+func investigationRequestName(ruleName, targetName, incidentOccurrence string) string {
+	suffixSource := incidentOccurrence
 	sum := sha256.Sum256([]byte(suffixSource))
 	suffix := hex.EncodeToString(sum[:])[:12]
 	name := strings.ToLower(ruleName + "-" + targetName + "-" + suffix)
@@ -522,6 +532,115 @@ func investigationRequestName(ruleName, targetName, fingerprint, windowBucket st
 		return strings.TrimSuffix(name, "-")
 	}
 	return strings.TrimSuffix(name[:63], "-")
+}
+
+func findingIdentity(riskRule *v1alpha1.RiskRule, target rule.Target, matches []rule.Match, windowBucket string) *v1alpha1.FindingIdentity {
+	findingType := findingType(matches)
+	attributes := normalizedFindingAttributes(matches)
+	object := canonicaldigest.String(canonicaldigest.ObservationJSONV1, map[string]any{
+		"schemaVersion": findingIdentitySchemaVersion,
+		"sourceUID":     string(riskRule.UID),
+		"targetUID":     targetUID(target),
+		"findingType":   findingType,
+		"attributes":    attributes,
+	})
+	logical := canonicaldigest.String(canonicaldigest.ObservationJSONV1, map[string]any{
+		"schemaVersion": findingIdentitySchemaVersion,
+		"source": map[string]any{
+			"apiVersion": v1alpha1.SchemeGroupVersion.String(),
+			"kind":       "RiskRule",
+			"namespace":  riskRule.Namespace,
+			"name":       riskRule.Name,
+		},
+		"target": map[string]any{
+			"apiVersion": target.Resource.APIVersion,
+			"kind":       target.Resource.Kind,
+			"namespace":  target.Resource.Namespace,
+			"name":       target.Resource.Name,
+		},
+		"findingType": findingType,
+		"attributes":  attributes,
+	})
+	occurrence := canonicaldigest.String(canonicaldigest.ObservationJSONV1, map[string]any{
+		"schemaVersion":         findingIdentitySchemaVersion,
+		"objectFindingIdentity": object,
+		"sourceGeneration":      riskRule.Generation,
+		"targetGeneration":      target.Generation,
+		"windowBucket":          windowBucket,
+	})
+	return &v1alpha1.FindingIdentity{
+		SchemaVersion:          findingIdentitySchemaVersion,
+		ObjectFindingIdentity:  object,
+		LogicalFindingIdentity: logical,
+		IncidentOccurrence:     occurrence,
+		FindingType:            findingType,
+		TargetGeneration:       target.Generation,
+		WindowBucket:           windowBucket,
+	}
+}
+
+func applyFindingIdentityAnnotations(annotations map[string]string, identity *v1alpha1.FindingIdentity) {
+	if annotations == nil || identity == nil {
+		return
+	}
+	annotations[annotationFindingSchema] = identity.SchemaVersion
+	annotations[annotationFindingType] = identity.FindingType
+	annotations[annotationObjectFindingID] = identity.ObjectFindingIdentity
+	annotations[annotationLogicalFindingID] = identity.LogicalFindingIdentity
+	annotations[annotationIncidentOccurrence] = identity.IncidentOccurrence
+	annotations[annotationTargetGeneration] = strconv.FormatInt(identity.TargetGeneration, 10)
+}
+
+func findingType(matches []rule.Match) string {
+	types := make([]string, 0, len(matches))
+	for _, match := range matches {
+		types = appendStringIfMissing(types, rule.SignalTypeForSignal(match.Signal))
+	}
+	sort.Strings(types)
+	return strings.Join(types, "+")
+}
+
+func normalizedFindingAttributes(matches []rule.Match) []map[string]any {
+	attributes := make([]map[string]any, 0, len(matches))
+	for _, match := range matches {
+		evidenceDigests := make([]string, 0, len(match.Evidence))
+		for _, ref := range match.Evidence {
+			evidenceDigests = append(evidenceDigests, firstNonEmptyString(ref.ContentDigest, ref.QueryDigest, ref.Kind+":"+ref.Source+":"+ref.Summary))
+		}
+		sort.Strings(evidenceDigests)
+		attributes = append(attributes, map[string]any{
+			"signal":          match.Signal.Name,
+			"signalType":      rule.SignalTypeForSignal(match.Signal),
+			"severity":        match.Severity,
+			"evidenceDigests": evidenceDigests,
+		})
+	}
+	sort.Slice(attributes, func(i, j int) bool {
+		return fmt.Sprint(attributes[i]["signal"], attributes[i]["signalType"]) < fmt.Sprint(attributes[j]["signal"], attributes[j]["signalType"])
+	})
+	return attributes
+}
+
+func appendStringIfMissing(values []string, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func targetUID(target rule.Target) string {

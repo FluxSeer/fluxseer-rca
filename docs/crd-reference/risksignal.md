@@ -22,6 +22,7 @@ Capture a detected workload risk with enough context for notification, review, a
 | --- | --- | --- | --- |
 | `spec.target` | object | yes | Target workload or resource reference. |
 | `spec.signalType` | string | yes | Semantic finding type such as event, logs, or metric regression. |
+| `spec.findingIdentity` | object | no | Structured finding and incident occurrence identity used for deduplication, correlation, and lineage. |
 | `spec.actionType` | string | no | Suggested downstream action contract. |
 | `spec.severity` | string | yes | Severity string used by guardrails and downstream planning. |
 | `spec.confidence` | integer | yes | Confidence score from `0` to `100` for the merged finding. |
@@ -138,6 +139,16 @@ Fields that should not be persisted:
 - provider raw responses
 - secrets, tokens, or authorization headers
 - unredacted Kubernetes objects
+
+### `spec.findingIdentity`
+
+`spec.findingIdentity` is present when the signal is materialized from `RiskRule` routing or promoted from an `InvestigationRequest` that carries lineage. It separates three related identities:
+
+- `objectFindingIdentity`: precise deduplication using source UID, target UID, finding type, and normalized evidence attributes.
+- `logicalFindingIdentity`: dashboard and long-term correlation using apiVersion/kind/namespace/name references instead of object UIDs.
+- `incidentOccurrence`: per-incident identity using object finding identity, source generation, target generation, and the rounded evidence window bucket.
+
+`status.rcaSummary` and other RCA compatibility fields remain projections. In the canonical v0.3 path, the complete RCA result is owned by `InvestigationRequest.status`; `RiskSignal` stores the materialized finding, lineage, compact evidence references, and compatibility RCA fields required by the v0.2 path.
 
 ### `spec.parameters`
 

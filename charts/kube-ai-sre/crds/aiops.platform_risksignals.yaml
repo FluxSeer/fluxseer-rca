@@ -33,6 +33,16 @@ spec:
                     apiVersion: {type: string}
                     service: {type: string}
                 signalType: {type: string}
+                findingIdentity:
+                  type: object
+                  properties:
+                    schemaVersion: {type: string}
+                    objectFindingIdentity: {type: string}
+                    logicalFindingIdentity: {type: string}
+                    incidentOccurrence: {type: string}
+                    findingType: {type: string}
+                    targetGeneration: {type: integer, format: int64}
+                    windowBucket: {type: string}
                 actionType: {type: string}
                 severity: {type: string}
                 confidence: {type: integer}

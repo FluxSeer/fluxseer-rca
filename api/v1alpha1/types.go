@@ -56,6 +56,16 @@ type EvidenceRef struct {
 	Link                   string       `json:"link,omitempty"`
 }
 
+type FindingIdentity struct {
+	SchemaVersion          string `json:"schemaVersion,omitempty"`
+	ObjectFindingIdentity  string `json:"objectFindingIdentity,omitempty"`
+	LogicalFindingIdentity string `json:"logicalFindingIdentity,omitempty"`
+	IncidentOccurrence     string `json:"incidentOccurrence,omitempty"`
+	FindingType            string `json:"findingType,omitempty"`
+	TargetGeneration       int64  `json:"targetGeneration,omitempty"`
+	WindowBucket           string `json:"windowBucket,omitempty"`
+}
+
 type ResourceStatus struct {
 	Phase              string      `json:"phase,omitempty"`
 	Message            string      `json:"message,omitempty"`
@@ -78,15 +88,16 @@ type RiskSignalStatus struct {
 }
 
 type RiskSignalSpec struct {
-	Target     TargetRef         `json:"target"`
-	SignalType string            `json:"signalType"`
-	ActionType string            `json:"actionType,omitempty"`
-	Severity   string            `json:"severity"`
-	Confidence int               `json:"confidence"`
-	DryRun     bool              `json:"dryRun"`
-	TTLSeconds int64             `json:"ttlSeconds,omitempty"`
-	Evidence   []EvidenceRef     `json:"evidence,omitempty"`
-	Parameters map[string]string `json:"parameters,omitempty"`
+	Target          TargetRef         `json:"target"`
+	SignalType      string            `json:"signalType"`
+	FindingIdentity *FindingIdentity  `json:"findingIdentity,omitempty"`
+	ActionType      string            `json:"actionType,omitempty"`
+	Severity        string            `json:"severity"`
+	Confidence      int               `json:"confidence"`
+	DryRun          bool              `json:"dryRun"`
+	TTLSeconds      int64             `json:"ttlSeconds,omitempty"`
+	Evidence        []EvidenceRef     `json:"evidence,omitempty"`
+	Parameters      map[string]string `json:"parameters,omitempty"`
 }
 
 type RemediationStep struct {
@@ -167,6 +178,10 @@ func (in *RiskSignal) DeepCopyInto(out *RiskSignal) {
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
 	if in.Spec.Evidence != nil {
 		out.Spec.Evidence = deepcopyEvidenceRefs(in.Spec.Evidence)
+	}
+	if in.Spec.FindingIdentity != nil {
+		identity := *in.Spec.FindingIdentity
+		out.Spec.FindingIdentity = &identity
 	}
 	if in.Spec.Parameters != nil {
 		out.Spec.Parameters = make(map[string]string, len(in.Spec.Parameters))

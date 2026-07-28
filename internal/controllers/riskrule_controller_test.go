@@ -26,6 +26,7 @@ import (
 	"fluxagent/internal/model/heuristic"
 	"fluxagent/internal/model/openai"
 	"fluxagent/internal/modelgateway"
+	"fluxagent/internal/rule"
 )
 
 type fakeRuleDataSource struct {
@@ -408,7 +409,11 @@ func TestRiskRuleReconcilerRoutesMatchesToInvestigationRequest(t *testing.T) {
 		investigation.Annotations[annotationLineageSourceUID] != "riskrule-latency-uid" ||
 		investigation.Annotations[annotationLineageGeneration] != "4" ||
 		investigation.Annotations[annotationTargetUID] != "deployment-open-api-uid" ||
-		!strings.HasPrefix(investigation.Annotations[annotationFindingFingerprint], "sha256:") {
+		!strings.HasPrefix(investigation.Annotations[annotationFindingFingerprint], "sha256:") ||
+		investigation.Annotations[annotationFindingSchema] != findingIdentitySchemaVersion ||
+		!strings.HasPrefix(investigation.Annotations[annotationObjectFindingID], "sha256:") ||
+		!strings.HasPrefix(investigation.Annotations[annotationLogicalFindingID], "sha256:") ||
+		!strings.HasPrefix(investigation.Annotations[annotationIncidentOccurrence], "sha256:") {
 		t.Fatalf("expected lineage annotations, got %#v", investigation.Annotations)
 	}
 
@@ -426,6 +431,62 @@ func TestRiskRuleReconcilerRoutesMatchesToInvestigationRequest(t *testing.T) {
 	}
 	if storedRule.Status.Message != "processed 1 targets; 1 produced InvestigationRequest" {
 		t.Fatalf("unexpected rule status message: %s", storedRule.Status.Message)
+	}
+}
+
+func TestFindingIdentitySeparatesSameWorkloadNameDifferentUID(t *testing.T) {
+	riskRule := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "latency-regression",
+			Namespace: "fluxagent-test",
+			UID:       types.UID("riskrule-uid"),
+		},
+	}
+	matches := []rule.Match{testFindingMatch("latency", "sha256:evidence")}
+	first := findingIdentity(riskRule, rule.Target{
+		Resource:   domain.ResourceRef{APIVersion: "apps/v1", Kind: "Deployment", Namespace: "prod", Name: "open-api"},
+		UID:        "deployment-uid-a",
+		Generation: 7,
+	}, matches, "2026-07-06T10:00Z")
+	second := findingIdentity(riskRule, rule.Target{
+		Resource:   domain.ResourceRef{APIVersion: "apps/v1", Kind: "Deployment", Namespace: "prod", Name: "open-api"},
+		UID:        "deployment-uid-b",
+		Generation: 7,
+	}, matches, "2026-07-06T10:00Z")
+
+	if first.ObjectFindingIdentity == second.ObjectFindingIdentity {
+		t.Fatalf("expected object identities to differ for different target UIDs, got %s", first.ObjectFindingIdentity)
+	}
+	if first.LogicalFindingIdentity != second.LogicalFindingIdentity {
+		t.Fatalf("expected logical identity to remain stable across UID replacement, got first=%s second=%s", first.LogicalFindingIdentity, second.LogicalFindingIdentity)
+	}
+}
+
+func TestFindingIdentitySeparatesOccurrenceByGenerationAndWindow(t *testing.T) {
+	riskRule := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "latency-regression",
+			Namespace:  "fluxagent-test",
+			UID:        types.UID("riskrule-uid"),
+			Generation: 1,
+		},
+	}
+	target := rule.Target{
+		Resource:   domain.ResourceRef{APIVersion: "apps/v1", Kind: "Deployment", Namespace: "prod", Name: "open-api"},
+		UID:        "deployment-uid",
+		Generation: 7,
+	}
+	matches := []rule.Match{testFindingMatch("latency", "sha256:evidence")}
+	first := findingIdentity(riskRule, target, matches, "2026-07-06T10:00Z")
+	second := findingIdentity(riskRule, target, matches, "2026-07-06T10:15Z")
+	target.Generation = 8
+	third := findingIdentity(riskRule, target, matches, "2026-07-06T10:00Z")
+
+	if first.ObjectFindingIdentity != second.ObjectFindingIdentity || first.ObjectFindingIdentity != third.ObjectFindingIdentity {
+		t.Fatalf("expected object identity to remain stable across occurrences")
+	}
+	if first.IncidentOccurrence == second.IncidentOccurrence || first.IncidentOccurrence == third.IncidentOccurrence {
+		t.Fatalf("expected occurrence identity to change by window or generation, got first=%s second=%s third=%s", first.IncidentOccurrence, second.IncidentOccurrence, third.IncidentOccurrence)
 	}
 }
 
@@ -1596,4 +1657,23 @@ func findCondition(conditions []metav1.Condition, condType string) *metav1.Condi
 		}
 	}
 	return nil
+}
+
+func testFindingMatch(signalName string, evidenceDigest string) rule.Match {
+	return rule.Match{
+		Signal: v1alpha1.RiskRuleSignal{
+			Name: signalName,
+			Type: "metric",
+		},
+		Summary:  signalName + " crossed threshold",
+		Severity: "high",
+		Evidence: []v1alpha1.EvidenceRef{
+			{
+				Kind:          "metric",
+				Source:        "prometheus",
+				Summary:       "metric crossed threshold",
+				ContentDigest: evidenceDigest,
+			},
+		},
+	}
 }
