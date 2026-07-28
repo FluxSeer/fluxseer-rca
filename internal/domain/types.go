@@ -56,6 +56,69 @@ type Evidence struct {
 	Link    string `json:"link,omitempty"`
 }
 
+type TimeRange struct {
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
+}
+
+type ObservationType string
+
+const (
+	ObservationTypeMetric              ObservationType = "metric"
+	ObservationTypeLog                 ObservationType = "log"
+	ObservationTypeEvent               ObservationType = "event"
+	ObservationTypeDeploymentCondition ObservationType = "deploymentCondition"
+)
+
+type ObservationValue struct {
+	Metric              *MetricObservation              `json:"metric,omitempty"`
+	Log                 *LogObservation                 `json:"log,omitempty"`
+	Event               *EventObservation               `json:"event,omitempty"`
+	DeploymentCondition *DeploymentConditionObservation `json:"deploymentCondition,omitempty"`
+}
+
+type MetricObservation struct {
+	Name  string  `json:"name,omitempty"`
+	Value float64 `json:"value"`
+	Unit  string  `json:"unit,omitempty"`
+}
+
+type LogObservation struct {
+	Line string `json:"line,omitempty"`
+}
+
+type EventObservation struct {
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type DeploymentConditionObservation struct {
+	Type              string `json:"type,omitempty"`
+	Status            string `json:"status,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	Message           string `json:"message,omitempty"`
+	AvailableReplicas int32  `json:"availableReplicas,omitempty"`
+	DesiredReplicas   int32  `json:"desiredReplicas,omitempty"`
+}
+
+type Observation struct {
+	ID               string           `json:"id"`
+	SchemaVersion    string           `json:"schemaVersion"`
+	DataSourceRef    string           `json:"dataSourceRef"`
+	Capability       QueryType        `json:"capability"`
+	QueryDigest      string           `json:"queryDigest"`
+	TimeRange        TimeRange        `json:"timeRange"`
+	Type             ObservationType  `json:"type"`
+	Value            ObservationValue `json:"value"`
+	Summary          string           `json:"summary"`
+	ContentDigest    string           `json:"contentDigest"`
+	RedactionProfile string           `json:"redactionProfile"`
+	Truncated        bool             `json:"truncated"`
+	OriginalCount    int              `json:"originalCount"`
+	RetainedCount    int              `json:"retainedCount"`
+	CollectedAt      time.Time        `json:"collectedAt"`
+}
+
 type IncidentContext struct {
 	ID          string            `json:"id"`
 	Cluster     string            `json:"cluster"`
@@ -68,11 +131,12 @@ type IncidentContext struct {
 }
 
 type EvidenceBundle struct {
-	Logs       []string           `json:"logs,omitempty"`
-	Metrics    map[string]float64 `json:"metrics,omitempty"`
-	Traces     []string           `json:"traces,omitempty"`
-	Events     []string           `json:"events,omitempty"`
-	References []Evidence         `json:"references,omitempty"`
+	Logs         []string           `json:"logs,omitempty"`
+	Metrics      map[string]float64 `json:"metrics,omitempty"`
+	Traces       []string           `json:"traces,omitempty"`
+	Events       []string           `json:"events,omitempty"`
+	References   []Evidence         `json:"references,omitempty"`
+	Observations []Observation      `json:"observations,omitempty"`
 }
 
 type ResourceTimeline struct {

@@ -2,6 +2,9 @@ package investigation
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,12 +12,14 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
+	evidencepkg "fluxagent/internal/evidence"
 	"fluxagent/internal/modelgateway"
 	"fluxagent/internal/rule"
 )
@@ -59,6 +64,7 @@ func (r PreflightResult) Successful() bool {
 type EvidenceCollectionResult struct {
 	Summary      string
 	EvidenceRefs []v1alpha1.EvidenceRef
+	Observations []domain.Observation
 	Issue        *Issue
 }
 
@@ -129,6 +135,7 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 	}
 
 	evidenceRefs := make([]v1alpha1.EvidenceRef, 0, len(preflight.CollectionPlan))
+	observations := make([]domain.Observation, 0, len(preflight.CollectionPlan))
 	totalRecords := 0
 	for _, step := range preflight.CollectionPlan {
 		source, ok := s.Registry.Get(step.DatasourceName)
@@ -158,13 +165,14 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 			return result, nil
 		}
 		filtered := filterQueryResult(queryResult, step)
-		normalized := normalizeEvidenceRefs(filtered, queryRequest)
-		assignEvidenceIDs(normalized, len(evidenceRefs))
-		evidenceRefs = append(evidenceRefs, normalized...)
+		normalized := normalizeObservations(filtered, queryRequest, len(observations), now)
+		observations = append(observations, normalized...)
+		evidenceRefs = append(evidenceRefs, evidenceRefsFromObservations(normalized, queryRequest)...)
 		totalRecords += len(filtered.Records)
 	}
 
 	result.EvidenceRefs = evidenceRefs
+	result.Observations = observations
 	result.Summary = fmt.Sprintf("collected %d evidence records from %d investigation queries", totalRecords, len(preflight.CollectionPlan))
 	return result, nil
 }
@@ -453,72 +461,144 @@ func investigationQueryText(querySpec v1alpha1.InvestigationQuery, queryType dom
 	}
 }
 
-func normalizeEvidenceRefs(result *datasource.QueryResult, req datasource.QueryRequest) []v1alpha1.EvidenceRef {
+func normalizeObservations(result *datasource.QueryResult, req datasource.QueryRequest, offset int, collectedAt time.Time) []domain.Observation {
 	if result == nil {
 		return nil
 	}
 
 	const maxEvidencePerDatasource = 5
-	evidenceRefs := make([]v1alpha1.EvidenceRef, 0, min(len(result.Records), maxEvidencePerDatasource))
+	originalCount := len(result.Records)
+	retainedCount := min(originalCount, maxEvidencePerDatasource)
+	truncated := originalCount > retainedCount
+	observations := make([]domain.Observation, 0, retainedCount)
 	for index, record := range result.Records {
 		if index >= maxEvidencePerDatasource {
 			break
 		}
-		evidenceRefs = append(evidenceRefs, normalizeEvidenceRef(record, result, req))
+		observations = append(observations, normalizeObservation(record, result, req, offset+index, originalCount, retainedCount, truncated, collectedAt))
 	}
-	return evidenceRefs
+	return observations
 }
 
-func normalizeEvidenceRef(record map[string]any, result *datasource.QueryResult, req datasource.QueryRequest) v1alpha1.EvidenceRef {
+func normalizeObservation(record map[string]any, result *datasource.QueryResult, req datasource.QueryRequest, index int, originalCount int, retainedCount int, truncated bool, collectedAt time.Time) domain.Observation {
+	redactor := evidencepkg.NewPatternRedactor()
+	source := firstNonEmpty(result.Source, req.Target.Service, req.Target.Name)
+	queryDigest := digestCanonical(map[string]any{
+		"capability": req.QueryType,
+		"query":      req.Query,
+	})
+	obs := domain.Observation{
+		ID:               fmt.Sprintf("evidence-%03d", index+1),
+		SchemaVersion:    "observation.fluxagent.io/v1alpha1",
+		DataSourceRef:    source,
+		Capability:       req.QueryType,
+		QueryDigest:      queryDigest,
+		TimeRange:        domain.TimeRange{Start: req.StartTime.UTC(), End: req.EndTime.UTC()},
+		RedactionProfile: "default-v1",
+		Truncated:        truncated,
+		OriginalCount:    originalCount,
+		RetainedCount:    retainedCount,
+		CollectedAt:      collectedAt.UTC(),
+	}
 	switch result.QueryType {
 	case domain.QueryTypeMetric:
 		metricName, _ := record["metric"].(string)
 		rawValue := fmt.Sprint(record["value"])
+		value := 0.0
 		summary := fmt.Sprintf("metric %s returned value %s", firstNonEmpty(metricName, "unknown"), rawValue)
 		if parsed, err := strconv.ParseFloat(rawValue, 64); err == nil {
+			value = parsed
 			summary = fmt.Sprintf("metric %s returned value %.2f", firstNonEmpty(metricName, "unknown"), parsed)
 		}
-		return v1alpha1.EvidenceRef{
-			Kind:    "metric",
-			Source:  result.Source,
-			Query:   req.Query,
-			Summary: summary,
-		}
+		obs.Type = domain.ObservationTypeMetric
+		obs.Summary = redactor.RedactText(summary)
+		obs.Value = domain.ObservationValue{Metric: &domain.MetricObservation{Name: firstNonEmpty(metricName, "unknown"), Value: value}}
 	case domain.QueryTypeLog:
 		line, _ := record["line"].(string)
-		return v1alpha1.EvidenceRef{
-			Kind:    "log",
-			Source:  result.Source,
-			Query:   req.Query,
-			Summary: firstNonEmpty(strings.TrimSpace(line), result.Summary),
-		}
+		obs.Type = domain.ObservationTypeLog
+		obs.Summary = redactor.RedactText(firstNonEmpty(strings.TrimSpace(line), result.Summary))
+		obs.Value = domain.ObservationValue{Log: &domain.LogObservation{Line: obs.Summary}}
 	case domain.QueryTypeEvent:
 		reason, _ := record["reason"].(string)
 		message, _ := record["message"].(string)
-		return v1alpha1.EvidenceRef{
-			Kind:    "event",
-			Source:  result.Source,
-			Query:   req.Query,
-			Reason:  reason,
-			Summary: firstNonEmpty(strings.TrimSpace(message), result.Summary),
-		}
+		obs.Type = domain.ObservationTypeEvent
+		obs.Summary = redactor.RedactText(firstNonEmpty(strings.TrimSpace(message), result.Summary))
+		obs.Value = domain.ObservationValue{Event: &domain.EventObservation{Reason: redactor.RedactText(reason), Message: obs.Summary}}
+	case domain.QueryTypeDeploymentCondition:
+		reason, _ := record["reason"].(string)
+		message, _ := record["message"].(string)
+		conditionType, _ := record["type"].(string)
+		status, _ := record["status"].(string)
+		obs.Type = domain.ObservationTypeDeploymentCondition
+		obs.Summary = redactor.RedactText(firstNonEmpty(strings.TrimSpace(message), result.Summary))
+		obs.Value = domain.ObservationValue{DeploymentCondition: &domain.DeploymentConditionObservation{
+			Type:    redactor.RedactText(conditionType),
+			Status:  redactor.RedactText(status),
+			Reason:  redactor.RedactText(reason),
+			Message: obs.Summary,
+		}}
 	default:
-		return v1alpha1.EvidenceRef{
-			Kind:    "signal",
-			Source:  result.Source,
-			Query:   req.Query,
-			Summary: result.Summary,
-		}
+		obs.Type = domain.ObservationTypeEvent
+		obs.Summary = redactor.RedactText(result.Summary)
+		obs.Value = domain.ObservationValue{Event: &domain.EventObservation{Message: obs.Summary}}
 	}
+	obs.ContentDigest = digestCanonical(map[string]any{
+		"schemaVersion":    obs.SchemaVersion,
+		"dataSourceRef":    obs.DataSourceRef,
+		"capability":       obs.Capability,
+		"queryDigest":      obs.QueryDigest,
+		"timeRange":        obs.TimeRange,
+		"type":             obs.Type,
+		"value":            obs.Value,
+		"summary":          obs.Summary,
+		"redactionProfile": obs.RedactionProfile,
+		"truncated":        obs.Truncated,
+		"originalCount":    obs.OriginalCount,
+		"retainedCount":    obs.RetainedCount,
+	})
+	return obs
 }
 
-func assignEvidenceIDs(refs []v1alpha1.EvidenceRef, offset int) {
-	for index := range refs {
-		if strings.TrimSpace(refs[index].ID) != "" {
-			continue
+func evidenceRefsFromObservations(observations []domain.Observation, req datasource.QueryRequest) []v1alpha1.EvidenceRef {
+	refs := make([]v1alpha1.EvidenceRef, 0, len(observations))
+	for _, observation := range observations {
+		collectedAt := metav1Time(observation.CollectedAt)
+		ref := v1alpha1.EvidenceRef{
+			ID:               observation.ID,
+			Kind:             string(observation.Type),
+			Source:           observation.DataSourceRef,
+			Summary:          observation.Summary,
+			Query:            req.Query,
+			QueryDigest:      observation.QueryDigest,
+			ContentDigest:    observation.ContentDigest,
+			RedactionProfile: observation.RedactionProfile,
+			Truncated:        observation.Truncated,
+			OriginalCount:    int32(observation.OriginalCount),
+			RetainedCount:    int32(observation.RetainedCount),
+			CollectedAt:      &collectedAt,
 		}
-		refs[index].ID = fmt.Sprintf("evidence-%03d", offset+index+1)
+		if observation.Value.Event != nil {
+			ref.Reason = observation.Value.Event.Reason
+		}
+		if observation.Value.DeploymentCondition != nil {
+			ref.Reason = observation.Value.DeploymentCondition.Reason
+		}
+		refs = append(refs, ref)
 	}
+	return refs
+}
+
+func digestCanonical(value any) string {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		payload = []byte(fmt.Sprint(value))
+	}
+	sum := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func metav1Time(value time.Time) metav1.Time {
+	return metav1.NewTime(value)
 }
 
 func filterQueryResult(result *datasource.QueryResult, step CollectionStep) *datasource.QueryResult {
@@ -647,10 +727,11 @@ func buildInvestigationIngestionOutput(spec v1alpha1.InvestigationRequestSpec, p
 			GeneratedAt: now,
 		},
 		Evidence: domain.EvidenceBundle{
-			Logs:       logs,
-			Metrics:    metrics,
-			Events:     events,
-			References: references,
+			Logs:         logs,
+			Metrics:      metrics,
+			Events:       events,
+			References:   references,
+			Observations: append([]domain.Observation(nil), evidenceResult.Observations...),
 		},
 		Signals: signals,
 		Timeline: domain.ResourceTimeline{

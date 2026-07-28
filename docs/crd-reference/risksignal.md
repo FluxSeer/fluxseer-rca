@@ -118,11 +118,13 @@ Evidence is intentionally lightweight. It holds enough metadata to explain why t
 Recommended persisted evidence fields:
 
 - datasource type and name
-- query type and time range
+- query type, query digest, and time range
 - compact summary
 - resource references
-- evidence count or digest
-- redaction metadata
+- content digest
+- redaction profile
+- truncation metadata
+- collection timestamp
 
 Fields that should not be persisted:
 

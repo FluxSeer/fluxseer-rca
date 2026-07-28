@@ -48,6 +48,13 @@ spec:
                       source: {type: string}
                       summary: {type: string}
                       query: {type: string}
+                      queryDigest: {type: string}
+                      contentDigest: {type: string}
+                      redactionProfile: {type: string}
+                      truncated: {type: boolean}
+                      originalCount: {type: integer, format: int32}
+                      retainedCount: {type: integer, format: int32}
+                      collectedAt: {type: string, format: date-time}
                       reason: {type: string}
                       link: {type: string}
                 parameters:

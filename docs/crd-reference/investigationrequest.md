@@ -198,8 +198,17 @@ These fields are the v0.3 target contract. New integrations should check the gen
 - `source`
 - `summary`
 - `query`
+- `queryDigest`
+- `contentDigest`
+- `redactionProfile`
+- `truncated`
+- `originalCount`
+- `retainedCount`
+- `collectedAt`
 - `reason`
 - `link`
+
+These fields are compact normalized-observation metadata. They let consumers audit which query and redacted observation supported the RCA without storing raw Prometheus payloads, large Loki excerpts, or unredacted Kubernetes objects in status.
 
 `status.alternativeHypotheses[]`, `status.missingEvidence[]`, and `status.degradation` are reserved for partial-failure and claim-hardening semantics. They let FluxAgent report uncertainty explicitly instead of silently presenting an incomplete RCA as fully proven.
 

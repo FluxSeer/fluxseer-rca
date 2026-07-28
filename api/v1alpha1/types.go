@@ -33,13 +33,20 @@ type TargetRef struct {
 }
 
 type EvidenceRef struct {
-	ID      string `json:"id,omitempty"`
-	Kind    string `json:"kind,omitempty"`
-	Source  string `json:"source,omitempty"`
-	Summary string `json:"summary,omitempty"`
-	Query   string `json:"query,omitempty"`
-	Reason  string `json:"reason,omitempty"`
-	Link    string `json:"link,omitempty"`
+	ID               string       `json:"id,omitempty"`
+	Kind             string       `json:"kind,omitempty"`
+	Source           string       `json:"source,omitempty"`
+	Summary          string       `json:"summary,omitempty"`
+	Query            string       `json:"query,omitempty"`
+	QueryDigest      string       `json:"queryDigest,omitempty"`
+	ContentDigest    string       `json:"contentDigest,omitempty"`
+	RedactionProfile string       `json:"redactionProfile,omitempty"`
+	Truncated        bool         `json:"truncated,omitempty"`
+	OriginalCount    int32        `json:"originalCount,omitempty"`
+	RetainedCount    int32        `json:"retainedCount,omitempty"`
+	CollectedAt      *metav1.Time `json:"collectedAt,omitempty"`
+	Reason           string       `json:"reason,omitempty"`
+	Link             string       `json:"link,omitempty"`
 }
 
 type ResourceStatus struct {
@@ -152,7 +159,7 @@ func (in *RiskSignal) DeepCopyInto(out *RiskSignal) {
 	out.TypeMeta = in.TypeMeta
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
 	if in.Spec.Evidence != nil {
-		out.Spec.Evidence = append([]EvidenceRef(nil), in.Spec.Evidence...)
+		out.Spec.Evidence = deepcopyEvidenceRefs(in.Spec.Evidence)
 	}
 	if in.Spec.Parameters != nil {
 		out.Spec.Parameters = make(map[string]string, len(in.Spec.Parameters))
@@ -167,6 +174,21 @@ func (in *RiskSignal) DeepCopyInto(out *RiskSignal) {
 		out.Status.Conditions = make([]metav1.Condition, len(in.Status.Conditions))
 		copy(out.Status.Conditions, in.Status.Conditions)
 	}
+}
+
+func deepcopyEvidenceRefs(in []EvidenceRef) []EvidenceRef {
+	if in == nil {
+		return nil
+	}
+	out := make([]EvidenceRef, len(in))
+	copy(out, in)
+	for index := range out {
+		if in[index].CollectedAt != nil {
+			collectedAt := in[index].CollectedAt.DeepCopy()
+			out[index].CollectedAt = collectedAt
+		}
+	}
+	return out
 }
 
 func (in *RiskSignal) DeepCopy() *RiskSignal {
