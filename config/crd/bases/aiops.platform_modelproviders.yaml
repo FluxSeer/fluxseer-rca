@@ -40,6 +40,19 @@ spec:
                   type: string
                 maxTokens:
                   type: integer
+                dataPolicy:
+                  type: object
+                  properties:
+                    allowExternalTransmission:
+                      type: boolean
+                    allowedEvidenceKinds:
+                      type: array
+                      items:
+                        type: string
+                    allowLogSamples:
+                      type: boolean
+                    maximumClassification:
+                      type: string
                 fallbackProviderRef:
                   type: object
                   properties:

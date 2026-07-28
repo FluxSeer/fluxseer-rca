@@ -6,13 +6,21 @@ import (
 )
 
 type ModelProviderSpec struct {
-	Provider            string               `json:"provider"`
-	Model               string               `json:"model,omitempty"`
-	Endpoint            string               `json:"endpoint,omitempty"`
-	APIKeySecretRef     *SecretKeyRef        `json:"apiKeySecretRef,omitempty"`
-	Timeout             metav1.Duration      `json:"timeout,omitempty"`
-	MaxTokens           int                  `json:"maxTokens,omitempty"`
-	FallbackProviderRef LocalObjectReference `json:"fallbackProviderRef,omitempty"`
+	Provider            string                  `json:"provider"`
+	Model               string                  `json:"model,omitempty"`
+	Endpoint            string                  `json:"endpoint,omitempty"`
+	APIKeySecretRef     *SecretKeyRef           `json:"apiKeySecretRef,omitempty"`
+	Timeout             metav1.Duration         `json:"timeout,omitempty"`
+	MaxTokens           int                     `json:"maxTokens,omitempty"`
+	DataPolicy          ModelProviderDataPolicy `json:"dataPolicy,omitempty"`
+	FallbackProviderRef LocalObjectReference    `json:"fallbackProviderRef,omitempty"`
+}
+
+type ModelProviderDataPolicy struct {
+	AllowExternalTransmission bool     `json:"allowExternalTransmission,omitempty"`
+	AllowedEvidenceKinds      []string `json:"allowedEvidenceKinds,omitempty"`
+	AllowLogSamples           bool     `json:"allowLogSamples,omitempty"`
+	MaximumClassification     string   `json:"maximumClassification,omitempty"`
 }
 
 type ModelProvider struct {
@@ -36,6 +44,9 @@ func (in *ModelProvider) DeepCopyInto(out *ModelProvider) {
 	if in.Spec.APIKeySecretRef != nil {
 		ref := *in.Spec.APIKeySecretRef
 		out.Spec.APIKeySecretRef = &ref
+	}
+	if in.Spec.DataPolicy.AllowedEvidenceKinds != nil {
+		out.Spec.DataPolicy.AllowedEvidenceKinds = append([]string(nil), in.Spec.DataPolicy.AllowedEvidenceKinds...)
 	}
 }
 

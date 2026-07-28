@@ -287,6 +287,21 @@ spec:
                       type: string
                     verifierVersion:
                       type: string
+                    egressAudit:
+                      type: object
+                      properties:
+                        providerType:
+                          type: string
+                        evidenceBundleDigest:
+                          type: string
+                        evidenceKinds:
+                          type: array
+                          items:
+                            type: string
+                        logSamplesIncluded:
+                          type: boolean
+                        maximumClassificationSent:
+                          type: string
                     controllerVersion:
                       type: string
                     attemptCount:
