@@ -7,6 +7,11 @@ import (
 
 const (
 	InvestigationModeReadOnly = "readOnly"
+
+	InvestigationOutcomeConfirmed    = "Confirmed"
+	InvestigationOutcomeInconclusive = "Inconclusive"
+	InvestigationOutcomeNoIssueFound = "NoIssueFound"
+	InvestigationOutcomeFailed       = "ExecutionFailed"
 )
 
 type InvestigationTimeRange struct {
@@ -40,10 +45,19 @@ type InvestigationRequestSpec struct {
 }
 
 type RCAVerdict struct {
-	Summary         string    `json:"summary,omitempty"`
-	RootCauseEntity TargetRef `json:"rootCauseEntity,omitempty"`
-	RootCauseType   string    `json:"rootCauseType,omitempty"`
-	Confidence      float64   `json:"confidence,omitempty"`
+	Outcome          string         `json:"outcome,omitempty"`
+	Summary          string         `json:"summary,omitempty"`
+	RootCauseEntity  TargetRef      `json:"rootCauseEntity,omitempty"`
+	RootCauseType    string         `json:"rootCauseType,omitempty"`
+	Confidence       float64        `json:"confidence,omitempty"`
+	ConfidenceDetail *RCAConfidence `json:"confidenceDetail,omitempty"`
+}
+
+type RCAConfidence struct {
+	ProviderScore float64 `json:"providerScore,omitempty"`
+	VerifiedScore float64 `json:"verifiedScore,omitempty"`
+	Level         string  `json:"level,omitempty"`
+	Method        string  `json:"method,omitempty"`
 }
 
 type RCAClaim struct {
@@ -70,15 +84,22 @@ type RCADegradation struct {
 }
 
 type RCAExecution struct {
-	Provider        string `json:"provider,omitempty"`
-	Attempts        int32  `json:"attempts,omitempty"`
-	DurationSeconds int64  `json:"durationSeconds,omitempty"`
-	InputTokens     int64  `json:"inputTokens,omitempty"`
-	OutputTokens    int64  `json:"outputTokens,omitempty"`
+	Provider               string                     `json:"provider,omitempty"`
+	ProviderRef            *NamespacedObjectReference `json:"providerRef,omitempty"`
+	ProviderGeneration     int64                      `json:"providerGeneration,omitempty"`
+	ProviderType           string                     `json:"providerType,omitempty"`
+	Model                  string                     `json:"model,omitempty"`
+	ReasoningPolicyVersion string                     `json:"reasoningPolicyVersion,omitempty"`
+	ControllerVersion      string                     `json:"controllerVersion,omitempty"`
+	Attempts               int32                      `json:"attempts,omitempty"`
+	DurationSeconds        int64                      `json:"durationSeconds,omitempty"`
+	InputTokens            int64                      `json:"inputTokens,omitempty"`
+	OutputTokens           int64                      `json:"outputTokens,omitempty"`
 }
 
 type InvestigationRequestStatus struct {
 	ResourceStatus        `json:",inline"`
+	Outcome               string                     `json:"outcome,omitempty"`
 	Summary               string                     `json:"summary,omitempty"`
 	Hypothesis            string                     `json:"hypothesis,omitempty"`
 	Confidence            float64                    `json:"confidence,omitempty"`
@@ -139,6 +160,10 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 	}
 	if in.Status.Verdict != nil {
 		verdict := *in.Status.Verdict
+		if in.Status.Verdict.ConfidenceDetail != nil {
+			confidence := *in.Status.Verdict.ConfidenceDetail
+			verdict.ConfidenceDetail = &confidence
+		}
 		out.Status.Verdict = &verdict
 	}
 	if in.Status.Claims != nil {
@@ -171,6 +196,10 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 	}
 	if in.Status.Execution != nil {
 		execution := *in.Status.Execution
+		if in.Status.Execution.ProviderRef != nil {
+			ref := *in.Status.Execution.ProviderRef
+			execution.ProviderRef = &ref
+		}
 		out.Status.Execution = &execution
 	}
 	if in.Status.LinkedRiskSignalRef != nil {

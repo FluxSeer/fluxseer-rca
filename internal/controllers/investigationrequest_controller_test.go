@@ -66,7 +66,7 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system", Generation: 3},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "heuristic",
 			Model:    "built-in",
@@ -110,6 +110,9 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Phase != v1alpha1.PhaseCompleted {
 		t.Fatalf("expected completed phase, got %s", stored.Status.Phase)
 	}
+	if stored.Status.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
+		t.Fatalf("expected confirmed outcome, got %q", stored.Status.Outcome)
+	}
 	if stored.Status.StartedAt == nil || !stored.Status.StartedAt.Equal(&metav1.Time{Time: now}) {
 		t.Fatalf("expected startedAt %s, got %#v", now.Format(time.RFC3339), stored.Status.StartedAt)
 	}
@@ -134,11 +137,26 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Verdict == nil {
 		t.Fatal("expected structured RCA verdict")
 	}
+	if stored.Status.Verdict.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
+		t.Fatalf("expected confirmed verdict outcome, got %#v", stored.Status.Verdict)
+	}
 	if stored.Status.Verdict.RootCauseEntity.Name != "open-api" {
 		t.Fatalf("expected root cause entity open-api, got %#v", stored.Status.Verdict.RootCauseEntity)
 	}
 	if stored.Status.Verdict.RootCauseType == "" {
 		t.Fatalf("expected root cause type, got %#v", stored.Status.Verdict)
+	}
+	if stored.Status.Verdict.ConfidenceDetail == nil {
+		t.Fatal("expected structured confidence detail")
+	}
+	if stored.Status.Verdict.ConfidenceDetail.ProviderScore != stored.Status.Confidence {
+		t.Fatalf("expected provider confidence %f, got %#v", stored.Status.Confidence, stored.Status.Verdict.ConfidenceDetail)
+	}
+	if stored.Status.Verdict.ConfidenceDetail.VerifiedScore != stored.Status.Confidence {
+		t.Fatalf("expected verified confidence %f, got %#v", stored.Status.Confidence, stored.Status.Verdict.ConfidenceDetail)
+	}
+	if stored.Status.Verdict.ConfidenceDetail.Level == "" || stored.Status.Verdict.ConfidenceDetail.Method != "ProviderScoreV1" {
+		t.Fatalf("expected confidence level and method, got %#v", stored.Status.Verdict.ConfidenceDetail)
 	}
 	if len(stored.Status.Claims) == 0 {
 		t.Fatalf("expected structured claims, got %#v", stored.Status.Claims)
@@ -151,6 +169,19 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	}
 	if stored.Status.Execution == nil || stored.Status.Execution.Provider != "heuristic" || stored.Status.Execution.Attempts != 1 {
 		t.Fatalf("expected RCA execution metadata, got %#v", stored.Status.Execution)
+	}
+	if stored.Status.Execution.ProviderRef == nil ||
+		stored.Status.Execution.ProviderRef.Name != "heuristic-provider" ||
+		stored.Status.Execution.ProviderRef.Namespace != "fluxagent-system" {
+		t.Fatalf("expected provider ref metadata, got %#v", stored.Status.Execution)
+	}
+	if stored.Status.Execution.ProviderGeneration != 3 ||
+		stored.Status.Execution.ProviderType != "heuristic" ||
+		stored.Status.Execution.Model != "built-in" {
+		t.Fatalf("expected provider identity metadata, got %#v", stored.Status.Execution)
+	}
+	if stored.Status.Execution.ReasoningPolicyVersion != "rca-v2-compat" || stored.Status.Execution.ControllerVersion == "" {
+		t.Fatalf("expected execution policy and controller versions, got %#v", stored.Status.Execution)
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionTargetResolved); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected TargetResolved true condition, got %#v", cond)
