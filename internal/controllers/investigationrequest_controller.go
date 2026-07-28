@@ -438,6 +438,24 @@ func validateEvidenceRetention(policy v1alpha1.EvidenceRetentionPolicy) string {
 
 func validateInvestigationQueryBudget(spec v1alpha1.InvestigationRequestSpec) string {
 	budget := spec.QueryBudget
+	if budget.MaxTimeRange.Duration < 0 {
+		return "queryBudget.maxTimeRange must not be negative"
+	}
+	if budget.MaxQueriesTotal < 0 {
+		return "queryBudget.maxQueriesTotal must not be negative"
+	}
+	if budget.MaxQueriesPerSource < 0 {
+		return "queryBudget.maxQueriesPerSource must not be negative"
+	}
+	if budget.MaxConcurrentQueries < 0 {
+		return "queryBudget.maxConcurrentQueries must not be negative"
+	}
+	if budget.MaxCumulativeDuration.Duration < 0 {
+		return "queryBudget.maxCumulativeDuration must not be negative"
+	}
+	if budget.MaxCumulativeResponseBytes < 0 {
+		return "queryBudget.maxCumulativeResponseBytes must not be negative"
+	}
 	if budget.MaxTimeRange.Duration > 0 && spec.TimeRange.Lookback.Duration > budget.MaxTimeRange.Duration {
 		return fmt.Sprintf("spec.timeRange.lookback %s exceeds queryBudget.maxTimeRange %s", spec.TimeRange.Lookback.Duration, budget.MaxTimeRange.Duration)
 	}

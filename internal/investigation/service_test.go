@@ -212,6 +212,95 @@ func TestServiceCollectEvidenceNormalizesResults(t *testing.T) {
 	}
 }
 
+func TestServiceCollectEvidenceRejectsCumulativeResponseBudget(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "loki",
+				queryType: domain.QueryTypeLog,
+				records: []map[string]any{
+					{"line": "large response body"},
+				},
+			},
+		),
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 15 * time.Minute}},
+		QueryBudget: v1alpha1.InvestigationQueryBudget{
+			MaxCumulativeResponseBytes: 1,
+		},
+	}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Labels: map[string]string{"app": "open-api"},
+		CollectionPlan: []CollectionStep{
+			{
+				Name:           "loki",
+				DatasourceName: "loki",
+				QueryType:      domain.QueryTypeLog,
+				Query:          `{app="open-api"}`,
+			},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "QueryBudgetExceeded" {
+		t.Fatalf("expected QueryBudgetExceeded issue, got %#v", result.Issue)
+	}
+	if !strings.Contains(result.Issue.Message, "queryBudget.maxCumulativeResponseBytes") {
+		t.Fatalf("expected response-byte budget message, got %q", result.Issue.Message)
+	}
+	if len(result.Observations) != 0 || len(result.EvidenceRefs) != 0 {
+		t.Fatalf("expected no retained evidence after budget rejection, got observations=%#v refs=%#v", result.Observations, result.EvidenceRefs)
+	}
+}
+
+func TestServiceCollectEvidenceRejectsCumulativeDurationBudget(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				records: []map[string]any{
+					{"metric": "http_requests_total", "value": "1"},
+				},
+				delay: time.Millisecond,
+			},
+		),
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 15 * time.Minute}},
+		QueryBudget: v1alpha1.InvestigationQueryBudget{
+			MaxCumulativeDuration: metav1.Duration{Duration: time.Nanosecond},
+		},
+	}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Labels: map[string]string{"app": "open-api"},
+		CollectionPlan: []CollectionStep{
+			{
+				Name:           "prometheus",
+				DatasourceName: "prometheus",
+				QueryType:      domain.QueryTypeMetric,
+				Query:          "up",
+			},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "QueryBudgetExceeded" {
+		t.Fatalf("expected QueryBudgetExceeded issue, got %#v", result.Issue)
+	}
+	if !strings.Contains(result.Issue.Message, "queryBudget.maxCumulativeDuration") {
+		t.Fatalf("expected duration budget message, got %q", result.Issue.Message)
+	}
+	if len(result.Observations) != 0 || len(result.EvidenceRefs) != 0 {
+		t.Fatalf("expected no retained evidence after budget rejection, got observations=%#v refs=%#v", result.Observations, result.EvidenceRefs)
+	}
+}
+
 func TestServiceCollectEvidenceBuildsNormalizedObservations(t *testing.T) {
 	service := &Service{
 		Registry: datasource.NewRegistry(
@@ -662,6 +751,7 @@ type fakeDataSource struct {
 	queryType domain.QueryType
 	records   []map[string]any
 	queryErr  error
+	delay     time.Duration
 }
 
 type capturingModelProvider struct {
@@ -710,6 +800,9 @@ func (f fakeDataSource) Capabilities() datasource.Capabilities {
 }
 
 func (f fakeDataSource) Query(context.Context, datasource.QueryRequest) (*datasource.QueryResult, error) {
+	if f.delay > 0 {
+		time.Sleep(f.delay)
+	}
 	if f.queryErr != nil {
 		return nil, f.queryErr
 	}

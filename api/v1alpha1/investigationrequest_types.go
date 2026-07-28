@@ -90,9 +90,12 @@ type EvidenceRetentionAccessPolicy struct {
 }
 
 type InvestigationQueryBudget struct {
-	MaxTimeRange        metav1.Duration `json:"maxTimeRange,omitempty"`
-	MaxQueriesTotal     int32           `json:"maxQueriesTotal,omitempty"`
-	MaxQueriesPerSource int32           `json:"maxQueriesPerSource,omitempty"`
+	MaxTimeRange               metav1.Duration `json:"maxTimeRange,omitempty"`
+	MaxQueriesTotal            int32           `json:"maxQueriesTotal,omitempty"`
+	MaxQueriesPerSource        int32           `json:"maxQueriesPerSource,omitempty"`
+	MaxConcurrentQueries       int32           `json:"maxConcurrentQueries,omitempty"`
+	MaxCumulativeDuration      metav1.Duration `json:"maxCumulativeDuration,omitempty"`
+	MaxCumulativeResponseBytes int64           `json:"maxCumulativeResponseBytes,omitempty"`
 }
 
 type InvestigationLoopPolicy struct {

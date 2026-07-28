@@ -130,6 +130,14 @@ spec:
                     maxQueriesPerSource:
                       type: integer
                       format: int32
+                    maxConcurrentQueries:
+                      type: integer
+                      format: int32
+                    maxCumulativeDuration:
+                      type: string
+                    maxCumulativeResponseBytes:
+                      type: integer
+                      format: int64
                 loopPolicy:
                   type: object
                   properties:

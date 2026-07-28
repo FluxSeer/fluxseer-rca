@@ -442,6 +442,53 @@ func TestValidateInvestigationQueryBudgetRejectsQueryCounts(t *testing.T) {
 	}
 }
 
+func TestValidateInvestigationQueryBudgetRejectsNegativeValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		budget v1alpha1.InvestigationQueryBudget
+		want   string
+	}{
+		{
+			name:   "maxTimeRange",
+			budget: v1alpha1.InvestigationQueryBudget{MaxTimeRange: metav1.Duration{Duration: -time.Second}},
+			want:   "queryBudget.maxTimeRange must not be negative",
+		},
+		{
+			name:   "maxQueriesTotal",
+			budget: v1alpha1.InvestigationQueryBudget{MaxQueriesTotal: -1},
+			want:   "queryBudget.maxQueriesTotal must not be negative",
+		},
+		{
+			name:   "maxQueriesPerSource",
+			budget: v1alpha1.InvestigationQueryBudget{MaxQueriesPerSource: -1},
+			want:   "queryBudget.maxQueriesPerSource must not be negative",
+		},
+		{
+			name:   "maxConcurrentQueries",
+			budget: v1alpha1.InvestigationQueryBudget{MaxConcurrentQueries: -1},
+			want:   "queryBudget.maxConcurrentQueries must not be negative",
+		},
+		{
+			name:   "maxCumulativeDuration",
+			budget: v1alpha1.InvestigationQueryBudget{MaxCumulativeDuration: metav1.Duration{Duration: -time.Second}},
+			want:   "queryBudget.maxCumulativeDuration must not be negative",
+		},
+		{
+			name:   "maxCumulativeResponseBytes",
+			budget: v1alpha1.InvestigationQueryBudget{MaxCumulativeResponseBytes: -1},
+			want:   "queryBudget.maxCumulativeResponseBytes must not be negative",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			message := validateInvestigationQueryBudget(v1alpha1.InvestigationRequestSpec{QueryBudget: tt.budget})
+			if message != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, message)
+			}
+		})
+	}
+}
+
 func TestValidateEvidenceRetentionRejectsUnsupportedSnapshots(t *testing.T) {
 	if message := validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{}); message != "" {
 		t.Fatalf("expected empty retention policy to be accepted, got %q", message)
