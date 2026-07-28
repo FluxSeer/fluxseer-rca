@@ -476,6 +476,7 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	request.Status.MissingEvidence = nil
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
 	request.Status.Execution = buildRCAExecution(request, preflight, evidence, rca, investigationExecutionID(request, preflight, evidence), executionStateFinalized, now)
+	request.Status.Execution.VerifierVersion = verification.Method
 }
 
 func confidenceLevel(score float64) string {
@@ -834,9 +835,22 @@ func applyClaimVerification(claims []v1alpha1.RCAClaim, verification verifier.Re
 			continue
 		}
 		claims[i].EvidenceRefs = append([]string(nil), result.EvidenceRefs...)
+		claims[i].EvidenceLinks = verifierEvidenceLinks(result.EvidenceLinks)
 		claims[i].Verification = result.Verification
 	}
 	return claims
+}
+
+func verifierEvidenceLinks(links []verifier.EvidenceLink) []v1alpha1.RCAEvidenceLink {
+	out := make([]v1alpha1.RCAEvidenceLink, 0, len(links))
+	for _, link := range links {
+		out = append(out, v1alpha1.RCAEvidenceLink{
+			EvidenceRef: link.EvidenceRef,
+			Role:        link.Role,
+			Strength:    link.Strength,
+		})
+	}
+	return out
 }
 
 func inferRootCauseType(hypothesis string, causes []string) string {

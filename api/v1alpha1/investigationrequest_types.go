@@ -80,10 +80,17 @@ type RCAConfidence struct {
 }
 
 type RCAClaim struct {
-	ID           string   `json:"id,omitempty"`
-	Statement    string   `json:"statement,omitempty"`
-	EvidenceRefs []string `json:"evidenceRefs,omitempty"`
-	Verification string   `json:"verification,omitempty"`
+	ID            string            `json:"id,omitempty"`
+	Statement     string            `json:"statement,omitempty"`
+	EvidenceRefs  []string          `json:"evidenceRefs,omitempty"`
+	EvidenceLinks []RCAEvidenceLink `json:"evidenceLinks,omitempty"`
+	Verification  string            `json:"verification,omitempty"`
+}
+
+type RCAEvidenceLink struct {
+	EvidenceRef string `json:"evidenceRef,omitempty"`
+	Role        string `json:"role,omitempty"`
+	Strength    string `json:"strength,omitempty"`
 }
 
 type RCAAlternativeHypothesis struct {
@@ -169,6 +176,7 @@ type RCAExecution struct {
 	RCASchemaVersion        string                     `json:"rcaSchemaVersion,omitempty"`
 	CanonicalizationVersion string                     `json:"canonicalizationVersion,omitempty"`
 	ReasoningPolicyVersion  string                     `json:"reasoningPolicyVersion,omitempty"`
+	VerifierVersion         string                     `json:"verifierVersion,omitempty"`
 	ControllerVersion       string                     `json:"controllerVersion,omitempty"`
 	AttemptCount            int32                      `json:"attemptCount,omitempty"`
 	Attempts                []RCAExecutionAttempt      `json:"attempts,omitempty"`
@@ -272,6 +280,9 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 		for i := range out.Status.Claims {
 			if in.Status.Claims[i].EvidenceRefs != nil {
 				out.Status.Claims[i].EvidenceRefs = append([]string(nil), in.Status.Claims[i].EvidenceRefs...)
+			}
+			if in.Status.Claims[i].EvidenceLinks != nil {
+				out.Status.Claims[i].EvidenceLinks = append([]RCAEvidenceLink(nil), in.Status.Claims[i].EvidenceLinks...)
 			}
 		}
 	}
