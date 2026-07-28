@@ -2,6 +2,8 @@ package datasourceconfig
 
 import (
 	"context"
+	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"testing"
@@ -190,6 +192,95 @@ func TestBuildHTTPClientRevalidatesRedirectTarget(t *testing.T) {
 	}
 	err = client.CheckRedirect(&http.Request{URL: redirectURL}, []*http.Request{{URL: &url.URL{Scheme: "http", Host: "prometheus.example"}}})
 	expectNetworkPolicyDenied(t, err)
+}
+
+func TestDatasourcePolicyDialContextRejectsDeniedResolvedIP(t *testing.T) {
+	dialCalled := false
+	dial := datasourcePolicyDialContext(
+		v1alpha1.DataSourceNetworkPolicy{},
+		func(context.Context, string) ([]net.IPAddr, error) {
+			return []net.IPAddr{{IP: net.ParseIP("169.254.169.254")}}, nil
+		},
+		func(context.Context, string, string) (net.Conn, error) {
+			dialCalled = true
+			return nil, errors.New("unexpected dial")
+		},
+	)
+
+	_, err := dial(context.Background(), "tcp", "prometheus.example:9090")
+	expectNetworkPolicyDenied(t, err)
+	if dialCalled {
+		t.Fatal("expected denied resolved IP to block before dial")
+	}
+}
+
+func TestDatasourcePolicyDialContextPinsAllowedResolvedIP(t *testing.T) {
+	expectedErr := errors.New("dial stopped after policy validation")
+	var dialAddress string
+	dial := datasourcePolicyDialContext(
+		v1alpha1.DataSourceNetworkPolicy{AllowedCIDRs: []string{"10.32.0.0/16"}},
+		func(context.Context, string) ([]net.IPAddr, error) {
+			return []net.IPAddr{{IP: net.ParseIP("10.32.0.15")}}, nil
+		},
+		func(_ context.Context, _ string, address string) (net.Conn, error) {
+			dialAddress = address
+			return nil, expectedErr
+		},
+	)
+
+	_, err := dial(context.Background(), "tcp", "prometheus.example:9090")
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected dial sentinel after policy validation, got %v", err)
+	}
+	if dialAddress != "10.32.0.15:9090" {
+		t.Fatalf("expected dial to pinned IP address, got %q", dialAddress)
+	}
+}
+
+func TestDatasourcePolicyDialContextRejectsWhenAnyResolvedIPDenied(t *testing.T) {
+	dialCalled := false
+	dial := datasourcePolicyDialContext(
+		v1alpha1.DataSourceNetworkPolicy{AllowedCIDRs: []string{"10.32.0.0/16"}},
+		func(context.Context, string) ([]net.IPAddr, error) {
+			return []net.IPAddr{
+				{IP: net.ParseIP("10.32.0.15")},
+				{IP: net.ParseIP("169.254.169.254")},
+			}, nil
+		},
+		func(context.Context, string, string) (net.Conn, error) {
+			dialCalled = true
+			return nil, errors.New("unexpected dial")
+		},
+	)
+
+	_, err := dial(context.Background(), "tcp", "prometheus.example:9090")
+	expectNetworkPolicyDenied(t, err)
+	if dialCalled {
+		t.Fatal("expected one denied resolved IP to block before dial")
+	}
+}
+
+func TestDatasourcePolicyDialContextAllowsClusterServicePrivateIP(t *testing.T) {
+	expectedErr := errors.New("dial stopped after service policy validation")
+	var dialAddress string
+	dial := datasourcePolicyDialContext(
+		v1alpha1.DataSourceNetworkPolicy{},
+		func(context.Context, string) ([]net.IPAddr, error) {
+			return []net.IPAddr{{IP: net.ParseIP("10.96.0.10")}}, nil
+		},
+		func(_ context.Context, _ string, address string) (net.Conn, error) {
+			dialAddress = address
+			return nil, expectedErr
+		},
+	)
+
+	_, err := dial(context.Background(), "tcp", "prometheus-server.monitoring.svc:9090")
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected dial sentinel after service policy validation, got %v", err)
+	}
+	if dialAddress != "10.96.0.10:9090" {
+		t.Fatalf("expected dial to service ClusterIP, got %q", dialAddress)
+	}
 }
 
 func expectNetworkPolicyDenied(t *testing.T, err error) {
