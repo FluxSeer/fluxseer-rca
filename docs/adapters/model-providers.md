@@ -38,6 +38,18 @@ spec:
   apiKeySecretRef:
     name: openai-secret
     key: api-key
+  dataPolicy:
+    allowExternalTransmission: true
+    maximumClassification: Internal
+    allowedEvidenceKinds:
+      - MetricObservation
+      - KubernetesEventObservation
+      - DeploymentConditionObservation
+    deniedSensitivityTags:
+      - CredentialLike
+      - PersonalData
+    allowLogSamples: false
+    requireRedaction: true
   fallbackProviderRef:
     name: heuristic-provider
 ```
@@ -53,6 +65,10 @@ spec:
   apiKeySecretRef:
     name: gemini-secret
     key: api-key
+  dataPolicy:
+    allowExternalTransmission: true
+    maximumClassification: Internal
+    allowLogSamples: false
 ```
 
 ```yaml
@@ -66,6 +82,10 @@ spec:
   apiKeySecretRef:
     name: claude-secret
     key: api-key
+  dataPolicy:
+    allowExternalTransmission: true
+    maximumClassification: Internal
+    allowLogSamples: false
 ```
 
 Then `RiskRule` chooses one:
@@ -100,6 +120,10 @@ Hosted provider runtime behavior is now unified across `openai`, `gemini`, and `
 - auth failures: `ProviderAuthFailed`
 - provider throttling after retry exhaustion: `ProviderRateLimited`
 - request or model configuration rejection: `ProviderRequestInvalid`
+- explicit egress opt-in is required through `spec.dataPolicy.allowExternalTransmission`
+- evidence above `spec.dataPolicy.maximumClassification`, denied sensitivity tags, or missing required redaction metadata is rejected before any hosted provider call
+
+Classification level and sensitivity tags are separate. Levels are ordered as `Public < Internal < Confidential < Restricted`; tags include `CredentialLike`, `PersonalData`, `CustomerData`, `SourceCode`, `InfrastructureMetadata`, and `SecuritySensitive`. Redaction does not automatically lower classification.
 
 ## Fallback Behavior
 

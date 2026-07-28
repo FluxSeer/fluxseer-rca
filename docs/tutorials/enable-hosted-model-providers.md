@@ -79,6 +79,26 @@ Expected fields:
 - `status.rcaSummary`
 - `status.rcaHypothesis`
 - `status.conditions[type=RCAReady].status=True`
+- for `InvestigationRequest`-based flows, `status.execution.egressAudit.decision=Allowed`
+
+Hosted provider samples intentionally set:
+
+```yaml
+dataPolicy:
+  allowExternalTransmission: true
+  maximumClassification: Internal
+  allowedEvidenceKinds:
+    - MetricObservation
+    - KubernetesEventObservation
+    - DeploymentConditionObservation
+  deniedSensitivityTags:
+    - CredentialLike
+    - PersonalData
+  allowLogSamples: false
+  requireRedaction: true
+```
+
+This allows low-risk metric, event, and deployment-condition metadata while keeping log samples and credential-like content out of hosted provider requests.
 
 ## Failure Diagnosis
 
@@ -96,6 +116,8 @@ Common failure reasons surfaced through `RCAReady=False`:
 - `APIKeyMissing`
 - `ProviderUnavailable`
 - `InvalidProviderResponse`
+- `ProviderDataPolicyDenied`
+- `ProviderDataPolicyRejected`
 
 Examples:
 
@@ -106,11 +128,13 @@ Examples:
 - rejected model, endpoint path, or unsupported request shape: `ProviderRequestInvalid`
 - provider returned non-JSON or incomplete JSON: `InvalidProviderResponse`
 - endpoint or vendor API unavailable: `ProviderUnavailable`
+- hosted provider configured without explicit external egress opt-in: `ProviderDataPolicyDenied`
+- evidence exceeds `maximumClassification`, contains denied sensitivity tags, or lacks required redaction metadata: `ProviderDataPolicyRejected`
 
 ## Notes
 
 - Hosted providers require real network reachability from the FluxAgent manager pod.
-- FluxAgent redacts evidence before provider-bound reasoning.
+- FluxAgent redacts evidence before provider-bound reasoning, but redaction does not automatically lower data classification.
 - If `spec.timeout` is omitted, hosted providers default to `15s` per request.
 - Hosted providers retry transient timeout, `429`, and `5xx` failures up to 3 attempts total.
 - `RiskRule` remains read-only even when hosted providers are enabled.

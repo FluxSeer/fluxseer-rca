@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"fluxagent/api/v1alpha1"
+)
 
 type Severity string
 
@@ -102,28 +106,29 @@ type DeploymentConditionObservation struct {
 }
 
 type Observation struct {
-	ID                     string           `json:"id"`
-	SchemaVersion          string           `json:"schemaVersion"`
-	DataSourceRef          string           `json:"dataSourceRef"`
-	Capability             QueryType        `json:"capability"`
-	QueryDigest            string           `json:"queryDigest"`
-	TimeRange              TimeRange        `json:"timeRange"`
-	Type                   ObservationType  `json:"type"`
-	Value                  ObservationValue `json:"value"`
-	Summary                string           `json:"summary"`
-	ContentDigest          string           `json:"contentDigest"`
-	DigestAlgorithm        string           `json:"digestAlgorithm"`
-	DigestCanonicalization string           `json:"digestCanonicalization"`
-	RedactionProfile       string           `json:"redactionProfile"`
-	Truncated              bool             `json:"truncated"`
-	TruncationReason       string           `json:"truncationReason,omitempty"`
-	LimitDimension         string           `json:"limitDimension,omitempty"`
-	Limit                  int64            `json:"limit,omitempty"`
-	OriginalCount          int              `json:"originalCount"`
-	RetainedCount          int              `json:"retainedCount"`
-	OriginalBytes          int              `json:"originalBytes"`
-	RetainedBytes          int              `json:"retainedBytes"`
-	CollectedAt            time.Time        `json:"collectedAt"`
+	ID                     string                       `json:"id"`
+	SchemaVersion          string                       `json:"schemaVersion"`
+	DataSourceRef          string                       `json:"dataSourceRef"`
+	Capability             QueryType                    `json:"capability"`
+	QueryDigest            string                       `json:"queryDigest"`
+	TimeRange              TimeRange                    `json:"timeRange"`
+	Type                   ObservationType              `json:"type"`
+	Value                  ObservationValue             `json:"value"`
+	Summary                string                       `json:"summary"`
+	ContentDigest          string                       `json:"contentDigest"`
+	DigestAlgorithm        string                       `json:"digestAlgorithm"`
+	DigestCanonicalization string                       `json:"digestCanonicalization"`
+	RedactionProfile       string                       `json:"redactionProfile"`
+	Classification         *v1alpha1.DataClassification `json:"classification,omitempty"`
+	Truncated              bool                         `json:"truncated"`
+	TruncationReason       string                       `json:"truncationReason,omitempty"`
+	LimitDimension         string                       `json:"limitDimension,omitempty"`
+	Limit                  int64                        `json:"limit,omitempty"`
+	OriginalCount          int                          `json:"originalCount"`
+	RetainedCount          int                          `json:"retainedCount"`
+	OriginalBytes          int                          `json:"originalBytes"`
+	RetainedBytes          int                          `json:"retainedBytes"`
+	CollectedAt            time.Time                    `json:"collectedAt"`
 }
 
 type IncidentContext struct {

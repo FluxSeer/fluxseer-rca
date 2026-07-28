@@ -19,7 +19,9 @@ type ModelProviderSpec struct {
 type ModelProviderDataPolicy struct {
 	AllowExternalTransmission bool     `json:"allowExternalTransmission,omitempty"`
 	AllowedEvidenceKinds      []string `json:"allowedEvidenceKinds,omitempty"`
+	DeniedSensitivityTags     []string `json:"deniedSensitivityTags,omitempty"`
 	AllowLogSamples           bool     `json:"allowLogSamples,omitempty"`
+	RequireRedaction          bool     `json:"requireRedaction,omitempty"`
 	MaximumClassification     string   `json:"maximumClassification,omitempty"`
 }
 
@@ -47,6 +49,9 @@ func (in *ModelProvider) DeepCopyInto(out *ModelProvider) {
 	}
 	if in.Spec.DataPolicy.AllowedEvidenceKinds != nil {
 		out.Spec.DataPolicy.AllowedEvidenceKinds = append([]string(nil), in.Spec.DataPolicy.AllowedEvidenceKinds...)
+	}
+	if in.Spec.DataPolicy.DeniedSensitivityTags != nil {
+		out.Spec.DataPolicy.DeniedSensitivityTags = append([]string(nil), in.Spec.DataPolicy.DeniedSensitivityTags...)
 	}
 }
 

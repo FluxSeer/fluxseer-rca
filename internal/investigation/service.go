@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/canonicaldigest"
+	"fluxagent/internal/dataclassification"
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
 	evidencepkg "fluxagent/internal/evidence"
@@ -28,8 +30,9 @@ import (
 )
 
 type Issue struct {
-	Reason  string
-	Message string
+	Reason      string
+	Message     string
+	EgressAudit *v1alpha1.ProviderEgressAudit
 }
 
 type PreflightResult struct {
@@ -293,6 +296,9 @@ func (s *Service) collectDatasourceQuery(ctx context.Context, budget v1alpha1.In
 		}
 		return collected
 	}
+	if provider, ok := source.(datasource.ClassificationProvider); ok {
+		collected.request.Classification = provider.DataClassification()
+	}
 	queryStart := time.Now()
 	queryResult, err := source.Query(ctx, collected.request)
 	queryDuration := time.Since(queryStart)
@@ -476,18 +482,51 @@ func applyProviderDataPolicy(provider *v1alpha1.ModelProvider, evidenceResult Ev
 		return evidenceResult, nil
 	}
 	policy := provider.Spec.DataPolicy
-	if !policy.AllowExternalTransmission {
-		return evidenceResult, &Issue{
-			Reason:  "ProviderDataPolicyDenied",
-			Message: fmt.Sprintf("ModelProvider %q requires spec.dataPolicy.allowExternalTransmission=true before evidence can be sent to hosted provider %q", provider.Name, provider.Spec.Provider),
-		}
-	}
-
 	filtered := evidenceResult
 	filtered.EvidenceRefs = filterEvidenceRefsForProviderPolicy(evidenceResult.EvidenceRefs, policy)
 	filtered.Observations = filterObservationsForProviderPolicy(evidenceResult.Observations, policy)
+	if !policy.AllowExternalTransmission {
+		decision := dataclassification.EvaluateProviderPolicy(policy, filtered.EvidenceRefs)
+		decision.Decision = dataclassification.DecisionRejected
+		decision.Reason = dataclassification.ReasonExternalTransmissionDeny
+		decision.MaximumSent = ""
+		decision.SensitivityTagsSent = nil
+		return evidenceResult, &Issue{
+			Reason:      "ProviderDataPolicyDenied",
+			Message:     fmt.Sprintf("ModelProvider %q requires spec.dataPolicy.allowExternalTransmission=true before evidence can be sent to hosted provider %q", provider.Name, provider.Spec.Provider),
+			EgressAudit: providerDataPolicyAudit(provider, filtered.EvidenceRefs, decision, policy),
+		}
+	}
+
+	decision := dataclassification.EvaluateProviderPolicy(policy, filtered.EvidenceRefs)
+	if decision.Decision == dataclassification.DecisionRejected {
+		return filtered, &Issue{
+			Reason:      "ProviderDataPolicyRejected",
+			Message:     fmt.Sprintf("ModelProvider %q rejected hosted provider transmission: %s", provider.Name, decision.Message),
+			EgressAudit: providerDataPolicyAudit(provider, filtered.EvidenceRefs, decision, policy),
+		}
+	}
 	filtered.Summary = fmt.Sprintf("%s; provider data policy retained %d evidence refs", evidenceResult.Summary, len(filtered.EvidenceRefs))
 	return filtered, nil
+}
+
+func providerDataPolicyAudit(provider *v1alpha1.ModelProvider, refs []v1alpha1.EvidenceRef, decision dataclassification.Decision, policy v1alpha1.ModelProviderDataPolicy) *v1alpha1.ProviderEgressAudit {
+	if provider == nil {
+		return nil
+	}
+	return &v1alpha1.ProviderEgressAudit{
+		Decision:                      decision.Decision,
+		Reason:                        decision.Reason,
+		ProviderType:                  strings.ToLower(strings.TrimSpace(provider.Spec.Provider)),
+		EvidenceBundleDigest:          canonicaldigest.String(canonicaldigest.ObservationJSONV1, refs),
+		EvidenceKinds:                 evidenceKindsForAudit(refs),
+		SensitivityTagsSent:           append([]string(nil), decision.SensitivityTagsSent...),
+		LogSamplesIncluded:            logSamplesIncludedForAudit(refs, policy),
+		MaximumClassificationObserved: decision.MaximumObserved,
+		MaximumClassificationAllowed:  decision.MaximumAllowed,
+		MaximumClassificationSent:     decision.MaximumSent,
+		ClassificationPolicyVersion:   decision.ClassificationVersion,
+	}
 }
 
 func isHostedProvider(providerType string) bool {
@@ -534,6 +573,36 @@ func filterObservationsForProviderPolicy(observations []domain.Observation, poli
 		out = append(out, filtered)
 	}
 	return out
+}
+
+func evidenceKindsForAudit(refs []v1alpha1.EvidenceRef) []string {
+	seen := map[string]struct{}{}
+	kinds := make([]string, 0)
+	for _, ref := range refs {
+		kind := strings.TrimSpace(ref.Kind)
+		if kind == "" {
+			continue
+		}
+		if _, ok := seen[kind]; ok {
+			continue
+		}
+		seen[kind] = struct{}{}
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	return kinds
+}
+
+func logSamplesIncludedForAudit(refs []v1alpha1.EvidenceRef, policy v1alpha1.ModelProviderDataPolicy) bool {
+	if !policy.AllowLogSamples {
+		return false
+	}
+	for _, ref := range refs {
+		if strings.EqualFold(ref.Kind, "log") && strings.TrimSpace(ref.Summary) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func evidenceKindAllowed(kind string, allowed []string) bool {
@@ -882,6 +951,10 @@ func normalizeObservations(result *datasource.QueryResult, req datasource.QueryR
 func normalizeObservation(record map[string]any, result *datasource.QueryResult, req datasource.QueryRequest, index int, originalCount int, retainedCount int, truncated bool, collectedAt time.Time) domain.Observation {
 	redactor := evidencepkg.NewPatternRedactor()
 	source := firstNonEmpty(result.Source, req.Target.Service, req.Target.Name)
+	classification := dataclassification.Merge(
+		dataclassification.DefaultForObservation(result.QueryType, rawObservationSummary(record, result)),
+		req.Classification,
+	)
 	queryDigest := canonicaldigest.String(canonicaldigest.ObservationJSONV1, map[string]any{
 		"capability": req.QueryType,
 		"query":      req.Query,
@@ -894,6 +967,7 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 		QueryDigest:      queryDigest,
 		TimeRange:        domain.TimeRange{Start: req.StartTime.UTC(), End: req.EndTime.UTC()},
 		RedactionProfile: "default-v1",
+		Classification:   &classification,
 		Truncated:        truncated,
 		TruncationReason: firstNonEmpty(result.TruncationReason, nativeLimitReason(result.NativeLimit)),
 		LimitDimension:   firstNonEmpty(result.LimitDimension, nativeLimitDimension(result.NativeLimit)),
@@ -970,6 +1044,7 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 		"value":            obs.Value,
 		"summary":          obs.Summary,
 		"redactionProfile": obs.RedactionProfile,
+		"classification":   obs.Classification,
 		"truncated":        obs.Truncated,
 		"originalCount":    obs.OriginalCount,
 		"retainedCount":    obs.RetainedCount,
@@ -1004,6 +1079,7 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 			DigestAlgorithm:        observation.DigestAlgorithm,
 			DigestCanonicalization: observation.DigestCanonicalization,
 			RedactionProfile:       observation.RedactionProfile,
+			Classification:         copyClassification(observation.Classification),
 			Truncated:              observation.Truncated,
 			TruncationReason:       observation.TruncationReason,
 			LimitDimension:         observation.LimitDimension,
@@ -1103,6 +1179,36 @@ func nativeLimitValue(limit *datasource.NativeResultLimit) int64 {
 		return 0
 	}
 	return limit.Limit
+}
+
+func rawObservationSummary(record map[string]any, result *datasource.QueryResult) string {
+	if record == nil {
+		if result == nil {
+			return ""
+		}
+		return result.Summary
+	}
+	parts := make([]string, 0, len(record)+1)
+	for _, key := range []string{"line", "message", "reason", "metric", "value"} {
+		if value, ok := record[key]; ok {
+			parts = append(parts, fmt.Sprint(value))
+		}
+	}
+	if result != nil {
+		parts = append(parts, result.Summary)
+	}
+	return strings.Join(parts, " ")
+}
+
+func copyClassification(in *v1alpha1.DataClassification) *v1alpha1.DataClassification {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	if in.SensitivityTags != nil {
+		out.SensitivityTags = append([]string(nil), in.SensitivityTags...)
+	}
+	return &out
 }
 
 func min(a, b int) int {

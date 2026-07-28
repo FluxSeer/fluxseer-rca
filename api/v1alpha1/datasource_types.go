@@ -34,13 +34,14 @@ type DataSourceQueryPolicy struct {
 }
 
 type DataSourceSpec struct {
-	Type          string                  `json:"type"`
-	Endpoint      string                  `json:"endpoint,omitempty"`
-	Timeout       metav1.Duration         `json:"timeout,omitempty"`
-	NetworkPolicy DataSourceNetworkPolicy `json:"networkPolicy,omitempty"`
-	QueryPolicy   DataSourceQueryPolicy   `json:"queryPolicy,omitempty"`
-	Auth          *DataSourceAuthSpec     `json:"auth,omitempty"`
-	TLS           *DataSourceTLSSpec      `json:"tls,omitempty"`
+	Type               string                  `json:"type"`
+	Endpoint           string                  `json:"endpoint,omitempty"`
+	Timeout            metav1.Duration         `json:"timeout,omitempty"`
+	NetworkPolicy      DataSourceNetworkPolicy `json:"networkPolicy,omitempty"`
+	QueryPolicy        DataSourceQueryPolicy   `json:"queryPolicy,omitempty"`
+	DataClassification DataClassification      `json:"dataClassification,omitempty"`
+	Auth               *DataSourceAuthSpec     `json:"auth,omitempty"`
+	TLS                *DataSourceTLSSpec      `json:"tls,omitempty"`
 }
 
 type DataSourceStatus struct {
@@ -88,6 +89,9 @@ func (in *DataSource) DeepCopyInto(out *DataSource) {
 	}
 	if in.Spec.QueryPolicy.AllowedTemplates != nil {
 		out.Spec.QueryPolicy.AllowedTemplates = append([]string(nil), in.Spec.QueryPolicy.AllowedTemplates...)
+	}
+	if in.Spec.DataClassification.SensitivityTags != nil {
+		out.Spec.DataClassification.SensitivityTags = append([]string(nil), in.Spec.DataClassification.SensitivityTags...)
 	}
 	if in.Status.Conditions != nil {
 		out.Status.Conditions = make([]metav1.Condition, len(in.Status.Conditions))
