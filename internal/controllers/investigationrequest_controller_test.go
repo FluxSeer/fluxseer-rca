@@ -152,20 +152,26 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Verdict.ConfidenceDetail.ProviderScore != stored.Status.Confidence {
 		t.Fatalf("expected provider confidence %f, got %#v", stored.Status.Confidence, stored.Status.Verdict.ConfidenceDetail)
 	}
-	if stored.Status.Verdict.ConfidenceDetail.VerifiedScore != stored.Status.Confidence {
-		t.Fatalf("expected verified confidence %f, got %#v", stored.Status.Confidence, stored.Status.Verdict.ConfidenceDetail)
+	if stored.Status.Verdict.ConfidenceDetail.VerifiedScore <= 0 || stored.Status.Verdict.ConfidenceDetail.VerifiedScore > stored.Status.Confidence {
+		t.Fatalf("expected bounded verified confidence, got %#v", stored.Status.Verdict.ConfidenceDetail)
 	}
-	if stored.Status.Verdict.ConfidenceDetail.Level == "" || stored.Status.Verdict.ConfidenceDetail.Method != "ProviderScoreV1" {
+	if stored.Status.Verdict.ConfidenceDetail.Level == "" || stored.Status.Verdict.ConfidenceDetail.Method != "HeuristicEvidenceCoverageV1" {
 		t.Fatalf("expected confidence level and method, got %#v", stored.Status.Verdict.ConfidenceDetail)
 	}
 	if len(stored.Status.Claims) == 0 {
 		t.Fatalf("expected structured claims, got %#v", stored.Status.Claims)
 	}
-	if stored.Status.Claims[0].Verification != "Supported" {
-		t.Fatalf("expected first claim supported, got %#v", stored.Status.Claims[0])
+	if stored.Status.Claims[0].Verification != "Inferred" {
+		t.Fatalf("expected summary claim inferred without a direct evidence match, got %#v", stored.Status.Claims[0])
 	}
-	if len(stored.Status.Claims[0].EvidenceRefs) != 1 || stored.Status.Claims[0].EvidenceRefs[0] != "evidence-001" {
-		t.Fatalf("expected claim to cite evidence-001, got %#v", stored.Status.Claims[0])
+	supportedClaimFound := false
+	for _, claim := range stored.Status.Claims {
+		if claim.Verification == "Supported" && len(claim.EvidenceRefs) == 1 && claim.EvidenceRefs[0] == "evidence-001" {
+			supportedClaimFound = true
+		}
+	}
+	if !supportedClaimFound {
+		t.Fatalf("expected at least one supported claim citing evidence-001, got %#v", stored.Status.Claims)
 	}
 	if stored.Status.Execution == nil || stored.Status.Execution.Provider != "heuristic" || stored.Status.Execution.Attempts != 1 {
 		t.Fatalf("expected RCA execution metadata, got %#v", stored.Status.Execution)

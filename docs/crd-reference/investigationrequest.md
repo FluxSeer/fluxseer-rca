@@ -193,6 +193,8 @@ These fields are the v0.3 target contract. New integrations should check the gen
 - `evidenceRefs[]`: referenced evidence IDs
 - `verification`: current verification state, for example `Supported` or `Inferred`
 
+FluxAgent applies a deterministic heuristic verifier before writing claims. In the current implementation, a claim is `Supported` only when compact evidence metadata is relevant to the claim text. Claims with evidence in the bundle but no relevant match remain `Inferred`; claims with no evidence are `Unverified`. `status.verdict.confidenceDetail.verifiedScore` is bounded by this evidence coverage and can be lower than the provider score.
+
 `status.evidenceRefs[]` stores compact evidence references. Each entry may include:
 
 - `id`: stable evidence identifier such as `evidence-001`
