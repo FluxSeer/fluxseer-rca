@@ -345,6 +345,7 @@ Evidence provenance should preserve compact metadata even when raw payloads are 
 - time range
 - collected timestamp
 - content digest
+- digest algorithm and canonicalization version
 - redaction profile
 - truncation flag
 - original size

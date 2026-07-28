@@ -2,9 +2,6 @@ package controllers
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"reflect"
 	"strconv"
 	"strings"
@@ -18,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"fluxagent/api/v1alpha1"
+	"fluxagent/internal/canonicaldigest"
 	"fluxagent/internal/investigation"
 	"fluxagent/internal/verifier"
 	"fluxagent/internal/version"
@@ -25,7 +23,7 @@ import (
 
 const (
 	rcaSchemaVersion           = "fluxagent-rca-result-v1"
-	rcaCanonicalizationVersion = "fluxagent-rca-json-v1"
+	rcaCanonicalizationVersion = canonicaldigest.RCAJSONV1
 	reasoningPolicyVersion     = "rca-v2-compat"
 	executionStateFinalized    = "Finalized"
 	executionAttemptCompleted  = "Completed"
@@ -446,7 +444,7 @@ func investigationExecutionID(request *v1alpha1.InvestigationRequest, preflight 
 		"rcaSchemaVersion":        rcaSchemaVersion,
 		"canonicalizationVersion": rcaCanonicalizationVersion,
 	}
-	return "sha256:" + stableSHA256(input)
+	return canonicaldigest.String(canonicaldigest.RCAJSONV1, input)
 }
 
 func executionIdempotencyKey(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, attemptID string) string {
@@ -454,11 +452,11 @@ func executionIdempotencyKey(request *v1alpha1.InvestigationRequest, preflight i
 		"executionID": investigationExecutionID(request, preflight, evidence),
 		"attemptID":   attemptID,
 	}
-	return "sha256:" + stableSHA256(input)
+	return canonicaldigest.String(canonicaldigest.RCAJSONV1, input)
 }
 
 func evidenceBundleDigest(refs []v1alpha1.EvidenceRef) string {
-	return "sha256:" + stableSHA256(refs)
+	return canonicaldigest.String(canonicaldigest.ObservationJSONV1, refs)
 }
 
 func lineageTargetUID(lineage *v1alpha1.InvestigationLineage) string {
@@ -466,15 +464,6 @@ func lineageTargetUID(lineage *v1alpha1.InvestigationLineage) string {
 		return ""
 	}
 	return lineage.TargetUID
-}
-
-func stableSHA256(value any) string {
-	payload, err := json.Marshal(value)
-	if err != nil {
-		payload = []byte(strconv.Quote(strings.TrimSpace(err.Error())))
-	}
-	sum := sha256.Sum256(payload)
-	return hex.EncodeToString(sum[:])
 }
 
 func lineageFromAnnotations(annotations map[string]string) *v1alpha1.InvestigationLineage {

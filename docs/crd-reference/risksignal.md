@@ -122,9 +122,12 @@ Recommended persisted evidence fields:
 - compact summary
 - resource references
 - content digest
+- digest algorithm and canonicalization version
 - redaction profile
 - truncation metadata
 - collection timestamp
+
+Evidence digests use the same `sha256` / `fluxagent-observation-json-v1` contract as `InvestigationRequest.status.evidenceRefs`.
 
 Fields that should not be persisted:
 

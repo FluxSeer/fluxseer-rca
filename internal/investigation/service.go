@@ -2,9 +2,6 @@ package investigation
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"fluxagent/api/v1alpha1"
+	"fluxagent/internal/canonicaldigest"
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
 	evidencepkg "fluxagent/internal/evidence"
@@ -483,7 +481,7 @@ func normalizeObservations(result *datasource.QueryResult, req datasource.QueryR
 func normalizeObservation(record map[string]any, result *datasource.QueryResult, req datasource.QueryRequest, index int, originalCount int, retainedCount int, truncated bool, collectedAt time.Time) domain.Observation {
 	redactor := evidencepkg.NewPatternRedactor()
 	source := firstNonEmpty(result.Source, req.Target.Service, req.Target.Name)
-	queryDigest := digestCanonical(map[string]any{
+	queryDigest := canonicaldigest.String(canonicaldigest.ObservationJSONV1, map[string]any{
 		"capability": req.QueryType,
 		"query":      req.Query,
 	})
@@ -542,7 +540,9 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 		obs.Summary = redactor.RedactText(result.Summary)
 		obs.Value = domain.ObservationValue{Event: &domain.EventObservation{Message: obs.Summary}}
 	}
-	obs.ContentDigest = digestCanonical(map[string]any{
+	obs.DigestAlgorithm = canonicaldigest.AlgorithmSHA256
+	obs.DigestCanonicalization = canonicaldigest.ObservationJSONV1
+	obs.ContentDigest = canonicaldigest.String(canonicaldigest.ObservationJSONV1, map[string]any{
 		"schemaVersion":    obs.SchemaVersion,
 		"dataSourceRef":    obs.DataSourceRef,
 		"capability":       obs.Capability,
@@ -564,18 +564,20 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 	for _, observation := range observations {
 		collectedAt := metav1Time(observation.CollectedAt)
 		ref := v1alpha1.EvidenceRef{
-			ID:               observation.ID,
-			Kind:             string(observation.Type),
-			Source:           observation.DataSourceRef,
-			Summary:          observation.Summary,
-			Query:            req.Query,
-			QueryDigest:      observation.QueryDigest,
-			ContentDigest:    observation.ContentDigest,
-			RedactionProfile: observation.RedactionProfile,
-			Truncated:        observation.Truncated,
-			OriginalCount:    int32(observation.OriginalCount),
-			RetainedCount:    int32(observation.RetainedCount),
-			CollectedAt:      &collectedAt,
+			ID:                     observation.ID,
+			Kind:                   string(observation.Type),
+			Source:                 observation.DataSourceRef,
+			Summary:                observation.Summary,
+			Query:                  req.Query,
+			QueryDigest:            observation.QueryDigest,
+			ContentDigest:          observation.ContentDigest,
+			DigestAlgorithm:        observation.DigestAlgorithm,
+			DigestCanonicalization: observation.DigestCanonicalization,
+			RedactionProfile:       observation.RedactionProfile,
+			Truncated:              observation.Truncated,
+			OriginalCount:          int32(observation.OriginalCount),
+			RetainedCount:          int32(observation.RetainedCount),
+			CollectedAt:            &collectedAt,
 		}
 		if observation.Value.Event != nil {
 			ref.Reason = observation.Value.Event.Reason
@@ -586,15 +588,6 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 		refs = append(refs, ref)
 	}
 	return refs
-}
-
-func digestCanonical(value any) string {
-	payload, err := json.Marshal(value)
-	if err != nil {
-		payload = []byte(fmt.Sprint(value))
-	}
-	sum := sha256.Sum256(payload)
-	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func metav1Time(value time.Time) metav1.Time {

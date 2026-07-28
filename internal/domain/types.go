@@ -102,21 +102,23 @@ type DeploymentConditionObservation struct {
 }
 
 type Observation struct {
-	ID               string           `json:"id"`
-	SchemaVersion    string           `json:"schemaVersion"`
-	DataSourceRef    string           `json:"dataSourceRef"`
-	Capability       QueryType        `json:"capability"`
-	QueryDigest      string           `json:"queryDigest"`
-	TimeRange        TimeRange        `json:"timeRange"`
-	Type             ObservationType  `json:"type"`
-	Value            ObservationValue `json:"value"`
-	Summary          string           `json:"summary"`
-	ContentDigest    string           `json:"contentDigest"`
-	RedactionProfile string           `json:"redactionProfile"`
-	Truncated        bool             `json:"truncated"`
-	OriginalCount    int              `json:"originalCount"`
-	RetainedCount    int              `json:"retainedCount"`
-	CollectedAt      time.Time        `json:"collectedAt"`
+	ID                     string           `json:"id"`
+	SchemaVersion          string           `json:"schemaVersion"`
+	DataSourceRef          string           `json:"dataSourceRef"`
+	Capability             QueryType        `json:"capability"`
+	QueryDigest            string           `json:"queryDigest"`
+	TimeRange              TimeRange        `json:"timeRange"`
+	Type                   ObservationType  `json:"type"`
+	Value                  ObservationValue `json:"value"`
+	Summary                string           `json:"summary"`
+	ContentDigest          string           `json:"contentDigest"`
+	DigestAlgorithm        string           `json:"digestAlgorithm"`
+	DigestCanonicalization string           `json:"digestCanonicalization"`
+	RedactionProfile       string           `json:"redactionProfile"`
+	Truncated              bool             `json:"truncated"`
+	OriginalCount          int              `json:"originalCount"`
+	RetainedCount          int              `json:"retainedCount"`
+	CollectedAt            time.Time        `json:"collectedAt"`
 }
 
 type IncidentContext struct {

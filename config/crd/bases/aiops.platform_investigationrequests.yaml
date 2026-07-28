@@ -310,6 +310,10 @@ spec:
                         type: string
                       contentDigest:
                         type: string
+                      digestAlgorithm:
+                        type: string
+                      digestCanonicalization:
+                        type: string
                       redactionProfile:
                         type: string
                       truncated:
