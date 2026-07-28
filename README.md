@@ -19,6 +19,8 @@ Can this investigation be audited, reproduced from recorded query metadata, and 
 
 FluxAgent is the Kubernetes control plane and audit contract around RCA. It is not an all-in-one monitoring stack, not a free-form cluster agent, and not an autonomous production remediation system.
 
+FluxAgent does not grant reasoning providers unrestricted cluster access. It sends only bounded, normalized, and redacted evidence collected through declared investigation policies and datasource capabilities.
+
 ## Why FluxAgent
 
 FluxAgent is built around four product decisions:

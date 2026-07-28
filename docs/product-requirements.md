@@ -52,6 +52,20 @@ InvestigationRequest
 -> auditable RCA status
 ```
 
+Canonical RCA ownership should remain `InvestigationRequest`-first:
+
+```text
+RiskRule / Alert / Manual Request
+-> InvestigationRequest
+-> bounded evidence bundle
+-> provider-neutral structured RCA
+-> claim verification
+-> InvestigationRequest.status
+-> optional discovered RiskSignal
+```
+
+`RiskRule` should detect recurring conditions. `InvestigationRequest` should orchestrate investigation and own canonical RCA output. `RiskSignal` should preserve confirmed or trackable risks, summaries, lineage, and compact evidence references, not become the primary RCA orchestration surface.
+
 Secondary entrypoint:
 
 ```text
@@ -96,6 +110,8 @@ This project intentionally accepts some YAML and CRD learning cost in exchange f
 
 Read-only does not automatically prevent data exposure. Logs, events, pod specs, ConfigMaps, and error messages can still contain tokens or connection strings. FluxAgent therefore treats evidence minimization and redaction as core product requirements, not implementation details.
 
+Reasoning providers must not receive unrestricted Kubernetes access. Hosted providers should receive only bounded, normalized, and redacted evidence collected through declared `InvestigationRequest`, `RiskRule`, datasource, and policy configuration.
+
 Required security posture:
 
 - never send Kubernetes Secret values to model providers
@@ -137,6 +153,8 @@ Rule pack principles:
 - never install external datasource backends as a side effect of enabling a rule pack
 - never install hosted `ModelProvider` resources or provider secrets as a side effect of enabling a rule pack
 - allow users to override target namespace, workload labels, interval, window, severity, RCA enablement, datasource names, and provider reference
+- keep portable Kubernetes signals separate from application-specific metric profiles
+- parameterize application metric queries instead of hard-coding metric names into controllers
 - use stable names, labels, and annotations so GitOps and dashboards can recognize generated rules
 
 Initial Helm contract:
@@ -159,6 +177,29 @@ rulePacks:
 ```
 
 The Kubernetes baseline may rely on the built-in Kubernetes Events datasource adapter. Prometheus and Loki baselines may reference `DataSource` names but must not create those datasources or install those systems.
+
+Rule pack categories:
+
+```text
+Portable baseline
+- CrashLoopBackOff
+- ImagePullBackOff
+- readiness failure
+- Deployment unavailable
+- CPU throttling
+- memory near limit
+- restart increase
+
+Application profile
+- HTTP request rate
+- HTTP latency
+- queue depth
+- worker saturation
+- database connection pool
+- external API rate limiting
+```
+
+Application profiles must expose query expressions and labels as values. FluxAgent should not assume that every workload uses `http_requests_total`, the same histogram buckets, the same queue metric, or the same application label shape.
 
 Verification contract:
 
