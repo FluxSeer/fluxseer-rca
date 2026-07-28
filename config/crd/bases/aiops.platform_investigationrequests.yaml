@@ -224,6 +224,10 @@ spec:
                 execution:
                   type: object
                   properties:
+                    id:
+                      type: string
+                    state:
+                      type: string
                     provider:
                       type: string
                     providerRef:
@@ -240,13 +244,38 @@ spec:
                       type: string
                     model:
                       type: string
+                    rcaSchemaVersion:
+                      type: string
+                    canonicalizationVersion:
+                      type: string
                     reasoningPolicyVersion:
                       type: string
                     controllerVersion:
                       type: string
-                    attempts:
+                    attemptCount:
                       type: integer
                       format: int32
+                    attempts:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          providerRequestID:
+                            type: string
+                          idempotencyKey:
+                            type: string
+                          retryReason:
+                            type: string
+                          result:
+                            type: string
+                          startedAt:
+                            type: string
+                            format: date-time
+                          completedAt:
+                            type: string
+                            format: date-time
                     durationSeconds:
                       type: integer
                       format: int64

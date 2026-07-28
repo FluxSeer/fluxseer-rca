@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"reflect"
 	"strconv"
 	"strings"
@@ -18,6 +21,15 @@ import (
 	"fluxagent/internal/investigation"
 	"fluxagent/internal/verifier"
 	"fluxagent/internal/version"
+)
+
+const (
+	rcaSchemaVersion           = "fluxagent-rca-result-v1"
+	rcaCanonicalizationVersion = "fluxagent-rca-json-v1"
+	reasoningPolicyVersion     = "rca-v2-compat"
+	executionStateFinalized    = "Finalized"
+	executionAttemptCompleted  = "Completed"
+	defaultExecutionAttemptID  = "attempt-001"
 )
 
 type InvestigationRequestReconciler struct {
@@ -354,15 +366,28 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	request.Status.MissingEvidence = nil
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
 	request.Status.Execution = &v1alpha1.RCAExecution{
-		Provider:               request.Status.Provider,
-		ProviderRef:            providerRef(preflight.Provider),
-		ProviderGeneration:     providerGeneration(preflight.Provider),
-		ProviderType:           providerType(preflight.Provider),
-		Model:                  providerModel(preflight.Provider),
-		ReasoningPolicyVersion: "rca-v2-compat",
-		ControllerVersion:      version.Current().Version,
-		Attempts:               1,
-		DurationSeconds:        investigationDurationSeconds(request, now),
+		ID:                      investigationExecutionID(request, preflight, evidence),
+		State:                   executionStateFinalized,
+		Provider:                request.Status.Provider,
+		ProviderRef:             providerRef(preflight.Provider),
+		ProviderGeneration:      providerGeneration(preflight.Provider),
+		ProviderType:            providerType(preflight.Provider),
+		Model:                   providerModel(preflight.Provider),
+		RCASchemaVersion:        rcaSchemaVersion,
+		CanonicalizationVersion: rcaCanonicalizationVersion,
+		ReasoningPolicyVersion:  reasoningPolicyVersion,
+		ControllerVersion:       version.Current().Version,
+		AttemptCount:            1,
+		Attempts: []v1alpha1.RCAExecutionAttempt{
+			{
+				ID:             defaultExecutionAttemptID,
+				IdempotencyKey: executionIdempotencyKey(request, preflight, evidence, defaultExecutionAttemptID),
+				Result:         executionAttemptCompleted,
+				StartedAt:      request.Status.StartedAt,
+				CompletedAt:    &metav1.Time{Time: now},
+			},
+		},
+		DurationSeconds: investigationDurationSeconds(request, now),
 	}
 }
 
@@ -405,6 +430,51 @@ func providerModel(provider *v1alpha1.ModelProvider) string {
 		return ""
 	}
 	return provider.Spec.Model
+}
+
+func investigationExecutionID(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult) string {
+	input := map[string]any{
+		"requestUID":              string(request.UID),
+		"requestGeneration":       request.Generation,
+		"target":                  preflight.Target,
+		"targetUID":               lineageTargetUID(request.Status.Lineage),
+		"evidenceBundleDigest":    evidenceBundleDigest(evidence.EvidenceRefs),
+		"providerType":            providerType(preflight.Provider),
+		"providerGeneration":      providerGeneration(preflight.Provider),
+		"model":                   providerModel(preflight.Provider),
+		"reasoningPolicyVersion":  reasoningPolicyVersion,
+		"rcaSchemaVersion":        rcaSchemaVersion,
+		"canonicalizationVersion": rcaCanonicalizationVersion,
+	}
+	return "sha256:" + stableSHA256(input)
+}
+
+func executionIdempotencyKey(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, attemptID string) string {
+	input := map[string]any{
+		"executionID": investigationExecutionID(request, preflight, evidence),
+		"attemptID":   attemptID,
+	}
+	return "sha256:" + stableSHA256(input)
+}
+
+func evidenceBundleDigest(refs []v1alpha1.EvidenceRef) string {
+	return "sha256:" + stableSHA256(refs)
+}
+
+func lineageTargetUID(lineage *v1alpha1.InvestigationLineage) string {
+	if lineage == nil {
+		return ""
+	}
+	return lineage.TargetUID
+}
+
+func stableSHA256(value any) string {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		payload = []byte(strconv.Quote(strings.TrimSpace(err.Error())))
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
 }
 
 func lineageFromAnnotations(annotations map[string]string) *v1alpha1.InvestigationLineage {
