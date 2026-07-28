@@ -39,6 +39,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		setResourceStatus(&action.Status, v1alpha1.PhaseWaitingApproval, "waiting for human approval", action.Generation, now())
 		if statusChangedAction(original, &action) {
 			if err := r.Status().Update(ctx, &action); err != nil {
+				recordStatusUpdateConflict("AgentAction", err)
 				return ctrl.Result{}, err
 			}
 		}
@@ -49,6 +50,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	setResourceStatus(&action.Status, v1alpha1.PhaseExecuting, "approved action is executing", action.Generation, now())
 	if statusChangedAction(original, &action) {
 		if err := r.Status().Update(ctx, &action); err != nil {
+			recordStatusUpdateConflict("AgentAction", err)
 			return ctrl.Result{}, err
 		}
 	}
@@ -67,6 +69,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		setResourceStatus(&action.Status, v1alpha1.PhaseFailed, err.Error(), action.Generation, now())
 		if updateErr := r.Status().Update(ctx, &action); updateErr != nil {
+			recordStatusUpdateConflict("AgentAction", updateErr)
 			return ctrl.Result{}, updateErr
 		}
 		return ctrl.Result{}, err
@@ -77,6 +80,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	setResourceStatus(&action.Status, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, now())
 	if err := r.Status().Update(ctx, &action); err != nil {
+		recordStatusUpdateConflict("AgentAction", err)
 		return ctrl.Result{}, err
 	}
 

@@ -155,6 +155,10 @@ func RecordLoopPrevention(reason string) {
 	LoopPreventionTotal.WithLabelValues(normalizeReason(reason)).Inc()
 }
 
+func RecordStatusUpdateConflict(resource string) {
+	StatusUpdateConflictsTotal.WithLabelValues(normalizeLabel(resource, "unknown")).Inc()
+}
+
 func ForbiddenLabelNames() map[string]struct{} {
 	out := make(map[string]struct{}, len(forbiddenLabels))
 	for key := range forbiddenLabels {

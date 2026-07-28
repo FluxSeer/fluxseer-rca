@@ -66,7 +66,7 @@ func (r *DataSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if !reflect.DeepEqual(original.Status, dataSource.Status) {
-		if err := r.Status().Update(ctx, &dataSource); err != nil && !apierrors.IsConflict(err) {
+		if err := r.Status().Update(ctx, &dataSource); err != nil && !recordStatusUpdateConflict("DataSource", err) {
 			return ctrl.Result{}, err
 		}
 	}

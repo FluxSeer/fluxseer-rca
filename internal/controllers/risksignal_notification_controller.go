@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,7 +51,7 @@ func (r *RiskSignalNotificationReconciler) Reconcile(ctx context.Context, req ct
 	}
 	riskSignal.Annotations[annotationNotificationAt] = now().UTC().Format(time.RFC3339)
 	riskSignal.Annotations[annotationNotificationSource] = notifierSource(riskSignal)
-	if err := r.Update(ctx, &riskSignal); err != nil && !apierrors.IsConflict(err) {
+	if err := r.Update(ctx, &riskSignal); err != nil && !recordStatusUpdateConflict("RiskSignal", err) {
 		return ctrl.Result{}, err
 	}
 
@@ -61,7 +60,7 @@ func (r *RiskSignalNotificationReconciler) Reconcile(ctx context.Context, req ct
 	}
 	setRiskSignalStatus(&riskSignal.Status, v1alpha1.PhaseNotified, original.Status.Message, riskSignal.Generation, now())
 	if statusChangedRiskSignal(original, &riskSignal) {
-		if err := r.Status().Update(ctx, &riskSignal); err != nil && !apierrors.IsConflict(err) {
+		if err := r.Status().Update(ctx, &riskSignal); err != nil && !recordStatusUpdateConflict("RiskSignal", err) {
 			return ctrl.Result{}, err
 		}
 	}

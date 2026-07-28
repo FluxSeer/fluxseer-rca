@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -79,7 +78,7 @@ func (r *RiskRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	)
 	applyRiskRuleConditions(&rule.Status, rule.Generation, summary, now())
 	if statusChangedRiskRule(original, &rule) {
-		if err := r.Status().Update(ctx, &rule); err != nil && !apierrors.IsConflict(err) {
+		if err := r.Status().Update(ctx, &rule); err != nil && !recordStatusUpdateConflict("RiskRule", err) {
 			return ctrl.Result{}, err
 		}
 	}
@@ -301,7 +300,7 @@ func (r *RiskRuleReconciler) upsertRiskSignal(ctx context.Context, riskRule *v1a
 	applyEvidenceConditions(&riskSignal.Status, riskSignal.Generation, summary, now)
 	applyRCAResult(&riskSignal.Status, rca)
 	if statusChangedRiskSignal(original, riskSignal) {
-		if err := r.Status().Update(ctx, riskSignal); err != nil && !apierrors.IsConflict(err) {
+		if err := r.Status().Update(ctx, riskSignal); err != nil && !recordStatusUpdateConflict("RiskSignal", err) {
 			return err
 		}
 	}

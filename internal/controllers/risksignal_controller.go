@@ -81,7 +81,7 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		now(),
 	)
 	if statusChangedRiskSignal(original, &riskSignal) {
-		if err := r.Status().Update(ctx, &riskSignal); err != nil && !apierrors.IsConflict(err) {
+		if err := r.Status().Update(ctx, &riskSignal); err != nil && !recordStatusUpdateConflict("RiskSignal", err) {
 			return ctrl.Result{}, err
 		}
 	}

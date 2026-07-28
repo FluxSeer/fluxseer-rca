@@ -1,6 +1,10 @@
 package rcametrics
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
+)
 
 func TestAllowedMetricLabelsRemainLowCardinality(t *testing.T) {
 	for metricName, labels := range AllowedLabels {
@@ -21,5 +25,14 @@ func TestNormalizeLabelBoundsUnexpectedCharacters(t *testing.T) {
 	}
 	if got := normalizeLabel("", "unknown"); got != "unknown" {
 		t.Fatalf("expected fallback label, got %q", got)
+	}
+}
+
+func TestRecordStatusUpdateConflict(t *testing.T) {
+	before := testutil.ToFloat64(StatusUpdateConflictsTotal.WithLabelValues("investigationrequest"))
+	RecordStatusUpdateConflict("InvestigationRequest")
+	after := testutil.ToFloat64(StatusUpdateConflictsTotal.WithLabelValues("investigationrequest"))
+	if after != before+1 {
+		t.Fatalf("expected status conflict counter increment, before=%f after=%f", before, after)
 	}
 }

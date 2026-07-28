@@ -7,7 +7,6 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -125,7 +124,7 @@ func (r *DeploymentRiskReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	original := riskSignal.DeepCopy()
 	setRiskSignalStatus(&riskSignal.Status, v1alpha1.PhaseConfirmed, finding.Summary, riskSignal.Generation, now())
 	if statusChangedRiskSignal(original, riskSignal) {
-		if err := r.Status().Update(ctx, riskSignal); err != nil && !apierrors.IsConflict(err) {
+		if err := r.Status().Update(ctx, riskSignal); err != nil && !recordStatusUpdateConflict("RiskSignal", err) {
 			return ctrl.Result{}, err
 		}
 	}
