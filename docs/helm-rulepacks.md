@@ -4,6 +4,8 @@ FluxAgent Helm installs can create built-in `RiskRule` resources through `rulePa
 
 Rule packs are explicit configuration. They do not install Prometheus, Loki, hosted model providers, provider secrets, or any external agent.
 
+Rule packs are bootstrap detection inputs, not the canonical RCA workflow. Long-term RCA orchestration should flow through `InvestigationRequest`, with generated `RiskSignal` resources acting as materialized risks and optional investigation triggers.
+
 ## Defaults
 
 ```yaml
@@ -149,6 +151,63 @@ rulePacks:
     namespaceSelector:
       matchNames: []
 ```
+
+## Future Profiles
+
+Rule packs should stay split between portable Kubernetes signals and application profiles.
+
+Portable baseline examples:
+
+- CrashLoopBackOff
+- ImagePullBackOff
+- readiness failure
+- Deployment unavailable
+- CPU throttling
+- memory near limit
+- restart increase
+
+Application profile examples:
+
+- HTTP request rate
+- HTTP latency
+- queue depth
+- worker saturation
+- database connection pool
+- external API rate limiting
+
+Application metric names and labels vary by service. Future profile values should parameterize query expressions instead of hard-coding controller assumptions:
+
+```yaml
+rulePacks:
+  trafficAnomaly:
+    enabled: true
+    datasourceRef:
+      name: prometheus
+    queries:
+      requestRate:
+        expression: |
+          sum(rate(http_requests_total{namespace="$namespace",app="$workload"}[5m]))
+      errorRate:
+        expression: |
+          sum(rate(http_requests_total{namespace="$namespace",app="$workload",status=~"5.."}[5m]))
+      latencyP95:
+        expression: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="$namespace",app="$workload"}[5m])) by (le))
+```
+
+Traffic anomaly detection should compare a current window against a baseline window and include a minimum-volume guard:
+
+```yaml
+rulePacks:
+  trafficAnomaly:
+    anomaly:
+      evaluationWindow: 10m
+      comparisonWindow: 30m
+      increaseRatio: 3.0
+      minimumCurrentRate: 10
+```
+
+This avoids treating low-volume noise as an operational incident just because the relative ratio is high.
 
 ## Verification
 

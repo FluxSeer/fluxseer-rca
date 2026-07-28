@@ -31,10 +31,11 @@ The model gateway is a reasoning seam inside the broader remediation architectur
 Its intended role is:
 
 ```text
-Risk evidence
+Bounded EvidenceBundle
 → provider-neutral reasoning interface
-→ explainable model output
-→ RemediationPlan enrichment or proposal formatting
+→ provider-neutral structured RCA
+→ claim verification
+→ CRD status
 ```
 
 Its non-role is equally important:
@@ -118,9 +119,47 @@ EvidenceBundle
 
 FluxAgent does not package CLI agent runtimes or developer-local interactive auth caches as a supported path. Hosted providers must use workload-scoped API credentials referenced by `ModelProvider`.
 
+## Provider-neutral Structured RCA
+
+Provider implementations may differ in reasoning quality, but they must normalize to one FluxAgent-owned contract. The canonical RCA result should be stored on `InvestigationRequest.status`; `RiskSignal` should keep summaries, lineage, and compact evidence references when a risk is materialized.
+
+Target output shape:
+
+```yaml
+verdict:
+  outcome: Confirmed
+  summary: Traffic surge caused CPU throttling and timeout propagation.
+  confidence:
+    level: High
+    score: 0.86
+    method: ProviderEvidenceCorrelation
+claims:
+  - statement: Request rate increased 4.8x.
+    evidenceRefs:
+      - prom-request-rate
+    verification: Supported
+  - statement: CPU throttling contributed to latency.
+    evidenceRefs:
+      - prom-cpu-throttling
+      - prom-p95-latency
+    verification: Inferred
+missingEvidence:
+  - source: upstream-capacity
+    reason: DataSourceNotConfigured
+```
+
+Expected provider behavior:
+
+| Provider | Behavior |
+| --- | --- |
+| `heuristic` | Summarizes explicit matching signals and avoids causal claims that are not directly supported. |
+| `openai`, `claude`, `gemini` | Correlate time order, cross-source evidence, and alternative hypotheses inside the bounded evidence context. |
+| verifier | Checks whether each claim is supported, inferred, unsupported, contradicted, or unverified. |
+
 ## Design Rules
 
 - Provider output must be explainable and attachable to evidence.
+- Provider output must normalize to FluxAgent-owned RCA fields rather than vendor-specific schemas.
 - Guardrails must evaluate actions after reasoning, not inside the provider.
 - Runtime should stay functional when no remote model is configured.
 - Provider integrations should be swappable without CRD schema changes.

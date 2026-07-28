@@ -25,12 +25,15 @@ The path should remain:
 Target runtime path:
 
 ```text
-InvestigationRequest
+RiskRule / Alert / Manual Request
+→ InvestigationRequest
 → InvestigationRequestReconciler
 → investigation.Service
 → Datasource Adapters
+→ Bounded Evidence Bundle
 → Evidence Redaction
 → Model Gateway
+→ Claim Verification
 → InvestigationRequest.status
 → optional discovered RiskSignal
 ```
@@ -54,6 +57,8 @@ What should FluxAgent investigate now?
 ```
 
 That split keeps the system declarative without forcing every user interaction into a future chat product.
+
+`RiskRule`-driven RCA can remain as a compatibility flow, but the target architecture should route recurring detections, external alerts, and manual requests through `InvestigationRequest` before calling hosted reasoning providers. That keeps RCA orchestration, evidence provenance, provider retries, verification, and optional discovered-signal emission in one workflow contract.
 
 ## Proposed Spec
 
@@ -94,11 +99,51 @@ Suggested sequence:
 2. validate datasource references
 3. validate datasource capabilities against requested query intent
 4. collect evidence within the requested lookback window
-5. redact sensitive evidence
-6. call the selected `ModelProvider`
-7. persist summary, hypothesis, confidence, provider, and conditions to status
-8. optionally emit a linked discovered `RiskSignal`
-9. delete the completed request after `ttlSeconds`, when retention is enabled
+5. normalize raw query output into compact observations
+6. redact sensitive evidence before provider-bound reasoning
+7. assemble a bounded evidence bundle
+8. call the selected `ModelProvider`
+9. verify provider claims against collected evidence
+10. persist verdict, summary, hypothesis, confidence, provider, claims, evidence references, and conditions to status
+11. optionally emit a linked discovered `RiskSignal`
+12. delete the completed request after `ttlSeconds`, when retention is enabled
+
+## Evidence Bundle Contract
+
+Reasoning providers should receive normalized observations instead of unrestricted Kubernetes API access, raw Prometheus responses, or large Loki excerpts.
+
+Minimum evidence reference shape:
+
+```yaml
+evidence:
+  - id: prom-request-rate
+    datasourceRef:
+      name: prometheus
+    capability: MetricsQuery
+    queryDigest: sha256:...
+    timeRange:
+      start: "2026-07-28T08:00:00Z"
+      end: "2026-07-28T08:10:00Z"
+    observation:
+      currentValue: 480
+      baselineValue: 100
+      changeRatio: 4.8
+    collectedAt: "2026-07-28T08:10:05Z"
+    contentDigest: sha256:...
+    redactionProfile: default-v1
+    truncated: false
+```
+
+Provider-bound context should prefer statements such as:
+
+```text
+request rate increased 4.8x
+CPU throttling increased from 2% to 36%
+p95 latency increased from 180ms to 1.9s
+17 upstream timeout logs occurred
+```
+
+This improves cost, privacy, and RCA quality while preserving auditability.
 
 ## Status Model
 
