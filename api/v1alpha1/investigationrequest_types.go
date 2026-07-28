@@ -121,6 +121,37 @@ type RCAExecutionAttempt struct {
 	CompletedAt       *metav1.Time `json:"completedAt,omitempty"`
 }
 
+type RCADigest struct {
+	Algorithm        string `json:"algorithm,omitempty"`
+	Canonicalization string `json:"canonicalization,omitempty"`
+	Value            string `json:"value,omitempty"`
+}
+
+type RCANormalizedResult struct {
+	RiskTitle         string            `json:"riskTitle,omitempty"`
+	RiskSummary       string            `json:"riskSummary,omitempty"`
+	Severity          string            `json:"severity,omitempty"`
+	ConfidenceScore   int               `json:"confidenceScore,omitempty"`
+	ConfidenceReason  string            `json:"confidenceReason,omitempty"`
+	EvidenceCoverage  string            `json:"evidenceCoverage,omitempty"`
+	RCAHypothesis     string            `json:"rcaHypothesis,omitempty"`
+	RCACauses         []string          `json:"rcaCauses,omitempty"`
+	RCAEvidence       []string          `json:"rcaEvidence,omitempty"`
+	ActionType        string            `json:"actionType,omitempty"`
+	ActionDescription string            `json:"actionDescription,omitempty"`
+	ActionParameters  map[string]string `json:"actionParameters,omitempty"`
+	RollbackPlan      []string          `json:"rollbackPlan,omitempty"`
+	RunbookRefs       []string          `json:"runbookRefs,omitempty"`
+	ServiceDocs       []string          `json:"serviceDocs,omitempty"`
+	Provider          string            `json:"provider,omitempty"`
+}
+
+type RCAProviderResult struct {
+	SchemaVersion    string               `json:"schemaVersion,omitempty"`
+	Digest           *RCADigest           `json:"digest,omitempty"`
+	NormalizedResult *RCANormalizedResult `json:"normalizedResult,omitempty"`
+}
+
 type RCAExecution struct {
 	ID                      string                     `json:"id,omitempty"`
 	State                   string                     `json:"state,omitempty"`
@@ -138,6 +169,7 @@ type RCAExecution struct {
 	DurationSeconds         int64                      `json:"durationSeconds,omitempty"`
 	InputTokens             int64                      `json:"inputTokens,omitempty"`
 	OutputTokens            int64                      `json:"outputTokens,omitempty"`
+	ProviderResult          *RCAProviderResult         `json:"providerResult,omitempty"`
 }
 
 type InvestigationLineageSource struct {
@@ -286,6 +318,39 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 					execution.Attempts[i].CompletedAt = in.Status.Execution.Attempts[i].CompletedAt.DeepCopy()
 				}
 			}
+		}
+		if in.Status.Execution.ProviderResult != nil {
+			providerResult := *in.Status.Execution.ProviderResult
+			if in.Status.Execution.ProviderResult.Digest != nil {
+				digest := *in.Status.Execution.ProviderResult.Digest
+				providerResult.Digest = &digest
+			}
+			if in.Status.Execution.ProviderResult.NormalizedResult != nil {
+				normalized := *in.Status.Execution.ProviderResult.NormalizedResult
+				if normalized.RCACauses != nil {
+					normalized.RCACauses = append([]string(nil), normalized.RCACauses...)
+				}
+				if normalized.RCAEvidence != nil {
+					normalized.RCAEvidence = append([]string(nil), normalized.RCAEvidence...)
+				}
+				if normalized.ActionParameters != nil {
+					normalized.ActionParameters = make(map[string]string, len(in.Status.Execution.ProviderResult.NormalizedResult.ActionParameters))
+					for key, value := range in.Status.Execution.ProviderResult.NormalizedResult.ActionParameters {
+						normalized.ActionParameters[key] = value
+					}
+				}
+				if normalized.RollbackPlan != nil {
+					normalized.RollbackPlan = append([]string(nil), normalized.RollbackPlan...)
+				}
+				if normalized.RunbookRefs != nil {
+					normalized.RunbookRefs = append([]string(nil), normalized.RunbookRefs...)
+				}
+				if normalized.ServiceDocs != nil {
+					normalized.ServiceDocs = append([]string(nil), normalized.ServiceDocs...)
+				}
+				providerResult.NormalizedResult = &normalized
+			}
+			execution.ProviderResult = &providerResult
 		}
 		out.Status.Execution = &execution
 	}

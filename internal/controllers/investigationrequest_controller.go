@@ -16,6 +16,7 @@ import (
 
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/canonicaldigest"
+	"fluxagent/internal/domain"
 	"fluxagent/internal/investigation"
 	"fluxagent/internal/statusbudget"
 	"fluxagent/internal/verifier"
@@ -23,12 +24,13 @@ import (
 )
 
 const (
-	rcaSchemaVersion           = "fluxagent-rca-result-v1"
-	rcaCanonicalizationVersion = canonicaldigest.RCAJSONV1
-	reasoningPolicyVersion     = "rca-v2-compat"
-	executionStateFinalized    = "Finalized"
-	executionAttemptCompleted  = "Completed"
-	defaultExecutionAttemptID  = "attempt-001"
+	rcaSchemaVersion                = "fluxagent-rca-result-v1"
+	rcaCanonicalizationVersion      = canonicaldigest.RCAJSONV1
+	reasoningPolicyVersion          = "rca-v2-compat"
+	executionStateProviderCompleted = "ProviderCompleted"
+	executionStateFinalized         = "Finalized"
+	executionAttemptCompleted       = "Completed"
+	defaultExecutionAttemptID       = "attempt-001"
 )
 
 type InvestigationRequestReconciler struct {
@@ -93,9 +95,22 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 		if evidenceErr != nil {
 			return ctrl.Result{}, evidenceErr
 		}
-		rca, rcaErr := r.generateRCA(ctx, &investigation, preflight, evidence, now())
-		if rcaErr != nil {
-			return ctrl.Result{}, rcaErr
+		executionID := investigationExecutionID(&investigation, preflight, evidence)
+		rca := emptyRCAResult()
+		if providerResult := reusableProviderResult(original.Status.Execution, executionID); providerResult != nil {
+			rca.Reasoning = reasoningFromProviderResult(providerResult)
+		} else {
+			generatedRCA, rcaErr := r.generateRCA(ctx, &investigation, preflight, evidence, now())
+			if rcaErr != nil {
+				return ctrl.Result{}, rcaErr
+			}
+			rca = generatedRCA
+			if rca.Reasoning != nil {
+				persistErr := r.persistProviderCompletedCheckpoint(ctx, &investigation, preflight, evidence, rca, executionID, now())
+				if persistErr != nil && !apierrors.IsConflict(persistErr) {
+					return ctrl.Result{}, persistErr
+				}
+			}
 		}
 		applyInvestigationExecutionStatus(&investigation, preflight, evidence, rca, message, now())
 		if rca.Reasoning != nil && investigation.Spec.CreateRiskSignal {
@@ -131,6 +146,20 @@ func applyInvestigationStatusBudget(request *v1alpha1.InvestigationRequest, now 
 	request.Status.Degradation.Partial = true
 	request.Status.Degradation.Reasons = appendDegradationReason(request.Status.Degradation.Reasons, reason)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, reason.Code, reason.Message, request.Generation, now)
+}
+
+func (r *InvestigationRequestReconciler) persistProviderCompletedCheckpoint(ctx context.Context, request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, executionID string, now time.Time) error {
+	checkpoint := request.DeepCopy()
+	checkpoint.Status.Provider = providerNameForStatus(checkpoint, preflight, rca)
+	checkpoint.Status.EvidenceRefs = evidence.EvidenceRefs
+	checkpoint.Status.Execution = buildRCAExecution(checkpoint, preflight, evidence, rca, executionID, executionStateProviderCompleted, now)
+	setInvestigationRequestStatus(&checkpoint.Status, v1alpha1.PhaseReasoning, "provider result persisted for RCA verification", checkpoint.Generation, now)
+	applyInvestigationStatusBudget(checkpoint, now)
+	if err := r.Status().Update(ctx, checkpoint); err != nil {
+		return err
+	}
+	request.ResourceVersion = checkpoint.ResourceVersion
+	return nil
 }
 
 func appendDegradationReason(reasons []v1alpha1.RCADegradationReason, reason v1alpha1.RCADegradationReason) []v1alpha1.RCADegradationReason {
@@ -182,6 +211,10 @@ func (r *InvestigationRequestReconciler) generateRCA(ctx context.Context, reques
 		}, nil
 	}
 	return r.Service.GenerateRCA(ctx, request.Spec, preflight, evidence, now)
+}
+
+func emptyRCAResult() investigation.RCAResult {
+	return investigation.RCAResult{}
 }
 
 func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) string {
@@ -391,30 +424,7 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	request.Status.AlternativeHypotheses = nil
 	request.Status.MissingEvidence = nil
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
-	request.Status.Execution = &v1alpha1.RCAExecution{
-		ID:                      investigationExecutionID(request, preflight, evidence),
-		State:                   executionStateFinalized,
-		Provider:                request.Status.Provider,
-		ProviderRef:             providerRef(preflight.Provider),
-		ProviderGeneration:      providerGeneration(preflight.Provider),
-		ProviderType:            providerType(preflight.Provider),
-		Model:                   providerModel(preflight.Provider),
-		RCASchemaVersion:        rcaSchemaVersion,
-		CanonicalizationVersion: rcaCanonicalizationVersion,
-		ReasoningPolicyVersion:  reasoningPolicyVersion,
-		ControllerVersion:       version.Current().Version,
-		AttemptCount:            1,
-		Attempts: []v1alpha1.RCAExecutionAttempt{
-			{
-				ID:             defaultExecutionAttemptID,
-				IdempotencyKey: executionIdempotencyKey(request, preflight, evidence, defaultExecutionAttemptID),
-				Result:         executionAttemptCompleted,
-				StartedAt:      request.Status.StartedAt,
-				CompletedAt:    &metav1.Time{Time: now},
-			},
-		},
-		DurationSeconds: investigationDurationSeconds(request, now),
-	}
+	request.Status.Execution = buildRCAExecution(request, preflight, evidence, rca, investigationExecutionID(request, preflight, evidence), executionStateFinalized, now)
 }
 
 func confidenceLevel(score float64) string {
@@ -456,6 +466,142 @@ func providerModel(provider *v1alpha1.ModelProvider) string {
 		return ""
 	}
 	return provider.Spec.Model
+}
+
+func providerNameForStatus(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, rca investigation.RCAResult) string {
+	if rca.Reasoning != nil && strings.TrimSpace(rca.Reasoning.Provider) != "" {
+		return rca.Reasoning.Provider
+	}
+	if request.Status.Provider != "" {
+		return request.Status.Provider
+	}
+	if preflight.Provider != nil {
+		return preflight.Provider.Name
+	}
+	return ""
+}
+
+func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, executionID string, state string, now time.Time) *v1alpha1.RCAExecution {
+	providerResult := providerResultFromReasoning(rca)
+	return &v1alpha1.RCAExecution{
+		ID:                      executionID,
+		State:                   state,
+		Provider:                providerNameForStatus(request, preflight, rca),
+		ProviderRef:             providerRef(preflight.Provider),
+		ProviderGeneration:      providerGeneration(preflight.Provider),
+		ProviderType:            providerType(preflight.Provider),
+		Model:                   providerModel(preflight.Provider),
+		RCASchemaVersion:        rcaSchemaVersion,
+		CanonicalizationVersion: rcaCanonicalizationVersion,
+		ReasoningPolicyVersion:  reasoningPolicyVersion,
+		ControllerVersion:       version.Current().Version,
+		AttemptCount:            1,
+		Attempts: []v1alpha1.RCAExecutionAttempt{
+			{
+				ID:             defaultExecutionAttemptID,
+				IdempotencyKey: executionIdempotencyKey(request, preflight, evidence, defaultExecutionAttemptID),
+				Result:         executionAttemptCompleted,
+				StartedAt:      request.Status.StartedAt,
+				CompletedAt:    &metav1.Time{Time: now},
+			},
+		},
+		DurationSeconds: investigationDurationSeconds(request, now),
+		ProviderResult:  providerResult,
+	}
+}
+
+func providerResultFromReasoning(rca investigation.RCAResult) *v1alpha1.RCAProviderResult {
+	if rca.Reasoning == nil {
+		return nil
+	}
+	normalized := normalizedResultFromReasoning(*rca.Reasoning)
+	digest := canonicaldigest.SHA256(canonicaldigest.RCAJSONV1, normalized)
+	return &v1alpha1.RCAProviderResult{
+		SchemaVersion: rcaSchemaVersion,
+		Digest: &v1alpha1.RCADigest{
+			Algorithm:        digest.Algorithm,
+			Canonicalization: digest.Canonicalization,
+			Value:            digest.Value,
+		},
+		NormalizedResult: &normalized,
+	}
+}
+
+func normalizedResultFromReasoning(reasoning domain.ReasoningOutput) v1alpha1.RCANormalizedResult {
+	return v1alpha1.RCANormalizedResult{
+		RiskTitle:         reasoning.RiskTitle,
+		RiskSummary:       reasoning.RiskSummary,
+		Severity:          string(reasoning.Severity),
+		ConfidenceScore:   reasoning.Confidence.Score,
+		ConfidenceReason:  reasoning.Confidence.Rationale,
+		EvidenceCoverage:  reasoning.Confidence.EvidenceCoverage,
+		RCAHypothesis:     reasoning.RCA.Hypothesis,
+		RCACauses:         append([]string(nil), reasoning.RCA.Causes...),
+		RCAEvidence:       append([]string(nil), reasoning.RCA.Evidence...),
+		ActionType:        reasoning.Remediation.ActionType,
+		ActionDescription: reasoning.Remediation.Description,
+		ActionParameters:  copyStringMap(reasoning.Remediation.Parameters),
+		RollbackPlan:      append([]string(nil), reasoning.Remediation.RollbackPlan...),
+		RunbookRefs:       append([]string(nil), reasoning.RunbookRefs...),
+		ServiceDocs:       append([]string(nil), reasoning.ServiceDocs...),
+		Provider:          reasoning.Provider,
+	}
+}
+
+func reasoningFromProviderResult(result *v1alpha1.RCAProviderResult) *domain.ReasoningOutput {
+	if result == nil || result.NormalizedResult == nil {
+		return nil
+	}
+	normalized := result.NormalizedResult
+	severity := domain.Severity(normalized.Severity)
+	return &domain.ReasoningOutput{
+		RiskTitle:   normalized.RiskTitle,
+		RiskSummary: normalized.RiskSummary,
+		Severity:    severity,
+		Confidence: domain.Confidence{
+			Score:            normalized.ConfidenceScore,
+			Severity:         severity,
+			Rationale:        normalized.ConfidenceReason,
+			EvidenceCoverage: normalized.EvidenceCoverage,
+		},
+		RCA: domain.RCASummary{
+			Hypothesis: normalized.RCAHypothesis,
+			Causes:     append([]string(nil), normalized.RCACauses...),
+			Evidence:   append([]string(nil), normalized.RCAEvidence...),
+		},
+		Remediation: domain.Remediation{
+			ActionType:   normalized.ActionType,
+			Description:  normalized.ActionDescription,
+			Parameters:   copyStringMap(normalized.ActionParameters),
+			RollbackPlan: append([]string(nil), normalized.RollbackPlan...),
+		},
+		RunbookRefs: append([]string(nil), normalized.RunbookRefs...),
+		ServiceDocs: append([]string(nil), normalized.ServiceDocs...),
+		Provider:    normalized.Provider,
+	}
+}
+
+func reusableProviderResult(execution *v1alpha1.RCAExecution, executionID string) *v1alpha1.RCAProviderResult {
+	if execution == nil || execution.ID != executionID || execution.ProviderResult == nil || execution.ProviderResult.NormalizedResult == nil {
+		return nil
+	}
+	switch execution.State {
+	case executionStateProviderCompleted, executionStateFinalized:
+		return execution.ProviderResult
+	default:
+		return nil
+	}
+}
+
+func copyStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func investigationExecutionID(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult) string {

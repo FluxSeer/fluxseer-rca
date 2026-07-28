@@ -221,6 +221,13 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 		stored.Status.Execution.Attempts[0].CompletedAt == nil {
 		t.Fatalf("expected structured execution attempt metadata, got %#v", stored.Status.Execution.Attempts)
 	}
+	if stored.Status.Execution.ProviderResult == nil ||
+		stored.Status.Execution.ProviderResult.SchemaVersion != "fluxagent-rca-result-v1" ||
+		stored.Status.Execution.ProviderResult.Digest == nil ||
+		stored.Status.Execution.ProviderResult.NormalizedResult == nil ||
+		stored.Status.Execution.ProviderResult.NormalizedResult.RiskSummary == "" {
+		t.Fatalf("expected normalized provider result checkpoint, got %#v", stored.Status.Execution.ProviderResult)
+	}
 	if stored.Status.Lineage == nil ||
 		stored.Status.Lineage.Source.Kind != "RiskRule" ||
 		stored.Status.Lineage.Source.Namespace != "fluxagent-system" ||
@@ -349,6 +356,107 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 	}
 	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected RCAReady true on promoted risk signal, got %#v", cond)
+	}
+}
+
+func TestInvestigationRequestReconcilerReusesProviderCompletedCheckpoint(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	now := time.Date(2026, 7, 6, 10, 30, 0, 0, time.UTC)
+
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkpointed-open-api", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace: "prod",
+				Kind:      "Deployment",
+				Name:      "open-api",
+			},
+			DataSources: []v1alpha1.LocalObjectReference{{Name: "kubernetes-events"}},
+			ModelProviderRef: v1alpha1.LocalObjectReference{
+				Name: "counting-provider",
+			},
+			Mode: v1alpha1.InvestigationModeReadOnly,
+		},
+	}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system", Generation: 7},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
+	}
+	counter := &countingModelProvider{}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithObjects(request, deployment, provider).
+		Build()
+	service := &investigation.Service{
+		Client:   client,
+		Registry: datasource.NewRegistry(fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent}),
+		Resolver: modelgateway.KubeResolver{Client: client},
+		Gateway: &modelgateway.Gateway{
+			Base: knowledge.NewBase(),
+			Providers: model.NewRegistry(
+				counter,
+			),
+		},
+	}
+	preflight, err := service.Preflight(context.Background(), request.Namespace, request.Spec)
+	if err != nil {
+		t.Fatalf("preflight failed: %v", err)
+	}
+	evidence, err := service.CollectEvidence(context.Background(), request.Spec, preflight, now)
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	startedAt := metav1.NewTime(now)
+	request.Status.StartedAt = &startedAt
+	request.Status.Lineage = lineageFromAnnotations(request.Annotations)
+	executionID := investigationExecutionID(request, preflight, evidence)
+	reasoning := checkpointReasoningOutput()
+	request.Status.Execution = buildRCAExecution(request, preflight, evidence, investigation.RCAResult{Reasoning: &reasoning}, executionID, executionStateProviderCompleted, now)
+	request.Status.ResourceStatus = v1alpha1.ResourceStatus{
+		Phase:              v1alpha1.PhaseReasoning,
+		Message:            "provider result persisted for RCA verification",
+		ObservedGeneration: request.Generation,
+		UpdatedAt:          metav1.NewTime(now),
+	}
+	if err := client.Status().Update(context.Background(), request); err != nil {
+		t.Fatalf("seed checkpoint status: %v", err)
+	}
+
+	reconciler := &InvestigationRequestReconciler{
+		Client:  client,
+		Scheme:  scheme,
+		Service: service,
+		Now:     func() time.Time { return now },
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	if counter.calls != 0 {
+		t.Fatalf("expected checkpoint reuse without provider call, got %d calls", counter.calls)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseCompleted || stored.Status.Execution == nil || stored.Status.Execution.State != executionStateFinalized {
+		t.Fatalf("expected finalized status from checkpoint, got %#v", stored.Status)
+	}
+	if stored.Status.Execution.ProviderResult == nil || stored.Status.Execution.ProviderResult.Digest == nil {
+		t.Fatalf("expected provider result checkpoint to remain persisted, got %#v", stored.Status.Execution)
 	}
 }
 
@@ -747,6 +855,54 @@ func (f fakeInvestigationDataSource) Query(context.Context, datasource.QueryRequ
 	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: records}, nil
 }
 func (f fakeInvestigationDataSource) HealthCheck(context.Context) error { return nil }
+
+type countingModelProvider struct {
+	calls int
+}
+
+func (p *countingModelProvider) Name() string { return "counting" }
+func (p *countingModelProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	p.calls++
+	return domain.ModelResponse{
+		Provider:   "counting",
+		Model:      "test-model",
+		Structured: true,
+		Output: map[string]any{
+			"riskTitle":       "Provider should not be called",
+			"riskSummary":     "Provider should not be called",
+			"severity":        "low",
+			"confidenceScore": 10,
+			"rationale":       "unexpected call",
+			"rcaHypothesis":   "unexpected call",
+			"rcaCauses":       []string{"unexpected"},
+			"actionType":      "notification.sendSlack",
+		},
+	}, nil
+}
+
+func checkpointReasoningOutput() domain.ReasoningOutput {
+	return domain.ReasoningOutput{
+		RiskTitle:   "Crash loop after rollout",
+		RiskSummary: "Checkpointed RCA summary",
+		Severity:    domain.SeverityHigh,
+		Confidence: domain.Confidence{
+			Score:            91,
+			Severity:         domain.SeverityHigh,
+			Rationale:        "checkpointed provider result",
+			EvidenceCoverage: "events",
+		},
+		RCA: domain.RCASummary{
+			Hypothesis: "The latest rollout introduced startup failures.",
+			Causes:     []string{"startup failure"},
+			Evidence:   []string{"BackOff"},
+		},
+		Remediation: domain.Remediation{
+			ActionType:  "notification.sendSlack",
+			Description: "Notify operators",
+		},
+		Provider: "counting",
+	}
+}
 
 func hasPrefix(value string, prefix string) bool {
 	return len(value) >= len(prefix) && value[:len(prefix)] == prefix
