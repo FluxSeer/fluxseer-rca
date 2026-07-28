@@ -179,10 +179,12 @@ These fields are the v0.3 target contract. New integrations should check the gen
 
 `status.verdict` is the top-level RCA conclusion:
 
+- `outcome`: RCA result semantics such as `Confirmed`, `Inconclusive`, `NoIssueFound`, or `ExecutionFailed`
 - `summary`: compact human-readable conclusion
 - `rootCauseEntity`: Kubernetes target most directly associated with the conclusion
 - `rootCauseType`: coarse category such as `CrashLoop`, `LatencyRegression`, `ResourcePressure`, `ConfigurationMismatch`, or `WorkloadDegradation`
-- `confidence`: normalized score from `0.0` to `1.0`; this is a ranking score, not a calibrated probability
+- `confidence`: compatibility normalized score from `0.0` to `1.0`; this is a ranking score, not a calibrated probability
+- `confidenceDetail`: provider, verifier, confidence band, and scoring-method metadata
 
 `status.claims[]` stores machine-addressable RCA claims:
 
@@ -215,22 +217,24 @@ These fields are compact normalized-observation metadata. They let consumers aud
 `status.execution` records RCA execution metadata:
 
 - `provider`
+- `providerRef`
+- `providerGeneration`
+- `providerType`
+- `model`
+- `reasoningPolicyVersion`
+- `controllerVersion`
 - `attempts`
 - `durationSeconds`
 - `inputTokens`
 - `outputTokens`
 
+`status.phase` describes workflow lifecycle. `status.outcome` and `status.verdict.outcome` describe RCA result semantics. A failed datasource or provider execution can therefore be `phase: Failed` and `outcome: ExecutionFailed`, while a successful read-only investigation can be `phase: Completed` and `outcome: Confirmed`.
+
 When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to the emitted `RiskSignal`. The RCA itself remains on `InvestigationRequest.status`; the linked `RiskSignal` represents a materialized finding for downstream workflows, not the canonical RCA result.
 
 If `ttlSeconds` is greater than zero, FluxAgent keeps the completed request for that many seconds after `status.completedAt`, then deletes it automatically.
 
-Status hardening target:
-
-- terminal phase should be explicit and should not require callers to infer completion from conditions alone
-- future terminal phases should distinguish `Succeeded`, `Failed`, `PartiallySucceeded`, `Cancelled`, and `Expired`
-- workflow completion, RCA readiness, notification, and discovered-signal emission should remain separate result dimensions
-- `phase` should describe workflow lifecycle
-- `outcome` should describe RCA result semantics, for example `Confirmed`, `Inconclusive`, or `NoIssueFound`
+Compatibility note: `status.summary`, `status.hypothesis`, `status.confidence`, and `status.provider` remain available for the v0.2 path. New consumers should prefer `status.verdict`, `status.claims`, `status.degradation`, and `status.execution`.
 
 ## Conditions
 

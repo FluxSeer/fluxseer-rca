@@ -16,6 +16,7 @@ import (
 
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/investigation"
+	"fluxagent/internal/version"
 )
 
 type InvestigationRequestReconciler struct {
@@ -53,6 +54,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 		investigation.Status.StartedAt = &startedAt
 	}
 	investigation.Status.CompletedAt = nil
+	investigation.Status.Outcome = ""
 	investigation.Status.Summary = ""
 	investigation.Status.Hypothesis = ""
 	investigation.Status.Confidence = 0
@@ -174,6 +176,7 @@ func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) st
 
 func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, message string, now time.Time) {
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, message, request.Generation, now)
+	request.Status.Outcome = v1alpha1.InvestigationOutcomeFailed
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
 	request.Status.Provider = ""
@@ -228,6 +231,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 
 	if issue := preflight.FirstIssue(); issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, issue.Message, request.Generation, now)
+		request.Status.Outcome = v1alpha1.InvestigationOutcomeFailed
 		completedAt := metav1.NewTime(now)
 		request.Status.CompletedAt = &completedAt
 		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, issue.Reason, issue.Message, request.Generation, now)
@@ -240,6 +244,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	}
 	if evidence.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, evidence.Issue.Message, request.Generation, now)
+		request.Status.Outcome = v1alpha1.InvestigationOutcomeFailed
 		request.Status.Summary = ""
 		request.Status.Hypothesis = ""
 		request.Status.Confidence = 0
@@ -255,6 +260,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	}
 	if rca.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, rca.Issue.Message, request.Generation, now)
+		request.Status.Outcome = v1alpha1.InvestigationOutcomeFailed
 		request.Status.Summary = evidence.Summary
 		request.Status.Hypothesis = ""
 		request.Status.Confidence = 0
@@ -280,6 +286,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	}
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
+	request.Status.Outcome = v1alpha1.InvestigationOutcomeConfirmed
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseCompleted, request.Status.Summary, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request completed successfully without degradation", request.Generation, now)
@@ -292,20 +299,74 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 
 	confidence := float64(rca.Reasoning.Confidence.Score) / 100.0
 	request.Status.Verdict = &v1alpha1.RCAVerdict{
+		Outcome:         v1alpha1.InvestigationOutcomeConfirmed,
 		Summary:         rca.Reasoning.RiskSummary,
 		RootCauseEntity: resourceToTargetRef(preflight.Target),
 		RootCauseType:   inferRootCauseType(rca.Reasoning.RCA.Hypothesis, rca.Reasoning.RCA.Causes),
 		Confidence:      confidence,
+		ConfidenceDetail: &v1alpha1.RCAConfidence{
+			ProviderScore: confidence,
+			VerifiedScore: confidence,
+			Level:         confidenceLevel(confidence),
+			Method:        "ProviderScoreV1",
+		},
 	}
 	request.Status.Claims = buildRCAClaims(rca, evidence)
 	request.Status.AlternativeHypotheses = nil
 	request.Status.MissingEvidence = nil
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
 	request.Status.Execution = &v1alpha1.RCAExecution{
-		Provider:        request.Status.Provider,
-		Attempts:        1,
-		DurationSeconds: investigationDurationSeconds(request, now),
+		Provider:               request.Status.Provider,
+		ProviderRef:            providerRef(preflight.Provider),
+		ProviderGeneration:     providerGeneration(preflight.Provider),
+		ProviderType:           providerType(preflight.Provider),
+		Model:                  providerModel(preflight.Provider),
+		ReasoningPolicyVersion: "rca-v2-compat",
+		ControllerVersion:      version.Current().Version,
+		Attempts:               1,
+		DurationSeconds:        investigationDurationSeconds(request, now),
 	}
+}
+
+func confidenceLevel(score float64) string {
+	switch {
+	case score >= 0.8:
+		return "High"
+	case score >= 0.5:
+		return "Medium"
+	case score > 0:
+		return "Low"
+	default:
+		return "Unknown"
+	}
+}
+
+func providerRef(provider *v1alpha1.ModelProvider) *v1alpha1.NamespacedObjectReference {
+	if provider == nil {
+		return nil
+	}
+	return &v1alpha1.NamespacedObjectReference{Name: provider.Name, Namespace: provider.Namespace}
+}
+
+func providerGeneration(provider *v1alpha1.ModelProvider) int64 {
+	if provider == nil {
+		return 0
+	}
+	return provider.Generation
+}
+
+func providerType(provider *v1alpha1.ModelProvider) string {
+	if provider == nil {
+		return ""
+	}
+	return provider.Spec.Provider
+}
+
+func providerModel(provider *v1alpha1.ModelProvider) string {
+	if provider == nil {
+		return ""
+	}
+	return provider.Spec.Model
 }
 
 func buildRCAClaims(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult) []v1alpha1.RCAClaim {
