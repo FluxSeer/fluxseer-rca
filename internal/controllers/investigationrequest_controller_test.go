@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -24,6 +26,7 @@ import (
 	"fluxagent/internal/model"
 	"fluxagent/internal/model/heuristic"
 	"fluxagent/internal/modelgateway"
+	"fluxagent/internal/rcametrics"
 	"fluxagent/internal/verifier"
 )
 
@@ -749,10 +752,15 @@ func TestInvestigationRequestReconcilerReusesProviderCompletedCheckpoint(t *test
 		Service: service,
 		Now:     func() time.Time { return now },
 	}
+	dedupHitsBefore := testutil.ToFloat64(rcametrics.DeduplicationHitsTotal.WithLabelValues("provider_checkpoint"))
 	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
 	}); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
+	}
+	dedupHitsAfter := testutil.ToFloat64(rcametrics.DeduplicationHitsTotal.WithLabelValues("provider_checkpoint"))
+	if dedupHitsAfter != dedupHitsBefore+1 {
+		t.Fatalf("expected provider checkpoint deduplication metric increment, before=%f after=%f", dedupHitsBefore, dedupHitsAfter)
 	}
 	if counter.calls != 0 {
 		t.Fatalf("expected checkpoint reuse without provider call, got %d calls", counter.calls)

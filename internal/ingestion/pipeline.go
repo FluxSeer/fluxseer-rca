@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"fluxagent/internal/domain"
+	"fluxagent/internal/rcametrics"
 )
 
 type Request struct {
@@ -113,6 +114,7 @@ func (p *Pipeline) deduplicate(signals []domain.Signal) []domain.Signal {
 			signal.Message,
 		}, "|")
 		if _, exists := seen[key]; exists {
+			rcametrics.RecordDeduplicationHit("ingestion_signal")
 			continue
 		}
 		seen[key] = struct{}{}

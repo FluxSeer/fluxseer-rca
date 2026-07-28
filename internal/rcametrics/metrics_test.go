@@ -36,3 +36,12 @@ func TestRecordStatusUpdateConflict(t *testing.T) {
 		t.Fatalf("expected status conflict counter increment, before=%f after=%f", before, after)
 	}
 }
+
+func TestRecordDeduplicationHit(t *testing.T) {
+	before := testutil.ToFloat64(DeduplicationHitsTotal.WithLabelValues("provider_checkpoint"))
+	RecordDeduplicationHit("Provider Checkpoint")
+	after := testutil.ToFloat64(DeduplicationHitsTotal.WithLabelValues("provider_checkpoint"))
+	if after != before+1 {
+		t.Fatalf("expected deduplication counter increment, before=%f after=%f", before, after)
+	}
+}
