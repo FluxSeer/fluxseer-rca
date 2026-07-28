@@ -14,15 +14,22 @@ const (
 	DecisionAllowed  = "allowed"
 	DecisionRejected = "rejected"
 
-	ReasonAllowed             = "allowed"
-	ReasonLegacyUnrestricted  = "legacy_unrestricted"
-	ReasonNoPolicy            = "no_policy"
-	ReasonModeUnsupported     = "mode_unsupported"
-	ReasonTemplateRequired    = "template_required"
-	ReasonTemplateNotAllowed  = "template_not_allowed"
-	ReasonRangeExceeded       = "range_exceeded"
-	ReasonRegexDenied         = "regex_denied"
-	ReasonTargetScopeRequired = "target_scope_required"
+	ReasonAllowed                 = "allowed"
+	ReasonLegacyUnrestricted      = "legacy_unrestricted"
+	ReasonNoPolicy                = "no_policy"
+	ReasonModeUnsupported         = "mode_unsupported"
+	ReasonTemplateRequired        = "template_required"
+	ReasonTemplateNotAllowed      = "template_not_allowed"
+	ReasonRangeExceeded           = "range_exceeded"
+	ReasonRegexDenied             = "regex_denied"
+	ReasonTargetScopeRequired     = "target_scope_required"
+	ReasonFunctionDenied          = "function_denied"
+	ReasonFunctionNotAllowed      = "function_not_allowed"
+	ReasonSubqueryDenied          = "subquery_denied"
+	ReasonOffsetDenied            = "offset_denied"
+	ReasonAtModifierDenied        = "at_modifier_denied"
+	ReasonPipelineStageDenied     = "pipeline_stage_denied"
+	ReasonPipelineStageNotAllowed = "pipeline_stage_not_allowed"
 )
 
 type Request struct {
@@ -73,7 +80,22 @@ func Validate(source datasource.DataSource, req Request) Decision {
 	if policy.RequireTargetScope && !hasTargetScope(req) {
 		return Decision{Decision: DecisionRejected, Reason: ReasonTargetScopeRequired, Message: fmt.Sprintf("query template %q did not render required target scope", templateName)}
 	}
+	if decision := validateBackendSyntax(source, policy, req); decision.Decision == DecisionRejected {
+		return decision
+	}
 	return Decision{Decision: DecisionAllowed, Reason: ReasonAllowed, Message: "query policy allowed datasource query"}
+}
+
+func validateBackendSyntax(source datasource.DataSource, policy v1alpha1.DataSourceQueryPolicy, req Request) Decision {
+	backend := strings.ToLower(strings.TrimSpace(source.Type()))
+	switch {
+	case backend == "prometheus" || req.QueryType == domain.QueryTypeMetric:
+		return validatePromQLPolicy(policy.Prometheus, req)
+	case backend == "loki" || req.QueryType == domain.QueryTypeLog:
+		return validateLogQLPolicy(policy.Loki, req)
+	default:
+		return Decision{Decision: DecisionAllowed, Reason: ReasonAllowed, Message: "query policy has no backend-specific syntax restrictions for datasource"}
+	}
 }
 
 func datasourceQueryPolicy(source datasource.DataSource) (v1alpha1.DataSourceQueryPolicy, bool) {
