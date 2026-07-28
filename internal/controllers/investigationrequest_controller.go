@@ -20,6 +20,7 @@ import (
 	"fluxagent/internal/canonicaldigest"
 	"fluxagent/internal/domain"
 	"fluxagent/internal/investigation"
+	"fluxagent/internal/rcametrics"
 	"fluxagent/internal/statusbudget"
 	"fluxagent/internal/verifier"
 	"fluxagent/internal/version"
@@ -254,6 +255,7 @@ func applyEvidenceRequirementInconclusiveStatus(request *v1alpha1.InvestigationR
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseCompleted, gate.Message, request.Generation, now)
+	rcametrics.RecordInvestigation(request.Namespace, "heuristic", request.Status.Outcome, "unknown")
 	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionTrue, "TargetResolved", "target resource was resolved successfully", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionTrue, "AllDatasourcesResolved", "all referenced datasources were resolved", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
@@ -268,6 +270,7 @@ func applyLoopPreventedInvestigationStatus(request *v1alpha1.InvestigationReques
 	request.Status.Message = failure.Message
 	request.Status.Outcome = v1alpha1.InvestigationOutcomeUnknown
 	request.Status.Failure = failure
+	rcametrics.RecordLoopPrevention(failure.Code)
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, failure.Code, failure.Message, request.Generation, now)
@@ -532,6 +535,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	if issue := preflight.FirstIssue(); issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, issue.Message, request.Generation, now)
 		applyInvestigationFailure(request, issue.Reason, issue.Message, investigationFailureStage(issue.Reason))
+		rcametrics.RecordInvestigation(request.Namespace, providerType(preflight.Provider), "failed", "unknown")
 		completedAt := metav1.NewTime(now)
 		request.Status.CompletedAt = &completedAt
 		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, issue.Reason, issue.Message, request.Generation, now)
@@ -545,6 +549,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	if evidence.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, evidence.Issue.Message, request.Generation, now)
 		applyInvestigationFailure(request, evidence.Issue.Reason, evidence.Issue.Message, v1alpha1.InvestigationStageEvidenceCollection)
+		rcametrics.RecordInvestigation(request.Namespace, providerType(preflight.Provider), "failed", "unknown")
 		request.Status.Summary = ""
 		request.Status.Hypothesis = ""
 		request.Status.Confidence = 0
@@ -561,6 +566,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	if rca.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, rca.Issue.Message, request.Generation, now)
 		applyInvestigationFailure(request, rca.Issue.Reason, rca.Issue.Message, v1alpha1.InvestigationStageReasoning)
+		rcametrics.RecordInvestigation(request.Namespace, providerType(preflight.Provider), "failed", "unknown")
 		request.Status.Summary = evidence.Summary
 		request.Status.Hypothesis = ""
 		request.Status.Confidence = 0
@@ -589,6 +595,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	request.Status.Outcome = v1alpha1.InvestigationOutcomeConfirmed
 	request.Status.Failure = nil
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseCompleted, request.Status.Summary, request.Generation, now)
+	rcametrics.RecordInvestigation(request.Namespace, providerType(preflight.Provider), request.Status.Outcome, rootCauseTypeForMetrics(request))
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request completed successfully without degradation", request.Generation, now)
 }
@@ -624,6 +631,9 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 
 	confidence := float64(rca.Reasoning.Confidence.Score) / 100.0
 	claims, verification := buildRCAClaims(rca, evidence)
+	for _, claim := range claims {
+		rcametrics.RecordClaimVerification(claim.Verification)
+	}
 	verifiedScore := confidence
 	if verifiedScore > verification.CoverageScore {
 		verifiedScore = verification.CoverageScore
@@ -647,6 +657,13 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
 	request.Status.Execution = buildRCAExecution(request, preflight, evidence, rca, investigationExecutionID(request, preflight, evidence), executionStateFinalized, now)
 	request.Status.Execution.VerifierVersion = verification.Method
+}
+
+func rootCauseTypeForMetrics(request *v1alpha1.InvestigationRequest) string {
+	if request.Status.Verdict == nil {
+		return "unknown"
+	}
+	return request.Status.Verdict.RootCauseType
 }
 
 func confidenceLevel(score float64) string {
