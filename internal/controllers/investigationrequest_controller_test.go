@@ -23,6 +23,7 @@ import (
 	"fluxagent/internal/model"
 	"fluxagent/internal/model/heuristic"
 	"fluxagent/internal/modelgateway"
+	"fluxagent/internal/verifier"
 )
 
 func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
@@ -177,12 +178,15 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if len(stored.Status.Claims) == 0 {
 		t.Fatalf("expected structured claims, got %#v", stored.Status.Claims)
 	}
-	if stored.Status.Claims[0].Verification != "Inferred" {
-		t.Fatalf("expected summary claim inferred without a direct evidence match, got %#v", stored.Status.Claims[0])
+	if stored.Status.Claims[0].Verification != verifier.VerificationUnsupported {
+		t.Fatalf("expected summary claim unsupported without a direct evidence match, got %#v", stored.Status.Claims[0])
 	}
 	supportedClaimFound := false
 	for _, claim := range stored.Status.Claims {
-		if claim.Verification == "Supported" && len(claim.EvidenceRefs) == 1 && claim.EvidenceRefs[0] == "evidence-001" {
+		if claim.Verification == verifier.VerificationSupported && len(claim.EvidenceRefs) == 1 && claim.EvidenceRefs[0] == "evidence-001" {
+			if len(claim.EvidenceLinks) != 1 || claim.EvidenceLinks[0].EvidenceRef != "evidence-001" || claim.EvidenceLinks[0].Role != verifier.EvidenceRoleSupports || claim.EvidenceLinks[0].Strength != verifier.EvidenceStrengthDirect {
+				t.Fatalf("expected direct supporting evidence link, got %#v", claim)
+			}
 			supportedClaimFound = true
 		}
 	}
@@ -191,6 +195,9 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	}
 	if stored.Status.Execution == nil || stored.Status.Execution.Provider != "heuristic" || stored.Status.Execution.AttemptCount != 1 {
 		t.Fatalf("expected RCA execution metadata, got %#v", stored.Status.Execution)
+	}
+	if stored.Status.Execution.VerifierVersion != verifier.MethodHeuristicEvidenceCoverageV1 {
+		t.Fatalf("expected verifier version on execution, got %#v", stored.Status.Execution)
 	}
 	if stored.Status.Execution.ID == "" || !hasPrefix(stored.Status.Execution.ID, "sha256:") {
 		t.Fatalf("expected stable execution id, got %#v", stored.Status.Execution)

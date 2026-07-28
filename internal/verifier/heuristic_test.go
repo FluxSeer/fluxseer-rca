@@ -27,10 +27,13 @@ func TestVerifyClaimsMarksRelevantEvidenceSupported(t *testing.T) {
 		if len(claim.EvidenceRefs) == 0 {
 			t.Fatalf("expected cited evidence refs, got %#v", claim)
 		}
+		if len(claim.EvidenceLinks) == 0 || claim.EvidenceLinks[0].Role != EvidenceRoleSupports || claim.EvidenceLinks[0].Strength != EvidenceStrengthDirect {
+			t.Fatalf("expected direct supporting evidence link, got %#v", claim)
+		}
 	}
 }
 
-func TestVerifyClaimsDoesNotSupportUnrelatedClaims(t *testing.T) {
+func TestVerifyClaimsMarksUnsupportedWhenEvidenceIsIrrelevant(t *testing.T) {
 	result := VerifyClaims(
 		[]Claim{
 			{ID: "claim-001", Statement: "Database connection pool exhaustion caused errors"},
@@ -44,11 +47,28 @@ func TestVerifyClaimsDoesNotSupportUnrelatedClaims(t *testing.T) {
 	if result.CoverageScore != 0.5 {
 		t.Fatalf("expected half coverage score, got %#v", result)
 	}
-	if result.Claims[0].Verification != VerificationInferred || len(result.Claims[0].EvidenceRefs) != 0 {
-		t.Fatalf("expected unrelated claim to remain inferred, got %#v", result.Claims[0])
+	if result.Claims[0].Verification != VerificationUnsupported || len(result.Claims[0].EvidenceRefs) != 0 {
+		t.Fatalf("expected unrelated claim to be unsupported, got %#v", result.Claims[0])
 	}
 	if result.Claims[1].Verification != VerificationSupported || len(result.Claims[1].EvidenceRefs) != 1 {
 		t.Fatalf("expected restart claim to be supported, got %#v", result.Claims[1])
+	}
+}
+
+func TestVerifyClaimsMarksContradictedEvidence(t *testing.T) {
+	result := VerifyClaims(
+		[]Claim{{ID: "claim-001", Statement: "CPU saturation is causing errors"}},
+		[]EvidenceRef{{ID: "evidence-001", Kind: "metric", Summary: "cpu usage normal below threshold"}},
+	)
+
+	if result.CoverageScore != 0 {
+		t.Fatalf("expected contradicted claim not to raise coverage, got %#v", result)
+	}
+	if result.Claims[0].Verification != VerificationContradicted {
+		t.Fatalf("expected contradicted claim, got %#v", result.Claims[0])
+	}
+	if len(result.Claims[0].EvidenceLinks) != 1 || result.Claims[0].EvidenceLinks[0].Role != EvidenceRoleContradicts {
+		t.Fatalf("expected contradictory evidence link, got %#v", result.Claims[0])
 	}
 }
 

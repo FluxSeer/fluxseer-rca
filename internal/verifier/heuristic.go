@@ -3,11 +3,18 @@ package verifier
 import "strings"
 
 const (
-	VerificationSupported  = "Supported"
-	VerificationInferred   = "Inferred"
-	VerificationUnverified = "Unverified"
+	VerificationSupported    = "Supported"
+	VerificationInferred     = "Inferred"
+	VerificationUnsupported  = "Unsupported"
+	VerificationContradicted = "Contradicted"
+	VerificationUnverified   = "Unverified"
 
 	MethodHeuristicEvidenceCoverageV1 = "HeuristicEvidenceCoverageV1"
+
+	EvidenceRoleSupports     = "Supports"
+	EvidenceRoleContradicts  = "Contradicts"
+	EvidenceStrengthDirect   = "Direct"
+	EvidenceStrengthIndirect = "Indirect"
 )
 
 type Claim struct {
@@ -23,9 +30,16 @@ type EvidenceRef struct {
 }
 
 type ClaimResult struct {
-	ID           string
-	EvidenceRefs []string
-	Verification string
+	ID            string
+	EvidenceRefs  []string
+	EvidenceLinks []EvidenceLink
+	Verification  string
+}
+
+type EvidenceLink struct {
+	EvidenceRef string
+	Role        string
+	Strength    string
 }
 
 type Result struct {
@@ -46,22 +60,65 @@ func VerifyClaims(claims []Claim, evidence []EvidenceRef) Result {
 	supported := 0
 	for _, claim := range claims {
 		matches := matchingEvidenceIDs(claim.Statement, evidence)
+		contradictions := contradictoryEvidenceIDs(claim.Statement, evidence)
 		verification := VerificationInferred
 		if len(evidence) == 0 {
 			verification = VerificationUnverified
 		}
+		if len(evidence) > 0 && len(matches) == 0 {
+			verification = VerificationUnsupported
+		}
+		links := evidenceLinks(matches, EvidenceRoleSupports, EvidenceStrengthDirect)
 		if len(matches) > 0 {
 			verification = VerificationSupported
-			supported++
+			if len(contradictions) == 0 {
+				supported++
+			}
+		}
+		if len(contradictions) > 0 {
+			verification = VerificationContradicted
+			links = evidenceLinks(contradictions, EvidenceRoleContradicts, EvidenceStrengthDirect)
 		}
 		result.Claims = append(result.Claims, ClaimResult{
-			ID:           claim.ID,
-			EvidenceRefs: matches,
-			Verification: verification,
+			ID:            claim.ID,
+			EvidenceRefs:  matches,
+			EvidenceLinks: links,
+			Verification:  verification,
 		})
 	}
 	result.CoverageScore = float64(supported) / float64(len(claims))
 	return result
+}
+
+func contradictoryEvidenceIDs(statement string, evidence []EvidenceRef) []string {
+	statement = normalizeText(statement)
+	if statement == "" {
+		return nil
+	}
+
+	ids := make([]string, 0, len(evidence))
+	for _, ref := range evidence {
+		id := strings.TrimSpace(ref.ID)
+		if id == "" {
+			continue
+		}
+		if evidenceContradictsStatement(statement, ref) {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func evidenceLinks(ids []string, role string, strength string) []EvidenceLink {
+	links := make([]EvidenceLink, 0, len(ids))
+	for _, id := range ids {
+		links = append(links, EvidenceLink{
+			EvidenceRef: id,
+			Role:        role,
+			Strength:    strength,
+		})
+	}
+	return links
 }
 
 func matchingEvidenceIDs(statement string, evidence []EvidenceRef) []string {
@@ -86,6 +143,22 @@ func matchingEvidenceIDs(statement string, evidence []EvidenceRef) []string {
 func evidenceSupportsStatement(statement string, ref EvidenceRef) bool {
 	evidenceText := normalizeText(ref.Kind + " " + ref.Source + " " + ref.Summary)
 	if evidenceText == "" {
+		return false
+	}
+	for _, token := range evidenceTerms(statement) {
+		if strings.Contains(evidenceText, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func evidenceContradictsStatement(statement string, ref EvidenceRef) bool {
+	evidenceText := normalizeText(ref.Kind + " " + ref.Source + " " + ref.Summary)
+	if evidenceText == "" {
+		return false
+	}
+	if !containsAny(evidenceText, "normal", "healthy", "below threshold", "no error", "no errors", "ready", "available") {
 		return false
 	}
 	for _, token := range evidenceTerms(statement) {
