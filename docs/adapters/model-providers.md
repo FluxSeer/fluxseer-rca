@@ -149,4 +149,4 @@ This design keeps FluxAgent:
 - vendor-neutral at the API layer
 - explicit about which hosted API providers are supported
 
-For the detailed architecture, see [architecture/model-gateway.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/model-gateway.md:1).
+For the detailed architecture, see [architecture/model-gateway.md](../architecture/model-gateway.md).

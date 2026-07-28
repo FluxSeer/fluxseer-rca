@@ -4,13 +4,13 @@ This file is kept as a compatibility entry point.
 
 Use the new architecture docs:
 
-- [architecture/overview.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/overview.md:1)
-- [architecture/read-only-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/read-only-flow.md:1)
-- [architecture/investigation-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/investigation-flow.md:1)
-- [architecture/remediation-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/remediation-flow.md:1)
-- [architecture/model-gateway.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/model-gateway.md:1)
-- [architecture/action-executor.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/action-executor.md:1)
-- [architecture/v0.3-investigation-experience.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.3-investigation-experience.md:1)
+- [architecture/overview.md](architecture/overview.md)
+- [architecture/read-only-flow.md](architecture/read-only-flow.md)
+- [architecture/investigation-flow.md](architecture/investigation-flow.md)
+- [architecture/remediation-flow.md](architecture/remediation-flow.md)
+- [architecture/model-gateway.md](architecture/model-gateway.md)
+- [architecture/action-executor.md](architecture/action-executor.md)
+- [architecture/v0.3-investigation-experience.md](architecture/v0.3-investigation-experience.md)
 
 The architecture is now best understood as three paths:
 

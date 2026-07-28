@@ -8,7 +8,7 @@ They can also be represented as a `DataSource` resource for consistency with the
 
 The adapter is always registered by the manager.
 
-Implementation source: [internal/datasource/kubernetes/adapter.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/datasource/kubernetes/adapter.go:1)
+Implementation source: [internal/datasource/kubernetes/adapter.go](../../internal/datasource/kubernetes/adapter.go)
 
 ## Query Behavior
 

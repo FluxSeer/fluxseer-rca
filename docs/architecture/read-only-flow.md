@@ -2,7 +2,7 @@
 
 This document describes the default `v0.1` runtime path. This is the path that should be treated as the main open-source entry point today.
 
-For the ad-hoc investigation path, see [investigation-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/investigation-flow.md:1).
+For the ad-hoc investigation path, see [investigation-flow.md](investigation-flow.md).
 
 ## Goal
 
@@ -10,7 +10,7 @@ Turn Kubernetes-native and observability signals into a `RiskSignal` plus notifi
 
 ## Runtime Entry
 
-The read-only path is started by [cmd/manager/main.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/cmd/manager/main.go:1) through [internal/operatorapp/run.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/operatorapp/run.go:1).
+The read-only path is started by [cmd/manager/main.go](../../cmd/manager/main.go) through [internal/operatorapp/run.go](../../internal/operatorapp/run.go).
 
 Default behavior:
 
@@ -52,7 +52,7 @@ Optional per-workload annotations:
 - `fluxagent.aiops.platform/loki-query`
 - `fluxagent.aiops.platform/event-keywords`
 
-See [examples/sample-app/deployment.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/examples/sample-app/deployment.yaml:1).
+See [examples/sample-app/deployment.yaml](../../examples/sample-app/deployment.yaml).
 
 ## Control Flow
 

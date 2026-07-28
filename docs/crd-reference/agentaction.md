@@ -8,7 +8,7 @@
 - Version: `v1alpha1`
 - Kind: `AgentAction`
 
-Source schema: [api/v1alpha1/types.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/api/v1alpha1/types.go:1)
+Source schema: [api/v1alpha1/types.go](../../api/v1alpha1/types.go)
 
 ## Purpose
 
@@ -98,4 +98,4 @@ Typical phases:
 
 ## Sample
 
-See [config/samples/agent-action.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-action.yaml:1).
+See [config/samples/agent-action.yaml](../../config/samples/agent-action.yaml).

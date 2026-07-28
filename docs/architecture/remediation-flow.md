@@ -14,7 +14,7 @@ Remediation controllers are only active when the manager is started with:
 GOWORK=off go run ./cmd/manager --enable-remediation=true
 ```
 
-The wiring lives in [internal/operatorapp/run.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/operatorapp/run.go:1).
+The wiring lives in [internal/operatorapp/run.go](../../internal/operatorapp/run.go).
 
 ## Flow Summary
 
@@ -37,7 +37,7 @@ This is a separate, opt-in control path. Detection and execution are not a singl
 
 ### 1. `RiskSignalReconciler`
 
-Source: [internal/controllers/risksignal_controller.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/controllers/risksignal_controller.go:1)
+Source: [internal/controllers/risksignal_controller.go](../../internal/controllers/risksignal_controller.go)
 
 Responsibilities:
 
@@ -53,7 +53,7 @@ Current posture:
 
 ### 2. `RemediationPlanReconciler`
 
-Source: [internal/controllers/remediationplan_controller.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/controllers/remediationplan_controller.go:1)
+Source: [internal/controllers/remediationplan_controller.go](../../internal/controllers/remediationplan_controller.go)
 
 Responsibilities:
 
@@ -64,7 +64,7 @@ Responsibilities:
 
 ### 3. `AgentActionReconciler`
 
-Source: [internal/controllers/agentaction_controller.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/controllers/agentaction_controller.go:1)
+Source: [internal/controllers/agentaction_controller.go](../../internal/controllers/agentaction_controller.go)
 
 Responsibilities:
 
@@ -74,7 +74,7 @@ Responsibilities:
 
 ## Decision Boundary
 
-The main safety boundary is in [internal/guardrails/engine.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/guardrails/engine.go:1).
+The main safety boundary is in [internal/guardrails/engine.go](../../internal/guardrails/engine.go).
 
 Current policy behavior:
 

@@ -15,10 +15,10 @@ Env-based example:
 export FLUXAGENT_PROMETHEUS_URL=http://your-prometheus.example
 ```
 
-Registration source: [internal/operatorapp/run.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/operatorapp/run.go:1)
-Resource loader: [internal/datasourceconfig/loader.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/datasourceconfig/loader.go:1)
+Registration source: [internal/operatorapp/run.go](../../internal/operatorapp/run.go)
+Resource loader: [internal/datasourceconfig/loader.go](../../internal/datasourceconfig/loader.go)
 
-Implementation source: [internal/datasource/prometheus/adapter.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/datasource/prometheus/adapter.go:1)
+Implementation source: [internal/datasource/prometheus/adapter.go](../../internal/datasource/prometheus/adapter.go)
 
 ## Endpoint Shape
 
@@ -66,4 +66,4 @@ env:
     value: http://fluxagent-observability:8080
 ```
 
-See [examples/kind/manager-demo-patch.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/examples/kind/manager-demo-patch.yaml:1).
+See [examples/kind/manager-demo-patch.yaml](../../examples/kind/manager-demo-patch.yaml).
