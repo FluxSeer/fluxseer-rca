@@ -768,6 +768,12 @@ func TestInvestigationRequestReconcilerReusesProviderCompletedCheckpoint(t *test
 	if stored.Status.Execution.ProviderResult == nil || stored.Status.Execution.ProviderResult.Digest == nil {
 		t.Fatalf("expected provider result checkpoint to remain persisted, got %#v", stored.Status.Execution)
 	}
+	if stored.Status.Execution.ProviderResult.ProviderRequestID != "provider-request-checkpoint-123" {
+		t.Fatalf("expected provider request id to remain in checkpoint, got %#v", stored.Status.Execution.ProviderResult)
+	}
+	if len(stored.Status.Execution.Attempts) != 1 || stored.Status.Execution.Attempts[0].ProviderRequestID != "provider-request-checkpoint-123" {
+		t.Fatalf("expected provider request id on finalized attempt, got %#v", stored.Status.Execution.Attempts)
+	}
 }
 
 func TestInvestigationRequestReconcilerSkipsCompletedGenerationAndSchedulesTTL(t *testing.T) {
@@ -1304,7 +1310,8 @@ func checkpointReasoningOutput() domain.ReasoningOutput {
 			ActionType:  "notification.sendSlack",
 			Description: "Notify operators",
 		},
-		Provider: "counting",
+		Provider:          "counting",
+		ProviderRequestID: "provider-request-checkpoint-123",
 	}
 }
 

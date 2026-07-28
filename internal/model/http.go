@@ -19,6 +19,11 @@ const (
 	defaultProviderRetryDelay  = 100 * time.Millisecond
 )
 
+type HTTPResponse struct {
+	Body      []byte
+	RequestID string
+}
+
 func HTTPClient(timeout time.Duration, client *http.Client) *http.Client {
 	base := http.DefaultClient
 	if client != nil {
@@ -54,6 +59,14 @@ func NewJSONRequest(ctx context.Context, method string, endpoint string, payload
 }
 
 func DoRequestWithRetry(ctx context.Context, provider string, timeout time.Duration, client *http.Client, buildRequest func(context.Context) (*http.Request, error)) ([]byte, error) {
+	resp, err := DoRequestWithRetryMetadata(ctx, provider, timeout, client, buildRequest)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
+}
+
+func DoRequestWithRetryMetadata(ctx context.Context, provider string, timeout time.Duration, client *http.Client, buildRequest func(context.Context) (*http.Request, error)) (HTTPResponse, error) {
 	httpClient := HTTPClient(timeout, client)
 	attempts := 0
 	for attempts < defaultProviderMaxAttempts {
@@ -61,9 +74,9 @@ func DoRequestWithRetry(ctx context.Context, provider string, timeout time.Durat
 		req, err := buildRequest(ctx)
 		if err != nil {
 			if providerErr, ok := err.(*ProviderError); ok {
-				return nil, providerErr
+				return HTTPResponse{}, providerErr
 			}
-			return nil, &ProviderError{
+			return HTTPResponse{}, &ProviderError{
 				Reason:  "ProviderUnavailable",
 				Message: err.Error(),
 			}
@@ -73,31 +86,44 @@ func DoRequestWithRetry(ctx context.Context, provider string, timeout time.Durat
 		if err != nil {
 			providerErr, retry := classifyProviderTransportError(provider, err)
 			if !retry || attempts >= defaultProviderMaxAttempts {
-				return nil, withAttemptContext(providerErr, attempts)
+				return HTTPResponse{}, withAttemptContext(providerErr, attempts)
 			}
 			if sleepErr := sleepForRetry(ctx, retryDelay(attempts, nil)); sleepErr != nil {
-				return nil, withAttemptContext(providerErr, attempts)
+				return HTTPResponse{}, withAttemptContext(providerErr, attempts)
 			}
 			continue
 		}
 
+		requestID := providerRequestID(resp)
 		body, providerErr, retry := readProviderResponse(resp, provider)
 		_ = resp.Body.Close()
 		if providerErr == nil {
-			return body, nil
+			return HTTPResponse{Body: body, RequestID: requestID}, nil
 		}
 		if !retry || attempts >= defaultProviderMaxAttempts {
-			return nil, withAttemptContext(providerErr, attempts)
+			return HTTPResponse{}, withAttemptContext(providerErr, attempts)
 		}
 		if sleepErr := sleepForRetry(ctx, retryDelay(attempts, resp)); sleepErr != nil {
-			return nil, withAttemptContext(providerErr, attempts)
+			return HTTPResponse{}, withAttemptContext(providerErr, attempts)
 		}
 	}
 
-	return nil, &ProviderError{
+	return HTTPResponse{}, &ProviderError{
 		Reason:  "ProviderUnavailable",
 		Message: fmt.Sprintf("%s provider request exhausted retry budget", provider),
 	}
+}
+
+func providerRequestID(resp *http.Response) string {
+	if resp == nil {
+		return ""
+	}
+	for _, header := range []string{"x-request-id", "request-id", "x-goog-request-id", "anthropic-request-id"} {
+		if value := strings.TrimSpace(resp.Header.Get(header)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func normalizeProviderTimeout(timeout time.Duration) time.Duration {

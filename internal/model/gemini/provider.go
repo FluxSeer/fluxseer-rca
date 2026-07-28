@@ -95,7 +95,7 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 	if endpoint == "" {
 		endpoint = fmt.Sprintf(defaultEndpoint, url.PathEscape(p.Model))
 	}
-	body, err := model.DoRequestWithRetry(ctx, p.Name(), p.Timeout, p.Client, func(ctx context.Context) (*http.Request, error) {
+	httpResp, err := model.DoRequestWithRetryMetadata(ctx, p.Name(), p.Timeout, p.Client, func(ctx context.Context) (*http.Request, error) {
 		httpReq, err := model.NewJSONRequest(ctx, http.MethodPost, endpoint, payload)
 		if err != nil {
 			return nil, fmt.Errorf("create gemini request: %w", err)
@@ -116,7 +116,7 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 			} `json:"content"`
 		} `json:"candidates"`
 	}
-	if err := json.Unmarshal(body, &decoded); err != nil {
+	if err := json.Unmarshal(httpResp.Body, &decoded); err != nil {
 		return domain.ModelResponse{}, &model.ProviderError{
 			Reason:  "InvalidProviderResponse",
 			Message: fmt.Sprintf("decode gemini response: %v", err),
@@ -130,7 +130,11 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 	}
 	for _, part := range decoded.Candidates[0].Content.Parts {
 		if part.Text != "" {
-			return model.ParseStructuredText(p.Name(), p.Model, part.Text)
+			resp, err := model.ParseStructuredText(p.Name(), p.Model, part.Text)
+			if err != nil {
+				return domain.ModelResponse{}, err
+			}
+			return model.WithProviderRequestID(resp, httpResp.RequestID), nil
 		}
 	}
 	return domain.ModelResponse{}, &model.ProviderError{

@@ -739,16 +739,24 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 		AttemptCount:            1,
 		Attempts: []v1alpha1.RCAExecutionAttempt{
 			{
-				ID:             defaultExecutionAttemptID,
-				IdempotencyKey: executionIdempotencyKey(request, preflight, evidence, defaultExecutionAttemptID),
-				Result:         executionAttemptCompleted,
-				StartedAt:      request.Status.StartedAt,
-				CompletedAt:    &metav1.Time{Time: now},
+				ID:                defaultExecutionAttemptID,
+				ProviderRequestID: providerRequestIDFromRCA(rca),
+				IdempotencyKey:    executionIdempotencyKey(request, preflight, evidence, defaultExecutionAttemptID),
+				Result:            executionAttemptCompleted,
+				StartedAt:         request.Status.StartedAt,
+				CompletedAt:       &metav1.Time{Time: now},
 			},
 		},
 		DurationSeconds: investigationDurationSeconds(request, now),
 		ProviderResult:  providerResult,
 	}
+}
+
+func providerRequestIDFromRCA(rca investigation.RCAResult) string {
+	if rca.Reasoning == nil {
+		return ""
+	}
+	return strings.TrimSpace(rca.Reasoning.ProviderRequestID)
 }
 
 func providerEgressAudit(provider *v1alpha1.ModelProvider, evidence investigation.EvidenceCollectionResult) *v1alpha1.ProviderEgressAudit {
@@ -852,7 +860,8 @@ func providerResultFromReasoning(rca investigation.RCAResult) *v1alpha1.RCAProvi
 	normalized := normalizedResultFromReasoning(*rca.Reasoning)
 	digest := canonicaldigest.SHA256(canonicaldigest.RCAJSONV1, normalized)
 	return &v1alpha1.RCAProviderResult{
-		SchemaVersion: rcaSchemaVersion,
+		SchemaVersion:     rcaSchemaVersion,
+		ProviderRequestID: strings.TrimSpace(rca.Reasoning.ProviderRequestID),
 		Digest: &v1alpha1.RCADigest{
 			Algorithm:        digest.Algorithm,
 			Canonicalization: digest.Canonicalization,
@@ -890,9 +899,10 @@ func reasoningFromProviderResult(result *v1alpha1.RCAProviderResult) *domain.Rea
 	normalized := result.NormalizedResult
 	severity := domain.Severity(normalized.Severity)
 	return &domain.ReasoningOutput{
-		RiskTitle:   normalized.RiskTitle,
-		RiskSummary: normalized.RiskSummary,
-		Severity:    severity,
+		RiskTitle:         normalized.RiskTitle,
+		RiskSummary:       normalized.RiskSummary,
+		Severity:          severity,
+		ProviderRequestID: strings.TrimSpace(result.ProviderRequestID),
 		Confidence: domain.Confidence{
 			Score:            normalized.ConfidenceScore,
 			Severity:         severity,

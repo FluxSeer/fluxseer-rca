@@ -22,6 +22,7 @@ func TestOpenAIProviderCompletesStructuredResponse(t *testing.T) {
 			t.Fatalf("expected openai bearer auth, got %q", got)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "chatcmpl-openai-request-123",
 			"choices": []map[string]any{
 				{
 					"message": map[string]any{
@@ -55,6 +56,9 @@ func TestOpenAIProviderCompletesStructuredResponse(t *testing.T) {
 	if resp.Output["riskSummary"] != "OpenAI correlated error spikes with rollout timing." {
 		t.Fatalf("unexpected risk summary: %#v", resp.Output["riskSummary"])
 	}
+	if resp.ProviderRequestID != "chatcmpl-openai-request-123" {
+		t.Fatalf("expected openai provider request id, got %q", resp.ProviderRequestID)
+	}
 }
 
 func TestClaudeProviderCompletesStructuredResponse(t *testing.T) {
@@ -65,6 +69,7 @@ func TestClaudeProviderCompletesStructuredResponse(t *testing.T) {
 		if got := r.Header.Get("anthropic-version"); got == "" {
 			t.Fatal("expected anthropic-version header")
 		}
+		w.Header().Set("request-id", "claude-request-456")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"content": []map[string]any{
 				{
@@ -95,6 +100,9 @@ func TestClaudeProviderCompletesStructuredResponse(t *testing.T) {
 	if resp.Provider != "claude" {
 		t.Fatalf("expected claude provider, got %q", resp.Provider)
 	}
+	if resp.ProviderRequestID != "claude-request-456" {
+		t.Fatalf("expected claude provider request id, got %q", resp.ProviderRequestID)
+	}
 }
 
 func TestGeminiProviderCompletesStructuredResponse(t *testing.T) {
@@ -102,6 +110,7 @@ func TestGeminiProviderCompletesStructuredResponse(t *testing.T) {
 		if got := r.Header.Get("x-goog-api-key"); got != "gemini-token" {
 			t.Fatalf("expected gemini api key header, got %q", got)
 		}
+		w.Header().Set("x-goog-request-id", "gemini-request-789")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"candidates": []map[string]any{
 				{
@@ -136,6 +145,9 @@ func TestGeminiProviderCompletesStructuredResponse(t *testing.T) {
 	}
 	if resp.Provider != "gemini" {
 		t.Fatalf("expected gemini provider, got %q", resp.Provider)
+	}
+	if resp.ProviderRequestID != "gemini-request-789" {
+		t.Fatalf("expected gemini provider request id, got %q", resp.ProviderRequestID)
 	}
 }
 

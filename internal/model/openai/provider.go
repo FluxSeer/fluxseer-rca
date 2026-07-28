@@ -79,7 +79,7 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 		}
 	}
 
-	body, err := model.DoRequestWithRetry(ctx, p.Name(), p.Timeout, p.Client, func(ctx context.Context) (*http.Request, error) {
+	httpResp, err := model.DoRequestWithRetryMetadata(ctx, p.Name(), p.Timeout, p.Client, func(ctx context.Context) (*http.Request, error) {
 		httpReq, err := model.NewJSONRequest(ctx, http.MethodPost, firstNonEmpty(p.Endpoint, defaultEndpoint), payload)
 		if err != nil {
 			return nil, fmt.Errorf("create openai request: %w", err)
@@ -92,13 +92,14 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 	}
 
 	var decoded struct {
+		ID      string `json:"id"`
 		Choices []struct {
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	if err := json.Unmarshal(body, &decoded); err != nil {
+	if err := json.Unmarshal(httpResp.Body, &decoded); err != nil {
 		return domain.ModelResponse{}, &model.ProviderError{
 			Reason:  "InvalidProviderResponse",
 			Message: fmt.Sprintf("decode openai response: %v", err),
@@ -110,7 +111,11 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 			Message: "openai response did not include a message content payload",
 		}
 	}
-	return model.ParseStructuredText(p.Name(), p.Model, decoded.Choices[0].Message.Content)
+	resp, err := model.ParseStructuredText(p.Name(), p.Model, decoded.Choices[0].Message.Content)
+	if err != nil {
+		return domain.ModelResponse{}, err
+	}
+	return model.WithProviderRequestID(resp, firstNonEmpty(httpResp.RequestID, decoded.ID)), nil
 }
 
 func maxTokens(value int) int {

@@ -32,6 +32,32 @@ func (p invalidStructuredProvider) Complete(context.Context, domain.ModelRequest
 	}, nil
 }
 
+type requestIDProvider struct{}
+
+func (p requestIDProvider) Name() string {
+	return "request-id-provider"
+}
+
+func (p requestIDProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	score := 81
+	return domain.ModelResponse{
+		Provider:          p.Name(),
+		Model:             "request-id-test",
+		ProviderRequestID: "provider-request-abc",
+		Structured:        true,
+		Output: map[string]any{
+			"riskTitle":       "Latency regression",
+			"riskSummary":     "Provider returned a request id.",
+			"severity":        "high",
+			"confidenceScore": score,
+			"rationale":       "test fixture",
+			"rcaHypothesis":   "upstream latency increased",
+			"rcaCauses":       []string{"upstream latency"},
+			"actionType":      "notification.sendSlack",
+		},
+	}, nil
+}
+
 func TestEngineRejectsInvalidStructuredProviderResponse(t *testing.T) {
 	engine := NewEngine(knowledge.NewBase(), invalidStructuredProvider{})
 	_, err := engine.Analyze(context.Background(), domain.IngestionOutput{
@@ -52,5 +78,21 @@ func TestEngineRejectsInvalidStructuredProviderResponse(t *testing.T) {
 	}
 	if !strings.Contains(providerErr.Message, "confidenceScore") {
 		t.Fatalf("expected confidenceScore message, got %q", providerErr.Message)
+	}
+}
+
+func TestEngineCarriesProviderRequestID(t *testing.T) {
+	engine := NewEngine(knowledge.NewBase(), requestIDProvider{})
+	result, err := engine.Analyze(context.Background(), domain.IngestionOutput{
+		Context: domain.IncidentContext{
+			Resource: domain.ResourceRef{Namespace: "prod", Name: "payments-api", Kind: "Deployment"},
+			Summary:  "latency increased",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected analyze error: %v", err)
+	}
+	if result.ProviderRequestID != "provider-request-abc" {
+		t.Fatalf("expected provider request id, got %q", result.ProviderRequestID)
 	}
 }

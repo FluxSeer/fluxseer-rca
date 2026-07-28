@@ -373,6 +373,8 @@ spec:
                       properties:
                         schemaVersion:
                           type: string
+                        providerRequestID:
+                          type: string
                         digest:
                           type: object
                           properties:
