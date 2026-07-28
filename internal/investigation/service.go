@@ -201,7 +201,13 @@ func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRe
 		return result, nil
 	}
 
-	reasoning, err := s.Gateway.AnalyzeIngestion(ctx, preflight.Provider, buildInvestigationIngestionOutput(spec, preflight, evidenceResult, now))
+	filteredEvidence, policyIssue := applyProviderDataPolicy(preflight.Provider, evidenceResult)
+	if policyIssue != nil {
+		result.Issue = policyIssue
+		return result, nil
+	}
+
+	reasoning, err := s.Gateway.AnalyzeIngestion(ctx, preflight.Provider, buildInvestigationIngestionOutput(spec, preflight, filteredEvidence, now))
 	if err != nil {
 		if analyzeErr, ok := err.(*modelgateway.AnalyzeError); ok {
 			result.Issue = &Issue{
@@ -214,6 +220,101 @@ func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRe
 	}
 	result.Reasoning = &reasoning
 	return result, nil
+}
+
+func applyProviderDataPolicy(provider *v1alpha1.ModelProvider, evidenceResult EvidenceCollectionResult) (EvidenceCollectionResult, *Issue) {
+	if provider == nil || !isHostedProvider(provider.Spec.Provider) {
+		return evidenceResult, nil
+	}
+	policy := provider.Spec.DataPolicy
+	if !policy.AllowExternalTransmission {
+		return evidenceResult, &Issue{
+			Reason:  "ProviderDataPolicyDenied",
+			Message: fmt.Sprintf("ModelProvider %q requires spec.dataPolicy.allowExternalTransmission=true before evidence can be sent to hosted provider %q", provider.Name, provider.Spec.Provider),
+		}
+	}
+
+	filtered := evidenceResult
+	filtered.EvidenceRefs = filterEvidenceRefsForProviderPolicy(evidenceResult.EvidenceRefs, policy)
+	filtered.Observations = filterObservationsForProviderPolicy(evidenceResult.Observations, policy)
+	filtered.Summary = fmt.Sprintf("%s; provider data policy retained %d evidence refs", evidenceResult.Summary, len(filtered.EvidenceRefs))
+	return filtered, nil
+}
+
+func isHostedProvider(providerType string) bool {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "openai", "claude", "gemini":
+		return true
+	default:
+		return false
+	}
+}
+
+func filterEvidenceRefsForProviderPolicy(refs []v1alpha1.EvidenceRef, policy v1alpha1.ModelProviderDataPolicy) []v1alpha1.EvidenceRef {
+	out := make([]v1alpha1.EvidenceRef, 0, len(refs))
+	for _, ref := range refs {
+		if !evidenceKindAllowed(ref.Kind, policy.AllowedEvidenceKinds) {
+			continue
+		}
+		filtered := ref
+		if strings.EqualFold(ref.Kind, "log") && !policy.AllowLogSamples {
+			filtered.Summary = "log sample omitted by provider data policy"
+			filtered.Query = ""
+			filtered.Link = ""
+		}
+		out = append(out, filtered)
+	}
+	return out
+}
+
+func filterObservationsForProviderPolicy(observations []domain.Observation, policy v1alpha1.ModelProviderDataPolicy) []domain.Observation {
+	out := make([]domain.Observation, 0, len(observations))
+	for _, observation := range observations {
+		if !evidenceKindAllowed(string(observation.Type), policy.AllowedEvidenceKinds) {
+			continue
+		}
+		filtered := observation
+		if observation.Type == domain.ObservationTypeLog && !policy.AllowLogSamples {
+			filtered.Summary = "log sample omitted by provider data policy"
+			if filtered.Value.Log != nil {
+				logValue := *filtered.Value.Log
+				logValue.Line = filtered.Summary
+				filtered.Value.Log = &logValue
+			}
+		}
+		out = append(out, filtered)
+	}
+	return out
+}
+
+func evidenceKindAllowed(kind string, allowed []string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	normalizedKind := normalizeEvidencePolicyKind(kind)
+	for _, candidate := range allowed {
+		if normalizeEvidencePolicyKind(candidate) == normalizedKind {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeEvidencePolicyKind(kind string) string {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	kind = strings.TrimSuffix(kind, "observation")
+	switch kind {
+	case "kubernetesevent":
+		return "event"
+	case "metric":
+		return "metric"
+	case "log":
+		return "log"
+	case "deploymentcondition":
+		return "deploymentcondition"
+	default:
+		return kind
+	}
 }
 
 func (s *Service) resolveTarget(ctx context.Context, targetRef v1alpha1.TargetRef) (domain.ResourceRef, map[string]string, *Issue, error) {

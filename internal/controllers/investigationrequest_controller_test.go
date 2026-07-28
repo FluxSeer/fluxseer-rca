@@ -439,6 +439,43 @@ func TestValidateInvestigationQueryBudgetRejectsQueryCounts(t *testing.T) {
 	}
 }
 
+func TestProviderEgressAuditUsesFilteredMetadataOnly(t *testing.T) {
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			DataPolicy: v1alpha1.ModelProviderDataPolicy{
+				AllowExternalTransmission: true,
+				AllowedEvidenceKinds:      []string{"MetricObservation", "LogObservation"},
+				AllowLogSamples:           false,
+				MaximumClassification:     "Internal",
+			},
+		},
+	}
+	audit := providerEgressAudit(provider, investigation.EvidenceCollectionResult{
+		EvidenceRefs: []v1alpha1.EvidenceRef{
+			{Kind: "metric", Source: "prometheus", Summary: "latency high"},
+			{Kind: "log", Source: "loki", Summary: "secret log sample"},
+			{Kind: "event", Source: "kubernetes-events", Summary: "BackOff"},
+		},
+	})
+	if audit == nil {
+		t.Fatal("expected hosted provider egress audit")
+	}
+	if audit.ProviderType != "openai" || audit.EvidenceBundleDigest == "" || !hasPrefix(audit.EvidenceBundleDigest, "sha256:") {
+		t.Fatalf("expected provider type and digest, got %#v", audit)
+	}
+	if audit.LogSamplesIncluded {
+		t.Fatalf("expected log samples to be excluded, got %#v", audit)
+	}
+	if len(audit.EvidenceKinds) != 2 || audit.EvidenceKinds[0] != "log" || audit.EvidenceKinds[1] != "metric" {
+		t.Fatalf("expected filtered evidence kinds, got %#v", audit.EvidenceKinds)
+	}
+	if audit.MaximumClassificationSent != "Internal" {
+		t.Fatalf("expected Internal max classification, got %#v", audit)
+	}
+}
+
 func TestInvestigationRequestReconcilerBlocksRiskSignalSourceByDefault(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {

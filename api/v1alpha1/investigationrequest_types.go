@@ -189,6 +189,7 @@ type RCAExecution struct {
 	CanonicalizationVersion string                     `json:"canonicalizationVersion,omitempty"`
 	ReasoningPolicyVersion  string                     `json:"reasoningPolicyVersion,omitempty"`
 	VerifierVersion         string                     `json:"verifierVersion,omitempty"`
+	EgressAudit             *ProviderEgressAudit       `json:"egressAudit,omitempty"`
 	ControllerVersion       string                     `json:"controllerVersion,omitempty"`
 	AttemptCount            int32                      `json:"attemptCount,omitempty"`
 	Attempts                []RCAExecutionAttempt      `json:"attempts,omitempty"`
@@ -196,6 +197,14 @@ type RCAExecution struct {
 	InputTokens             int64                      `json:"inputTokens,omitempty"`
 	OutputTokens            int64                      `json:"outputTokens,omitempty"`
 	ProviderResult          *RCAProviderResult         `json:"providerResult,omitempty"`
+}
+
+type ProviderEgressAudit struct {
+	ProviderType              string   `json:"providerType,omitempty"`
+	EvidenceBundleDigest      string   `json:"evidenceBundleDigest,omitempty"`
+	EvidenceKinds             []string `json:"evidenceKinds,omitempty"`
+	LogSamplesIncluded        bool     `json:"logSamplesIncluded,omitempty"`
+	MaximumClassificationSent string   `json:"maximumClassificationSent,omitempty"`
 }
 
 type InvestigationLineageSource struct {
@@ -336,6 +345,13 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 		if in.Status.Execution.ProviderRef != nil {
 			ref := *in.Status.Execution.ProviderRef
 			execution.ProviderRef = &ref
+		}
+		if in.Status.Execution.EgressAudit != nil {
+			audit := *in.Status.Execution.EgressAudit
+			if in.Status.Execution.EgressAudit.EvidenceKinds != nil {
+				audit.EvidenceKinds = append([]string(nil), in.Status.Execution.EgressAudit.EvidenceKinds...)
+			}
+			execution.EgressAudit = &audit
 		}
 		if in.Status.Execution.Attempts != nil {
 			execution.Attempts = make([]RCAExecutionAttempt, len(in.Status.Execution.Attempts))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -697,6 +698,7 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 		RCASchemaVersion:        rcaSchemaVersion,
 		CanonicalizationVersion: rcaCanonicalizationVersion,
 		ReasoningPolicyVersion:  reasoningPolicyVersion,
+		EgressAudit:             providerEgressAudit(preflight.Provider, evidence),
 		ControllerVersion:       version.Current().Version,
 		AttemptCount:            1,
 		Attempts: []v1alpha1.RCAExecutionAttempt{
@@ -710,6 +712,100 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 		},
 		DurationSeconds: investigationDurationSeconds(request, now),
 		ProviderResult:  providerResult,
+	}
+}
+
+func providerEgressAudit(provider *v1alpha1.ModelProvider, evidence investigation.EvidenceCollectionResult) *v1alpha1.ProviderEgressAudit {
+	if provider == nil || !isHostedProviderType(provider.Spec.Provider) {
+		return nil
+	}
+	filteredRefs := egressEvidenceRefsForAudit(evidence.EvidenceRefs, provider.Spec.DataPolicy)
+	return &v1alpha1.ProviderEgressAudit{
+		ProviderType:              strings.ToLower(strings.TrimSpace(provider.Spec.Provider)),
+		EvidenceBundleDigest:      evidenceBundleDigest(filteredRefs),
+		EvidenceKinds:             evidenceKinds(filteredRefs),
+		LogSamplesIncluded:        logSamplesIncluded(filteredRefs, provider.Spec.DataPolicy),
+		MaximumClassificationSent: firstNonEmptyString(provider.Spec.DataPolicy.MaximumClassification, "Internal"),
+	}
+}
+
+func egressEvidenceRefsForAudit(refs []v1alpha1.EvidenceRef, policy v1alpha1.ModelProviderDataPolicy) []v1alpha1.EvidenceRef {
+	out := make([]v1alpha1.EvidenceRef, 0, len(refs))
+	for _, ref := range refs {
+		if !egressEvidenceKindAllowed(ref.Kind, policy.AllowedEvidenceKinds) {
+			continue
+		}
+		filtered := ref
+		if strings.EqualFold(filtered.Kind, "log") && !policy.AllowLogSamples {
+			filtered.Summary = "log sample omitted by provider data policy"
+			filtered.Query = ""
+			filtered.Link = ""
+		}
+		out = append(out, filtered)
+	}
+	return out
+}
+
+func egressEvidenceKindAllowed(kind string, allowed []string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	normalizedKind := normalizeEgressEvidenceKind(kind)
+	for _, candidate := range allowed {
+		if normalizeEgressEvidenceKind(candidate) == normalizedKind {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeEgressEvidenceKind(kind string) string {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	kind = strings.TrimSuffix(kind, "observation")
+	switch kind {
+	case "kubernetesevent":
+		return "event"
+	default:
+		return kind
+	}
+}
+
+func evidenceKinds(refs []v1alpha1.EvidenceRef) []string {
+	seen := map[string]struct{}{}
+	kinds := make([]string, 0)
+	for _, ref := range refs {
+		kind := strings.TrimSpace(ref.Kind)
+		if kind == "" {
+			continue
+		}
+		if _, ok := seen[kind]; ok {
+			continue
+		}
+		seen[kind] = struct{}{}
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	return kinds
+}
+
+func logSamplesIncluded(refs []v1alpha1.EvidenceRef, policy v1alpha1.ModelProviderDataPolicy) bool {
+	if !policy.AllowLogSamples {
+		return false
+	}
+	for _, ref := range refs {
+		if strings.EqualFold(ref.Kind, "log") && strings.TrimSpace(ref.Summary) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func isHostedProviderType(providerType string) bool {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "openai", "claude", "gemini":
+		return true
+	default:
+		return false
 	}
 }
 

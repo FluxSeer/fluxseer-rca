@@ -568,11 +568,128 @@ func TestServiceGenerateRCAReturnsReasoningOutput(t *testing.T) {
 	}
 }
 
+func TestServiceGenerateRCABlocksHostedProviderWithoutExternalTransmission(t *testing.T) {
+	hosted := &capturingModelProvider{name: "openai"}
+	service := &Service{
+		Gateway: &modelgateway.Gateway{
+			Base: knowledge.NewBase(),
+			Providers: model.NewRegistry(
+				hosted,
+			),
+		},
+	}
+
+	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Provider: &v1alpha1.ModelProvider{
+			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+			Spec:       v1alpha1.ModelProviderSpec{Provider: "openai", Model: "test-model"},
+		},
+	}, EvidenceCollectionResult{
+		Summary: "collected 1 evidence records from 1 datasources",
+		EvidenceRefs: []v1alpha1.EvidenceRef{
+			{Kind: "event", Source: "kubernetes-events", Summary: "BackOff"},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("generate RCA failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "ProviderDataPolicyDenied" {
+		t.Fatalf("expected ProviderDataPolicyDenied issue, got %#v", result.Issue)
+	}
+	if hosted.calls != 0 {
+		t.Fatalf("expected hosted provider not to be called, got %d", hosted.calls)
+	}
+}
+
+func TestServiceGenerateRCAFiltersHostedProviderEvidenceByDataPolicy(t *testing.T) {
+	hosted := &capturingModelProvider{name: "openai"}
+	service := &Service{
+		Gateway: &modelgateway.Gateway{
+			Base: knowledge.NewBase(),
+			Providers: model.NewRegistry(
+				hosted,
+			),
+		},
+	}
+
+	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Provider: &v1alpha1.ModelProvider{
+			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+			Spec: v1alpha1.ModelProviderSpec{
+				Provider: "openai",
+				Model:    "test-model",
+				DataPolicy: v1alpha1.ModelProviderDataPolicy{
+					AllowExternalTransmission: true,
+					AllowedEvidenceKinds:      []string{"MetricObservation"},
+					AllowLogSamples:           false,
+					MaximumClassification:     "Internal",
+				},
+			},
+		},
+	}, EvidenceCollectionResult{
+		Summary: "collected 2 evidence records from 2 datasources",
+		EvidenceRefs: []v1alpha1.EvidenceRef{
+			{Kind: "metric", Source: "prometheus", Summary: "latency high"},
+			{Kind: "log", Source: "loki", Summary: "secret log sample"},
+		},
+		Observations: []domain.Observation{
+			{Type: domain.ObservationTypeMetric, Summary: "latency high"},
+			{Type: domain.ObservationTypeLog, Summary: "secret log sample", Value: domain.ObservationValue{Log: &domain.LogObservation{Line: "secret log sample"}}},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("generate RCA failed: %v", err)
+	}
+	if result.Issue != nil {
+		t.Fatalf("expected no RCA issue, got %#v", result.Issue)
+	}
+	if hosted.calls != 1 {
+		t.Fatalf("expected hosted provider call, got %d", hosted.calls)
+	}
+	evidenceBundle, ok := hosted.lastRequest.Context["evidence"].(domain.EvidenceBundle)
+	if !ok {
+		t.Fatalf("expected evidence bundle in model request, got %#v", hosted.lastRequest.Context["evidence"])
+	}
+	if len(evidenceBundle.Logs) != 0 || len(evidenceBundle.References) != 1 || evidenceBundle.References[0].Kind != "metric" {
+		t.Fatalf("expected only metric evidence to be sent, got %#v", evidenceBundle)
+	}
+}
+
 type fakeDataSource struct {
 	name      string
 	queryType domain.QueryType
 	records   []map[string]any
 	queryErr  error
+}
+
+type capturingModelProvider struct {
+	name        string
+	calls       int
+	lastRequest domain.ModelRequest
+}
+
+func (p *capturingModelProvider) Name() string { return p.name }
+
+func (p *capturingModelProvider) Complete(_ context.Context, req domain.ModelRequest) (domain.ModelResponse, error) {
+	p.calls++
+	p.lastRequest = req
+	return domain.ModelResponse{
+		Provider:   p.name,
+		Model:      "test-model",
+		Structured: true,
+		Output: map[string]any{
+			"riskTitle":       "RCA",
+			"riskSummary":     "RCA summary",
+			"severity":        "low",
+			"confidenceScore": 75,
+			"rationale":       "test",
+			"rcaHypothesis":   "test hypothesis",
+			"rcaCauses":       []string{"test cause"},
+			"actionType":      "notification.sendSlack",
+		},
+	}, nil
 }
 
 func (f fakeDataSource) Name() string { return f.name }
