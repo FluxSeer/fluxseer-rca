@@ -49,6 +49,37 @@ func TestBuildInvestigationRequestWithDatasources(t *testing.T) {
 	}
 }
 
+func TestBuildInvestigationRequestNormalizesSupportedTargetKinds(t *testing.T) {
+	cases := []struct {
+		inputKind      string
+		wantKind       string
+		wantAPIVersion string
+	}{
+		{inputKind: "deployment", wantKind: "Deployment", wantAPIVersion: "apps/v1"},
+		{inputKind: "sts", wantKind: "StatefulSet", wantAPIVersion: "apps/v1"},
+		{inputKind: "daemonset", wantKind: "DaemonSet", wantAPIVersion: "apps/v1"},
+		{inputKind: "rs", wantKind: "ReplicaSet", wantAPIVersion: "apps/v1"},
+		{inputKind: "po", wantKind: "Pod", wantAPIVersion: "v1"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.inputKind, func(t *testing.T) {
+			req, err := buildInvestigationRequest(tc.inputKind, "open-api", investigateOptions{
+				targetNamespace:  "prod",
+				requestNamespace: "fluxagent-system",
+				lookback:         15 * time.Minute,
+				datasources:      []string{"kubernetes-events"},
+			})
+			if err != nil {
+				t.Fatalf("buildInvestigationRequest returned error: %v", err)
+			}
+			if req.Spec.Target.Kind != tc.wantKind || req.Spec.Target.APIVersion != tc.wantAPIVersion {
+				t.Fatalf("expected %s %s, got %#v", tc.wantKind, tc.wantAPIVersion, req.Spec.Target)
+			}
+		})
+	}
+}
+
 func TestLoadQueriesFileWrappedPayload(t *testing.T) {
 	path := writeTempQueryFile(t, `
 queries:

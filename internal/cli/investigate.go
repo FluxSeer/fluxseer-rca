@@ -239,6 +239,14 @@ func normalizeTargetKind(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "deployment", "deploy":
 		return "Deployment"
+	case "statefulset", "sts":
+		return "StatefulSet"
+	case "daemonset", "ds":
+		return "DaemonSet"
+	case "replicaset", "rs":
+		return "ReplicaSet"
+	case "pod", "po":
+		return "Pod"
 	default:
 		return kind
 	}
@@ -248,6 +256,14 @@ func apiVersionForKind(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "deployment", "deploy":
 		return "apps/v1"
+	case "statefulset", "sts":
+		return "apps/v1"
+	case "daemonset", "ds":
+		return "apps/v1"
+	case "replicaset", "rs":
+		return "apps/v1"
+	case "pod", "po":
+		return "v1"
 	default:
 		return ""
 	}

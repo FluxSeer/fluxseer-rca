@@ -11,6 +11,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -643,29 +644,57 @@ func (s *Service) resolveTarget(ctx context.Context, targetRef v1alpha1.TargetRe
 		}, nil
 	}
 
-	if !strings.EqualFold(strings.TrimSpace(targetRef.Kind), "Deployment") {
-		return domain.ResourceRef{}, nil, &Issue{
-			Reason:  "UnsupportedTargetKind",
-			Message: fmt.Sprintf("target kind %q is not supported yet; only Deployment is currently supported", targetRef.Kind),
-		}, nil
-	}
-
-	var deployment appsv1.Deployment
 	key := types.NamespacedName{
 		Namespace: targetRef.Namespace,
 		Name:      targetRef.Name,
 	}
-	if err := s.Client.Get(ctx, key, &deployment); err != nil {
-		if apierrors.IsNotFound(err) {
-			return domain.ResourceRef{}, nil, &Issue{
-				Reason:  "TargetNotFound",
-				Message: fmt.Sprintf("target Deployment %s/%s was not found", key.Namespace, key.Name),
-			}, nil
+	switch normalizeTargetKind(targetRef.Kind) {
+	case "deployment":
+		var deployment appsv1.Deployment
+		if err := s.Client.Get(ctx, key, &deployment); err != nil {
+			return targetNotFoundOrError("Deployment", key, err)
 		}
-		return domain.ResourceRef{}, nil, nil, err
+		return workloadToResource("Deployment", "apps/v1", deployment.Name, deployment.Namespace, deployment.Labels, deployment.Spec.Template.Labels), workloadLabels(deployment.Labels, deployment.Spec.Template.Labels), nil, nil
+	case "statefulset":
+		var statefulSet appsv1.StatefulSet
+		if err := s.Client.Get(ctx, key, &statefulSet); err != nil {
+			return targetNotFoundOrError("StatefulSet", key, err)
+		}
+		return workloadToResource("StatefulSet", "apps/v1", statefulSet.Name, statefulSet.Namespace, statefulSet.Labels, statefulSet.Spec.Template.Labels), workloadLabels(statefulSet.Labels, statefulSet.Spec.Template.Labels), nil, nil
+	case "daemonset":
+		var daemonSet appsv1.DaemonSet
+		if err := s.Client.Get(ctx, key, &daemonSet); err != nil {
+			return targetNotFoundOrError("DaemonSet", key, err)
+		}
+		return workloadToResource("DaemonSet", "apps/v1", daemonSet.Name, daemonSet.Namespace, daemonSet.Labels, daemonSet.Spec.Template.Labels), workloadLabels(daemonSet.Labels, daemonSet.Spec.Template.Labels), nil, nil
+	case "replicaset":
+		var replicaSet appsv1.ReplicaSet
+		if err := s.Client.Get(ctx, key, &replicaSet); err != nil {
+			return targetNotFoundOrError("ReplicaSet", key, err)
+		}
+		return workloadToResource("ReplicaSet", "apps/v1", replicaSet.Name, replicaSet.Namespace, replicaSet.Labels, replicaSet.Spec.Template.Labels), workloadLabels(replicaSet.Labels, replicaSet.Spec.Template.Labels), nil, nil
+	case "pod":
+		var pod corev1.Pod
+		if err := s.Client.Get(ctx, key, &pod); err != nil {
+			return targetNotFoundOrError("Pod", key, err)
+		}
+		return workloadToResource("Pod", "v1", pod.Name, pod.Namespace, pod.Labels, nil), workloadLabels(pod.Labels, nil), nil, nil
+	default:
+		return domain.ResourceRef{}, nil, &Issue{
+			Reason:  "UnsupportedTargetKind",
+			Message: fmt.Sprintf("target kind %q is not supported; supported kinds are Deployment, StatefulSet, DaemonSet, ReplicaSet, and Pod", targetRef.Kind),
+		}, nil
 	}
+}
 
-	return deploymentToResource(deployment), deploymentLabels(deployment), nil, nil
+func targetNotFoundOrError(kind string, key types.NamespacedName, err error) (domain.ResourceRef, map[string]string, *Issue, error) {
+	if apierrors.IsNotFound(err) {
+		return domain.ResourceRef{}, nil, &Issue{
+			Reason:  "TargetNotFound",
+			Message: fmt.Sprintf("target %s %s/%s was not found", kind, key.Namespace, key.Name),
+		}, nil
+	}
+	return domain.ResourceRef{}, nil, nil, err
 }
 
 func (s *Service) resolveCollectionPlan(spec v1alpha1.InvestigationRequestSpec, target domain.ResourceRef, labels map[string]string) ([]string, []CollectionStep, *Issue, *Issue) {
@@ -845,32 +874,38 @@ func localRefOrNil(ref v1alpha1.LocalObjectReference) *v1alpha1.LocalObjectRefer
 }
 
 func deploymentLabels(deployment appsv1.Deployment) map[string]string {
-	labels := make(map[string]string, len(deployment.Labels)+len(deployment.Spec.Template.Labels))
-	for key, value := range deployment.Labels {
+	return workloadLabels(deployment.Labels, deployment.Spec.Template.Labels)
+}
+
+func deploymentToResource(deployment appsv1.Deployment) domain.ResourceRef {
+	return workloadToResource("Deployment", "apps/v1", deployment.Name, deployment.Namespace, deployment.Labels, deployment.Spec.Template.Labels)
+}
+
+func workloadLabels(objectLabels map[string]string, templateLabels map[string]string) map[string]string {
+	labels := make(map[string]string, len(objectLabels)+len(templateLabels))
+	for key, value := range objectLabels {
 		labels[key] = value
 	}
-	for key, value := range deployment.Spec.Template.Labels {
+	for key, value := range templateLabels {
 		labels[key] = value
 	}
 	return labels
 }
 
-func deploymentToResource(deployment appsv1.Deployment) domain.ResourceRef {
-	service := deployment.Labels["app"]
-	if service == "" {
-		service = deployment.Spec.Template.Labels["app"]
-	}
-	if service == "" {
-		service = deployment.Name
-	}
+func workloadToResource(kind string, apiVersion string, name string, namespace string, objectLabels map[string]string, templateLabels map[string]string) domain.ResourceRef {
+	service := firstNonEmpty(objectLabels["app"], templateLabels["app"], name)
 	return domain.ResourceRef{
 		Cluster:    "in-cluster",
-		Namespace:  deployment.Namespace,
-		Kind:       "Deployment",
-		Name:       deployment.Name,
-		APIVersion: "apps/v1",
+		Namespace:  namespace,
+		Kind:       kind,
+		Name:       name,
+		APIVersion: apiVersion,
 		Service:    service,
 	}
+}
+
+func normalizeTargetKind(kind string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(kind), "-", ""), "_", ""))
 }
 
 func buildDefaultCollectionStep(source datasource.DataSource, target domain.ResourceRef, labels map[string]string) (CollectionStep, *Issue) {
