@@ -132,7 +132,40 @@ func validateQueryPolicy(policy v1alpha1.DataSourceQueryPolicy) error {
 			Message: "datasource queryPolicy.maxRange must not be negative",
 		}
 	}
+	if overlap := firstNormalizedOverlap(policy.Prometheus.AllowedFunctions, policy.Prometheus.DeniedFunctions); overlap != "" {
+		return &ValidationError{
+			Reason:  "QueryPolicyInvalid",
+			Message: fmt.Sprintf("datasource queryPolicy.prometheus function %q cannot be both allowed and denied", overlap),
+		}
+	}
+	if overlap := firstNormalizedOverlap(policy.Loki.AllowedPipelineStages, policy.Loki.DeniedPipelineStages); overlap != "" {
+		return &ValidationError{
+			Reason:  "QueryPolicyInvalid",
+			Message: fmt.Sprintf("datasource queryPolicy.loki pipeline stage %q cannot be both allowed and denied", overlap),
+		}
+	}
 	return nil
+}
+
+func firstNormalizedOverlap(left []string, right []string) string {
+	seen := map[string]struct{}{}
+	for _, item := range left {
+		normalized := strings.ToLower(strings.TrimSpace(item))
+		if normalized == "" {
+			continue
+		}
+		seen[normalized] = struct{}{}
+	}
+	for _, item := range right {
+		normalized := strings.ToLower(strings.TrimSpace(item))
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			return normalized
+		}
+	}
+	return ""
 }
 
 func normalizeResourceType(value string) string {

@@ -157,6 +157,38 @@ func TestBuildSourceFromResourceValidatesQueryPolicy(t *testing.T) {
 	if validationErr, ok := err.(*ValidationError); !ok || validationErr.Reason != "QueryPolicyInvalid" {
 		t.Fatalf("expected QueryPolicyInvalid, got %T %v", err, err)
 	}
+
+	_, err = BuildSourceFromResource(context.Background(), nil, v1alpha1.DataSource{
+		Spec: v1alpha1.DataSourceSpec{
+			Type:     "prometheus",
+			Endpoint: "http://prometheus.example",
+			QueryPolicy: v1alpha1.DataSourceQueryPolicy{
+				Prometheus: v1alpha1.PromQLPolicy{
+					AllowedFunctions: []string{"rate"},
+					DeniedFunctions:  []string{"RATE"},
+				},
+			},
+		},
+	}, nil)
+	if validationErr, ok := err.(*ValidationError); !ok || validationErr.Reason != "QueryPolicyInvalid" {
+		t.Fatalf("expected QueryPolicyInvalid, got %T %v", err, err)
+	}
+
+	_, err = BuildSourceFromResource(context.Background(), nil, v1alpha1.DataSource{
+		Spec: v1alpha1.DataSourceSpec{
+			Type:     "loki",
+			Endpoint: "http://loki.example",
+			QueryPolicy: v1alpha1.DataSourceQueryPolicy{
+				Loki: v1alpha1.LogQLPolicy{
+					AllowedPipelineStages: []string{"json"},
+					DeniedPipelineStages:  []string{"JSON"},
+				},
+			},
+		},
+	}, nil)
+	if validationErr, ok := err.(*ValidationError); !ok || validationErr.Reason != "QueryPolicyInvalid" {
+		t.Fatalf("expected QueryPolicyInvalid, got %T %v", err, err)
+	}
 }
 
 func unwrapPolicySource(source datasource.DataSource) datasource.DataSource {

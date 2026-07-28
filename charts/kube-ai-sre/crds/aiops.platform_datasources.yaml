@@ -59,6 +59,34 @@ spec:
                       type: boolean
                     requireTargetScope:
                       type: boolean
+                    prometheus:
+                      type: object
+                      properties:
+                        allowedFunctions:
+                          type: array
+                          items:
+                            type: string
+                        deniedFunctions:
+                          type: array
+                          items:
+                            type: string
+                        allowSubqueries:
+                          type: boolean
+                        allowOffset:
+                          type: boolean
+                        allowAtModifier:
+                          type: boolean
+                    loki:
+                      type: object
+                      properties:
+                        allowedPipelineStages:
+                          type: array
+                          items:
+                            type: string
+                        deniedPipelineStages:
+                          type: array
+                          items:
+                            type: string
                 dataClassification:
                   type: object
                   properties:

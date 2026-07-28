@@ -31,6 +31,21 @@ type DataSourceQueryPolicy struct {
 	MaxRange           metav1.Duration `json:"maxRange,omitempty"`
 	AllowRegexMatchers bool            `json:"allowRegexMatchers,omitempty"`
 	RequireTargetScope bool            `json:"requireTargetScope,omitempty"`
+	Prometheus         PromQLPolicy    `json:"prometheus,omitempty"`
+	Loki               LogQLPolicy     `json:"loki,omitempty"`
+}
+
+type PromQLPolicy struct {
+	AllowedFunctions []string `json:"allowedFunctions,omitempty"`
+	DeniedFunctions  []string `json:"deniedFunctions,omitempty"`
+	AllowSubqueries  *bool    `json:"allowSubqueries,omitempty"`
+	AllowOffset      *bool    `json:"allowOffset,omitempty"`
+	AllowAtModifier  *bool    `json:"allowAtModifier,omitempty"`
+}
+
+type LogQLPolicy struct {
+	AllowedPipelineStages []string `json:"allowedPipelineStages,omitempty"`
+	DeniedPipelineStages  []string `json:"deniedPipelineStages,omitempty"`
 }
 
 type DataSourceSpec struct {
@@ -89,6 +104,30 @@ func (in *DataSource) DeepCopyInto(out *DataSource) {
 	}
 	if in.Spec.QueryPolicy.AllowedTemplates != nil {
 		out.Spec.QueryPolicy.AllowedTemplates = append([]string(nil), in.Spec.QueryPolicy.AllowedTemplates...)
+	}
+	if in.Spec.QueryPolicy.Prometheus.AllowedFunctions != nil {
+		out.Spec.QueryPolicy.Prometheus.AllowedFunctions = append([]string(nil), in.Spec.QueryPolicy.Prometheus.AllowedFunctions...)
+	}
+	if in.Spec.QueryPolicy.Prometheus.DeniedFunctions != nil {
+		out.Spec.QueryPolicy.Prometheus.DeniedFunctions = append([]string(nil), in.Spec.QueryPolicy.Prometheus.DeniedFunctions...)
+	}
+	if in.Spec.QueryPolicy.Prometheus.AllowSubqueries != nil {
+		allowSubqueries := *in.Spec.QueryPolicy.Prometheus.AllowSubqueries
+		out.Spec.QueryPolicy.Prometheus.AllowSubqueries = &allowSubqueries
+	}
+	if in.Spec.QueryPolicy.Prometheus.AllowOffset != nil {
+		allowOffset := *in.Spec.QueryPolicy.Prometheus.AllowOffset
+		out.Spec.QueryPolicy.Prometheus.AllowOffset = &allowOffset
+	}
+	if in.Spec.QueryPolicy.Prometheus.AllowAtModifier != nil {
+		allowAtModifier := *in.Spec.QueryPolicy.Prometheus.AllowAtModifier
+		out.Spec.QueryPolicy.Prometheus.AllowAtModifier = &allowAtModifier
+	}
+	if in.Spec.QueryPolicy.Loki.AllowedPipelineStages != nil {
+		out.Spec.QueryPolicy.Loki.AllowedPipelineStages = append([]string(nil), in.Spec.QueryPolicy.Loki.AllowedPipelineStages...)
+	}
+	if in.Spec.QueryPolicy.Loki.DeniedPipelineStages != nil {
+		out.Spec.QueryPolicy.Loki.DeniedPipelineStages = append([]string(nil), in.Spec.QueryPolicy.Loki.DeniedPipelineStages...)
 	}
 	if in.Spec.DataClassification.SensitivityTags != nil {
 		out.Spec.DataClassification.SensitivityTags = append([]string(nil), in.Spec.DataClassification.SensitivityTags...)
