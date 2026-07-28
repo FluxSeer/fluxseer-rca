@@ -127,17 +127,49 @@ spec:
                     maxQueriesTotal:
                       type: integer
                       format: int32
+                      minimum: 0
                     maxQueriesPerSource:
                       type: integer
                       format: int32
+                      minimum: 0
                     maxConcurrentQueries:
                       type: integer
                       format: int32
+                      minimum: 0
                     maxCumulativeDuration:
                       type: string
                     maxCumulativeResponseBytes:
                       type: integer
                       format: int64
+                      minimum: 0
+                    resultLimits:
+                      type: object
+                      properties:
+                        metrics:
+                          type: object
+                          properties:
+                            maxSeries:
+                              type: integer
+                              format: int64
+                              minimum: 0
+                            maxSamples:
+                              type: integer
+                              format: int64
+                              minimum: 0
+                        logs:
+                          type: object
+                          properties:
+                            maxLines:
+                              type: integer
+                              format: int64
+                              minimum: 0
+                        events:
+                          type: object
+                          properties:
+                            maxRecords:
+                              type: integer
+                              format: int64
+                              minimum: 0
                 loopPolicy:
                   type: object
                   properties:

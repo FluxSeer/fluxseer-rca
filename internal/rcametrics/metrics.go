@@ -13,7 +13,7 @@ var AllowedLabels = map[string][]string{
 	"fluxagent_provider_requests_total":           {"provider_type", "result"},
 	"fluxagent_provider_failures_total":           {"provider_type", "reason"},
 	"fluxagent_datasource_query_duration_seconds": {"datasource_type", "result"},
-	"fluxagent_evidence_truncated_total":          {"kind"},
+	"fluxagent_evidence_truncated_total":          {"kind", "reason"},
 	"fluxagent_claim_verification_total":          {"verification_status"},
 	"fluxagent_deduplication_hits_total":          {"source"},
 	"fluxagent_loop_prevention_total":             {"reason"},
@@ -66,7 +66,7 @@ var (
 	EvidenceTruncatedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxagent_evidence_truncated_total",
-			Help: "Total FluxAgent truncated evidence references by evidence kind.",
+			Help: "Total FluxAgent truncated evidence references by evidence kind and low-cardinality reason.",
 		},
 		AllowedLabels["fluxagent_evidence_truncated_total"],
 	)
@@ -143,8 +143,8 @@ func ObserveDatasourceQuery(datasourceType, result string, duration time.Duratio
 	DatasourceQueryDurationSeconds.WithLabelValues(normalizeLabel(datasourceType, "unknown"), normalizeResult(result)).Observe(duration.Seconds())
 }
 
-func RecordEvidenceTruncated(kind string) {
-	EvidenceTruncatedTotal.WithLabelValues(normalizeLabel(kind, "unknown")).Inc()
+func RecordEvidenceTruncated(kind string, reason string) {
+	EvidenceTruncatedTotal.WithLabelValues(normalizeLabel(kind, "unknown"), normalizeReason(reason)).Inc()
 }
 
 func RecordClaimVerification(status string) {

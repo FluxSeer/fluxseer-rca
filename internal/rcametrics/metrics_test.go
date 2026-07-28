@@ -45,3 +45,12 @@ func TestRecordDeduplicationHit(t *testing.T) {
 		t.Fatalf("expected deduplication counter increment, before=%f after=%f", before, after)
 	}
 }
+
+func TestRecordEvidenceTruncated(t *testing.T) {
+	before := testutil.ToFloat64(EvidenceTruncatedTotal.WithLabelValues("log", "result_limit"))
+	RecordEvidenceTruncated("Log", "Result Limit")
+	after := testutil.ToFloat64(EvidenceTruncatedTotal.WithLabelValues("log", "result_limit"))
+	if after != before+1 {
+		t.Fatalf("expected evidence truncation counter increment, before=%f after=%f", before, after)
+	}
+}

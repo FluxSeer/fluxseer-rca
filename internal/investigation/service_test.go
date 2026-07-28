@@ -362,6 +362,128 @@ func TestServiceCollectEvidenceEnforcesMaxConcurrentQueries(t *testing.T) {
 	}
 }
 
+func TestServiceCollectEvidenceAppliesQueryResultLimits(t *testing.T) {
+	tests := []struct {
+		name             string
+		queryType        domain.QueryType
+		records          []map[string]any
+		resultLimits     v1alpha1.QueryResultLimits
+		wantObservations int
+		wantTruncated    bool
+	}{
+		{
+			name:      "metrics",
+			queryType: domain.QueryTypeMetric,
+			records: []map[string]any{
+				{"metric": "http_requests_total", "value": "1"},
+				{"metric": "http_requests_total", "value": "2"},
+				{"metric": "http_requests_total", "value": "3"},
+			},
+			resultLimits: v1alpha1.QueryResultLimits{
+				Metrics: v1alpha1.MetricResultLimits{MaxSamples: 2},
+			},
+			wantObservations: 2,
+			wantTruncated:    true,
+		},
+		{
+			name:      "logs",
+			queryType: domain.QueryTypeLog,
+			records: []map[string]any{
+				{"line": "line 1"},
+				{"line": "line 2"},
+				{"line": "line 3"},
+			},
+			resultLimits: v1alpha1.QueryResultLimits{
+				Logs: v1alpha1.LogResultLimits{MaxLines: 2},
+			},
+			wantObservations: 2,
+			wantTruncated:    true,
+		},
+		{
+			name:      "metrics-strictest-positive-limit",
+			queryType: domain.QueryTypeMetric,
+			records: []map[string]any{
+				{"metric": "http_requests_total", "value": "1"},
+				{"metric": "http_requests_total", "value": "2"},
+				{"metric": "http_requests_total", "value": "3"},
+			},
+			resultLimits: v1alpha1.QueryResultLimits{
+				Metrics: v1alpha1.MetricResultLimits{MaxSeries: 1, MaxSamples: 3},
+			},
+			wantObservations: 1,
+			wantTruncated:    true,
+		},
+		{
+			name:      "events",
+			queryType: domain.QueryTypeEvent,
+			records: []map[string]any{
+				{"reason": "BackOff", "message": "event 1"},
+				{"reason": "BackOff", "message": "event 2"},
+				{"reason": "BackOff", "message": "event 3"},
+			},
+			resultLimits: v1alpha1.QueryResultLimits{
+				Events: v1alpha1.EventResultLimits{MaxRecords: 2},
+			},
+			wantObservations: 2,
+			wantTruncated:    true,
+		},
+		{
+			name:      "unset",
+			queryType: domain.QueryTypeLog,
+			records: []map[string]any{
+				{"line": "line 1"},
+				{"line": "line 2"},
+				{"line": "line 3"},
+			},
+			wantObservations: 3,
+			wantTruncated:    false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := &Service{
+				Registry: datasource.NewRegistry(
+					fakeDataSource{
+						name:      tt.name,
+						queryType: tt.queryType,
+						records:   tt.records,
+					},
+				),
+			}
+
+			result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+				TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 15 * time.Minute}},
+				QueryBudget: v1alpha1.InvestigationQueryBudget{
+					ResultLimits: tt.resultLimits,
+				},
+			}, PreflightResult{
+				Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+				Labels: map[string]string{"app": "open-api"},
+				CollectionPlan: []CollectionStep{
+					{Name: tt.name, DatasourceName: tt.name, QueryType: tt.queryType, Query: tt.name},
+				},
+			}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+			if err != nil {
+				t.Fatalf("collect evidence failed: %v", err)
+			}
+			if result.Issue != nil {
+				t.Fatalf("expected no issue, got %#v", result.Issue)
+			}
+			if len(result.Observations) != tt.wantObservations {
+				t.Fatalf("expected %d observations, got %#v", tt.wantObservations, result.Observations)
+			}
+			for _, observation := range result.Observations {
+				if observation.Truncated != tt.wantTruncated {
+					t.Fatalf("expected truncated=%v, got %#v", tt.wantTruncated, observation)
+				}
+				if observation.OriginalCount != len(tt.records) || observation.RetainedCount != tt.wantObservations {
+					t.Fatalf("expected count metadata original=%d retained=%d, got %#v", len(tt.records), tt.wantObservations, observation)
+				}
+			}
+		})
+	}
+}
+
 func TestServiceCollectEvidenceBuildsNormalizedObservations(t *testing.T) {
 	service := &Service{
 		Registry: datasource.NewRegistry(

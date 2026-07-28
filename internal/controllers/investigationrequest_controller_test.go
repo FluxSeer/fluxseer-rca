@@ -478,6 +478,34 @@ func TestValidateInvestigationQueryBudgetRejectsNegativeValues(t *testing.T) {
 			budget: v1alpha1.InvestigationQueryBudget{MaxCumulativeResponseBytes: -1},
 			want:   "queryBudget.maxCumulativeResponseBytes must not be negative",
 		},
+		{
+			name: "metricsMaxSeries",
+			budget: v1alpha1.InvestigationQueryBudget{ResultLimits: v1alpha1.QueryResultLimits{
+				Metrics: v1alpha1.MetricResultLimits{MaxSeries: -1},
+			}},
+			want: "queryBudget.resultLimits.metrics.maxSeries must not be negative",
+		},
+		{
+			name: "metricsMaxSamples",
+			budget: v1alpha1.InvestigationQueryBudget{ResultLimits: v1alpha1.QueryResultLimits{
+				Metrics: v1alpha1.MetricResultLimits{MaxSamples: -1},
+			}},
+			want: "queryBudget.resultLimits.metrics.maxSamples must not be negative",
+		},
+		{
+			name: "logsMaxLines",
+			budget: v1alpha1.InvestigationQueryBudget{ResultLimits: v1alpha1.QueryResultLimits{
+				Logs: v1alpha1.LogResultLimits{MaxLines: -1},
+			}},
+			want: "queryBudget.resultLimits.logs.maxLines must not be negative",
+		},
+		{
+			name: "eventsMaxRecords",
+			budget: v1alpha1.InvestigationQueryBudget{ResultLimits: v1alpha1.QueryResultLimits{
+				Events: v1alpha1.EventResultLimits{MaxRecords: -1},
+			}},
+			want: "queryBudget.resultLimits.events.maxRecords must not be negative",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
