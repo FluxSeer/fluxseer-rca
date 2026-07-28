@@ -17,7 +17,7 @@ Kubernetes-native, evidence-verifiable RCA control plane.
 Current release scope:
 
 ```text
-v0.2 focuses on read-only RCA workflows and is currently a beta candidate.
+v0.2.0-beta.1 is a published prerelease focused on read-only RCA workflows.
 ```
 
 The long-term product positioning is intentionally narrower than a general AI SRE agent. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it.
@@ -245,7 +245,7 @@ These capabilities must not all be granted to the same pod or ServiceAccount.
 
 ## Trustworthy RCA Contract
 
-FluxAgent now includes the first structured RCA status contract for `InvestigationRequest`. The next major product hardening target is to make this contract stricter and more evidence-verifiable across provider adapters and partial-failure cases.
+FluxAgent now includes the first compatibility RCA status contract for `InvestigationRequest`. The next major product hardening target is to add stricter structured RCA fields and make the contract more evidence-verifiable across provider adapters and partial-failure cases.
 
 The contract should make this relationship explicit:
 
@@ -255,19 +255,27 @@ Claim
 -> Verification status
 ```
 
-Required status concepts:
+Implemented in `v0.2.0-beta.1`:
 
-- verdict summary: implemented
-- verdict outcome: target
-- root cause entity: implemented
-- root cause type: implemented
-- confidence: implemented
-- claims: implemented
-- evidence references: implemented with stable IDs
-- degradation and partial failure metadata: first field shape implemented, semantics still hardening
-- provider execution metadata: first field shape implemented
-- alternative hypotheses: field shape implemented, richer ranking still hardening
-- missing evidence: field shape implemented, richer datasource semantics still hardening
+- summary
+- hypothesis
+- confidence
+- provider
+- evidence references with stable IDs
+- linked discovered `RiskSignal` reference
+- workflow and readiness conditions
+
+Target for `v0.3`:
+
+- verdict summary and outcome
+- root cause entity
+- root cause type
+- normalized confidence
+- claims
+- degradation and partial failure metadata
+- provider execution metadata
+- alternative hypotheses
+- missing evidence
 
 Verification values should distinguish at least:
 
@@ -471,9 +479,9 @@ Invalid provider responses should remain visible because they may indicate schem
 
 Fallback chains must not loop. `v0.2` should either allow only one fallback level or use runtime visited-provider cycle detection.
 
-## Release Tag Freeze Criteria
+## Release Gate Criteria
 
-Before tagging `v0.2.0-beta.1`, freeze and confirm:
+For release tags, freeze and confirm:
 
 - the tag points at a commit that passed the release gate
 - CRD YAML and generated deepcopy/client code are consistent
@@ -483,4 +491,4 @@ Before tagging `v0.2.0-beta.1`, freeze and confirm:
 - upgrade and uninstall paths have at least smoke-test coverage or are explicitly documented as pending
 - `make verify-release-v0.2-beta` or its documented equivalent passes against the intended release image reference
 
-The release must remain framed as a read-only RCA beta, not as a production remediation platform.
+`v0.2.0-beta.1` passed this gate before it was tagged and published as a prerelease. The release must remain framed as a read-only RCA beta, not as a production remediation platform.

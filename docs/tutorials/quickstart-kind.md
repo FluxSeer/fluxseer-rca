@@ -122,11 +122,15 @@ Evidence:
     Summary: crash loop (matched 1 events)
 ```
 
+`Confidence: 94` is a `RiskSignal` integer score on a `0-100` scale. Confidence is a heuristic or provider-derived ranking score, not a calibrated probability that the RCA is correct.
+
 Expected condition checks:
 
 - `DataSource/prometheus`: `Ready=True`, `Unsupported=False`
 - `RiskRule/fluxagent-sample-latency`: `DatasourceResolved=True`, `QueryTypeSupported=True`, `Ready=True`
 - `RiskSignal/fluxagent-sample-latency-fluxagent-sample-risk`: `EvidenceCollectionReady=True`, `RCAReady=True`
+
+`RCAReady=True` means an RCA result is available. It does not indicate that the target workload is healthy or remediated.
 
 Expected `demo-status` shape:
 

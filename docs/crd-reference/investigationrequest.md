@@ -141,39 +141,48 @@ Contract hardening target:
 
 ## Status
 
-Key status fields:
+### Implemented In `v0.2.0-beta.1`
+
+Implemented status fields:
 
 - `phase`
 - `message`
 - `provider`
-- `verdict`
-- `claims[]`
-- `alternativeHypotheses[]`
-- `missingEvidence[]`
-- `degradation`
-- `execution`
+- `summary`
+- `hypothesis`
+- `confidence`
 - `startedAt`
 - `completedAt`
 - `evidenceRefs`
 - `linkedRiskSignalRef`
 - `conditions`
 
-Compatibility status fields remain available:
+These fields are the compatibility RCA surface for humans and existing scripts.
 
-- `summary`
-- `hypothesis`
-- `confidence`
+`status.confidence` is a provider- or heuristic-derived ranking score. It is not a calibrated probability that the RCA is correct.
 
-These fields preserve the v0.2 read-only RCA surface for humans and existing scripts. New integrations should prefer the structured RCA status fields because they are easier to validate without parsing prose.
+### Target For `v0.3`
 
-### Structured RCA Contract
+Target structured status fields:
+
+- `verdict`
+- `claims[]`
+- `alternativeHypotheses[]`
+- `missingEvidence[]`
+- `degradation`
+- `execution`
+- rich evidence provenance
+
+These fields are the v0.3 target contract. New integrations should check the generated CRD YAML and `api/v1alpha1/types.go` before depending on any target field.
+
+### Structured RCA Contract Target
 
 `status.verdict` is the top-level RCA conclusion:
 
 - `summary`: compact human-readable conclusion
 - `rootCauseEntity`: Kubernetes target most directly associated with the conclusion
 - `rootCauseType`: coarse category such as `CrashLoop`, `LatencyRegression`, `ResourcePressure`, `ConfigurationMismatch`, or `WorkloadDegradation`
-- `confidence`: normalized score from `0.0` to `1.0`
+- `confidence`: normalized score from `0.0` to `1.0`; this is a ranking score, not a calibrated probability
 
 `status.claims[]` stores machine-addressable RCA claims:
 
@@ -211,6 +220,8 @@ Status hardening target:
 - terminal phase should be explicit and should not require callers to infer completion from conditions alone
 - future terminal phases should distinguish `Succeeded`, `Failed`, `PartiallySucceeded`, `Cancelled`, and `Expired`
 - workflow completion, RCA readiness, notification, and discovered-signal emission should remain separate result dimensions
+- `phase` should describe workflow lifecycle
+- `outcome` should describe RCA result semantics, for example `Confirmed`, `Inconclusive`, or `NoIssueFound`
 
 ## Conditions
 
@@ -235,6 +246,8 @@ Common reasons:
 
 `Degraded=True` is used when the request failed because an optional dependency or adapter path was unavailable or incompatible.
 
+`Ready=True` means the investigation workflow reached a consumable terminal status. `RCAReady=True` means an RCA result is available. It does not indicate that the target workload is healthy or remediated.
+
 ## Execution Semantics
 
 Current execution path:
@@ -257,7 +270,7 @@ Boundaries:
 
 ## Files And Examples
 
-- [config/samples/investigation-request.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/investigation-request.yaml:1)
-- [config/samples/investigation-queries.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/investigation-queries.yaml:1)
-- [../tutorials/investigate-workload.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/investigate-workload.md:1)
-- [../architecture/investigation-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/investigation-flow.md:1)
+- [config/samples/investigation-request.yaml](../../config/samples/investigation-request.yaml)
+- [config/samples/investigation-queries.yaml](../../config/samples/investigation-queries.yaml)
+- [../tutorials/investigate-workload.md](../tutorials/investigate-workload.md)
+- [../architecture/investigation-flow.md](../architecture/investigation-flow.md)

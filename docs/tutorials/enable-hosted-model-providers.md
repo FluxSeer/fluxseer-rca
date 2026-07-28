@@ -13,13 +13,15 @@ The flow is:
 3. point `RiskRule.spec.ai.providerRef.name` at that provider
 4. wait for `RiskSignal.status.rcaProvider` and `RCAReady=True`
 
+`RCAReady=True` means an RCA result is available. It does not indicate that the target workload is healthy or remediated.
+
 ## 1. Create A Secret
 
 Examples:
 
-- [config/samples/model-provider-openai-secret.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-openai-secret.yaml:1)
-- [config/samples/model-provider-gemini-secret.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-gemini-secret.yaml:1)
-- [config/samples/model-provider-claude-secret.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-claude-secret.yaml:1)
+- [config/samples/model-provider-openai-secret.yaml](../../config/samples/model-provider-openai-secret.yaml)
+- [config/samples/model-provider-gemini-secret.yaml](../../config/samples/model-provider-gemini-secret.yaml)
+- [config/samples/model-provider-claude-secret.yaml](../../config/samples/model-provider-claude-secret.yaml)
 
 Replace the placeholder value, then apply:
 
@@ -31,9 +33,9 @@ kubectl apply -f config/samples/model-provider-openai-secret.yaml
 
 Examples:
 
-- [config/samples/model-provider-openai.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-openai.yaml:1)
-- [config/samples/model-provider-gemini.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-gemini.yaml:1)
-- [config/samples/model-provider-claude.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-claude.yaml:1)
+- [config/samples/model-provider-openai.yaml](../../config/samples/model-provider-openai.yaml)
+- [config/samples/model-provider-gemini.yaml](../../config/samples/model-provider-gemini.yaml)
+- [config/samples/model-provider-claude.yaml](../../config/samples/model-provider-claude.yaml)
 
 Apply one or more:
 

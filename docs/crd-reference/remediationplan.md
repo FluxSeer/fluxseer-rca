@@ -8,7 +8,7 @@
 - Version: `v1alpha1`
 - Kind: `RemediationPlan`
 
-Source schema: [api/v1alpha1/types.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/api/v1alpha1/types.go:1)
+Source schema: [api/v1alpha1/types.go](../../api/v1alpha1/types.go)
 
 ## Purpose
 
@@ -23,7 +23,7 @@ Represent a proposed mitigation strategy with summary, references, rollback inst
 | `spec.target` | object | yes | Target workload or resource reference. |
 | `spec.recommendedBy` | string | no | Identity of the component or provider that generated the plan. |
 | `spec.severity` | string | yes | Severity inherited from the upstream risk. |
-| `spec.confidence` | integer | yes | Confidence score inherited from the upstream risk. |
+| `spec.confidence` | integer | yes | Confidence score from `0` to `100`, inherited from the upstream risk. |
 | `spec.dryRun` | boolean | yes | Whether this plan remains in review-first mode. |
 | `spec.ttlSeconds` | integer | no | Lifecycle hint copied into downstream actions. |
 | `spec.summary` | string | no | Human-readable remediation summary. |
@@ -76,7 +76,7 @@ Severity inherited from the originating `RiskSignal`.
 
 ### `spec.confidence`
 
-Confidence score inherited from the upstream risk analysis.
+Confidence score from `0` to `100`, inherited from the upstream risk analysis. This is a heuristic or provider-derived ranking score, not a calibrated probability that the remediation is correct.
 
 ### `spec.dryRun`
 
@@ -112,4 +112,4 @@ The phase is set by the guardrails evaluation result.
 
 ## Sample
 
-See [config/samples/remediation-plan.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/remediation-plan.yaml:1).
+See [config/samples/remediation-plan.yaml](../../config/samples/remediation-plan.yaml).
