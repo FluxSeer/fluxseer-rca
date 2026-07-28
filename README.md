@@ -131,9 +131,24 @@ status:
     durationSeconds: 4
 ```
 
-The current status implements the first structured RCA contract: `verdict`, `claims`, evidence IDs, `degradation`, and `execution` metadata are persisted alongside the compatibility `summary`, `hypothesis`, and `confidence` fields. Rich evidence provenance, deeper claim verification, alternative hypothesis ranking, and richer partial-failure semantics remain `v0.3` hardening work.
+Implemented in `v0.2.0-beta.1`:
 
-`confidence` is a provider- or verifier-derived ranking score, not a calibrated probability of correctness.
+- compatibility RCA status fields: `summary`, `hypothesis`, `confidence`, `provider`
+- compact `evidenceRefs`
+- `linkedRiskSignalRef`
+- workflow and readiness conditions
+
+Target for `v0.3`:
+
+- `verdict`
+- `claims`
+- `alternativeHypotheses`
+- `missingEvidence`
+- `degradation`
+- `execution`
+- richer evidence provenance and claim verification semantics
+
+`confidence` is a provider- or verifier-derived ranking score, not a calibrated probability of correctness. `RiskSignal.spec.confidence`, `RiskSignal.status.rcaCauses[].confidence`, and `RemediationPlan.spec.confidence` use integer scores from `0` to `100`; the v0.3 target `InvestigationRequest.status.verdict.confidence` uses a normalized score from `0.0` to `1.0`.
 
 ## Security Posture
 
@@ -201,7 +216,7 @@ Current `v0.2` implements bounded evidence collection, provider reasoning, statu
 
 In `v0.2`, external alerting systems integrate by creating `InvestigationRequest` resources through the Kubernetes API. Built-in alert receivers, webhook ingress, Kubernetes Event to `InvestigationRequest` adapters, and `RiskSignal`-triggered reinvestigation are future producer adapters. Reinvestigation must be policy-gated to avoid loops.
 
-Read the long-form architecture in [docs/architecture/overview.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/overview.md:1).
+Read the long-form architecture in [docs/architecture/overview.md](docs/architecture/overview.md).
 
 ## Runtime Modes
 
@@ -229,7 +244,7 @@ FluxAgent distinguishes runtime, compile-time, and deployment dependency.
 | External model APIs | optional | isolated to model-provider packages | not installed by default | RCA enrichment |
 | Remediation executors | optional | isolated to executor packages | disabled by default | guarded expansion path |
 
-The longer-form design constraints are documented in [docs/architecture/dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1).
+The longer-form design constraints are documented in [docs/architecture/dependency-neutrality.md](docs/architecture/dependency-neutrality.md).
 
 ## Optional Extensions
 
@@ -237,7 +252,7 @@ The longer-form design constraints are documented in [docs/architecture/dependen
 
 FluxAgent includes an optional Kubernetes Events rule pack for first-run bootstrap. It helps a new install surface common workload failure events without requiring users to write their first `RiskRule` by hand, but it is not intended to replace Alertmanager or a production detection platform.
 
-See [docs/helm-rulepacks.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/helm-rulepacks.md:1) for configuration and supported rules.
+See [docs/helm-rulepacks.md](docs/helm-rulepacks.md) for configuration and supported rules.
 
 ### Guarded Remediation
 
@@ -264,22 +279,22 @@ The current API group is `aiops.platform/v1alpha1`. `v0.3` should review whether
 
 See:
 
-- [config/samples/risk-rule.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/risk-rule.yaml:1)
-- [config/samples/investigation-request.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/investigation-request.yaml:1)
-- [config/samples/investigation-queries.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/investigation-queries.yaml:1)
-- [config/samples/datasource-prometheus.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/datasource-prometheus.yaml:1)
-- [config/samples/datasource-loki.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/datasource-loki.yaml:1)
-- [config/samples/datasource-kubernetes-events.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/datasource-kubernetes-events.yaml:1)
-- [config/samples/model-provider.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider.yaml:1)
-- [config/samples/model-provider-openai.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-openai.yaml:1)
-- [config/samples/model-provider-gemini.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-gemini.yaml:1)
-- [config/samples/model-provider-claude.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-claude.yaml:1)
-- [config/samples/model-provider-openai-secret.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-openai-secret.yaml:1)
-- [config/samples/model-provider-gemini-secret.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-gemini-secret.yaml:1)
-- [config/samples/model-provider-claude-secret.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/model-provider-claude-secret.yaml:1)
-- [config/samples/risk-signal.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/risk-signal.yaml:1)
-- [config/samples/remediation-plan.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/remediation-plan.yaml:1)
-- [config/samples/agent-action.yaml](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/config/samples/agent-action.yaml:1)
+- [config/samples/risk-rule.yaml](config/samples/risk-rule.yaml)
+- [config/samples/investigation-request.yaml](config/samples/investigation-request.yaml)
+- [config/samples/investigation-queries.yaml](config/samples/investigation-queries.yaml)
+- [config/samples/datasource-prometheus.yaml](config/samples/datasource-prometheus.yaml)
+- [config/samples/datasource-loki.yaml](config/samples/datasource-loki.yaml)
+- [config/samples/datasource-kubernetes-events.yaml](config/samples/datasource-kubernetes-events.yaml)
+- [config/samples/model-provider.yaml](config/samples/model-provider.yaml)
+- [config/samples/model-provider-openai.yaml](config/samples/model-provider-openai.yaml)
+- [config/samples/model-provider-gemini.yaml](config/samples/model-provider-gemini.yaml)
+- [config/samples/model-provider-claude.yaml](config/samples/model-provider-claude.yaml)
+- [config/samples/model-provider-openai-secret.yaml](config/samples/model-provider-openai-secret.yaml)
+- [config/samples/model-provider-gemini-secret.yaml](config/samples/model-provider-gemini-secret.yaml)
+- [config/samples/model-provider-claude-secret.yaml](config/samples/model-provider-claude-secret.yaml)
+- [config/samples/risk-signal.yaml](config/samples/risk-signal.yaml)
+- [config/samples/remediation-plan.yaml](config/samples/remediation-plan.yaml)
+- [config/samples/agent-action.yaml](config/samples/agent-action.yaml)
 
 ## Repo Layout
 
@@ -297,9 +312,11 @@ See:
 
 ### Install The Beta Chart
 
+Current `v0.2.0-beta.1` distribution uses the FluxSeer Harbor registry. GHCR is the planned canonical public registry, but it should not be used in install snippets until the chart and images are published there with anonymous pull enabled.
+
 ```bash
 helm install fluxagent \
-  oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent \
+  oci://test-harbor.fluxseer.com/fluxseer/fluxagent/charts/kube-ai-sre \
   --version 0.2.0-beta.1 \
   --namespace fluxagent-system \
   --create-namespace
@@ -348,9 +365,9 @@ kubectl -n fluxagent-system wait investigationrequest/investigate-fluxagent \
 kubectl -n fluxagent-system get investigationrequest investigate-fluxagent -o yaml
 ```
 
-This writes an `InvestigationRequest`, collects bounded Kubernetes evidence, and stores the RCA in `status.verdict`, `status.claims`, `status.evidenceRefs`, and compatibility summary fields.
+This writes an `InvestigationRequest`, collects bounded Kubernetes evidence, and stores the RCA in compatibility status fields plus compact `status.evidenceRefs`.
 
-`Ready=True` means the workflow produced a consumable terminal status. It does not mean a root cause was confirmed. Inspect `status.phase`, `status.verdict`, `status.claims`, `status.degradation`, and the `RCAReady` / `Degraded` conditions before acting on the result.
+`Ready=True` means the workflow produced a consumable terminal status. It does not mean a root cause was confirmed. `RCAReady=True` means an RCA result is available. It does not indicate that the target workload is healthy or remediated. Inspect `status.phase`, compatibility RCA fields, `status.evidenceRefs`, and the `RCAReady` / `Degraded` conditions before acting on the result.
 
 ### Deterministic RCA Demo
 
@@ -419,8 +436,8 @@ kubectl -n fluxagent-system get investigationrequest investigate-broken-checkout
 
 See:
 
-- [docs/tutorials/investigate-workload.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/investigate-workload.md:1)
-- [docs/crd-reference/investigationrequest.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/crd-reference/investigationrequest.md:1)
+- [docs/tutorials/investigate-workload.md](docs/tutorials/investigate-workload.md)
+- [docs/crd-reference/investigationrequest.md](docs/crd-reference/investigationrequest.md)
 
 ### Development
 
@@ -434,7 +451,7 @@ make verify-v0.2-beta
 
 Hosted OpenAI, Gemini, and Claude provider usage is documented in:
 
-- [docs/tutorials/enable-hosted-model-providers.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/enable-hosted-model-providers.md:1)
+- [docs/tutorials/enable-hosted-model-providers.md](docs/tutorials/enable-hosted-model-providers.md)
 
 ## kind Demo
 
@@ -516,7 +533,7 @@ FluxAgent is a working open-source RCA control plane, but its RCA contract and a
 Implemented today:
 
 - `InvestigationRequest`-based read-only RCA workflow with configurable `queries[]`
-- first structured RCA status contract with verdicts, claims, evidence IDs, degradation, and execution metadata
+- compatibility RCA status fields with compact evidence IDs
 - bounded Kubernetes Events, Prometheus, and Loki evidence collection
 - heuristic, OpenAI, Claude, and Gemini reasoning paths
 - optional discovered `RiskSignal` materialization
@@ -546,19 +563,19 @@ Operational gaps:
 
 ## Documentation
 
-- [docs/README.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/README.md:1)
-- [docs/architecture/overview.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/overview.md:1)
-- [docs/architecture/dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1)
-- [docs/architecture/read-only-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/read-only-flow.md:1)
-- [docs/architecture/remediation-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/remediation-flow.md:1)
-- [docs/crd-reference/risksignal.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/crd-reference/risksignal.md:1)
-- [docs/crd-reference/datasource.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/crd-reference/datasource.md:1)
-- [docs/adapters/prometheus.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/adapters/prometheus.md:1)
-- [docs/tutorials/quickstart-kind.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/quickstart-kind.md:1)
-- [docs/github-repo.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/github-repo.md:1)
-- [ROADMAP.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/ROADMAP.md:1)
-- [docs/open-source-positioning.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/open-source-positioning.md:1)
+- [docs/README.md](docs/README.md)
+- [docs/architecture/overview.md](docs/architecture/overview.md)
+- [docs/architecture/dependency-neutrality.md](docs/architecture/dependency-neutrality.md)
+- [docs/architecture/read-only-flow.md](docs/architecture/read-only-flow.md)
+- [docs/architecture/remediation-flow.md](docs/architecture/remediation-flow.md)
+- [docs/crd-reference/risksignal.md](docs/crd-reference/risksignal.md)
+- [docs/crd-reference/datasource.md](docs/crd-reference/datasource.md)
+- [docs/adapters/prometheus.md](docs/adapters/prometheus.md)
+- [docs/tutorials/quickstart-kind.md](docs/tutorials/quickstart-kind.md)
+- [docs/github-repo.md](docs/github-repo.md)
+- [ROADMAP.md](ROADMAP.md)
+- [docs/open-source-positioning.md](docs/open-source-positioning.md)
 
 ## License
 
-Apache-2.0. See [LICENSE](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/LICENSE:1).
+Apache-2.0. See [LICENSE](LICENSE).
