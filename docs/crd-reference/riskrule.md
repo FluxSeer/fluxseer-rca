@@ -41,7 +41,23 @@ spec:
     createRiskSignal: true
 ```
 
-`CreateRequest` uses a deterministic identity derived from the `RiskRule`, target, normalized window bucket, and finding fingerprint. Repeated reconciles for the same finding update the same request instead of creating unbounded objects. The created request carries lineage annotations that the `InvestigationRequest` controller writes to `status.lineage`.
+`CreateRequest` uses a deterministic identity derived from the `RiskRule`, target, normalized window bucket, and finding identity. Repeated reconciles for the same incident occurrence update the same request instead of creating unbounded objects. The created request carries lineage annotations that the `InvestigationRequest` controller writes to `status.lineage`.
+
+FluxAgent records three finding identities:
+
+- `objectFindingIdentity`: source UID, target UID, finding type, and normalized evidence attributes. Use this for precise deduplication across reconciles.
+- `logicalFindingIdentity`: source apiVersion/kind/namespace/name, target apiVersion/kind/namespace/name, finding type, and normalized evidence attributes. Use this for dashboards and long-term correlation when objects are recreated with new UIDs.
+- `incidentOccurrence`: object finding identity plus source generation, target generation, and rounded evidence window bucket. Use this for per-incident `InvestigationRequest` object identity.
+
+Example:
+
+```text
+objectFindingIdentity  = sha256(sourceUID, targetUID, findingType, normalizedAttributes)
+logicalFindingIdentity = sha256(sourceRef, targetRef, findingType, normalizedAttributes)
+incidentOccurrence     = sha256(objectFindingIdentity, sourceGeneration, targetGeneration, windowBucket)
+```
+
+Cooldown and notification policy are matching policies; they are not fingerprint inputs.
 
 ## Status Conditions
 

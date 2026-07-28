@@ -185,6 +185,7 @@ type InvestigationLineage struct {
 	Source             InvestigationLineageSource `json:"source,omitempty"`
 	TargetUID          string                     `json:"targetUID,omitempty"`
 	FindingFingerprint string                     `json:"findingFingerprint,omitempty"`
+	FindingIdentity    *FindingIdentity           `json:"findingIdentity,omitempty"`
 	InvestigationDepth int32                      `json:"investigationDepth,omitempty"`
 }
 
@@ -356,6 +357,10 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 	}
 	if in.Status.Lineage != nil {
 		lineage := *in.Status.Lineage
+		if in.Status.Lineage.FindingIdentity != nil {
+			identity := *in.Status.Lineage.FindingIdentity
+			lineage.FindingIdentity = &identity
+		}
 		out.Status.Lineage = &lineage
 	}
 	if in.Status.LinkedRiskSignalRef != nil {

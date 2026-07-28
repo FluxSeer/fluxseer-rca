@@ -422,6 +422,24 @@ spec:
                       type: string
                     findingFingerprint:
                       type: string
+                    findingIdentity:
+                      type: object
+                      properties:
+                        schemaVersion:
+                          type: string
+                        objectFindingIdentity:
+                          type: string
+                        logicalFindingIdentity:
+                          type: string
+                        incidentOccurrence:
+                          type: string
+                        findingType:
+                          type: string
+                        targetGeneration:
+                          type: integer
+                          format: int64
+                        windowBucket:
+                          type: string
                     investigationDepth:
                       type: integer
                       format: int32
