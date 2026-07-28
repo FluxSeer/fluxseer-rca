@@ -59,6 +59,19 @@ spec:
                       type: boolean
                     requireTargetScope:
                       type: boolean
+                dataClassification:
+                  type: object
+                  properties:
+                    level:
+                      type: string
+                    sensitivityTags:
+                      type: array
+                      items:
+                        type: string
+                    source:
+                      type: string
+                    policyVersion:
+                      type: string
                 auth:
                   type: object
                   properties:

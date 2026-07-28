@@ -18,10 +18,18 @@
         }
       },
       "summary": "metric http_request_duration_seconds_p95 returned value 2.75",
-      "contentDigest": "sha256:6ec48bb72eb74a0902f708b0fa91a1a6c58bc99b34fdb20a6006602b37426443",
+      "contentDigest": "sha256:303647eef18b1a7fc8a2416878085bec9f5264344751953c9c5c18c9fd19b250",
       "digestAlgorithm": "sha256",
       "digestCanonicalization": "fluxagent-observation-json-v1",
       "redactionProfile": "default-v1",
+      "classification": {
+        "level": "Internal",
+        "sensitivityTags": [
+          "InfrastructureMetadata"
+        ],
+        "source": "Default",
+        "policyVersion": "fluxagent-data-classification-v1"
+      },
       "truncated": false,
       "originalCount": 1,
       "retainedCount": 1,
@@ -38,10 +46,18 @@
       "summary": "metric http_request_duration_seconds_p95 returned value 2.75",
       "query": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{namespace=\"prod\",app=\"checkout\"}[5m]))",
       "queryDigest": "sha256:f09a8782d4b74f28fcaabe8cf6bafdd26d8c945ed37cd0a0e492a7b7639adeae",
-      "contentDigest": "sha256:6ec48bb72eb74a0902f708b0fa91a1a6c58bc99b34fdb20a6006602b37426443",
+      "contentDigest": "sha256:303647eef18b1a7fc8a2416878085bec9f5264344751953c9c5c18c9fd19b250",
       "digestAlgorithm": "sha256",
       "digestCanonicalization": "fluxagent-observation-json-v1",
       "redactionProfile": "default-v1",
+      "classification": {
+        "level": "Internal",
+        "sensitivityTags": [
+          "InfrastructureMetadata"
+        ],
+        "source": "Default",
+        "policyVersion": "fluxagent-data-classification-v1"
+      },
       "originalCount": 1,
       "retainedCount": 1,
       "originalBytes": 60,

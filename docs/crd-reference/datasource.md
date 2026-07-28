@@ -24,6 +24,12 @@ spec:
   type: prometheus
   endpoint: http://prometheus-server.monitoring.svc:9090
   timeout: 10s
+  dataClassification:
+    level: Internal
+    sensitivityTags:
+      - InfrastructureMetadata
+    source: Explicit
+    policyVersion: fluxagent-data-classification-v1
 ```
 
 ## Spec
@@ -39,6 +45,10 @@ spec:
 - `spec.queryPolicy.maxRange`: maximum allowed query lookback before a datasource request is made
 - `spec.queryPolicy.allowRegexMatchers`: whether rendered metric/log queries may contain regex matchers such as `=~`, `!~`, or `|~`
 - `spec.queryPolicy.requireTargetScope`: whether rendered metric/log queries must include the target namespace and workload scope
+- `spec.dataClassification.level`: default minimum classification for evidence collected from this datasource. Supported levels are `Public`, `Internal`, `Confidential`, and `Restricted`.
+- `spec.dataClassification.sensitivityTags[]`: default sensitivity tags inherited by evidence from this datasource, such as `InfrastructureMetadata`, `CustomerData`, or `SecuritySensitive`.
+- `spec.dataClassification.source`: classification origin, usually `Explicit` for administrator-provided datasource policy.
+- `spec.dataClassification.policyVersion`: classification policy version, currently `fluxagent-data-classification-v1`.
 - `spec.auth`: optional auth config
 - `spec.tls`: optional TLS overrides
 
@@ -47,6 +57,8 @@ Datasource HTTP clients apply a network safety guard before registration, for ev
 For HTTP datasources, FluxAgent resolves hostnames through a policy-aware dialer, validates all resolved A/AAAA addresses, and pins the TCP connection to a verified IP. This reduces DNS rebinding risk while keeping the original request hostname available to the HTTP transport.
 
 When `queryPolicy.mode: TemplatesOnly` is configured, FluxAgent validates rendered queries before any datasource network request. It accepts named `queryTemplate` entries and controller-owned default templates; raw `query` expressions are rejected even when the query name matches an allowed template. Rejections use bounded diagnostic reasons such as `template_required`, `template_not_allowed`, `range_exceeded`, `regex_denied`, or `target_scope_required`; full query text is not needed for policy metrics.
+
+`spec.dataClassification` describes the data exposed by the datasource, not whether that data may leave the cluster. Hosted provider egress is still controlled by `ModelProvider.spec.dataPolicy`. FluxAgent computes effective evidence classification from datasource defaults, evidence-kind defaults, explicit policy, and content detection. The effective level only stays the same or becomes more restrictive; redaction does not automatically lower classification.
 
 ## Current Behavior
 

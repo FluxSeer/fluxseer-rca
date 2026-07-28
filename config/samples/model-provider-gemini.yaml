@@ -11,3 +11,15 @@ spec:
     key: api-key
   timeout: 30s
   maxTokens: 1500
+  dataPolicy:
+    allowExternalTransmission: true
+    maximumClassification: Internal
+    allowedEvidenceKinds:
+      - MetricObservation
+      - KubernetesEventObservation
+      - DeploymentConditionObservation
+    deniedSensitivityTags:
+      - CredentialLike
+      - PersonalData
+    allowLogSamples: false
+    requireRedaction: true

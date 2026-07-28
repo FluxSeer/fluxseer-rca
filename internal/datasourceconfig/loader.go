@@ -99,16 +99,21 @@ func BuildSourceFromResource(ctx context.Context, reader client.Reader, item v1a
 			Message: fmt.Sprintf("unsupported datasource type %q", item.Spec.Type),
 		}
 	}
-	return policyDataSource{DataSource: source, policy: item.Spec.QueryPolicy}, nil
+	return policyDataSource{DataSource: source, policy: item.Spec.QueryPolicy, classification: item.Spec.DataClassification}, nil
 }
 
 type policyDataSource struct {
 	datasource.DataSource
-	policy v1alpha1.DataSourceQueryPolicy
+	policy         v1alpha1.DataSourceQueryPolicy
+	classification v1alpha1.DataClassification
 }
 
 func (p policyDataSource) QueryPolicy() v1alpha1.DataSourceQueryPolicy {
 	return p.policy
+}
+
+func (p policyDataSource) DataClassification() v1alpha1.DataClassification {
+	return p.classification
 }
 
 func validateQueryPolicy(policy v1alpha1.DataSourceQueryPolicy) error {

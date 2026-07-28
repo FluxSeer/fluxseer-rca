@@ -63,6 +63,16 @@ spec:
                       digestAlgorithm: {type: string}
                       digestCanonicalization: {type: string}
                       redactionProfile: {type: string}
+                      classification:
+                        type: object
+                        properties:
+                          level: {type: string}
+                          sensitivityTags:
+                            type: array
+                            items:
+                              type: string
+                          source: {type: string}
+                          policyVersion: {type: string}
                       truncated: {type: boolean}
                       truncationReason: {type: string}
                       limitDimension: {type: string}

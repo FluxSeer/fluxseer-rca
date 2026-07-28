@@ -35,29 +35,59 @@ type TargetRef struct {
 	Service    string `json:"service,omitempty"`
 }
 
+const (
+	DataClassificationPolicyVersion = "fluxagent-data-classification-v1"
+
+	DataClassificationLevelPublic       = "Public"
+	DataClassificationLevelInternal     = "Internal"
+	DataClassificationLevelConfidential = "Confidential"
+	DataClassificationLevelRestricted   = "Restricted"
+
+	DataClassificationSourceDefault          = "Default"
+	DataClassificationSourceExplicit         = "Explicit"
+	DataClassificationSourceInherited        = "Inherited"
+	DataClassificationSourceContentDetection = "ContentDetection"
+	DataClassificationSourceRedactionPolicy  = "RedactionPolicy"
+
+	SensitivityTagCredentialLike         = "CredentialLike"
+	SensitivityTagPersonalData           = "PersonalData"
+	SensitivityTagCustomerData           = "CustomerData"
+	SensitivityTagSourceCode             = "SourceCode"
+	SensitivityTagInfrastructureMetadata = "InfrastructureMetadata"
+	SensitivityTagSecuritySensitive      = "SecuritySensitive"
+)
+
+type DataClassification struct {
+	Level           string   `json:"level,omitempty"`
+	SensitivityTags []string `json:"sensitivityTags,omitempty"`
+	Source          string   `json:"source,omitempty"`
+	PolicyVersion   string   `json:"policyVersion,omitempty"`
+}
+
 type EvidenceRef struct {
-	ID                     string       `json:"id,omitempty"`
-	Kind                   string       `json:"kind,omitempty"`
-	Source                 string       `json:"source,omitempty"`
-	Summary                string       `json:"summary,omitempty"`
-	Query                  string       `json:"query,omitempty"`
-	QueryDigest            string       `json:"queryDigest,omitempty"`
-	ContentDigest          string       `json:"contentDigest,omitempty"`
-	DigestAlgorithm        string       `json:"digestAlgorithm,omitempty"`
-	DigestCanonicalization string       `json:"digestCanonicalization,omitempty"`
-	RedactionProfile       string       `json:"redactionProfile,omitempty"`
-	Truncated              bool         `json:"truncated,omitempty"`
-	TruncationReason       string       `json:"truncationReason,omitempty"`
-	LimitDimension         string       `json:"limitDimension,omitempty"`
-	Limit                  int64        `json:"limit,omitempty"`
-	OriginalCount          int32        `json:"originalCount,omitempty"`
-	RetainedCount          int32        `json:"retainedCount,omitempty"`
-	OriginalBytes          int32        `json:"originalBytes,omitempty"`
-	RetainedBytes          int32        `json:"retainedBytes,omitempty"`
-	CollectedAt            *metav1.Time `json:"collectedAt,omitempty"`
-	PayloadRef             *PayloadRef  `json:"payloadRef,omitempty"`
-	Reason                 string       `json:"reason,omitempty"`
-	Link                   string       `json:"link,omitempty"`
+	ID                     string              `json:"id,omitempty"`
+	Kind                   string              `json:"kind,omitempty"`
+	Source                 string              `json:"source,omitempty"`
+	Summary                string              `json:"summary,omitempty"`
+	Query                  string              `json:"query,omitempty"`
+	QueryDigest            string              `json:"queryDigest,omitempty"`
+	ContentDigest          string              `json:"contentDigest,omitempty"`
+	DigestAlgorithm        string              `json:"digestAlgorithm,omitempty"`
+	DigestCanonicalization string              `json:"digestCanonicalization,omitempty"`
+	RedactionProfile       string              `json:"redactionProfile,omitempty"`
+	Classification         *DataClassification `json:"classification,omitempty"`
+	Truncated              bool                `json:"truncated,omitempty"`
+	TruncationReason       string              `json:"truncationReason,omitempty"`
+	LimitDimension         string              `json:"limitDimension,omitempty"`
+	Limit                  int64               `json:"limit,omitempty"`
+	OriginalCount          int32               `json:"originalCount,omitempty"`
+	RetainedCount          int32               `json:"retainedCount,omitempty"`
+	OriginalBytes          int32               `json:"originalBytes,omitempty"`
+	RetainedBytes          int32               `json:"retainedBytes,omitempty"`
+	CollectedAt            *metav1.Time        `json:"collectedAt,omitempty"`
+	PayloadRef             *PayloadRef         `json:"payloadRef,omitempty"`
+	Reason                 string              `json:"reason,omitempty"`
+	Link                   string              `json:"link,omitempty"`
 }
 
 type PayloadRef struct {
@@ -217,6 +247,13 @@ func deepcopyEvidenceRefs(in []EvidenceRef) []EvidenceRef {
 	out := make([]EvidenceRef, len(in))
 	copy(out, in)
 	for index := range out {
+		if in[index].Classification != nil {
+			classification := *in[index].Classification
+			if in[index].Classification.SensitivityTags != nil {
+				classification.SensitivityTags = append([]string(nil), in[index].Classification.SensitivityTags...)
+			}
+			out[index].Classification = &classification
+		}
 		if in[index].CollectedAt != nil {
 			collectedAt := in[index].CollectedAt.DeepCopy()
 			out[index].CollectedAt = collectedAt

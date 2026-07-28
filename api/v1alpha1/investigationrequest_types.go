@@ -225,6 +225,7 @@ type RCAProviderResult struct {
 	SchemaVersion     string               `json:"schemaVersion,omitempty"`
 	ProviderRequestID string               `json:"providerRequestID,omitempty"`
 	Digest            *RCADigest           `json:"digest,omitempty"`
+	Classification    *DataClassification  `json:"classification,omitempty"`
 	NormalizedResult  *RCANormalizedResult `json:"normalizedResult,omitempty"`
 }
 
@@ -251,11 +252,17 @@ type RCAExecution struct {
 }
 
 type ProviderEgressAudit struct {
-	ProviderType              string   `json:"providerType,omitempty"`
-	EvidenceBundleDigest      string   `json:"evidenceBundleDigest,omitempty"`
-	EvidenceKinds             []string `json:"evidenceKinds,omitempty"`
-	LogSamplesIncluded        bool     `json:"logSamplesIncluded,omitempty"`
-	MaximumClassificationSent string   `json:"maximumClassificationSent,omitempty"`
+	Decision                      string   `json:"decision,omitempty"`
+	Reason                        string   `json:"reason,omitempty"`
+	ProviderType                  string   `json:"providerType,omitempty"`
+	EvidenceBundleDigest          string   `json:"evidenceBundleDigest,omitempty"`
+	EvidenceKinds                 []string `json:"evidenceKinds,omitempty"`
+	SensitivityTagsSent           []string `json:"sensitivityTagsSent,omitempty"`
+	LogSamplesIncluded            bool     `json:"logSamplesIncluded,omitempty"`
+	MaximumClassificationObserved string   `json:"maximumClassificationObserved,omitempty"`
+	MaximumClassificationAllowed  string   `json:"maximumClassificationAllowed,omitempty"`
+	MaximumClassificationSent     string   `json:"maximumClassificationSent,omitempty"`
+	ClassificationPolicyVersion   string   `json:"classificationPolicyVersion,omitempty"`
 }
 
 type InvestigationLineageSource struct {
@@ -402,6 +409,9 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 			if in.Status.Execution.EgressAudit.EvidenceKinds != nil {
 				audit.EvidenceKinds = append([]string(nil), in.Status.Execution.EgressAudit.EvidenceKinds...)
 			}
+			if in.Status.Execution.EgressAudit.SensitivityTagsSent != nil {
+				audit.SensitivityTagsSent = append([]string(nil), in.Status.Execution.EgressAudit.SensitivityTagsSent...)
+			}
 			execution.EgressAudit = &audit
 		}
 		if in.Status.Execution.Attempts != nil {
@@ -421,6 +431,13 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 			if in.Status.Execution.ProviderResult.Digest != nil {
 				digest := *in.Status.Execution.ProviderResult.Digest
 				providerResult.Digest = &digest
+			}
+			if in.Status.Execution.ProviderResult.Classification != nil {
+				classification := *in.Status.Execution.ProviderResult.Classification
+				if in.Status.Execution.ProviderResult.Classification.SensitivityTags != nil {
+					classification.SensitivityTags = append([]string(nil), in.Status.Execution.ProviderResult.Classification.SensitivityTags...)
+				}
+				providerResult.Classification = &classification
 			}
 			if in.Status.Execution.ProviderResult.NormalizedResult != nil {
 				normalized := *in.Status.Execution.ProviderResult.NormalizedResult

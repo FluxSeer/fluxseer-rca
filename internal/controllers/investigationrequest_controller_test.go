@@ -559,7 +559,7 @@ func TestProviderEgressAuditUsesFilteredMetadataOnly(t *testing.T) {
 				AllowExternalTransmission: true,
 				AllowedEvidenceKinds:      []string{"MetricObservation", "LogObservation"},
 				AllowLogSamples:           false,
-				MaximumClassification:     "Internal",
+				MaximumClassification:     "Confidential",
 			},
 		},
 	}
@@ -582,8 +582,97 @@ func TestProviderEgressAuditUsesFilteredMetadataOnly(t *testing.T) {
 	if len(audit.EvidenceKinds) != 2 || audit.EvidenceKinds[0] != "log" || audit.EvidenceKinds[1] != "metric" {
 		t.Fatalf("expected filtered evidence kinds, got %#v", audit.EvidenceKinds)
 	}
-	if audit.MaximumClassificationSent != "Internal" {
-		t.Fatalf("expected Internal max classification, got %#v", audit)
+	if audit.Decision != "Allowed" || audit.MaximumClassificationSent != "Confidential" || audit.MaximumClassificationAllowed != "Confidential" {
+		t.Fatalf("expected allowed Confidential egress audit, got %#v", audit)
+	}
+}
+
+func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "policy-rejected", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "Deployment",
+				Name:       "open-api",
+				APIVersion: "apps/v1",
+			},
+			DataSources:      []v1alpha1.LocalObjectReference{{Name: "loki"}},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "openai-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+		},
+	}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
+	}
+	modelProvider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			Model:    "gpt-test",
+			DataPolicy: v1alpha1.ModelProviderDataPolicy{
+				AllowExternalTransmission: true,
+				MaximumClassification:     v1alpha1.DataClassificationLevelInternal,
+			},
+		},
+	}
+	kubeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithObjects(request, deployment, modelProvider).
+		Build()
+	provider := &countingModelProvider{name: "openai"}
+	reconciler := &InvestigationRequestReconciler{
+		Client: kubeClient,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client:   kubeClient,
+			Registry: datasource.NewRegistry(fakeInvestigationDataSource{name: "loki", queryType: domain.QueryTypeLog}),
+			Resolver: modelgateway.KubeResolver{Client: kubeClient},
+			Gateway: &modelgateway.Gateway{
+				Base:      knowledge.NewBase(),
+				Providers: model.NewRegistry(provider),
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC) },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace}}); err != nil {
+		t.Fatal(err)
+	}
+	var stored v1alpha1.InvestigationRequest
+	if err := kubeClient.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("expected provider not to be called after policy rejection, got %d calls", provider.calls)
+	}
+	if stored.Status.Failure == nil || stored.Status.Failure.Code != "ProviderDataPolicyRejected" {
+		t.Fatalf("expected ProviderDataPolicyRejected failure, got %#v", stored.Status.Failure)
+	}
+	if stored.Status.Execution == nil || stored.Status.Execution.EgressAudit == nil {
+		t.Fatalf("expected rejected egress audit in execution status, got %#v", stored.Status.Execution)
+	}
+	audit := stored.Status.Execution.EgressAudit
+	if audit.Decision != "Rejected" || audit.Reason != "ClassificationExceeded" {
+		t.Fatalf("expected rejected classification audit, got %#v", audit)
+	}
+	if audit.MaximumClassificationObserved != v1alpha1.DataClassificationLevelConfidential || audit.MaximumClassificationAllowed != v1alpha1.DataClassificationLevelInternal {
+		t.Fatalf("expected confidential over internal audit bounds, got %#v", audit)
+	}
+	if audit.MaximumClassificationSent != "" {
+		t.Fatalf("expected no classification sent on rejection, got %#v", audit)
+	}
+	if len(audit.SensitivityTagsSent) != 0 {
+		t.Fatalf("expected no sensitivity tags sent on rejection, got %#v", audit)
 	}
 }
 
@@ -1387,10 +1476,16 @@ func evidenceRequirementTestReconciler(kubeClient client.Client, scheme *runtime
 }
 
 type countingModelProvider struct {
+	name  string
 	calls int
 }
 
-func (p *countingModelProvider) Name() string { return "counting" }
+func (p *countingModelProvider) Name() string {
+	if strings.TrimSpace(p.name) != "" {
+		return p.name
+	}
+	return "counting"
+}
 func (p *countingModelProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
 	p.calls++
 	return domain.ModelResponse{

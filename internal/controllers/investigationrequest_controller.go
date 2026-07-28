@@ -18,6 +18,7 @@ import (
 
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/canonicaldigest"
+	"fluxagent/internal/dataclassification"
 	"fluxagent/internal/domain"
 	"fluxagent/internal/investigation"
 	"fluxagent/internal/rcametrics"
@@ -604,6 +605,9 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	if rca.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, rca.Issue.Message, request.Generation, now)
 		applyInvestigationFailure(request, rca.Issue.Reason, rca.Issue.Message, v1alpha1.InvestigationStageReasoning)
+		if rca.Issue.EgressAudit != nil {
+			request.Status.Execution = buildRejectedRCAExecution(request, preflight, evidence, rca.Issue.EgressAudit, investigationExecutionID(request, preflight, evidence), now)
+		}
 		rcametrics.RecordInvestigation(request.Namespace, providerType(preflight.Provider), "failed", "unknown")
 		request.Status.Summary = evidence.Summary
 		request.Status.Hypothesis = ""
@@ -790,6 +794,10 @@ func providerNameForStatus(request *v1alpha1.InvestigationRequest, preflight inv
 
 func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, executionID string, state string, now time.Time) *v1alpha1.RCAExecution {
 	providerResult := providerResultFromReasoning(rca)
+	if providerResult != nil && preflight.Provider != nil && isHostedProviderType(preflight.Provider.Spec.Provider) {
+		classification := dataclassification.BundleClassification(egressEvidenceRefsForAudit(evidence.EvidenceRefs, preflight.Provider.Spec.DataPolicy))
+		providerResult.Classification = &classification
+	}
 	return &v1alpha1.RCAExecution{
 		ID:                      executionID,
 		State:                   state,
@@ -819,6 +827,24 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 	}
 }
 
+func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, audit *v1alpha1.ProviderEgressAudit, executionID string, now time.Time) *v1alpha1.RCAExecution {
+	return &v1alpha1.RCAExecution{
+		ID:                      executionID,
+		State:                   "ProviderDataPolicyRejected",
+		Provider:                providerNameForStatus(request, preflight, investigation.RCAResult{}),
+		ProviderRef:             providerRef(preflight.Provider),
+		ProviderGeneration:      providerGeneration(preflight.Provider),
+		ProviderType:            providerType(preflight.Provider),
+		Model:                   providerModel(preflight.Provider),
+		RCASchemaVersion:        rcaSchemaVersion,
+		CanonicalizationVersion: rcaCanonicalizationVersion,
+		ReasoningPolicyVersion:  reasoningPolicyVersion,
+		EgressAudit:             audit,
+		ControllerVersion:       version.Current().Version,
+		DurationSeconds:         investigationDurationSeconds(request, now),
+	}
+}
+
 func providerRequestIDFromRCA(rca investigation.RCAResult) string {
 	if rca.Reasoning == nil {
 		return ""
@@ -831,12 +857,19 @@ func providerEgressAudit(provider *v1alpha1.ModelProvider, evidence investigatio
 		return nil
 	}
 	filteredRefs := egressEvidenceRefsForAudit(evidence.EvidenceRefs, provider.Spec.DataPolicy)
+	decision := dataclassification.EvaluateProviderPolicy(provider.Spec.DataPolicy, filteredRefs)
 	return &v1alpha1.ProviderEgressAudit{
-		ProviderType:              strings.ToLower(strings.TrimSpace(provider.Spec.Provider)),
-		EvidenceBundleDigest:      evidenceBundleDigest(filteredRefs),
-		EvidenceKinds:             evidenceKinds(filteredRefs),
-		LogSamplesIncluded:        logSamplesIncluded(filteredRefs, provider.Spec.DataPolicy),
-		MaximumClassificationSent: firstNonEmptyString(provider.Spec.DataPolicy.MaximumClassification, "Internal"),
+		Decision:                      decision.Decision,
+		Reason:                        decision.Reason,
+		ProviderType:                  strings.ToLower(strings.TrimSpace(provider.Spec.Provider)),
+		EvidenceBundleDigest:          evidenceBundleDigest(filteredRefs),
+		EvidenceKinds:                 evidenceKinds(filteredRefs),
+		SensitivityTagsSent:           decision.SensitivityTagsSent,
+		LogSamplesIncluded:            logSamplesIncluded(filteredRefs, provider.Spec.DataPolicy),
+		MaximumClassificationObserved: decision.MaximumObserved,
+		MaximumClassificationAllowed:  decision.MaximumAllowed,
+		MaximumClassificationSent:     decision.MaximumSent,
+		ClassificationPolicyVersion:   decision.ClassificationVersion,
 	}
 }
 

@@ -50,6 +50,7 @@ Capture a detected workload risk with enough context for notification, review, a
 | `source` | string | no | Datasource that produced the evidence. |
 | `summary` | string | no | Human-readable summary. |
 | `query` | string | no | Query used to retrieve the evidence. |
+| `classification` | object | no | Computed compact data classification inherited from the source evidence. |
 | `reason` | string | no | Event or classification reason. |
 | `link` | string | no | External reference URL or logical link. |
 
@@ -125,11 +126,14 @@ Recommended persisted evidence fields:
 - content digest
 - digest algorithm and canonicalization version
 - redaction profile
+- computed classification level and sensitivity tags
 - truncation metadata
 - original and retained byte counts
 - collection timestamp
 
 Evidence digests use the same `sha256` / `fluxagent-observation-json-v1` contract as `InvestigationRequest.status.evidenceRefs`.
+
+`spec.evidence[].classification` follows the same compact classification summary as `InvestigationRequest.status.evidenceRefs[]`: ordered `level`, `sensitivityTags[]`, `source`, and `policyVersion`. It helps downstream notification and review tools understand the data boundary without storing raw evidence.
 
 Fields that should not be persisted:
 

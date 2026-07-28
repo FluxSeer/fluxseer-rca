@@ -9,14 +9,15 @@ import (
 )
 
 type QueryRequest struct {
-	Query        string
-	StartTime    time.Time
-	EndTime      time.Time
-	Step         time.Duration
-	Labels       map[string]string
-	Target       domain.ResourceRef
-	QueryType    domain.QueryType
-	ResultLimits v1alpha1.QueryResultLimits
+	Query          string
+	StartTime      time.Time
+	EndTime        time.Time
+	Step           time.Duration
+	Labels         map[string]string
+	Target         domain.ResourceRef
+	QueryType      domain.QueryType
+	ResultLimits   v1alpha1.QueryResultLimits
+	Classification v1alpha1.DataClassification
 }
 
 type QueryResult struct {
@@ -89,6 +90,10 @@ type DataSource interface {
 
 type QueryPolicyProvider interface {
 	QueryPolicy() v1alpha1.DataSourceQueryPolicy
+}
+
+type ClassificationProvider interface {
+	DataClassification() v1alpha1.DataClassification
 }
 
 type Registry struct {

@@ -369,6 +369,10 @@ spec:
                     egressAudit:
                       type: object
                       properties:
+                        decision:
+                          type: string
+                        reason:
+                          type: string
                         providerType:
                           type: string
                         evidenceBundleDigest:
@@ -377,9 +381,19 @@ spec:
                           type: array
                           items:
                             type: string
+                        sensitivityTagsSent:
+                          type: array
+                          items:
+                            type: string
                         logSamplesIncluded:
                           type: boolean
+                        maximumClassificationObserved:
+                          type: string
+                        maximumClassificationAllowed:
+                          type: string
                         maximumClassificationSent:
+                          type: string
+                        classificationPolicyVersion:
                           type: string
                     controllerVersion:
                       type: string
@@ -431,6 +445,19 @@ spec:
                             canonicalization:
                               type: string
                             value:
+                              type: string
+                        classification:
+                          type: object
+                          properties:
+                            level:
+                              type: string
+                            sensitivityTags:
+                              type: array
+                              items:
+                                type: string
+                            source:
+                              type: string
+                            policyVersion:
                               type: string
                         normalizedResult:
                           type: object
@@ -511,6 +538,19 @@ spec:
                         type: string
                       redactionProfile:
                         type: string
+                      classification:
+                        type: object
+                        properties:
+                          level:
+                            type: string
+                          sensitivityTags:
+                            type: array
+                            items:
+                              type: string
+                          source:
+                            type: string
+                          policyVersion:
+                            type: string
                       truncated:
                         type: boolean
                       truncationReason:

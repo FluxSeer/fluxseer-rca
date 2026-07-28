@@ -620,6 +620,44 @@ func TestServiceCollectEvidencePreservesNativeResultLimitMetadata(t *testing.T) 
 	}
 }
 
+func TestServiceCollectEvidenceAppliesDataSourceClassification(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				records:   []map[string]any{{"metric": "latency", "value": "1"}},
+				classification: v1alpha1.DataClassification{
+					Level:           v1alpha1.DataClassificationLevelConfidential,
+					SensitivityTags: []string{v1alpha1.SensitivityTagCustomerData},
+					Source:          v1alpha1.DataClassificationSourceExplicit,
+					PolicyVersion:   v1alpha1.DataClassificationPolicyVersion,
+				},
+			},
+		),
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 15 * time.Minute}},
+	}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Labels: map[string]string{"app": "open-api"},
+		CollectionPlan: []CollectionStep{
+			{Name: "prometheus", DatasourceName: "prometheus", QueryType: domain.QueryTypeMetric, Query: "latency"},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if len(result.EvidenceRefs) != 1 || result.EvidenceRefs[0].Classification == nil {
+		t.Fatalf("expected classified evidence ref, got %#v", result.EvidenceRefs)
+	}
+	classification := result.EvidenceRefs[0].Classification
+	if classification.Level != v1alpha1.DataClassificationLevelConfidential || !stringSliceContains(classification.SensitivityTags, v1alpha1.SensitivityTagCustomerData) {
+		t.Fatalf("expected datasource classification to be inherited, got %#v", classification)
+	}
+}
+
 func TestServiceCollectEvidenceBuildsNormalizedObservations(t *testing.T) {
 	service := &Service{
 		Registry: datasource.NewRegistry(
@@ -1065,14 +1103,118 @@ func TestServiceGenerateRCAFiltersHostedProviderEvidenceByDataPolicy(t *testing.
 	}
 }
 
+func TestServiceGenerateRCARejectsClassificationAboveProviderPolicy(t *testing.T) {
+	hosted := &capturingModelProvider{name: "openai"}
+	service := &Service{
+		Gateway: &modelgateway.Gateway{
+			Base:      knowledge.NewBase(),
+			Providers: model.NewRegistry(hosted),
+		},
+	}
+
+	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Provider: &v1alpha1.ModelProvider{
+			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+			Spec: v1alpha1.ModelProviderSpec{
+				Provider: "openai",
+				Model:    "test-model",
+				DataPolicy: v1alpha1.ModelProviderDataPolicy{
+					AllowExternalTransmission: true,
+					AllowedEvidenceKinds:      []string{"LogObservation"},
+					AllowLogSamples:           false,
+					MaximumClassification:     "Internal",
+				},
+			},
+		},
+	}, EvidenceCollectionResult{
+		Summary: "collected 1 evidence record from 1 datasource",
+		EvidenceRefs: []v1alpha1.EvidenceRef{
+			{
+				Kind:             "log",
+				Source:           "loki",
+				Summary:          "log sample omitted by provider data policy",
+				RedactionProfile: "default-v1",
+				Classification: &v1alpha1.DataClassification{
+					Level:           v1alpha1.DataClassificationLevelConfidential,
+					SensitivityTags: []string{v1alpha1.SensitivityTagInfrastructureMetadata},
+					Source:          v1alpha1.DataClassificationSourceDefault,
+					PolicyVersion:   v1alpha1.DataClassificationPolicyVersion,
+				},
+			},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("generate RCA failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "ProviderDataPolicyRejected" || !strings.Contains(result.Issue.Message, "Confidential") {
+		t.Fatalf("expected classification policy rejection, got %#v", result.Issue)
+	}
+	if hosted.calls != 0 {
+		t.Fatalf("expected hosted provider not to be called, got %d", hosted.calls)
+	}
+}
+
+func TestServiceGenerateRCARejectsDeniedSensitivityTags(t *testing.T) {
+	hosted := &capturingModelProvider{name: "openai"}
+	service := &Service{
+		Gateway: &modelgateway.Gateway{
+			Base:      knowledge.NewBase(),
+			Providers: model.NewRegistry(hosted),
+		},
+	}
+
+	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Provider: &v1alpha1.ModelProvider{
+			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+			Spec: v1alpha1.ModelProviderSpec{
+				Provider: "openai",
+				Model:    "test-model",
+				DataPolicy: v1alpha1.ModelProviderDataPolicy{
+					AllowExternalTransmission: true,
+					MaximumClassification:     "Restricted",
+					DeniedSensitivityTags:     []string{"CredentialLike"},
+				},
+			},
+		},
+	}, EvidenceCollectionResult{
+		Summary: "collected 1 evidence record from 1 datasource",
+		EvidenceRefs: []v1alpha1.EvidenceRef{
+			{
+				Kind:             "event",
+				Source:           "kubernetes-events",
+				Summary:          "image pull failed",
+				RedactionProfile: "default-v1",
+				Classification: &v1alpha1.DataClassification{
+					Level:           v1alpha1.DataClassificationLevelRestricted,
+					SensitivityTags: []string{v1alpha1.SensitivityTagCredentialLike},
+					Source:          v1alpha1.DataClassificationSourceContentDetection,
+					PolicyVersion:   v1alpha1.DataClassificationPolicyVersion,
+				},
+			},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("generate RCA failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "ProviderDataPolicyRejected" || !strings.Contains(result.Issue.Message, "CredentialLike") {
+		t.Fatalf("expected sensitivity tag policy rejection, got %#v", result.Issue)
+	}
+	if hosted.calls != 0 {
+		t.Fatalf("expected hosted provider not to be called, got %d", hosted.calls)
+	}
+}
+
 type fakeDataSource struct {
-	name        string
-	queryType   domain.QueryType
-	records     []map[string]any
-	queryErr    error
-	delay       time.Duration
-	queryPolicy v1alpha1.DataSourceQueryPolicy
-	nativeLimit *datasource.NativeResultLimit
+	name           string
+	queryType      domain.QueryType
+	records        []map[string]any
+	queryErr       error
+	delay          time.Duration
+	queryPolicy    v1alpha1.DataSourceQueryPolicy
+	nativeLimit    *datasource.NativeResultLimit
+	classification v1alpha1.DataClassification
 }
 
 type capturingModelProvider struct {
@@ -1143,6 +1285,8 @@ func (f fakeDataSource) Query(context.Context, datasource.QueryRequest) (*dataso
 func (f fakeDataSource) HealthCheck(context.Context) error { return nil }
 
 func (f fakeDataSource) QueryPolicy() v1alpha1.DataSourceQueryPolicy { return f.queryPolicy }
+
+func (f fakeDataSource) DataClassification() v1alpha1.DataClassification { return f.classification }
 
 type blockingDataSource struct {
 	name      string
@@ -1260,3 +1404,12 @@ func (c *capturingDataSource) Query(_ context.Context, req datasource.QueryReque
 	return &datasource.QueryResult{Source: c.name, QueryType: c.queryType, Records: c.records}, nil
 }
 func (c *capturingDataSource) HealthCheck(context.Context) error { return nil }
+
+func stringSliceContains(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
