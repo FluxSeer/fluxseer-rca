@@ -49,13 +49,14 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 	original := investigation.DeepCopy()
 	restarting := original.Status.ObservedGeneration != investigation.Generation || isTerminalInvestigationPhase(original.Status.Phase)
 	message := "investigation execution started"
-	setInvestigationRequestStatus(&investigation.Status, v1alpha1.PhaseObserved, message, investigation.Generation, now())
+	setInvestigationRequestStatus(&investigation.Status, v1alpha1.PhaseCollecting, message, investigation.Generation, now())
 	if investigation.Status.StartedAt == nil || restarting {
 		startedAt := metav1.NewTime(now())
 		investigation.Status.StartedAt = &startedAt
 	}
 	investigation.Status.CompletedAt = nil
 	investigation.Status.Outcome = ""
+	investigation.Status.Failure = nil
 	investigation.Status.Summary = ""
 	investigation.Status.Hypothesis = ""
 	investigation.Status.Confidence = 0
@@ -178,7 +179,12 @@ func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) st
 
 func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, message string, now time.Time) {
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, message, request.Generation, now)
-	request.Status.Outcome = v1alpha1.InvestigationOutcomeFailed
+	applyInvestigationFailure(
+		request,
+		"TargetInvalid",
+		message,
+		v1alpha1.InvestigationStageValidation,
+	)
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
 	request.Status.Provider = ""
@@ -233,7 +239,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 
 	if issue := preflight.FirstIssue(); issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, issue.Message, request.Generation, now)
-		request.Status.Outcome = v1alpha1.InvestigationOutcomeFailed
+		applyInvestigationFailure(request, issue.Reason, issue.Message, investigationFailureStage(issue.Reason))
 		completedAt := metav1.NewTime(now)
 		request.Status.CompletedAt = &completedAt
 		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, issue.Reason, issue.Message, request.Generation, now)
@@ -246,7 +252,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	}
 	if evidence.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, evidence.Issue.Message, request.Generation, now)
-		request.Status.Outcome = v1alpha1.InvestigationOutcomeFailed
+		applyInvestigationFailure(request, evidence.Issue.Reason, evidence.Issue.Message, v1alpha1.InvestigationStageEvidenceCollection)
 		request.Status.Summary = ""
 		request.Status.Hypothesis = ""
 		request.Status.Confidence = 0
@@ -262,7 +268,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	}
 	if rca.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, rca.Issue.Message, request.Generation, now)
-		request.Status.Outcome = v1alpha1.InvestigationOutcomeFailed
+		applyInvestigationFailure(request, rca.Issue.Reason, rca.Issue.Message, v1alpha1.InvestigationStageReasoning)
 		request.Status.Summary = evidence.Summary
 		request.Status.Hypothesis = ""
 		request.Status.Confidence = 0
@@ -289,9 +295,34 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
 	request.Status.Outcome = v1alpha1.InvestigationOutcomeConfirmed
+	request.Status.Failure = nil
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseCompleted, request.Status.Summary, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request completed successfully without degradation", request.Generation, now)
+}
+
+func applyInvestigationFailure(request *v1alpha1.InvestigationRequest, code string, message string, stage string) {
+	request.Status.Outcome = v1alpha1.InvestigationOutcomeUnknown
+	request.Status.Failure = &v1alpha1.InvestigationFailure{
+		Code:      code,
+		Message:   message,
+		Stage:     stage,
+		Retryable: investigationFailureRetryable(code),
+	}
+	if shouldMarkInvestigationDegraded(code) {
+		request.Status.Degradation = &v1alpha1.RCADegradation{
+			Partial: true,
+			Reasons: []v1alpha1.RCADegradationReason{
+				{
+					Code:    code,
+					Stage:   stage,
+					Message: message,
+				},
+			},
+		}
+	} else {
+		request.Status.Degradation = nil
+	}
 }
 
 func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, now time.Time) {
@@ -523,6 +554,28 @@ func zeroPad3(index int) string {
 func shouldMarkInvestigationDegraded(reason string) bool {
 	switch reason {
 	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound", "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse", "CapabilityMismatch", "ResolverUnavailable", "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
+		return true
+	default:
+		return false
+	}
+}
+
+func investigationFailureStage(reason string) string {
+	switch reason {
+	case "TargetNotFound", "UnsupportedTargetKind", "ResolverUnavailable":
+		return v1alpha1.InvestigationStageTargetResolution
+	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound", "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse", "CapabilityMismatch":
+		return v1alpha1.InvestigationStageEvidenceCollection
+	case "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
+		return v1alpha1.InvestigationStageReasoning
+	default:
+		return v1alpha1.InvestigationStageReasoning
+	}
+}
+
+func investigationFailureRetryable(reason string) bool {
+	switch reason {
+	case "ResolverUnavailable", "DatasourceRegistryUnavailable", "DatasourceQueryFailed", "DatasourceRateLimited", "DatasourceUnavailable", "GatewayUnavailable", "ProviderUnavailable", "ProviderRateLimited", "SecretReaderUnavailable", "SecretReadFailed":
 		return true
 	default:
 		return false

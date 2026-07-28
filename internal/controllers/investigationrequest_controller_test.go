@@ -125,6 +125,9 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
 		t.Fatalf("expected confirmed outcome, got %q", stored.Status.Outcome)
 	}
+	if stored.Status.Failure != nil {
+		t.Fatalf("expected no workflow failure on completed investigation, got %#v", stored.Status.Failure)
+	}
 	if stored.Status.StartedAt == nil || !stored.Status.StartedAt.Equal(&metav1.Time{Time: now}) {
 		t.Fatalf("expected startedAt %s, got %#v", now.Format(time.RFC3339), stored.Status.StartedAt)
 	}
@@ -498,6 +501,15 @@ func TestInvestigationRequestReconcilerRejectsInvalidTarget(t *testing.T) {
 	if stored.Status.Phase != v1alpha1.PhaseFailed {
 		t.Fatalf("expected failed phase, got %s", stored.Status.Phase)
 	}
+	if stored.Status.Outcome != v1alpha1.InvestigationOutcomeUnknown {
+		t.Fatalf("expected unknown outcome for failed workflow, got %q", stored.Status.Outcome)
+	}
+	if stored.Status.Failure == nil ||
+		stored.Status.Failure.Code != "TargetInvalid" ||
+		stored.Status.Failure.Stage != v1alpha1.InvestigationStageValidation ||
+		stored.Status.Failure.Retryable {
+		t.Fatalf("expected non-retryable validation failure, got %#v", stored.Status.Failure)
+	}
 	if cond := findCondition(stored.Status.Conditions, conditionReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "TargetInvalid" {
 		t.Fatalf("expected Ready false TargetInvalid, got %#v", cond)
 	}
@@ -568,6 +580,22 @@ func TestInvestigationRequestReconcilerMarksDatasourceResolutionFailure(t *testi
 	}
 	if stored.Status.Phase != v1alpha1.PhaseFailed {
 		t.Fatalf("expected failed phase, got %s", stored.Status.Phase)
+	}
+	if stored.Status.Outcome != v1alpha1.InvestigationOutcomeUnknown {
+		t.Fatalf("expected unknown outcome for failed workflow, got %q", stored.Status.Outcome)
+	}
+	if stored.Status.Failure == nil ||
+		stored.Status.Failure.Code != "DataSourceNotFound" ||
+		stored.Status.Failure.Stage != v1alpha1.InvestigationStageEvidenceCollection ||
+		stored.Status.Failure.Retryable {
+		t.Fatalf("expected non-retryable datasource failure, got %#v", stored.Status.Failure)
+	}
+	if stored.Status.Degradation == nil ||
+		!stored.Status.Degradation.Partial ||
+		len(stored.Status.Degradation.Reasons) != 1 ||
+		stored.Status.Degradation.Reasons[0].Code != "DataSourceNotFound" ||
+		stored.Status.Degradation.Reasons[0].Stage != v1alpha1.InvestigationStageEvidenceCollection {
+		t.Fatalf("expected structured datasource degradation reason, got %#v", stored.Status.Degradation)
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionDatasourceResolved); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "DataSourceNotFound" {
 		t.Fatalf("expected DatasourceResolved false DataSourceNotFound, got %#v", cond)
@@ -647,6 +675,17 @@ func TestInvestigationRequestReconcilerMarksQueryTypeMismatch(t *testing.T) {
 	var stored v1alpha1.InvestigationRequest
 	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
 		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseFailed {
+		t.Fatalf("expected failed phase, got %s", stored.Status.Phase)
+	}
+	if stored.Status.Outcome != v1alpha1.InvestigationOutcomeUnknown {
+		t.Fatalf("expected unknown outcome for failed workflow, got %q", stored.Status.Outcome)
+	}
+	if stored.Status.Failure == nil ||
+		stored.Status.Failure.Code != "CapabilityMismatch" ||
+		stored.Status.Failure.Stage != v1alpha1.InvestigationStageEvidenceCollection {
+		t.Fatalf("expected capability mismatch failure, got %#v", stored.Status.Failure)
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionQueryTypeSupported); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "CapabilityMismatch" {
 		t.Fatalf("expected QueryTypeSupported false CapabilityMismatch, got %#v", cond)

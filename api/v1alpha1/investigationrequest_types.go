@@ -11,7 +11,20 @@ const (
 	InvestigationOutcomeConfirmed    = "Confirmed"
 	InvestigationOutcomeInconclusive = "Inconclusive"
 	InvestigationOutcomeNoIssueFound = "NoIssueFound"
-	InvestigationOutcomeFailed       = "ExecutionFailed"
+	InvestigationOutcomeUnknown      = "Unknown"
+
+	// Deprecated: workflow execution failure is represented by
+	// status.phase=Failed, status.outcome=Unknown, and status.failure.
+	InvestigationOutcomeFailed = "ExecutionFailed"
+)
+
+const (
+	InvestigationStageValidation         = "Validation"
+	InvestigationStageTargetResolution   = "TargetResolution"
+	InvestigationStageEvidenceCollection = "EvidenceCollection"
+	InvestigationStageReasoning          = "Reasoning"
+	InvestigationStageVerification       = "Verification"
+	InvestigationStagePersistence        = "Persistence"
 )
 
 type InvestigationTimeRange struct {
@@ -78,9 +91,24 @@ type RCAMissingEvidence struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+type InvestigationFailure struct {
+	Code      string `json:"code,omitempty"`
+	Message   string `json:"message,omitempty"`
+	Stage     string `json:"stage,omitempty"`
+	Retryable bool   `json:"retryable,omitempty"`
+}
+
+type RCADegradationReason struct {
+	Code      string                     `json:"code,omitempty"`
+	Stage     string                     `json:"stage,omitempty"`
+	SourceRef *NamespacedObjectReference `json:"sourceRef,omitempty"`
+	Message   string                     `json:"message,omitempty"`
+}
+
 type RCADegradation struct {
-	Partial            bool     `json:"partial,omitempty"`
-	UnavailableSources []string `json:"unavailableSources,omitempty"`
+	Partial            bool                   `json:"partial,omitempty"`
+	UnavailableSources []string               `json:"unavailableSources,omitempty"`
+	Reasons            []RCADegradationReason `json:"reasons,omitempty"`
 }
 
 type RCAExecution struct {
@@ -116,6 +144,7 @@ type InvestigationLineage struct {
 type InvestigationRequestStatus struct {
 	ResourceStatus        `json:",inline"`
 	Outcome               string                     `json:"outcome,omitempty"`
+	Failure               *InvestigationFailure      `json:"failure,omitempty"`
 	Summary               string                     `json:"summary,omitempty"`
 	Hypothesis            string                     `json:"hypothesis,omitempty"`
 	Confidence            float64                    `json:"confidence,omitempty"`
@@ -204,10 +233,24 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 	if in.Status.MissingEvidence != nil {
 		out.Status.MissingEvidence = append([]RCAMissingEvidence(nil), in.Status.MissingEvidence...)
 	}
+	if in.Status.Failure != nil {
+		failure := *in.Status.Failure
+		out.Status.Failure = &failure
+	}
 	if in.Status.Degradation != nil {
 		degradation := *in.Status.Degradation
 		if in.Status.Degradation.UnavailableSources != nil {
 			degradation.UnavailableSources = append([]string(nil), in.Status.Degradation.UnavailableSources...)
+		}
+		if in.Status.Degradation.Reasons != nil {
+			degradation.Reasons = make([]RCADegradationReason, len(in.Status.Degradation.Reasons))
+			copy(degradation.Reasons, in.Status.Degradation.Reasons)
+			for i := range degradation.Reasons {
+				if in.Status.Degradation.Reasons[i].SourceRef != nil {
+					ref := *in.Status.Degradation.Reasons[i].SourceRef
+					degradation.Reasons[i].SourceRef = &ref
+				}
+			}
 		}
 		out.Status.Degradation = &degradation
 	}

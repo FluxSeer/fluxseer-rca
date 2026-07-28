@@ -331,10 +331,11 @@ Important RCA statements without evidence references must not be represented as 
 Verdict outcomes should support abstention instead of forcing a confident answer when evidence is insufficient. Target outcomes:
 
 - `Confirmed`
-- `Probable`
 - `Inconclusive`
 - `NoIssueFound`
-- `ExecutionFailed`
+- `Unknown`
+
+Workflow execution failures are not RCA outcomes. They should be represented as `status.phase=Failed`, `status.outcome=Unknown`, and a populated `status.failure`.
 
 Evidence provenance should preserve compact metadata even when raw payloads are not stored:
 
