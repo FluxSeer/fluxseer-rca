@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -389,6 +390,52 @@ func TestLineageForReconcilePrefersStatusLineageWhenAnnotationsMissing(t *testin
 	got.Source.UID = "mutated"
 	if existing.Source.UID != "riskrule-uid" {
 		t.Fatalf("expected lineage copy to avoid mutating existing status, got %#v", existing)
+	}
+}
+
+func TestValidateInvestigationQueryBudgetRejectsExcessiveLookback(t *testing.T) {
+	message := validateInvestigationQueryBudget(v1alpha1.InvestigationRequestSpec{
+		TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 2 * time.Hour}},
+		QueryBudget: v1alpha1.InvestigationQueryBudget{
+			MaxTimeRange: metav1.Duration{Duration: 30 * time.Minute},
+		},
+		Queries: []v1alpha1.InvestigationQuery{
+			{
+				DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus"},
+				QueryType:     string(domain.QueryTypeMetric),
+			},
+		},
+	})
+	if !strings.Contains(message, "exceeds queryBudget.maxTimeRange") {
+		t.Fatalf("expected maxTimeRange rejection, got %q", message)
+	}
+}
+
+func TestValidateInvestigationQueryBudgetRejectsQueryCounts(t *testing.T) {
+	message := validateInvestigationQueryBudget(v1alpha1.InvestigationRequestSpec{
+		QueryBudget: v1alpha1.InvestigationQueryBudget{
+			MaxQueriesTotal: 1,
+		},
+		Queries: []v1alpha1.InvestigationQuery{
+			{DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus"}, QueryType: string(domain.QueryTypeMetric)},
+			{DatasourceRef: v1alpha1.LocalObjectReference{Name: "loki"}, QueryType: string(domain.QueryTypeLog)},
+		},
+	})
+	if !strings.Contains(message, "exceeds queryBudget.maxQueriesTotal") {
+		t.Fatalf("expected maxQueriesTotal rejection, got %q", message)
+	}
+
+	message = validateInvestigationQueryBudget(v1alpha1.InvestigationRequestSpec{
+		QueryBudget: v1alpha1.InvestigationQueryBudget{
+			MaxQueriesPerSource: 1,
+		},
+		Queries: []v1alpha1.InvestigationQuery{
+			{DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus"}, QueryType: string(domain.QueryTypeMetric)},
+			{DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus"}, QueryType: string(domain.QueryTypeMetric)},
+		},
+	})
+	if !strings.Contains(message, "exceeds queryBudget.maxQueriesPerSource") {
+		t.Fatalf("expected maxQueriesPerSource rejection, got %q", message)
 	}
 }
 

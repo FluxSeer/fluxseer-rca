@@ -398,12 +398,53 @@ func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) st
 	if len(spec.DataSources) == 0 && len(spec.Queries) == 0 {
 		return "spec.dataSources or spec.queries must include at least one datasource reference"
 	}
+	if message := validateInvestigationQueryBudget(spec); message != "" {
+		return message
+	}
 	for _, query := range spec.Queries {
 		if strings.TrimSpace(query.DatasourceRef.Name) == "" {
 			return "investigation queries require spec.queries[].datasourceRef.name"
 		}
 		if strings.TrimSpace(query.QueryType) == "" {
 			return "investigation queries require spec.queries[].queryType"
+		}
+	}
+	return ""
+}
+
+func validateInvestigationQueryBudget(spec v1alpha1.InvestigationRequestSpec) string {
+	budget := spec.QueryBudget
+	if budget.MaxTimeRange.Duration > 0 && spec.TimeRange.Lookback.Duration > budget.MaxTimeRange.Duration {
+		return fmt.Sprintf("spec.timeRange.lookback %s exceeds queryBudget.maxTimeRange %s", spec.TimeRange.Lookback.Duration, budget.MaxTimeRange.Duration)
+	}
+	totalQueries := len(spec.Queries)
+	if totalQueries == 0 {
+		totalQueries = len(spec.DataSources)
+	}
+	if budget.MaxQueriesTotal > 0 && int32(totalQueries) > budget.MaxQueriesTotal {
+		return fmt.Sprintf("investigation query count %d exceeds queryBudget.maxQueriesTotal %d", totalQueries, budget.MaxQueriesTotal)
+	}
+	if budget.MaxQueriesPerSource > 0 {
+		counts := map[string]int32{}
+		for _, datasourceRef := range spec.DataSources {
+			name := strings.TrimSpace(datasourceRef.Name)
+			if name == "" {
+				continue
+			}
+			counts[name]++
+			if counts[name] > budget.MaxQueriesPerSource {
+				return fmt.Sprintf("datasource %q query count %d exceeds queryBudget.maxQueriesPerSource %d", name, counts[name], budget.MaxQueriesPerSource)
+			}
+		}
+		for _, query := range spec.Queries {
+			name := strings.TrimSpace(query.DatasourceRef.Name)
+			if name == "" {
+				continue
+			}
+			counts[name]++
+			if counts[name] > budget.MaxQueriesPerSource {
+				return fmt.Sprintf("datasource %q query count %d exceeds queryBudget.maxQueriesPerSource %d", name, counts[name], budget.MaxQueriesPerSource)
+			}
 		}
 	}
 	return ""
