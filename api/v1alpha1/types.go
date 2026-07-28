@@ -36,20 +36,22 @@ type TargetRef struct {
 }
 
 type EvidenceRef struct {
-	ID               string       `json:"id,omitempty"`
-	Kind             string       `json:"kind,omitempty"`
-	Source           string       `json:"source,omitempty"`
-	Summary          string       `json:"summary,omitempty"`
-	Query            string       `json:"query,omitempty"`
-	QueryDigest      string       `json:"queryDigest,omitempty"`
-	ContentDigest    string       `json:"contentDigest,omitempty"`
-	RedactionProfile string       `json:"redactionProfile,omitempty"`
-	Truncated        bool         `json:"truncated,omitempty"`
-	OriginalCount    int32        `json:"originalCount,omitempty"`
-	RetainedCount    int32        `json:"retainedCount,omitempty"`
-	CollectedAt      *metav1.Time `json:"collectedAt,omitempty"`
-	Reason           string       `json:"reason,omitempty"`
-	Link             string       `json:"link,omitempty"`
+	ID                     string       `json:"id,omitempty"`
+	Kind                   string       `json:"kind,omitempty"`
+	Source                 string       `json:"source,omitempty"`
+	Summary                string       `json:"summary,omitempty"`
+	Query                  string       `json:"query,omitempty"`
+	QueryDigest            string       `json:"queryDigest,omitempty"`
+	ContentDigest          string       `json:"contentDigest,omitempty"`
+	DigestAlgorithm        string       `json:"digestAlgorithm,omitempty"`
+	DigestCanonicalization string       `json:"digestCanonicalization,omitempty"`
+	RedactionProfile       string       `json:"redactionProfile,omitempty"`
+	Truncated              bool         `json:"truncated,omitempty"`
+	OriginalCount          int32        `json:"originalCount,omitempty"`
+	RetainedCount          int32        `json:"retainedCount,omitempty"`
+	CollectedAt            *metav1.Time `json:"collectedAt,omitempty"`
+	Reason                 string       `json:"reason,omitempty"`
+	Link                   string       `json:"link,omitempty"`
 }
 
 type ResourceStatus struct {

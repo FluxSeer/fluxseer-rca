@@ -281,6 +281,9 @@ func TestServiceCollectEvidenceBuildsNormalizedObservations(t *testing.T) {
 	if !strings.HasPrefix(first.ContentDigest, "sha256:") || len(first.ContentDigest) != len("sha256:")+64 {
 		t.Fatalf("expected sha256 content digest, got %q", first.ContentDigest)
 	}
+	if first.DigestAlgorithm != "sha256" || first.DigestCanonicalization != "fluxagent-observation-json-v1" {
+		t.Fatalf("expected observation digest metadata, got %#v", first)
+	}
 	if !first.Truncated || first.OriginalCount != 6 || first.RetainedCount != 5 {
 		t.Fatalf("expected truncation metadata, got %#v", first)
 	}
@@ -291,6 +294,9 @@ func TestServiceCollectEvidenceBuildsNormalizedObservations(t *testing.T) {
 	ref := result.EvidenceRefs[0]
 	if ref.ID != first.ID || ref.QueryDigest != first.QueryDigest || ref.ContentDigest != first.ContentDigest {
 		t.Fatalf("expected evidence ref to carry observation metadata, got ref=%#v observation=%#v", ref, first)
+	}
+	if ref.DigestAlgorithm != first.DigestAlgorithm || ref.DigestCanonicalization != first.DigestCanonicalization {
+		t.Fatalf("expected evidence ref digest metadata, got ref=%#v observation=%#v", ref, first)
 	}
 	if ref.RedactionProfile != "default-v1" || !ref.Truncated || ref.OriginalCount != 6 || ref.RetainedCount != 5 {
 		t.Fatalf("expected evidence ref truncation and redaction metadata, got %#v", ref)

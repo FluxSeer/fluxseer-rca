@@ -50,6 +50,8 @@ spec:
                       query: {type: string}
                       queryDigest: {type: string}
                       contentDigest: {type: string}
+                      digestAlgorithm: {type: string}
+                      digestCanonicalization: {type: string}
                       redactionProfile: {type: string}
                       truncated: {type: boolean}
                       originalCount: {type: integer, format: int32}

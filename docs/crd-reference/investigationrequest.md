@@ -205,6 +205,8 @@ FluxAgent applies a deterministic heuristic verifier before writing claims. In t
 - `query`
 - `queryDigest`
 - `contentDigest`
+- `digestAlgorithm`
+- `digestCanonicalization`
 - `redactionProfile`
 - `truncated`
 - `originalCount`
@@ -214,6 +216,8 @@ FluxAgent applies a deterministic heuristic verifier before writing claims. In t
 - `link`
 
 These fields are compact normalized-observation metadata. They let consumers audit which query and redacted observation supported the RCA without storing raw Prometheus payloads, large Loki excerpts, or unredacted Kubernetes objects in status.
+
+`queryDigest` and `contentDigest` use `digestAlgorithm: sha256` and `digestCanonicalization: fluxagent-observation-json-v1`. The v1 canonicalization contract uses deterministic JSON object keys, preserves array order unless a field-specific contract says otherwise, normalizes strings to Unicode NFC, excludes non-semantic collection timestamps from content digests, and expects timestamp producers to write UTC timestamps.
 
 `status.failure` records workflow failure details when an investigation cannot reach a completed RCA state:
 

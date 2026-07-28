@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -21,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"fluxagent/api/v1alpha1"
+	"fluxagent/internal/canonicaldigest"
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
 	"fluxagent/internal/modelgateway"
@@ -508,9 +508,7 @@ func findingFingerprint(matches []rule.Match) string {
 	sort.Slice(payload, func(i, j int) bool {
 		return fmt.Sprint(payload[i]["signal"], payload[i]["summary"]) < fmt.Sprint(payload[j]["signal"], payload[j]["summary"])
 	})
-	raw, _ := json.Marshal(payload)
-	sum := sha256.Sum256(raw)
-	return "sha256:" + hex.EncodeToString(sum[:])
+	return canonicaldigest.String(canonicaldigest.ObservationJSONV1, payload)
 }
 
 func investigationRequestName(ruleName, targetName, fingerprint, windowBucket string) string {
