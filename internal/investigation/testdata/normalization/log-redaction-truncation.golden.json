@@ -1,0 +1,236 @@
+{
+  "observations": [
+    {
+      "id": "evidence-001",
+      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "dataSourceRef": "loki",
+      "capability": "log",
+      "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
+      "timeRange": {
+        "start": "2026-07-06T11:45:00Z",
+        "end": "2026-07-06T12:00:00Z"
+      },
+      "type": "log",
+      "value": {
+        "log": {
+          "line": "checkout failed token=[REDACTED] password=[REDACTED]"
+        }
+      },
+      "summary": "checkout failed token=[REDACTED] password=[REDACTED]",
+      "contentDigest": "sha256:507cdd9408da77ef176bbc1f3b85a442f0f381c7e8d9505b1937837b34955acd",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": true,
+      "originalCount": 6,
+      "retainedCount": 5,
+      "originalBytes": 52,
+      "retainedBytes": 52,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    },
+    {
+      "id": "evidence-002",
+      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "dataSourceRef": "loki",
+      "capability": "log",
+      "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
+      "timeRange": {
+        "start": "2026-07-06T11:45:00Z",
+        "end": "2026-07-06T12:00:00Z"
+      },
+      "type": "log",
+      "value": {
+        "log": {
+          "line": "checkout retry succeeded"
+        }
+      },
+      "summary": "checkout retry succeeded",
+      "contentDigest": "sha256:f16cbbdae113520aaf21288b62b115cb42f978fc7c876f1e07c4429b6f521542",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": true,
+      "originalCount": 6,
+      "retainedCount": 5,
+      "originalBytes": 24,
+      "retainedBytes": 24,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    },
+    {
+      "id": "evidence-003",
+      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "dataSourceRef": "loki",
+      "capability": "log",
+      "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
+      "timeRange": {
+        "start": "2026-07-06T11:45:00Z",
+        "end": "2026-07-06T12:00:00Z"
+      },
+      "type": "log",
+      "value": {
+        "log": {
+          "line": "checkout timeout after 30s"
+        }
+      },
+      "summary": "checkout timeout after 30s",
+      "contentDigest": "sha256:a72bcba64615c434a5da2d01de07ead7a499b120f9c3c17b9704687c4e78d09f",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": true,
+      "originalCount": 6,
+      "retainedCount": 5,
+      "originalBytes": 26,
+      "retainedBytes": 26,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    },
+    {
+      "id": "evidence-004",
+      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "dataSourceRef": "loki",
+      "capability": "log",
+      "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
+      "timeRange": {
+        "start": "2026-07-06T11:45:00Z",
+        "end": "2026-07-06T12:00:00Z"
+      },
+      "type": "log",
+      "value": {
+        "log": {
+          "line": "checkout upstream unavailable"
+        }
+      },
+      "summary": "checkout upstream unavailable",
+      "contentDigest": "sha256:25cea8c8f632be00ae42ee91a8289efcf93ea81fd27b3507add93214af93f9f5",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": true,
+      "originalCount": 6,
+      "retainedCount": 5,
+      "originalBytes": 29,
+      "retainedBytes": 29,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    },
+    {
+      "id": "evidence-005",
+      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "dataSourceRef": "loki",
+      "capability": "log",
+      "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
+      "timeRange": {
+        "start": "2026-07-06T11:45:00Z",
+        "end": "2026-07-06T12:00:00Z"
+      },
+      "type": "log",
+      "value": {
+        "log": {
+          "line": "checkout pool exhausted"
+        }
+      },
+      "summary": "checkout pool exhausted",
+      "contentDigest": "sha256:121e296f011b6f5300708875366bc4d19608eb3c0e6c0f9bb1518e98ec5a5cbb",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": true,
+      "originalCount": 6,
+      "retainedCount": 5,
+      "originalBytes": 23,
+      "retainedBytes": 23,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    }
+  ],
+  "evidenceRefs": [
+    {
+      "id": "evidence-001",
+      "kind": "log",
+      "source": "loki",
+      "summary": "checkout failed token=[REDACTED] password=[REDACTED]",
+      "query": "{namespace=\"prod\",app=\"checkout\"} |= \"error\"",
+      "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
+      "contentDigest": "sha256:507cdd9408da77ef176bbc1f3b85a442f0f381c7e8d9505b1937837b34955acd",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": true,
+      "originalCount": 6,
+      "retainedCount": 5,
+      "originalBytes": 52,
+      "retainedBytes": 52,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    },
+    {
+      "id": "evidence-002",
+      "kind": "log",
+      "source": "loki",
+      "summary": "checkout retry succeeded",
+      "query": "{namespace=\"prod\",app=\"checkout\"} |= \"error\"",
+      "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
+      "contentDigest": "sha256:f16cbbdae113520aaf21288b62b115cb42f978fc7c876f1e07c4429b6f521542",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": true,
+      "originalCount": 6,
+      "retainedCount": 5,
+      "originalBytes": 24,
+      "retainedBytes": 24,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    },
+    {
+      "id": "evidence-003",
+      "kind": "log",
+      "source": "loki",
+      "summary": "checkout timeout after 30s",
+      "query": "{namespace=\"prod\",app=\"checkout\"} |= \"error\"",
+      "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
+      "contentDigest": "sha256:a72bcba64615c434a5da2d01de07ead7a499b120f9c3c17b9704687c4e78d09f",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": true,
+      "originalCount": 6,
+      "retainedCount": 5,
+      "originalBytes": 26,
+      "retainedBytes": 26,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    },
+    {
+      "id": "evidence-004",
+      "kind": "log",
+      "source": "loki",
+      "summary": "checkout upstream unavailable",
+      "query": "{namespace=\"prod\",app=\"checkout\"} |= \"error\"",
+      "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
+      "contentDigest": "sha256:25cea8c8f632be00ae42ee91a8289efcf93ea81fd27b3507add93214af93f9f5",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": true,
+      "originalCount": 6,
+      "retainedCount": 5,
+      "originalBytes": 29,
+      "retainedBytes": 29,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    },
+    {
+      "id": "evidence-005",
+      "kind": "log",
+      "source": "loki",
+      "summary": "checkout pool exhausted",
+      "query": "{namespace=\"prod\",app=\"checkout\"} |= \"error\"",
+      "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
+      "contentDigest": "sha256:121e296f011b6f5300708875366bc4d19608eb3c0e6c0f9bb1518e98ec5a5cbb",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": true,
+      "originalCount": 6,
+      "retainedCount": 5,
+      "originalBytes": 23,
+      "retainedBytes": 23,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    }
+  ]
+}

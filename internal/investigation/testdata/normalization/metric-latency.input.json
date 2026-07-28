@@ -1,0 +1,32 @@
+{
+  "name": "metric-latency",
+  "collectedAt": "2026-07-06T12:00:00Z",
+  "query": {
+    "query": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{namespace=\"prod\",app=\"checkout\"}[5m]))",
+    "startTime": "2026-07-06T11:45:00Z",
+    "endTime": "2026-07-06T12:00:00Z",
+    "step": "1m",
+    "labels": {
+      "app": "checkout"
+    },
+    "target": {
+      "cluster": "homelab-test",
+      "namespace": "prod",
+      "kind": "Deployment",
+      "name": "checkout",
+      "apiVersion": "apps/v1",
+      "service": "checkout"
+    },
+    "queryType": "metric"
+  },
+  "result": {
+    "source": "prometheus",
+    "queryType": "metric",
+    "records": [
+      {
+        "metric": "http_request_duration_seconds_p95",
+        "value": "2.75"
+      }
+    ]
+  }
+}
