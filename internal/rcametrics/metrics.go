@@ -16,10 +16,11 @@ var AllowedLabels = map[string][]string{
 	"fluxagent_evidence_truncated_total":          {"kind", "reason"},
 	"fluxagent_claim_verification_total":          {"verification_status"},
 	"fluxagent_query_policy_decisions_total":      {"backend", "decision", "reason"},
+	"fluxagent_datasource_query_queue_depth":      {"scheduler"},
+	"fluxagent_datasource_queries_in_flight":      {"scheduler"},
 	"fluxagent_deduplication_hits_total":          {"source"},
 	"fluxagent_loop_prevention_total":             {"reason"},
 	"fluxagent_status_update_conflicts_total":     {"resource"},
-	"fluxagent_queue_depth":                       {"queue"},
 }
 
 var forbiddenLabels = map[string]struct{}{
@@ -85,6 +86,20 @@ var (
 		},
 		AllowedLabels["fluxagent_query_policy_decisions_total"],
 	)
+	DatasourceQueryQueueDepth = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "fluxagent_datasource_query_queue_depth",
+			Help: "FluxAgent datasource queries waiting for a scheduler slot.",
+		},
+		AllowedLabels["fluxagent_datasource_query_queue_depth"],
+	)
+	DatasourceQueriesInFlight = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "fluxagent_datasource_queries_in_flight",
+			Help: "FluxAgent datasource queries currently executing in the datasource scheduler.",
+		},
+		AllowedLabels["fluxagent_datasource_queries_in_flight"],
+	)
 	DeduplicationHitsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxagent_deduplication_hits_total",
@@ -106,13 +121,6 @@ var (
 		},
 		AllowedLabels["fluxagent_status_update_conflicts_total"],
 	)
-	QueueDepth = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "fluxagent_queue_depth",
-			Help: "FluxAgent controller queue depth by queue name.",
-		},
-		AllowedLabels["fluxagent_queue_depth"],
-	)
 )
 
 func init() {
@@ -124,10 +132,11 @@ func init() {
 		EvidenceTruncatedTotal,
 		ClaimVerificationTotal,
 		QueryPolicyDecisionsTotal,
+		DatasourceQueryQueueDepth,
+		DatasourceQueriesInFlight,
 		DeduplicationHitsTotal,
 		LoopPreventionTotal,
 		StatusUpdateConflictsTotal,
-		QueueDepth,
 	)
 }
 
@@ -162,6 +171,14 @@ func RecordClaimVerification(status string) {
 
 func RecordQueryPolicyDecision(backend string, decision string, reason string) {
 	QueryPolicyDecisionsTotal.WithLabelValues(normalizeLabel(backend, "unknown"), normalizeLabel(decision, "unknown"), normalizeReason(reason)).Inc()
+}
+
+func AddDatasourceQueryQueueDepth(scheduler string, delta float64) {
+	DatasourceQueryQueueDepth.WithLabelValues(normalizeLabel(scheduler, "unknown")).Add(delta)
+}
+
+func AddDatasourceQueriesInFlight(scheduler string, delta float64) {
+	DatasourceQueriesInFlight.WithLabelValues(normalizeLabel(scheduler, "unknown")).Add(delta)
 }
 
 func RecordDeduplicationHit(source string) {

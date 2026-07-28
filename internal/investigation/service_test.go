@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +23,7 @@ import (
 	"fluxagent/internal/model"
 	"fluxagent/internal/model/heuristic"
 	"fluxagent/internal/modelgateway"
+	"fluxagent/internal/rcametrics"
 )
 
 func TestServicePreflightResolvesTargetDatasourcesAndProvider(t *testing.T) {
@@ -364,6 +367,8 @@ func TestServiceCollectEvidenceRejectsCumulativeDurationBudget(t *testing.T) {
 func TestServiceCollectEvidenceEnforcesMaxConcurrentQueries(t *testing.T) {
 	blocking := newBlockingDataSource("loki", domain.QueryTypeLog)
 	defer blocking.release()
+	queueBefore := testutil.ToFloat64(rcametrics.DatasourceQueryQueueDepth.WithLabelValues("investigation"))
+	inFlightBefore := testutil.ToFloat64(rcametrics.DatasourceQueriesInFlight.WithLabelValues("investigation"))
 	service := &Service{
 		Registry: datasource.NewRegistry(blocking),
 	}
@@ -394,6 +399,14 @@ func TestServiceCollectEvidenceEnforcesMaxConcurrentQueries(t *testing.T) {
 
 	blocking.waitForStarted(t, 2)
 	blocking.assertNoAdditionalStart(t)
+	queueDuring := testutil.ToFloat64(rcametrics.DatasourceQueryQueueDepth.WithLabelValues("investigation"))
+	inFlightDuring := testutil.ToFloat64(rcametrics.DatasourceQueriesInFlight.WithLabelValues("investigation"))
+	if queueDuring != queueBefore+1 {
+		t.Fatalf("expected one queued datasource query, before=%f during=%f", queueBefore, queueDuring)
+	}
+	if inFlightDuring != inFlightBefore+2 {
+		t.Fatalf("expected two in-flight datasource queries, before=%f during=%f", inFlightBefore, inFlightDuring)
+	}
 	blocking.release()
 
 	select {
@@ -418,6 +431,14 @@ func TestServiceCollectEvidenceEnforcesMaxConcurrentQueries(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for evidence collection")
+	}
+	queueAfter := testutil.ToFloat64(rcametrics.DatasourceQueryQueueDepth.WithLabelValues("investigation"))
+	inFlightAfter := testutil.ToFloat64(rcametrics.DatasourceQueriesInFlight.WithLabelValues("investigation"))
+	if queueAfter != queueBefore {
+		t.Fatalf("expected datasource query queue depth to return to baseline, before=%f after=%f", queueBefore, queueAfter)
+	}
+	if inFlightAfter != inFlightBefore {
+		t.Fatalf("expected datasource queries in-flight to return to baseline, before=%f after=%f", inFlightBefore, inFlightAfter)
 	}
 }
 

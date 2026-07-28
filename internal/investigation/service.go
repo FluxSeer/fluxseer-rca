@@ -186,7 +186,8 @@ func (s *Service) collectDatasourceQueries(ctx context.Context, spec v1alpha1.In
 	defer cancel()
 
 	concurrency := effectiveDatasourceQueryConcurrency(spec.QueryBudget, len(plan))
-	jobs := make(chan int)
+	schedulerName := "investigation"
+	jobs := make(chan int, len(plan))
 	results := make(chan collectedDatasourceQuery, len(plan))
 	var wg sync.WaitGroup
 	for worker := 0; worker < concurrency; worker++ {
@@ -196,23 +197,25 @@ func (s *Service) collectDatasourceQueries(ctx context.Context, spec v1alpha1.In
 			for index := range jobs {
 				select {
 				case <-queryCtx.Done():
+					rcametrics.AddDatasourceQueryQueueDepth(schedulerName, -1)
 					continue
 				default:
 				}
-				results <- s.collectDatasourceQuery(queryCtx, preflight, now, window, index)
+				rcametrics.AddDatasourceQueryQueueDepth(schedulerName, -1)
+				queryResult := func() collectedDatasourceQuery {
+					rcametrics.AddDatasourceQueriesInFlight(schedulerName, 1)
+					defer rcametrics.AddDatasourceQueriesInFlight(schedulerName, -1)
+					return s.collectDatasourceQuery(queryCtx, preflight, now, window, index)
+				}()
+				results <- queryResult
 			}
 		}()
 	}
-	go func() {
-		defer close(jobs)
-		for index := range plan {
-			select {
-			case <-queryCtx.Done():
-				return
-			case jobs <- index:
-			}
-		}
-	}()
+	for index := range plan {
+		rcametrics.AddDatasourceQueryQueueDepth(schedulerName, 1)
+		jobs <- index
+	}
+	close(jobs)
 	go func() {
 		wg.Wait()
 		close(results)

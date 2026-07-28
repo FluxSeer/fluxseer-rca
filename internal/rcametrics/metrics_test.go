@@ -63,3 +63,32 @@ func TestRecordQueryPolicyDecision(t *testing.T) {
 		t.Fatalf("expected query policy decision counter increment, before=%f after=%f", before, after)
 	}
 }
+
+func TestDatasourceSchedulerGauges(t *testing.T) {
+	queueBefore := testutil.ToFloat64(DatasourceQueryQueueDepth.WithLabelValues("investigation"))
+	inFlightBefore := testutil.ToFloat64(DatasourceQueriesInFlight.WithLabelValues("investigation"))
+
+	AddDatasourceQueryQueueDepth("Investigation", 2)
+	AddDatasourceQueriesInFlight("Investigation", 1)
+
+	queueDuring := testutil.ToFloat64(DatasourceQueryQueueDepth.WithLabelValues("investigation"))
+	inFlightDuring := testutil.ToFloat64(DatasourceQueriesInFlight.WithLabelValues("investigation"))
+	if queueDuring != queueBefore+2 {
+		t.Fatalf("expected datasource query queue depth increment, before=%f during=%f", queueBefore, queueDuring)
+	}
+	if inFlightDuring != inFlightBefore+1 {
+		t.Fatalf("expected datasource queries in-flight increment, before=%f during=%f", inFlightBefore, inFlightDuring)
+	}
+
+	AddDatasourceQueryQueueDepth("Investigation", -2)
+	AddDatasourceQueriesInFlight("Investigation", -1)
+
+	queueAfter := testutil.ToFloat64(DatasourceQueryQueueDepth.WithLabelValues("investigation"))
+	inFlightAfter := testutil.ToFloat64(DatasourceQueriesInFlight.WithLabelValues("investigation"))
+	if queueAfter != queueBefore {
+		t.Fatalf("expected datasource query queue depth to return to baseline, before=%f after=%f", queueBefore, queueAfter)
+	}
+	if inFlightAfter != inFlightBefore {
+		t.Fatalf("expected datasource queries in-flight to return to baseline, before=%f after=%f", inFlightBefore, inFlightAfter)
+	}
+}
