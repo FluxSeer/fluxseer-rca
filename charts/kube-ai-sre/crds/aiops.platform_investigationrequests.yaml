@@ -324,6 +324,12 @@ spec:
                       retainedCount:
                         type: integer
                         format: int32
+                      originalBytes:
+                        type: integer
+                        format: int32
+                      retainedBytes:
+                        type: integer
+                        format: int32
                       collectedAt:
                         type: string
                         format: date-time

@@ -332,6 +332,58 @@ func TestNormalizeObservationContentDigestExcludesCollectedAt(t *testing.T) {
 	}
 }
 
+func TestNormalizeObservationTruncatesLargeLogEvidence(t *testing.T) {
+	req := datasource.QueryRequest{
+		Query:     `{namespace="prod"} |= "timeout"`,
+		StartTime: time.Date(2026, 7, 6, 11, 50, 0, 0, time.UTC),
+		EndTime:   time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC),
+		Target:    domain.ResourceRef{Namespace: "prod", Name: "open-api", Service: "open-api"},
+		QueryType: domain.QueryTypeLog,
+	}
+	result := &datasource.QueryResult{
+		Source:    "loki",
+		QueryType: domain.QueryTypeLog,
+		Records:   []map[string]any{{"line": strings.Repeat("延遲", 1024)}},
+	}
+
+	observation := normalizeObservations(result, req, 0, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))[0]
+	ref := evidenceRefsFromObservations([]domain.Observation{observation}, req)[0]
+
+	if !observation.Truncated || observation.OriginalBytes <= observation.RetainedBytes {
+		t.Fatalf("expected truncated observation byte metadata, got %#v", observation)
+	}
+	if len(observation.Summary) > 1024 {
+		t.Fatalf("expected bounded summary bytes, got %d", len(observation.Summary))
+	}
+	if ref.OriginalBytes != int32(observation.OriginalBytes) || ref.RetainedBytes != int32(observation.RetainedBytes) || !ref.Truncated {
+		t.Fatalf("expected evidence ref byte metadata, got ref=%#v observation=%#v", ref, observation)
+	}
+}
+
+func TestNormalizeObservationTruncatesLargeEventEvidence(t *testing.T) {
+	req := datasource.QueryRequest{
+		Query:     "recent-events",
+		StartTime: time.Date(2026, 7, 6, 11, 50, 0, 0, time.UTC),
+		EndTime:   time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC),
+		Target:    domain.ResourceRef{Namespace: "prod", Name: "open-api", Service: "open-api"},
+		QueryType: domain.QueryTypeEvent,
+	}
+	result := &datasource.QueryResult{
+		Source:    "kubernetes-events",
+		QueryType: domain.QueryTypeEvent,
+		Records:   []map[string]any{{"reason": "BackOff", "message": strings.Repeat("container failed ", 200)}},
+	}
+
+	observation := normalizeObservations(result, req, 0, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))[0]
+
+	if !observation.Truncated || observation.Value.Event == nil || observation.Value.Event.Message != observation.Summary {
+		t.Fatalf("expected truncated event message to match compact summary, got %#v", observation)
+	}
+	if len(observation.Summary) > 1024 {
+		t.Fatalf("expected bounded event summary bytes, got %d", len(observation.Summary))
+	}
+}
+
 func TestServiceCollectEvidencePreservesDatasourceQueryReason(t *testing.T) {
 	service := &Service{
 		Registry: datasource.NewRegistry(

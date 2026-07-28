@@ -17,6 +17,7 @@ import (
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/canonicaldigest"
 	"fluxagent/internal/investigation"
+	"fluxagent/internal/statusbudget"
 	"fluxagent/internal/verifier"
 	"fluxagent/internal/version"
 )
@@ -106,12 +107,39 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 	}
 
+	applyInvestigationStatusBudget(&investigation, now())
 	if !reflect.DeepEqual(original.Status, investigation.Status) {
 		if err := r.Status().Update(ctx, &investigation); err != nil && !apierrors.IsConflict(err) {
 			return ctrl.Result{}, err
 		}
 	}
 	return ttlResult, nil
+}
+
+func applyInvestigationStatusBudget(request *v1alpha1.InvestigationRequest, now time.Time) {
+	if !statusbudget.EnforceInvestigationStatus(&request.Status) {
+		return
+	}
+	reason := v1alpha1.RCADegradationReason{
+		Code:    "StatusBudgetExceeded",
+		Stage:   v1alpha1.InvestigationStagePersistence,
+		Message: "investigation status exceeded compact metadata budget and was truncated",
+	}
+	if request.Status.Degradation == nil {
+		request.Status.Degradation = &v1alpha1.RCADegradation{Partial: true}
+	}
+	request.Status.Degradation.Partial = true
+	request.Status.Degradation.Reasons = appendDegradationReason(request.Status.Degradation.Reasons, reason)
+	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, reason.Code, reason.Message, request.Generation, now)
+}
+
+func appendDegradationReason(reasons []v1alpha1.RCADegradationReason, reason v1alpha1.RCADegradationReason) []v1alpha1.RCADegradationReason {
+	for _, existing := range reasons {
+		if existing.Code == reason.Code && existing.Stage == reason.Stage {
+			return reasons
+		}
+	}
+	return append(reasons, reason)
 }
 
 func (r *InvestigationRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {

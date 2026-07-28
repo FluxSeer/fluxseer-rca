@@ -349,6 +349,7 @@ Evidence provenance should preserve compact metadata even when raw payloads are 
 - redaction profile
 - truncation flag
 - original size
+- original and retained byte counts
 - retention policy
 
 The first verifier can be heuristic. It should check whether each claim cites evidence, whether the evidence type is relevant, whether contradictory evidence exists, and whether confidence is consistent with evidence coverage.

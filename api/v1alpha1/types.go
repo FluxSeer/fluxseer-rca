@@ -49,6 +49,8 @@ type EvidenceRef struct {
 	Truncated              bool         `json:"truncated,omitempty"`
 	OriginalCount          int32        `json:"originalCount,omitempty"`
 	RetainedCount          int32        `json:"retainedCount,omitempty"`
+	OriginalBytes          int32        `json:"originalBytes,omitempty"`
+	RetainedBytes          int32        `json:"retainedBytes,omitempty"`
 	CollectedAt            *metav1.Time `json:"collectedAt,omitempty"`
 	Reason                 string       `json:"reason,omitempty"`
 	Link                   string       `json:"link,omitempty"`
