@@ -8,7 +8,7 @@ Product positioning:
 Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
 ```
 
-Current release scope is narrower: `v0.2` focuses on read-only RCA workflows and is currently a beta candidate.
+Current release scope is narrower: `v0.2.0-beta.1` is a published prerelease focused on read-only RCA workflows.
 
 The current runnable default path is read-only detection: observe workload risk, create a `RiskSignal`, and notify without mutating the target workload.
 
@@ -37,7 +37,7 @@ FluxAgent treats dependencies in three separate categories:
 
 That distinction matters because the project goal is integration without structural lock-in.
 
-See [../product-requirements.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/product-requirements.md:1) for the product positioning, release-scope, CRD contract, graceful-degradation, evidence-storage, and release-freeze baseline.
+See [../product-requirements.md](../product-requirements.md) for the product positioning, release-scope, CRD contract, graceful-degradation, evidence-storage, and release-freeze baseline.
 
 ## High-level Architecture
 
@@ -81,7 +81,7 @@ Current adapters:
 
 This is the primary extensibility seam for observability integrations. The core detection path depends on the contract, not on provider-specific query code.
 
-See [dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1) for the staged direction toward capabilities, standardized query results, and future datasource resources.
+See [dependency-neutrality.md](dependency-neutrality.md) for the staged direction toward capabilities, standardized query results, and future datasource resources.
 
 ### 3. Detection Service Layer
 
@@ -509,4 +509,4 @@ It should not yet be described as:
 
 That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.
 
-The conservative release label is `v0.2 read-only RCA beta candidate`.
+The conservative release label is `v0.2.0-beta.1 read-only RCA beta`.

@@ -40,27 +40,27 @@ docs/
 
 ## Start Here
 
-- [architecture/overview.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/overview.md:1)
-- [architecture/dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1)
-- [architecture/read-only-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/read-only-flow.md:1)
-- [architecture/investigation-flow.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/investigation-flow.md:1)
-- [architecture/v0.2-read-only-rca.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.2-read-only-rca.md:1)
-- [architecture/v0.3-investigation-experience.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.3-investigation-experience.md:1)
-- [architecture/v0.2-adapter-neutral-backlog.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.2-adapter-neutral-backlog.md:1)
-- [product-requirements.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/product-requirements.md:1)
-- [competitive-positioning.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/competitive-positioning.md:1)
-- [helm-rulepacks.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/helm-rulepacks.md:1)
-- [release-checkpoint.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/release-checkpoint.md:1)
-- [backlog/v0.2-beta.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/backlog/v0.2-beta.md:1)
-- [backlog/v0.2-release-reproducibility.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/backlog/v0.2-release-reproducibility.md:1)
-- [backlog/v0.3-trustworthy-rca-contract.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/backlog/v0.3-trustworthy-rca-contract.md:1)
-- [releases/v0.2.0-beta.1.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-beta.1.md:1)
-- [releases/v0.2.0-beta.1-freeze.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-beta.1-freeze.md:1)
-- [releases/v0.2.0-alpha.2.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/releases/v0.2.0-alpha.2.md:1)
-- [tutorials/quickstart-kind.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/quickstart-kind.md:1)
-- [tutorials/investigate-workload.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/investigate-workload.md:1)
-- [tutorials/enable-hosted-model-providers.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/tutorials/enable-hosted-model-providers.md:1)
-- [github-repo.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/github-repo.md:1)
+- [architecture/overview.md](architecture/overview.md)
+- [architecture/dependency-neutrality.md](architecture/dependency-neutrality.md)
+- [architecture/read-only-flow.md](architecture/read-only-flow.md)
+- [architecture/investigation-flow.md](architecture/investigation-flow.md)
+- [architecture/v0.2-read-only-rca.md](architecture/v0.2-read-only-rca.md)
+- [architecture/v0.3-investigation-experience.md](architecture/v0.3-investigation-experience.md)
+- [architecture/v0.2-adapter-neutral-backlog.md](architecture/v0.2-adapter-neutral-backlog.md)
+- [product-requirements.md](product-requirements.md)
+- [competitive-positioning.md](competitive-positioning.md)
+- [helm-rulepacks.md](helm-rulepacks.md)
+- [release-checkpoint.md](release-checkpoint.md)
+- [backlog/v0.2-beta.md](backlog/v0.2-beta.md)
+- [backlog/v0.2-release-reproducibility.md](backlog/v0.2-release-reproducibility.md)
+- [backlog/v0.3-trustworthy-rca-contract.md](backlog/v0.3-trustworthy-rca-contract.md)
+- [releases/v0.2.0-beta.1.md](releases/v0.2.0-beta.1.md)
+- [releases/v0.2.0-beta.1-freeze.md](releases/v0.2.0-beta.1-freeze.md)
+- [releases/v0.2.0-alpha.2.md](releases/v0.2.0-alpha.2.md)
+- [tutorials/quickstart-kind.md](tutorials/quickstart-kind.md)
+- [tutorials/investigate-workload.md](tutorials/investigate-workload.md)
+- [tutorials/enable-hosted-model-providers.md](tutorials/enable-hosted-model-providers.md)
+- [github-repo.md](github-repo.md)
 
 ## Diagram Sources
 
@@ -73,7 +73,7 @@ docs/
 ## Current Product Truth
 
 - Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
-- Current release scope: `v0.2` focuses on read-only RCA workflows and is a verified beta candidate.
+- Current release scope: `v0.2.0-beta.1` is a published prerelease focused on read-only RCA workflows.
 - `RemediationPlan` and `AgentAction` remain guarded experimental expansion paths.
 - Hosted model integrations are limited to OpenAI API, Claude API, and Gemini API; heuristic remains the no-secret default.
 - Prometheus, Loki, and Kubernetes Events adapters are wired into the runnable demo path.
