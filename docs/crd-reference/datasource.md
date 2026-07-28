@@ -37,7 +37,9 @@ spec:
 - `spec.auth`: optional auth config
 - `spec.tls`: optional TLS overrides
 
-Datasource HTTP clients apply a network safety guard before registration and again for every redirect target. Metadata endpoints, loopback, link-local, unspecified IPs, and private IP endpoints without `allowedCIDRs` are denied. Cluster service hostnames ending in `.svc` or `.svc.cluster.local` are allowed by default. Environment proxy settings are disabled for datasource clients.
+Datasource HTTP clients apply a network safety guard before registration, for every redirect target, and when dialing resolved hostnames. Metadata endpoints, loopback, link-local, unspecified IPs, and private IP endpoints without `allowedCIDRs` are denied. Cluster service hostnames ending in `.svc` or `.svc.cluster.local` are allowed by default and may resolve to private ClusterIP addresses. Environment proxy settings are disabled for datasource clients.
+
+For HTTP datasources, FluxAgent resolves hostnames through a policy-aware dialer, validates all resolved A/AAAA addresses, and pins the TCP connection to a verified IP. This reduces DNS rebinding risk while keeping the original request hostname available to the HTTP transport.
 
 ## Current Behavior
 
