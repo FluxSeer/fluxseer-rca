@@ -52,8 +52,17 @@ type EvidenceRef struct {
 	OriginalBytes          int32        `json:"originalBytes,omitempty"`
 	RetainedBytes          int32        `json:"retainedBytes,omitempty"`
 	CollectedAt            *metav1.Time `json:"collectedAt,omitempty"`
+	PayloadRef             *PayloadRef  `json:"payloadRef,omitempty"`
 	Reason                 string       `json:"reason,omitempty"`
 	Link                   string       `json:"link,omitempty"`
+}
+
+type PayloadRef struct {
+	Scheme         string       `json:"scheme,omitempty"`
+	Digest         string       `json:"digest,omitempty"`
+	Encrypted      bool         `json:"encrypted,omitempty"`
+	ExpiresAt      *metav1.Time `json:"expiresAt,omitempty"`
+	RetentionClass string       `json:"retentionClass,omitempty"`
 }
 
 type FindingIdentity struct {
@@ -208,6 +217,13 @@ func deepcopyEvidenceRefs(in []EvidenceRef) []EvidenceRef {
 		if in[index].CollectedAt != nil {
 			collectedAt := in[index].CollectedAt.DeepCopy()
 			out[index].CollectedAt = collectedAt
+		}
+		if in[index].PayloadRef != nil {
+			payloadRef := *in[index].PayloadRef
+			if in[index].PayloadRef.ExpiresAt != nil {
+				payloadRef.ExpiresAt = in[index].PayloadRef.ExpiresAt.DeepCopy()
+			}
+			out[index].PayloadRef = &payloadRef
 		}
 	}
 	return out

@@ -439,6 +439,25 @@ func TestValidateInvestigationQueryBudgetRejectsQueryCounts(t *testing.T) {
 	}
 }
 
+func TestValidateEvidenceRetentionRejectsUnsupportedSnapshots(t *testing.T) {
+	if message := validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{}); message != "" {
+		t.Fatalf("expected empty retention policy to be accepted, got %q", message)
+	}
+	if message := validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{Mode: v1alpha1.EvidenceRetentionModeMetadataOnly}); message != "" {
+		t.Fatalf("expected MetadataOnly retention policy to be accepted, got %q", message)
+	}
+
+	message := validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{Mode: v1alpha1.EvidenceRetentionModeRawSnapshot})
+	if !strings.Contains(message, "RawSnapshot") || !strings.Contains(message, "not supported") {
+		t.Fatalf("expected RawSnapshot rejection, got %q", message)
+	}
+
+	message = validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{Mode: v1alpha1.EvidenceRetentionModeNormalizedSnapshot})
+	if !strings.Contains(message, "NormalizedSnapshot") || !strings.Contains(message, "not supported") {
+		t.Fatalf("expected NormalizedSnapshot rejection, got %q", message)
+	}
+}
+
 func TestProviderEgressAuditUsesFilteredMetadataOnly(t *testing.T) {
 	provider := &v1alpha1.ModelProvider{
 		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},

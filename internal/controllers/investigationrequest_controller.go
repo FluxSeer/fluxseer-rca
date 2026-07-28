@@ -399,6 +399,9 @@ func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) st
 	if len(spec.DataSources) == 0 && len(spec.Queries) == 0 {
 		return "spec.dataSources or spec.queries must include at least one datasource reference"
 	}
+	if message := validateEvidenceRetention(spec.EvidenceRetention); message != "" {
+		return message
+	}
 	if message := validateInvestigationQueryBudget(spec); message != "" {
 		return message
 	}
@@ -411,6 +414,21 @@ func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) st
 		}
 	}
 	return ""
+}
+
+func validateEvidenceRetention(policy v1alpha1.EvidenceRetentionPolicy) string {
+	mode := strings.TrimSpace(policy.Mode)
+	if mode == "" || mode == v1alpha1.EvidenceRetentionModeMetadataOnly {
+		return ""
+	}
+	switch mode {
+	case v1alpha1.EvidenceRetentionModeNormalizedSnapshot:
+		return "spec.evidenceRetention.mode=NormalizedSnapshot is defined by the API contract but external evidence snapshot storage is not supported in this release"
+	case v1alpha1.EvidenceRetentionModeRawSnapshot:
+		return "spec.evidenceRetention.mode=RawSnapshot requires explicit raw evidence retention support and is not supported in this release"
+	default:
+		return "unsupported evidence retention mode: " + mode
+	}
 }
 
 func validateInvestigationQueryBudget(spec v1alpha1.InvestigationRequestSpec) string {
