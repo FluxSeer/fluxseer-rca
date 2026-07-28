@@ -1,0 +1,44 @@
+{
+  "name": "malformed-partial-out-of-order",
+  "collectedAt": "2026-07-06T12:00:00Z",
+  "query": {
+    "query": "sum(rate(container_cpu_usage_seconds_total{namespace=\"prod\",pod=~\"checkout-.*\"}[5m]))",
+    "startTime": "2026-07-06T11:45:00Z",
+    "endTime": "2026-07-06T12:00:00Z",
+    "step": "1m",
+    "labels": {
+      "app": "checkout"
+    },
+    "target": {
+      "cluster": "homelab-test",
+      "namespace": "prod",
+      "kind": "Deployment",
+      "name": "checkout",
+      "apiVersion": "apps/v1",
+      "service": "checkout"
+    },
+    "queryType": "metric"
+  },
+  "result": {
+    "source": "prometheus",
+    "queryType": "metric",
+    "records": [
+      {
+        "metric": "container_cpu_usage_seconds_total",
+        "value": "3.00",
+        "timestamp": "2026-07-06T11:59:00Z"
+      },
+      {
+        "value": "not-a-number",
+        "timestamp": "2026-07-06T11:57:00Z"
+      },
+      {
+        "metric": "container_cpu_usage_seconds_total",
+        "value": {
+          "unexpected": "shape"
+        },
+        "timestamp": "2026-07-06T11:58:00Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "log-redaction-truncation",
+  "collectedAt": "2026-07-06T12:00:00Z",
+  "query": {
+    "query": "{namespace=\"prod\",app=\"checkout\"} |= \"error\"",
+    "startTime": "2026-07-06T11:45:00Z",
+    "endTime": "2026-07-06T12:00:00Z",
+    "step": "1m",
+    "labels": {
+      "app": "checkout"
+    },
+    "target": {
+      "cluster": "homelab-test",
+      "namespace": "prod",
+      "kind": "Deployment",
+      "name": "checkout",
+      "apiVersion": "apps/v1",
+      "service": "checkout"
+    },
+    "queryType": "log"
+  },
+  "result": {
+    "source": "loki",
+    "queryType": "log",
+    "records": [
+      {
+        "line": "checkout failed token=fixture-token-123 password=fixture-password"
+      },
+      {
+        "line": "checkout retry succeeded"
+      },
+      {
+        "line": "checkout timeout after 30s"
+      },
+      {
+        "line": "checkout upstream unavailable"
+      },
+      {
+        "line": "checkout pool exhausted"
+      },
+      {
+        "line": "checkout extra line should be truncated"
+      }
+    ]
+  }
+}

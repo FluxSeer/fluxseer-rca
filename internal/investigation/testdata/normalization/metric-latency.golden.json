@@ -1,0 +1,52 @@
+{
+  "observations": [
+    {
+      "id": "evidence-001",
+      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "dataSourceRef": "prometheus",
+      "capability": "metric",
+      "queryDigest": "sha256:f09a8782d4b74f28fcaabe8cf6bafdd26d8c945ed37cd0a0e492a7b7639adeae",
+      "timeRange": {
+        "start": "2026-07-06T11:45:00Z",
+        "end": "2026-07-06T12:00:00Z"
+      },
+      "type": "metric",
+      "value": {
+        "metric": {
+          "name": "http_request_duration_seconds_p95",
+          "value": 2.75
+        }
+      },
+      "summary": "metric http_request_duration_seconds_p95 returned value 2.75",
+      "contentDigest": "sha256:6ec48bb72eb74a0902f708b0fa91a1a6c58bc99b34fdb20a6006602b37426443",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "truncated": false,
+      "originalCount": 1,
+      "retainedCount": 1,
+      "originalBytes": 60,
+      "retainedBytes": 60,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    }
+  ],
+  "evidenceRefs": [
+    {
+      "id": "evidence-001",
+      "kind": "metric",
+      "source": "prometheus",
+      "summary": "metric http_request_duration_seconds_p95 returned value 2.75",
+      "query": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{namespace=\"prod\",app=\"checkout\"}[5m]))",
+      "queryDigest": "sha256:f09a8782d4b74f28fcaabe8cf6bafdd26d8c945ed37cd0a0e492a7b7639adeae",
+      "contentDigest": "sha256:6ec48bb72eb74a0902f708b0fa91a1a6c58bc99b34fdb20a6006602b37426443",
+      "digestAlgorithm": "sha256",
+      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "redactionProfile": "default-v1",
+      "originalCount": 1,
+      "retainedCount": 1,
+      "originalBytes": 60,
+      "retainedBytes": 60,
+      "collectedAt": "2026-07-06T12:00:00Z"
+    }
+  ]
+}
