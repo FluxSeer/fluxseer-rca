@@ -465,6 +465,12 @@ func validateInvestigationQueryBudget(spec v1alpha1.InvestigationRequestSpec) st
 	if budget.ResultLimits.Logs.MaxLines < 0 {
 		return "queryBudget.resultLimits.logs.maxLines must not be negative"
 	}
+	if budget.ResultLimits.Logs.MaxStreams < 0 {
+		return "queryBudget.resultLimits.logs.maxStreams must not be negative"
+	}
+	if budget.ResultLimits.Logs.MaxEntries < 0 {
+		return "queryBudget.resultLimits.logs.maxEntries must not be negative"
+	}
 	if budget.ResultLimits.Events.MaxRecords < 0 {
 		return "queryBudget.resultLimits.events.maxRecords must not be negative"
 	}
@@ -622,6 +628,10 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		}
 		applyStructuredRCAStatus(request, preflight, evidence, rca, now)
 	}
+	evidenceDegradation := evidenceNativeLimitDegradation(evidence)
+	if evidenceDegradation != nil {
+		request.Status.Degradation = evidenceDegradation
+	}
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
 	request.Status.Outcome = v1alpha1.InvestigationOutcomeConfirmed
@@ -629,7 +639,11 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseCompleted, request.Status.Summary, request.Generation, now)
 	rcametrics.RecordInvestigation(request.Namespace, providerType(preflight.Provider), request.Status.Outcome, rootCauseTypeForMetrics(request))
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
-	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request completed successfully without degradation", request.Generation, now)
+	if evidenceDegradation != nil {
+		setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, "NativeResultLimitExceeded", "evidence collection completed with bounded datasource result truncation", request.Generation, now)
+	} else {
+		setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request completed successfully without degradation", request.Generation, now)
+	}
 }
 
 func applyInvestigationFailure(request *v1alpha1.InvestigationRequest, code string, message string, stage string) {
@@ -689,6 +703,28 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
 	request.Status.Execution = buildRCAExecution(request, preflight, evidence, rca, investigationExecutionID(request, preflight, evidence), executionStateFinalized, now)
 	request.Status.Execution.VerifierVersion = verification.Method
+}
+
+func evidenceNativeLimitDegradation(evidence investigation.EvidenceCollectionResult) *v1alpha1.RCADegradation {
+	reasons := make([]v1alpha1.RCADegradationReason, 0)
+	for _, ref := range evidence.EvidenceRefs {
+		if ref.TruncationReason != "NativeResultLimitExceeded" {
+			continue
+		}
+		message := fmt.Sprintf("evidence %s was truncated by native %s limit", ref.ID, firstNonEmptyString(ref.LimitDimension, "result"))
+		reasons = append(reasons, v1alpha1.RCADegradationReason{
+			Code:    "NativeResultLimitExceeded",
+			Stage:   v1alpha1.InvestigationStageEvidenceCollection,
+			Message: message,
+		})
+	}
+	if len(reasons) == 0 {
+		return nil
+	}
+	return &v1alpha1.RCADegradation{
+		Partial: true,
+		Reasons: reasons,
+	}
 }
 
 func rootCauseTypeForMetrics(request *v1alpha1.InvestigationRequest) string {

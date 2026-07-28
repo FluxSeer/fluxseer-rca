@@ -64,6 +64,15 @@ func TestRecordQueryPolicyDecision(t *testing.T) {
 	}
 }
 
+func TestRecordQueryResultLimitExceeded(t *testing.T) {
+	before := testutil.ToFloat64(QueryResultLimitExceededTotal.WithLabelValues("prometheus", "samples"))
+	RecordQueryResultLimitExceeded("Prometheus", "Samples")
+	after := testutil.ToFloat64(QueryResultLimitExceededTotal.WithLabelValues("prometheus", "samples"))
+	if after != before+1 {
+		t.Fatalf("expected query result limit counter increment, before=%f after=%f", before, after)
+	}
+}
+
 func TestDatasourceSchedulerGauges(t *testing.T) {
 	queueBefore := testutil.ToFloat64(DatasourceQueryQueueDepth.WithLabelValues("investigation"))
 	inFlightBefore := testutil.ToFloat64(DatasourceQueriesInFlight.WithLabelValues("investigation"))

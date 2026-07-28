@@ -116,6 +116,9 @@ type Observation struct {
 	DigestCanonicalization string           `json:"digestCanonicalization"`
 	RedactionProfile       string           `json:"redactionProfile"`
 	Truncated              bool             `json:"truncated"`
+	TruncationReason       string           `json:"truncationReason,omitempty"`
+	LimitDimension         string           `json:"limitDimension,omitempty"`
+	Limit                  int64            `json:"limit,omitempty"`
 	OriginalCount          int              `json:"originalCount"`
 	RetainedCount          int              `json:"retainedCount"`
 	OriginalBytes          int              `json:"originalBytes"`

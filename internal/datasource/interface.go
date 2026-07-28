@@ -9,13 +9,14 @@ import (
 )
 
 type QueryRequest struct {
-	Query     string
-	StartTime time.Time
-	EndTime   time.Time
-	Step      time.Duration
-	Labels    map[string]string
-	Target    domain.ResourceRef
-	QueryType domain.QueryType
+	Query        string
+	StartTime    time.Time
+	EndTime      time.Time
+	Step         time.Duration
+	Labels       map[string]string
+	Target       domain.ResourceRef
+	QueryType    domain.QueryType
+	ResultLimits v1alpha1.QueryResultLimits
 }
 
 type QueryResult struct {
@@ -24,8 +25,30 @@ type QueryResult struct {
 	Summary             string
 	Records             []map[string]any
 	Truncated           bool
+	TruncationReason    string
+	LimitDimension      string
+	Limit               int64
 	OriginalRecordCount int
 	RetainedRecordCount int
+	NativeCounts        NativeResultCounts
+	NativeLimit         *NativeResultLimit
+}
+
+type NativeResultCounts struct {
+	ResultType string
+	Series     int
+	Samples    int
+	Streams    int
+	Entries    int
+	Records    int
+}
+
+type NativeResultLimit struct {
+	Reason        string
+	Dimension     string
+	Limit         int64
+	OriginalCount int64
+	RetainedCount int64
 }
 
 type Capabilities struct {

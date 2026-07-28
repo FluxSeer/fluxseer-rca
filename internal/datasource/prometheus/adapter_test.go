@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
 )
@@ -35,6 +36,93 @@ func TestAdapterQueryParsesPrometheusSeries(t *testing.T) {
 	}
 	if len(result.Records) != 1 {
 		t.Fatalf("expected one record, got %d", len(result.Records))
+	}
+	if result.NativeCounts.ResultType != "matrix" || result.NativeCounts.Series != 1 || result.NativeCounts.Samples != 1 {
+		t.Fatalf("expected native matrix counts, got %#v", result.NativeCounts)
+	}
+}
+
+func TestAdapterQueryEnforcesPrometheusNativeSeriesAndSampleLimits(t *testing.T) {
+	body := `{"status":"success","data":{"resultType":"matrix","result":[` +
+		`{"metric":{"__name__":"latency","pod":"a"},"values":[[1,"1"],[3,"3"],[2,"2"]]},` +
+		`{"metric":{"__name__":"latency","pod":"b"},"values":[[1,"4"],[2,"5"]]},` +
+		`{"metric":{"__name__":"latency","pod":"c"},"values":[[1,"6"]]}` +
+		`]}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	adapter := Adapter{BaseURL: server.URL}
+	result, err := adapter.Query(context.Background(), datasource.QueryRequest{
+		Query:     "latency",
+		StartTime: time.Now().Add(-time.Minute),
+		EndTime:   time.Now(),
+		Target:    domain.ResourceRef{Name: "demo"},
+		QueryType: domain.QueryTypeMetric,
+		ResultLimits: v1alpha1.QueryResultLimits{
+			Metrics: v1alpha1.MetricResultLimits{MaxSeries: 2, MaxSamples: 4},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Records) != 2 {
+		t.Fatalf("expected two retained records, got %d", len(result.Records))
+	}
+	if result.NativeCounts.Series != 3 || result.NativeCounts.Samples != 6 {
+		t.Fatalf("expected original native counts, got %#v", result.NativeCounts)
+	}
+	if result.NativeLimit == nil || result.NativeLimit.Dimension != "series" || result.NativeLimit.OriginalCount != 3 || result.NativeLimit.RetainedCount != 2 {
+		t.Fatalf("expected series native limit metadata, got %#v", result.NativeLimit)
+	}
+	if result.Records[0]["value"] != "3" || result.Records[1]["value"] != "4" {
+		t.Fatalf("expected deterministic retained sample values, got %#v", result.Records)
+	}
+}
+
+func TestAdapterQueryCountsPrometheusVectorAndScalarResults(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantSeries int
+		wantSample int
+	}{
+		{
+			name:       "vector",
+			body:       `{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"up"},"value":[1,"1"]},{"metric":{"__name__":"up"},"value":[1,"0"]}]}}`,
+			wantSeries: 2,
+			wantSample: 2,
+		},
+		{
+			name:       "scalar",
+			body:       `{"status":"success","data":{"resultType":"scalar","result":[1,"42"]}}`,
+			wantSeries: 1,
+			wantSample: 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+
+			adapter := Adapter{BaseURL: server.URL}
+			result, err := adapter.Query(context.Background(), datasource.QueryRequest{
+				Query:     "demo",
+				StartTime: time.Now().Add(-time.Minute),
+				EndTime:   time.Now(),
+				Target:    domain.ResourceRef{Name: "demo"},
+				QueryType: domain.QueryTypeMetric,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.NativeCounts.Series != tt.wantSeries || result.NativeCounts.Samples != tt.wantSample {
+				t.Fatalf("expected native counts series=%d samples=%d, got %#v", tt.wantSeries, tt.wantSample, result.NativeCounts)
+			}
+		})
 	}
 }
 

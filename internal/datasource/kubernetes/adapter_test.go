@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
 )
@@ -42,6 +43,60 @@ func TestAdapterQueryFiltersEventsByTarget(t *testing.T) {
 	}
 	if len(result.Records) != 1 {
 		t.Fatalf("expected one record, got %d", len(result.Records))
+	}
+	if result.NativeCounts.Records != 1 {
+		t.Fatalf("expected native event count, got %#v", result.NativeCounts)
+	}
+}
+
+func TestAdapterQueryEnforcesKubernetesNativeEventRecordLimit(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add scheme: %v", err)
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{Name: "event-2", Namespace: "demo"},
+			InvolvedObject: corev1.ObjectReference{
+				Kind: "Pod",
+				Name: "demo-app-2",
+			},
+			Reason:        "BackOff",
+			Message:       "second",
+			LastTimestamp: metav1.Unix(20, 0),
+		},
+		&corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{Name: "event-1", Namespace: "demo"},
+			InvolvedObject: corev1.ObjectReference{
+				Kind: "Pod",
+				Name: "demo-app-1",
+			},
+			Reason:        "Failed",
+			Message:       "first",
+			LastTimestamp: metav1.Unix(10, 0),
+		},
+	).Build()
+
+	adapter := Adapter{Client: client}
+	result, err := adapter.Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "demo-app"},
+		QueryType: domain.QueryTypeEvent,
+		ResultLimits: v1alpha1.QueryResultLimits{
+			Events: v1alpha1.EventResultLimits{MaxRecords: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.NativeCounts.Records != 2 {
+		t.Fatalf("expected original native record count, got %#v", result.NativeCounts)
+	}
+	if len(result.Records) != 1 || result.Records[0]["message"] != "first" {
+		t.Fatalf("expected earliest retained event, got %#v", result.Records)
+	}
+	if result.NativeLimit == nil || result.NativeLimit.Dimension != "records" || result.NativeLimit.OriginalCount != 2 || result.NativeLimit.RetainedCount != 1 {
+		t.Fatalf("expected native record limit metadata, got %#v", result.NativeLimit)
 	}
 }
 

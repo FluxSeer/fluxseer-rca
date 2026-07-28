@@ -500,6 +500,20 @@ func TestValidateInvestigationQueryBudgetRejectsNegativeValues(t *testing.T) {
 			want: "queryBudget.resultLimits.logs.maxLines must not be negative",
 		},
 		{
+			name: "logsMaxStreams",
+			budget: v1alpha1.InvestigationQueryBudget{ResultLimits: v1alpha1.QueryResultLimits{
+				Logs: v1alpha1.LogResultLimits{MaxStreams: -1},
+			}},
+			want: "queryBudget.resultLimits.logs.maxStreams must not be negative",
+		},
+		{
+			name: "logsMaxEntries",
+			budget: v1alpha1.InvestigationQueryBudget{ResultLimits: v1alpha1.QueryResultLimits{
+				Logs: v1alpha1.LogResultLimits{MaxEntries: -1},
+			}},
+			want: "queryBudget.resultLimits.logs.maxEntries must not be negative",
+		},
+		{
 			name: "eventsMaxRecords",
 			budget: v1alpha1.InvestigationQueryBudget{ResultLimits: v1alpha1.QueryResultLimits{
 				Events: v1alpha1.EventResultLimits{MaxRecords: -1},
@@ -705,6 +719,29 @@ func TestInvestigationRequestReconcilerMarksInconclusiveWhenRequiredEvidenceMiss
 	}
 	if counter.calls != 0 {
 		t.Fatalf("expected provider not to be called when required evidence is missing, got %d", counter.calls)
+	}
+}
+
+func TestEvidenceNativeLimitDegradation(t *testing.T) {
+	degradation := evidenceNativeLimitDegradation(investigation.EvidenceCollectionResult{
+		EvidenceRefs: []v1alpha1.EvidenceRef{
+			{
+				ID:               "evidence-001",
+				Truncated:        true,
+				TruncationReason: "NativeResultLimitExceeded",
+				LimitDimension:   "samples",
+				Limit:            20000,
+				OriginalCount:    75321,
+				RetainedCount:    20000,
+			},
+		},
+	})
+	if degradation == nil || !degradation.Partial || len(degradation.Reasons) != 1 {
+		t.Fatalf("expected partial native limit degradation, got %#v", degradation)
+	}
+	reason := degradation.Reasons[0]
+	if reason.Code != "NativeResultLimitExceeded" || reason.Stage != v1alpha1.InvestigationStageEvidenceCollection || !strings.Contains(reason.Message, "samples") {
+		t.Fatalf("expected native limit degradation reason, got %#v", reason)
 	}
 }
 

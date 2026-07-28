@@ -16,6 +16,7 @@ var AllowedLabels = map[string][]string{
 	"fluxagent_evidence_truncated_total":          {"kind", "reason"},
 	"fluxagent_claim_verification_total":          {"verification_status"},
 	"fluxagent_query_policy_decisions_total":      {"backend", "decision", "reason"},
+	"fluxagent_query_result_limit_exceeded_total": {"backend_type", "dimension"},
 	"fluxagent_datasource_query_queue_depth":      {"scheduler"},
 	"fluxagent_datasource_queries_in_flight":      {"scheduler"},
 	"fluxagent_deduplication_hits_total":          {"source"},
@@ -86,6 +87,13 @@ var (
 		},
 		AllowedLabels["fluxagent_query_policy_decisions_total"],
 	)
+	QueryResultLimitExceededTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fluxagent_query_result_limit_exceeded_total",
+			Help: "Total FluxAgent datasource query result native limit exceedances by backend type and dimension.",
+		},
+		AllowedLabels["fluxagent_query_result_limit_exceeded_total"],
+	)
 	DatasourceQueryQueueDepth = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "fluxagent_datasource_query_queue_depth",
@@ -132,6 +140,7 @@ func init() {
 		EvidenceTruncatedTotal,
 		ClaimVerificationTotal,
 		QueryPolicyDecisionsTotal,
+		QueryResultLimitExceededTotal,
 		DatasourceQueryQueueDepth,
 		DatasourceQueriesInFlight,
 		DeduplicationHitsTotal,
@@ -171,6 +180,10 @@ func RecordClaimVerification(status string) {
 
 func RecordQueryPolicyDecision(backend string, decision string, reason string) {
 	QueryPolicyDecisionsTotal.WithLabelValues(normalizeLabel(backend, "unknown"), normalizeLabel(decision, "unknown"), normalizeReason(reason)).Inc()
+}
+
+func RecordQueryResultLimitExceeded(backendType string, dimension string) {
+	QueryResultLimitExceededTotal.WithLabelValues(normalizeLabel(backendType, "unknown"), normalizeLabel(dimension, "unknown")).Inc()
 }
 
 func AddDatasourceQueryQueueDepth(scheduler string, delta float64) {
