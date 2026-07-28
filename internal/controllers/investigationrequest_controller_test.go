@@ -479,6 +479,93 @@ func TestInvestigationRequestReconcilerEnforcesInvestigationDepthLimit(t *testin
 	}
 }
 
+func TestInvestigationRequestReconcilerMarksInconclusiveWhenRequiredEvidenceMissing(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	request := evidenceRequirementTestRequest("latency-missing-metric", "LatencyRegression", "kubernetes-events")
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
+	}
+	counter := &countingModelProvider{}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, evidenceRequirementDeployment(), provider).
+		Build()
+	reconciler := evidenceRequirementTestReconciler(client, scheme, counter, fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent})
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseCompleted || stored.Status.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
+		t.Fatalf("expected completed inconclusive status, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if stored.Status.Failure != nil {
+		t.Fatalf("expected no workflow failure for evidence-gated inconclusive status, got %#v", stored.Status.Failure)
+	}
+	if len(stored.Status.MissingEvidence) != 1 || stored.Status.MissingEvidence[0].Source != string(domain.QueryTypeMetric) {
+		t.Fatalf("expected missing metric evidence, got %#v", stored.Status.MissingEvidence)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RequiredEvidenceMissing" {
+		t.Fatalf("expected EvidenceCollectionReady false RequiredEvidenceMissing, got %#v", cond)
+	}
+	if counter.calls != 0 {
+		t.Fatalf("expected provider not to be called when required evidence is missing, got %d", counter.calls)
+	}
+}
+
+func TestInvestigationRequestReconcilerAllowsImagePullBackOffWhenEventEvidencePresent(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	request := evidenceRequirementTestRequest("imagepull-event-present", "ImagePullBackOff", "kubernetes-events")
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
+	}
+	counter := &countingModelProvider{}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, evidenceRequirementDeployment(), provider).
+		Build()
+	reconciler := evidenceRequirementTestReconciler(client, scheme, counter, fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent})
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseCompleted || stored.Status.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
+		t.Fatalf("expected completed confirmed status, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if counter.calls != 1 {
+		t.Fatalf("expected provider to be called once when required evidence is complete, got %d", counter.calls)
+	}
+}
+
 func TestInvestigationRequestReconcilerReusesProviderCompletedCheckpoint(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
@@ -1019,6 +1106,54 @@ func loopPolicyTestReconciler(kubeClient client.Client, scheme *runtime.Scheme, 
 			},
 		},
 		Now: func() time.Time { return time.Date(2026, 7, 6, 10, 45, 0, 0, time.UTC) },
+	}
+}
+
+func evidenceRequirementTestRequest(name string, profile string, datasourceName string) *v1alpha1.InvestigationRequest {
+	return &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "Deployment",
+				Name:       "open-api",
+				APIVersion: "apps/v1",
+			},
+			DataSources: []v1alpha1.LocalObjectReference{{Name: datasourceName}},
+			ModelProviderRef: v1alpha1.LocalObjectReference{
+				Name: "counting-provider",
+			},
+			Mode: v1alpha1.InvestigationModeReadOnly,
+			EvidenceRequirements: v1alpha1.EvidenceRequirements{
+				Profile: profile,
+			},
+		},
+	}
+}
+
+func evidenceRequirementDeployment() *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
+	}
+}
+
+func evidenceRequirementTestReconciler(kubeClient client.Client, scheme *runtime.Scheme, provider *countingModelProvider, sources ...datasource.DataSource) *InvestigationRequestReconciler {
+	return &InvestigationRequestReconciler{
+		Client: kubeClient,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client:   kubeClient,
+			Registry: datasource.NewRegistry(sources...),
+			Resolver: modelgateway.KubeResolver{Client: kubeClient},
+			Gateway: &modelgateway.Gateway{
+				Base: knowledge.NewBase(),
+				Providers: model.NewRegistry(
+					provider,
+				),
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 7, 6, 11, 0, 0, 0, time.UTC) },
 	}
 }
 
