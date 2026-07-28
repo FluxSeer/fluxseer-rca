@@ -14,12 +14,19 @@ type DataSourceTLSSpec struct {
 	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
 }
 
+type DataSourceNetworkPolicy struct {
+	AllowedHosts []string `json:"allowedHosts,omitempty"`
+	AllowedCIDRs []string `json:"allowedCIDRs,omitempty"`
+	DeniedCIDRs  []string `json:"deniedCIDRs,omitempty"`
+}
+
 type DataSourceSpec struct {
-	Type     string              `json:"type"`
-	Endpoint string              `json:"endpoint,omitempty"`
-	Timeout  metav1.Duration     `json:"timeout,omitempty"`
-	Auth     *DataSourceAuthSpec `json:"auth,omitempty"`
-	TLS      *DataSourceTLSSpec  `json:"tls,omitempty"`
+	Type          string                  `json:"type"`
+	Endpoint      string                  `json:"endpoint,omitempty"`
+	Timeout       metav1.Duration         `json:"timeout,omitempty"`
+	NetworkPolicy DataSourceNetworkPolicy `json:"networkPolicy,omitempty"`
+	Auth          *DataSourceAuthSpec     `json:"auth,omitempty"`
+	TLS           *DataSourceTLSSpec      `json:"tls,omitempty"`
 }
 
 type DataSourceStatus struct {
@@ -55,6 +62,15 @@ func (in *DataSource) DeepCopyInto(out *DataSource) {
 	if in.Spec.TLS != nil {
 		tls := *in.Spec.TLS
 		out.Spec.TLS = &tls
+	}
+	if in.Spec.NetworkPolicy.AllowedHosts != nil {
+		out.Spec.NetworkPolicy.AllowedHosts = append([]string(nil), in.Spec.NetworkPolicy.AllowedHosts...)
+	}
+	if in.Spec.NetworkPolicy.AllowedCIDRs != nil {
+		out.Spec.NetworkPolicy.AllowedCIDRs = append([]string(nil), in.Spec.NetworkPolicy.AllowedCIDRs...)
+	}
+	if in.Spec.NetworkPolicy.DeniedCIDRs != nil {
+		out.Spec.NetworkPolicy.DeniedCIDRs = append([]string(nil), in.Spec.NetworkPolicy.DeniedCIDRs...)
 	}
 	if in.Status.Conditions != nil {
 		out.Status.Conditions = make([]metav1.Condition, len(in.Status.Conditions))
