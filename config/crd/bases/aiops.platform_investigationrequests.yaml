@@ -285,6 +285,68 @@ spec:
                     outputTokens:
                       type: integer
                       format: int64
+                    providerResult:
+                      type: object
+                      properties:
+                        schemaVersion:
+                          type: string
+                        digest:
+                          type: object
+                          properties:
+                            algorithm:
+                              type: string
+                            canonicalization:
+                              type: string
+                            value:
+                              type: string
+                        normalizedResult:
+                          type: object
+                          properties:
+                            riskTitle:
+                              type: string
+                            riskSummary:
+                              type: string
+                            severity:
+                              type: string
+                            confidenceScore:
+                              type: integer
+                              format: int32
+                            confidenceReason:
+                              type: string
+                            evidenceCoverage:
+                              type: string
+                            rcaHypothesis:
+                              type: string
+                            rcaCauses:
+                              type: array
+                              items:
+                                type: string
+                            rcaEvidence:
+                              type: array
+                              items:
+                                type: string
+                            actionType:
+                              type: string
+                            actionDescription:
+                              type: string
+                            actionParameters:
+                              type: object
+                              additionalProperties:
+                                type: string
+                            rollbackPlan:
+                              type: array
+                              items:
+                                type: string
+                            runbookRefs:
+                              type: array
+                              items:
+                                type: string
+                            serviceDocs:
+                              type: array
+                              items:
+                                type: string
+                            provider:
+                              type: string
                 startedAt:
                   type: string
                   format: date-time
