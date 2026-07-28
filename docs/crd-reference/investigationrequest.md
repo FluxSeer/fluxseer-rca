@@ -135,6 +135,9 @@ Query field behavior:
 - `queryBudget.maxTimeRange`: maximum allowed `timeRange.lookback` before query execution starts
 - `queryBudget.maxQueriesTotal`: maximum total datasource queries for this investigation
 - `queryBudget.maxQueriesPerSource`: maximum queries referencing the same datasource
+- `queryBudget.maxConcurrentQueries`: maximum active datasource queries allowed for this investigation. The current collector is sequential, so values of `1` or higher are accepted.
+- `queryBudget.maxCumulativeDuration`: maximum cumulative datasource query runtime before evidence collection stops
+- `queryBudget.maxCumulativeResponseBytes`: maximum cumulative datasource response payload size before evidence collection stops
 - `loopPolicy.maxDepth`: maximum allowed lineage depth before execution is blocked; default is `1`
 - `loopPolicy.allowRiskSignalSource`: opt-in escape hatch for investigations sourced from `RiskSignal`; default is `false`
 
@@ -144,7 +147,7 @@ When an evidence requirements profile is configured, FluxAgent checks required e
 
 External evidence storage is disabled by default. FluxAgent currently accepts only the default `MetadataOnly` retention behavior. `NormalizedSnapshot` and `RawSnapshot` are reserved contract values and are rejected by validation until a secure external evidence storage adapter is implemented.
 
-When `queryBudget` is configured, FluxAgent rejects excessive lookback windows or query counts during validation before contacting datasources.
+When `queryBudget` is configured, FluxAgent rejects invalid limits, excessive lookback windows, or excessive query counts during validation before contacting datasources. It also stops evidence collection when cumulative datasource duration or response-byte limits are exceeded.
 
 ### Mode Contract
 

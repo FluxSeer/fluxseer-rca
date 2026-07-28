@@ -2,6 +2,7 @@ package investigation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -137,6 +138,9 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 	evidenceRefs := make([]v1alpha1.EvidenceRef, 0, len(preflight.CollectionPlan))
 	observations := make([]domain.Observation, 0, len(preflight.CollectionPlan))
 	totalRecords := 0
+	var cumulativeDuration time.Duration
+	var cumulativeResponseBytes int64
+	var activeQueries int32
 	for _, step := range preflight.CollectionPlan {
 		source, ok := s.Registry.Get(step.DatasourceName)
 		if !ok {
@@ -156,19 +160,45 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 			QueryType: step.QueryType,
 		}
 
+		activeQueries++
+		if maxConcurrentQueries := spec.QueryBudget.MaxConcurrentQueries; maxConcurrentQueries > 0 && activeQueries > maxConcurrentQueries {
+			result.Issue = &Issue{
+				Reason:  "QueryBudgetExceeded",
+				Message: fmt.Sprintf("active datasource query count %d exceeds queryBudget.maxConcurrentQueries %d", activeQueries, maxConcurrentQueries),
+			}
+			return result, nil
+		}
 		queryStart := time.Now()
 		queryResult, err := source.Query(ctx, queryRequest)
+		queryDuration := time.Since(queryStart)
+		activeQueries--
 		queryResultLabel := "success"
 		if err != nil {
 			queryResultLabel = datasource.QueryErrorReason(err, "failed")
-			rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, time.Since(queryStart))
+			rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, queryDuration)
 			result.Issue = &Issue{
 				Reason:  datasource.QueryErrorReason(err, "DatasourceQueryFailed"),
 				Message: fmt.Sprintf("query datasource %q failed: %v", step.DatasourceName, err),
 			}
 			return result, nil
 		}
-		rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, time.Since(queryStart))
+		rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, queryDuration)
+		cumulativeDuration += queryDuration
+		if maxDuration := spec.QueryBudget.MaxCumulativeDuration.Duration; maxDuration > 0 && cumulativeDuration > maxDuration {
+			result.Issue = &Issue{
+				Reason:  "QueryBudgetExceeded",
+				Message: fmt.Sprintf("datasource query cumulative duration %s exceeds queryBudget.maxCumulativeDuration %s", cumulativeDuration, maxDuration),
+			}
+			return result, nil
+		}
+		cumulativeResponseBytes += queryResultResponseBytes(queryResult)
+		if maxBytes := spec.QueryBudget.MaxCumulativeResponseBytes; maxBytes > 0 && cumulativeResponseBytes > maxBytes {
+			result.Issue = &Issue{
+				Reason:  "QueryBudgetExceeded",
+				Message: fmt.Sprintf("datasource query cumulative response bytes %d exceeds queryBudget.maxCumulativeResponseBytes %d", cumulativeResponseBytes, maxBytes),
+			}
+			return result, nil
+		}
 		filtered := filterQueryResult(queryResult, step)
 		normalized := normalizeObservations(filtered, queryRequest, len(observations), now)
 		for _, observation := range normalized {
@@ -185,6 +215,17 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 	result.Observations = observations
 	result.Summary = fmt.Sprintf("collected %d evidence records from %d investigation queries", totalRecords, len(preflight.CollectionPlan))
 	return result, nil
+}
+
+func queryResultResponseBytes(result *datasource.QueryResult) int64 {
+	if result == nil {
+		return 0
+	}
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return 0
+	}
+	return int64(len(payload))
 }
 
 func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRequestSpec, preflight PreflightResult, evidenceResult EvidenceCollectionResult, now time.Time) (RCAResult, error) {
