@@ -19,6 +19,7 @@ import (
 	"fluxagent/internal/domain"
 	evidencepkg "fluxagent/internal/evidence"
 	"fluxagent/internal/modelgateway"
+	"fluxagent/internal/rcametrics"
 	"fluxagent/internal/rule"
 	"fluxagent/internal/statusbudget"
 )
@@ -155,16 +156,26 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 			QueryType: step.QueryType,
 		}
 
+		queryStart := time.Now()
 		queryResult, err := source.Query(ctx, queryRequest)
+		queryResultLabel := "success"
 		if err != nil {
+			queryResultLabel = datasource.QueryErrorReason(err, "failed")
+			rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, time.Since(queryStart))
 			result.Issue = &Issue{
 				Reason:  datasource.QueryErrorReason(err, "DatasourceQueryFailed"),
 				Message: fmt.Sprintf("query datasource %q failed: %v", step.DatasourceName, err),
 			}
 			return result, nil
 		}
+		rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, time.Since(queryStart))
 		filtered := filterQueryResult(queryResult, step)
 		normalized := normalizeObservations(filtered, queryRequest, len(observations), now)
+		for _, observation := range normalized {
+			if observation.Truncated {
+				rcametrics.RecordEvidenceTruncated(string(observation.Type))
+			}
+		}
 		observations = append(observations, normalized...)
 		evidenceRefs = append(evidenceRefs, evidenceRefsFromObservations(normalized, queryRequest)...)
 		totalRecords += len(filtered.Records)
@@ -207,19 +218,34 @@ func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRe
 		return result, nil
 	}
 
+	providerType := modelProviderType(preflight.Provider)
 	reasoning, err := s.Gateway.AnalyzeIngestion(ctx, preflight.Provider, buildInvestigationIngestionOutput(spec, preflight, filteredEvidence, now))
 	if err != nil {
+		resultLabel := "failed"
 		if analyzeErr, ok := err.(*modelgateway.AnalyzeError); ok {
+			resultLabel = analyzeErr.Reason
+			rcametrics.RecordProviderRequest(providerType, resultLabel)
+			rcametrics.RecordProviderFailure(providerType, analyzeErr.Reason)
 			result.Issue = &Issue{
 				Reason:  analyzeErr.Reason,
 				Message: analyzeErr.Message,
 			}
 			return result, nil
 		}
+		rcametrics.RecordProviderRequest(providerType, resultLabel)
+		rcametrics.RecordProviderFailure(providerType, "ProviderRequestFailed")
 		return result, err
 	}
+	rcametrics.RecordProviderRequest(providerType, "success")
 	result.Reasoning = &reasoning
 	return result, nil
+}
+
+func modelProviderType(provider *v1alpha1.ModelProvider) string {
+	if provider == nil {
+		return "heuristic"
+	}
+	return provider.Spec.Provider
 }
 
 func applyProviderDataPolicy(provider *v1alpha1.ModelProvider, evidenceResult EvidenceCollectionResult) (EvidenceCollectionResult, *Issue) {
