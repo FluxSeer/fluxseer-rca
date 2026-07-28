@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -298,6 +299,66 @@ func TestServiceCollectEvidenceRejectsCumulativeDurationBudget(t *testing.T) {
 	}
 	if len(result.Observations) != 0 || len(result.EvidenceRefs) != 0 {
 		t.Fatalf("expected no retained evidence after budget rejection, got observations=%#v refs=%#v", result.Observations, result.EvidenceRefs)
+	}
+}
+
+func TestServiceCollectEvidenceEnforcesMaxConcurrentQueries(t *testing.T) {
+	blocking := newBlockingDataSource("loki", domain.QueryTypeLog)
+	defer blocking.release()
+	service := &Service{
+		Registry: datasource.NewRegistry(blocking),
+	}
+	done := make(chan EvidenceCollectionResult, 1)
+	errs := make(chan error, 1)
+
+	go func() {
+		result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+			TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 15 * time.Minute}},
+			QueryBudget: v1alpha1.InvestigationQueryBudget{
+				MaxConcurrentQueries: 2,
+			},
+		}, PreflightResult{
+			Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+			Labels: map[string]string{"app": "open-api"},
+			CollectionPlan: []CollectionStep{
+				{Name: "first", DatasourceName: "loki", QueryType: domain.QueryTypeLog, Query: "first"},
+				{Name: "second", DatasourceName: "loki", QueryType: domain.QueryTypeLog, Query: "second"},
+				{Name: "third", DatasourceName: "loki", QueryType: domain.QueryTypeLog, Query: "third"},
+			},
+		}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+		if err != nil {
+			errs <- err
+			return
+		}
+		done <- result
+	}()
+
+	blocking.waitForStarted(t, 2)
+	blocking.assertNoAdditionalStart(t)
+	blocking.release()
+
+	select {
+	case err := <-errs:
+		t.Fatalf("collect evidence failed: %v", err)
+	case result := <-done:
+		if result.Issue != nil {
+			t.Fatalf("expected no issue, got %#v", result.Issue)
+		}
+		if blocking.maxActive() != 2 {
+			t.Fatalf("expected max active queries 2, got %d", blocking.maxActive())
+		}
+		if len(result.Observations) != 3 {
+			t.Fatalf("expected three observations, got %#v", result.Observations)
+		}
+		got := []string{result.Observations[0].Summary, result.Observations[1].Summary, result.Observations[2].Summary}
+		want := []string{"first", "second", "third"}
+		for index := range want {
+			if got[index] != want[index] {
+				t.Fatalf("expected deterministic observation order %#v, got %#v", want, got)
+			}
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for evidence collection")
 	}
 }
 
@@ -810,6 +871,95 @@ func (f fakeDataSource) Query(context.Context, datasource.QueryRequest) (*dataso
 }
 
 func (f fakeDataSource) HealthCheck(context.Context) error { return nil }
+
+type blockingDataSource struct {
+	name      string
+	queryType domain.QueryType
+	started   chan string
+	releaseCh chan struct{}
+	once      sync.Once
+	mu        sync.Mutex
+	active    int
+	max       int
+}
+
+func newBlockingDataSource(name string, queryType domain.QueryType) *blockingDataSource {
+	return &blockingDataSource{
+		name:      name,
+		queryType: queryType,
+		started:   make(chan string, 8),
+		releaseCh: make(chan struct{}),
+	}
+}
+
+func (b *blockingDataSource) Name() string { return b.name }
+
+func (b *blockingDataSource) Type() string { return string(b.queryType) }
+
+func (b *blockingDataSource) Capabilities() datasource.Capabilities {
+	return datasource.Capabilities{Logs: b.queryType == domain.QueryTypeLog}
+}
+
+func (b *blockingDataSource) Query(ctx context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {
+	b.mu.Lock()
+	b.active++
+	if b.active > b.max {
+		b.max = b.active
+	}
+	b.mu.Unlock()
+	b.started <- req.Query
+	defer func() {
+		b.mu.Lock()
+		b.active--
+		b.mu.Unlock()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-b.releaseCh:
+	}
+	return &datasource.QueryResult{
+		Source:    b.name,
+		QueryType: b.queryType,
+		Records:   []map[string]any{{"line": req.Query}},
+		Summary:   req.Query,
+	}, nil
+}
+
+func (b *blockingDataSource) HealthCheck(context.Context) error { return nil }
+
+func (b *blockingDataSource) waitForStarted(t *testing.T, count int) {
+	t.Helper()
+	for index := 0; index < count; index++ {
+		select {
+		case <-b.started:
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for query %d to start", index+1)
+		}
+	}
+}
+
+func (b *blockingDataSource) assertNoAdditionalStart(t *testing.T) {
+	t.Helper()
+	select {
+	case query := <-b.started:
+		t.Fatalf("expected scheduler to hold additional queries, but %q started", query)
+	case <-time.After(25 * time.Millisecond):
+	}
+}
+
+func (b *blockingDataSource) release() {
+	b.once.Do(func() {
+		close(b.releaseCh)
+	})
+}
+
+func (b *blockingDataSource) maxActive() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.max
+}
 
 type capturingDataSource struct {
 	name      string
