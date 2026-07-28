@@ -114,6 +114,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 		executionID := investigationExecutionID(&investigation, preflight, evidence)
 		rca := emptyRCAResult()
 		if providerResult := reusableProviderResult(original.Status.Execution, executionID); providerResult != nil {
+			rcametrics.RecordDeduplicationHit("provider_checkpoint")
 			rca.Reasoning = reasoningFromProviderResult(providerResult)
 		} else {
 			generatedRCA, rcaErr := r.generateRCA(ctx, &investigation, preflight, evidence, now())

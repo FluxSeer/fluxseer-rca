@@ -151,6 +151,10 @@ func RecordClaimVerification(status string) {
 	ClaimVerificationTotal.WithLabelValues(normalizeLabel(status, "unknown")).Inc()
 }
 
+func RecordDeduplicationHit(source string) {
+	DeduplicationHitsTotal.WithLabelValues(normalizeLabel(source, "unknown")).Inc()
+}
+
 func RecordLoopPrevention(reason string) {
 	LoopPreventionTotal.WithLabelValues(normalizeReason(reason)).Inc()
 }
