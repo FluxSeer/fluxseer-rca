@@ -88,6 +88,17 @@ spec:
                   properties:
                     profile:
                       type: string
+                queryBudget:
+                  type: object
+                  properties:
+                    maxTimeRange:
+                      type: string
+                    maxQueriesTotal:
+                      type: integer
+                      format: int32
+                    maxQueriesPerSource:
+                      type: integer
+                      format: int32
                 loopPolicy:
                   type: object
                   properties:

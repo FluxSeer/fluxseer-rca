@@ -46,21 +46,28 @@ type InvestigationQuery struct {
 }
 
 type InvestigationRequestSpec struct {
-	Target               TargetRef               `json:"target"`
-	TimeRange            InvestigationTimeRange  `json:"timeRange,omitempty"`
-	Question             string                  `json:"question,omitempty"`
-	DataSources          []LocalObjectReference  `json:"dataSources,omitempty"`
-	Queries              []InvestigationQuery    `json:"queries,omitempty"`
-	ModelProviderRef     LocalObjectReference    `json:"modelProviderRef,omitempty"`
-	Mode                 string                  `json:"mode,omitempty"`
-	CreateRiskSignal     bool                    `json:"createRiskSignal,omitempty"`
-	EvidenceRequirements EvidenceRequirements    `json:"evidenceRequirements,omitempty"`
-	LoopPolicy           InvestigationLoopPolicy `json:"loopPolicy,omitempty"`
-	TTLSeconds           int64                   `json:"ttlSeconds,omitempty"`
+	Target               TargetRef                `json:"target"`
+	TimeRange            InvestigationTimeRange   `json:"timeRange,omitempty"`
+	Question             string                   `json:"question,omitempty"`
+	DataSources          []LocalObjectReference   `json:"dataSources,omitempty"`
+	Queries              []InvestigationQuery     `json:"queries,omitempty"`
+	ModelProviderRef     LocalObjectReference     `json:"modelProviderRef,omitempty"`
+	Mode                 string                   `json:"mode,omitempty"`
+	CreateRiskSignal     bool                     `json:"createRiskSignal,omitempty"`
+	EvidenceRequirements EvidenceRequirements     `json:"evidenceRequirements,omitempty"`
+	QueryBudget          InvestigationQueryBudget `json:"queryBudget,omitempty"`
+	LoopPolicy           InvestigationLoopPolicy  `json:"loopPolicy,omitempty"`
+	TTLSeconds           int64                    `json:"ttlSeconds,omitempty"`
 }
 
 type EvidenceRequirements struct {
 	Profile string `json:"profile,omitempty"`
+}
+
+type InvestigationQueryBudget struct {
+	MaxTimeRange        metav1.Duration `json:"maxTimeRange,omitempty"`
+	MaxQueriesTotal     int32           `json:"maxQueriesTotal,omitempty"`
+	MaxQueriesPerSource int32           `json:"maxQueriesPerSource,omitempty"`
 }
 
 type InvestigationLoopPolicy struct {
