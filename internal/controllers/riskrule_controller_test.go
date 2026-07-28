@@ -30,11 +30,12 @@ import (
 )
 
 type fakeRuleDataSource struct {
-	name      string
-	queryType domain.QueryType
-	result    *datasource.QueryResult
-	queryErr  error
-	requests  []datasource.QueryRequest
+	name        string
+	queryType   domain.QueryType
+	result      *datasource.QueryResult
+	queryErr    error
+	requests    []datasource.QueryRequest
+	queryPolicy v1alpha1.DataSourceQueryPolicy
 }
 
 func (f *fakeRuleDataSource) Name() string { return f.name }
@@ -47,7 +48,8 @@ func (f *fakeRuleDataSource) Capabilities() datasource.Capabilities {
 		Traces:  f.queryType == domain.QueryTypeTrace,
 	}
 }
-func (f *fakeRuleDataSource) HealthCheck(context.Context) error { return nil }
+func (f *fakeRuleDataSource) HealthCheck(context.Context) error           { return nil }
+func (f *fakeRuleDataSource) QueryPolicy() v1alpha1.DataSourceQueryPolicy { return f.queryPolicy }
 func (f *fakeRuleDataSource) Query(_ context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {
 	f.requests = append(f.requests, req)
 	if f.queryErr != nil {
@@ -583,6 +585,49 @@ func TestRiskRuleReconcilerUsesDatasourceRefQueryTypeAndTemplate(t *testing.T) {
 	}
 	if signals.Items[0].Spec.SignalType != "log" {
 		t.Fatalf("expected signal type log, got %s", signals.Items[0].Spec.SignalType)
+	}
+}
+
+func TestRiskRuleReconcilerRejectsDisallowedQueryTemplateBeforeQuery(t *testing.T) {
+	source := &fakeRuleDataSource{
+		name:      "prometheus-main",
+		queryType: domain.QueryTypeMetric,
+		result:    &datasource.QueryResult{Source: "prometheus-main", QueryType: domain.QueryTypeMetric},
+		queryPolicy: v1alpha1.DataSourceQueryPolicy{
+			Mode:             v1alpha1.DataSourceQueryPolicyModeTemplatesOnly,
+			AllowedTemplates: []string{"safe-template"},
+		},
+	}
+	reconciler := &RiskRuleReconciler{
+		Registry: datasource.NewRegistry(source),
+	}
+	matches, summary, err := reconciler.evaluateTarget(context.Background(), &v1alpha1.RiskRule{
+		Spec: v1alpha1.RiskRuleSpec{
+			Window: metav1.Duration{Duration: 5 * time.Minute},
+			Signals: []v1alpha1.RiskRuleSignal{
+				{
+					Name:          "custom-template",
+					DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus-main"},
+					QueryType:     "metric",
+					QueryTemplate: `sum(rate(http_requests_total{namespace="{{ .namespace }}",app="{{ .app }}"}[5m]))`,
+				},
+			},
+		},
+	}, rule.Target{
+		Resource: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment", Service: "open-api"},
+		Labels:   map[string]string{"app": "open-api"},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("evaluate target failed: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("expected no matches, got %#v", matches)
+	}
+	if summary.QueryFailure == nil || summary.QueryFailure.Reason != "QueryPolicyRejected" {
+		t.Fatalf("expected QueryPolicyRejected summary, got %#v", summary.QueryFailure)
+	}
+	if len(source.requests) != 0 {
+		t.Fatalf("expected policy rejection before datasource query, got %#v", source.requests)
 	}
 }
 

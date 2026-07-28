@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/domain"
 )
 
@@ -61,6 +62,10 @@ type DataSource interface {
 	Capabilities() Capabilities
 	Query(ctx context.Context, req QueryRequest) (*QueryResult, error)
 	HealthCheck(ctx context.Context) error
+}
+
+type QueryPolicyProvider interface {
+	QueryPolicy() v1alpha1.DataSourceQueryPolicy
 }
 
 type Registry struct {

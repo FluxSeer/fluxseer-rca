@@ -20,11 +20,25 @@ type DataSourceNetworkPolicy struct {
 	DeniedCIDRs  []string `json:"deniedCIDRs,omitempty"`
 }
 
+const (
+	DataSourceQueryPolicyModeLegacyUnrestricted = "LegacyUnrestricted"
+	DataSourceQueryPolicyModeTemplatesOnly      = "TemplatesOnly"
+)
+
+type DataSourceQueryPolicy struct {
+	Mode               string          `json:"mode,omitempty"`
+	AllowedTemplates   []string        `json:"allowedTemplates,omitempty"`
+	MaxRange           metav1.Duration `json:"maxRange,omitempty"`
+	AllowRegexMatchers bool            `json:"allowRegexMatchers,omitempty"`
+	RequireTargetScope bool            `json:"requireTargetScope,omitempty"`
+}
+
 type DataSourceSpec struct {
 	Type          string                  `json:"type"`
 	Endpoint      string                  `json:"endpoint,omitempty"`
 	Timeout       metav1.Duration         `json:"timeout,omitempty"`
 	NetworkPolicy DataSourceNetworkPolicy `json:"networkPolicy,omitempty"`
+	QueryPolicy   DataSourceQueryPolicy   `json:"queryPolicy,omitempty"`
 	Auth          *DataSourceAuthSpec     `json:"auth,omitempty"`
 	TLS           *DataSourceTLSSpec      `json:"tls,omitempty"`
 }
@@ -71,6 +85,9 @@ func (in *DataSource) DeepCopyInto(out *DataSource) {
 	}
 	if in.Spec.NetworkPolicy.DeniedCIDRs != nil {
 		out.Spec.NetworkPolicy.DeniedCIDRs = append([]string(nil), in.Spec.NetworkPolicy.DeniedCIDRs...)
+	}
+	if in.Spec.QueryPolicy.AllowedTemplates != nil {
+		out.Spec.QueryPolicy.AllowedTemplates = append([]string(nil), in.Spec.QueryPolicy.AllowedTemplates...)
 	}
 	if in.Status.Conditions != nil {
 		out.Status.Conditions = make([]metav1.Condition, len(in.Status.Conditions))

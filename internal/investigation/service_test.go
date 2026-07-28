@@ -144,6 +144,65 @@ func TestServicePreflightReportsMissingDatasource(t *testing.T) {
 	}
 }
 
+func TestServicePreflightRejectsDisallowedQueryTemplate(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add aiops scheme: %v", err)
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(
+			&appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod"},
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}},
+					},
+				},
+			},
+		).
+		Build()
+	service := &Service{
+		Client: client,
+		Registry: datasource.NewRegistry(fakeDataSource{
+			name:      "prometheus",
+			queryType: domain.QueryTypeMetric,
+			queryPolicy: v1alpha1.DataSourceQueryPolicy{
+				Mode:             v1alpha1.DataSourceQueryPolicyModeTemplatesOnly,
+				AllowedTemplates: []string{"safe-template"},
+			},
+		}),
+	}
+
+	result, err := service.Preflight(context.Background(), "prod", v1alpha1.InvestigationRequestSpec{
+		Target: v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "open-api"},
+		TimeRange: v1alpha1.InvestigationTimeRange{
+			Lookback: metav1.Duration{Duration: 5 * time.Minute},
+		},
+		Queries: []v1alpha1.InvestigationQuery{
+			{
+				Name:          "unbounded-custom-query",
+				DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus"},
+				QueryType:     string(domain.QueryTypeMetric),
+				QueryTemplate: `sum(rate(http_requests_total{namespace="{{ .namespace }}",app="{{ .app }}"}[5m]))`,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("preflight failed: %v", err)
+	}
+	if result.QueryTypeIssue == nil || result.QueryTypeIssue.Reason != "QueryPolicyRejected" {
+		t.Fatalf("expected QueryPolicyRejected, got %#v", result.QueryTypeIssue)
+	}
+	if !strings.Contains(result.QueryTypeIssue.Message, "not allowed") {
+		t.Fatalf("expected bounded policy message, got %q", result.QueryTypeIssue.Message)
+	}
+}
+
 func TestServiceCollectEvidenceNormalizesResults(t *testing.T) {
 	service := &Service{
 		Registry: datasource.NewRegistry(
@@ -930,11 +989,12 @@ func TestServiceGenerateRCAFiltersHostedProviderEvidenceByDataPolicy(t *testing.
 }
 
 type fakeDataSource struct {
-	name      string
-	queryType domain.QueryType
-	records   []map[string]any
-	queryErr  error
-	delay     time.Duration
+	name        string
+	queryType   domain.QueryType
+	records     []map[string]any
+	queryErr    error
+	delay       time.Duration
+	queryPolicy v1alpha1.DataSourceQueryPolicy
 }
 
 type capturingModelProvider struct {
@@ -993,6 +1053,8 @@ func (f fakeDataSource) Query(context.Context, datasource.QueryRequest) (*dataso
 }
 
 func (f fakeDataSource) HealthCheck(context.Context) error { return nil }
+
+func (f fakeDataSource) QueryPolicy() v1alpha1.DataSourceQueryPolicy { return f.queryPolicy }
 
 type blockingDataSource struct {
 	name      string

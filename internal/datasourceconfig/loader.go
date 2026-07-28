@@ -68,19 +68,23 @@ func RegisterFromResources(ctx context.Context, reader client.Reader, registry *
 }
 
 func BuildSourceFromResource(ctx context.Context, reader client.Reader, item v1alpha1.DataSource, kubeReader client.Reader) (datasource.DataSource, error) {
+	if err := validateQueryPolicy(item.Spec.QueryPolicy); err != nil {
+		return nil, err
+	}
+	var source datasource.DataSource
 	switch normalizeResourceType(item.Spec.Type) {
 	case CanonicalPrometheusName:
 		httpClient, err := buildHTTPClient(ctx, reader, item)
 		if err != nil {
 			return nil, err
 		}
-		return promadapter.Adapter{BaseURL: item.Spec.Endpoint, Client: httpClient}, nil
+		source = promadapter.Adapter{BaseURL: item.Spec.Endpoint, Client: httpClient}
 	case CanonicalLokiName:
 		httpClient, err := buildHTTPClient(ctx, reader, item)
 		if err != nil {
 			return nil, err
 		}
-		return lokiadapter.Adapter{BaseURL: item.Spec.Endpoint, Client: httpClient}, nil
+		source = lokiadapter.Adapter{BaseURL: item.Spec.Endpoint, Client: httpClient}
 	case CanonicalKubernetesEventName:
 		if kubeReader == nil {
 			return nil, &ValidationError{
@@ -88,13 +92,42 @@ func BuildSourceFromResource(ctx context.Context, reader client.Reader, item v1a
 				Message: "kubernetes datasource requires an in-cluster client",
 			}
 		}
-		return k8sadapter.Adapter{Client: kubeReader}, nil
+		source = k8sadapter.Adapter{Client: kubeReader}
 	default:
 		return nil, &ValidationError{
 			Reason:  "AdapterNotRegistered",
 			Message: fmt.Sprintf("unsupported datasource type %q", item.Spec.Type),
 		}
 	}
+	return policyDataSource{DataSource: source, policy: item.Spec.QueryPolicy}, nil
+}
+
+type policyDataSource struct {
+	datasource.DataSource
+	policy v1alpha1.DataSourceQueryPolicy
+}
+
+func (p policyDataSource) QueryPolicy() v1alpha1.DataSourceQueryPolicy {
+	return p.policy
+}
+
+func validateQueryPolicy(policy v1alpha1.DataSourceQueryPolicy) error {
+	mode := strings.TrimSpace(policy.Mode)
+	switch mode {
+	case "", v1alpha1.DataSourceQueryPolicyModeLegacyUnrestricted, v1alpha1.DataSourceQueryPolicyModeTemplatesOnly:
+	default:
+		return &ValidationError{
+			Reason:  "QueryPolicyInvalid",
+			Message: fmt.Sprintf("unsupported datasource queryPolicy.mode %q", policy.Mode),
+		}
+	}
+	if policy.MaxRange.Duration < 0 {
+		return &ValidationError{
+			Reason:  "QueryPolicyInvalid",
+			Message: "datasource queryPolicy.maxRange must not be negative",
+		}
+	}
+	return nil
 }
 
 func normalizeResourceType(value string) string {

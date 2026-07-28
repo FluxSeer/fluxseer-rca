@@ -23,6 +23,8 @@ import (
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
 	"fluxagent/internal/modelgateway"
+	"fluxagent/internal/querypolicy"
+	"fluxagent/internal/rcametrics"
 	"fluxagent/internal/rule"
 )
 
@@ -174,6 +176,24 @@ func (r *RiskRuleReconciler) evaluateTarget(ctx context.Context, riskRule *v1alp
 		renderedQuery, err := rule.RenderQuery(rule.QueryTemplateForSignal(signal), target.Resource, target.Labels)
 		if err != nil {
 			return nil, summary, err
+		}
+		decision := querypolicy.Validate(source, querypolicy.Request{
+			DatasourceName: sourceName,
+			TemplateName:   signal.Name,
+			FromTemplate:   strings.TrimSpace(signal.QueryTemplate) != "",
+			Query:          renderedQuery,
+			QueryType:      queryType,
+			Lookback:       window,
+			Target:         target.Resource,
+			Labels:         target.Labels,
+		})
+		rcametrics.RecordQueryPolicyDecision(source.Type(), decision.Decision, decision.Reason)
+		if decision.Decision == querypolicy.DecisionRejected {
+			summary.QueryFailure = firstIssue(summary.QueryFailure, evaluationIssue{
+				Reason:  "QueryPolicyRejected",
+				Message: decision.Message,
+			})
+			continue
 		}
 
 		result, err := source.Query(ctx, datasource.QueryRequest{
