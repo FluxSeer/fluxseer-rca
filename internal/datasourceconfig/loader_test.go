@@ -3,6 +3,7 @@ package datasourceconfig
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -125,6 +126,80 @@ func TestRegisterFromResourcesBuildsRegistry(t *testing.T) {
 	}
 	if _, ok := k8sSource.(k8sadapter.Adapter); !ok {
 		t.Fatalf("expected kubernetes adapter, got %T", k8sSource)
+	}
+}
+
+func TestBuildHTTPClientRejectsDeniedDatasourceEndpoints(t *testing.T) {
+	cases := []struct {
+		name     string
+		endpoint string
+	}{
+		{name: "metadata", endpoint: "http://169.254.169.254/latest/meta-data"},
+		{name: "loopback", endpoint: "http://127.0.0.1:9090"},
+		{name: "link-local", endpoint: "http://169.254.10.20:9090"},
+		{name: "private-without-allowlist", endpoint: "http://10.32.0.15:9090"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := buildHTTPClient(context.Background(), nil, v1alpha1.DataSource{
+				Spec: v1alpha1.DataSourceSpec{
+					Type:     "prometheus",
+					Endpoint: tc.endpoint,
+				},
+			})
+			expectNetworkPolicyDenied(t, err)
+		})
+	}
+}
+
+func TestBuildHTTPClientAllowsConfiguredPrivateCIDRAndClusterService(t *testing.T) {
+	if _, err := buildHTTPClient(context.Background(), nil, v1alpha1.DataSource{
+		Spec: v1alpha1.DataSourceSpec{
+			Type:     "prometheus",
+			Endpoint: "http://10.32.0.15:9090",
+			NetworkPolicy: v1alpha1.DataSourceNetworkPolicy{
+				AllowedCIDRs: []string{"10.32.0.0/16"},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("expected private endpoint to be allowed by CIDR, got %v", err)
+	}
+	if _, err := buildHTTPClient(context.Background(), nil, v1alpha1.DataSource{
+		Spec: v1alpha1.DataSourceSpec{
+			Type:     "prometheus",
+			Endpoint: "http://prometheus-server.monitoring.svc:9090",
+		},
+	}); err != nil {
+		t.Fatalf("expected cluster service endpoint to be allowed, got %v", err)
+	}
+}
+
+func TestBuildHTTPClientRevalidatesRedirectTarget(t *testing.T) {
+	client, err := buildHTTPClient(context.Background(), nil, v1alpha1.DataSource{
+		Spec: v1alpha1.DataSourceSpec{
+			Type:     "prometheus",
+			Endpoint: "http://prometheus.example",
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected client build to succeed, got %v", err)
+	}
+	redirectURL, err := url.Parse("http://169.254.169.254/latest/meta-data")
+	if err != nil {
+		t.Fatalf("parse redirect URL: %v", err)
+	}
+	err = client.CheckRedirect(&http.Request{URL: redirectURL}, []*http.Request{{URL: &url.URL{Scheme: "http", Host: "prometheus.example"}}})
+	expectNetworkPolicyDenied(t, err)
+}
+
+func expectNetworkPolicyDenied(t *testing.T, err error) {
+	t.Helper()
+	validationErr, ok := err.(*ValidationError)
+	if !ok {
+		t.Fatalf("expected ValidationError, got %T %v", err, err)
+	}
+	if validationErr.Reason != "DatasourceNetworkPolicyDenied" {
+		t.Fatalf("expected DatasourceNetworkPolicyDenied, got %#v", validationErr)
 	}
 }
 

@@ -75,6 +75,24 @@ func TestDoRequestWithRetryMapsTimeoutAfterRetries(t *testing.T) {
 	}
 }
 
+func TestDoRequestWithRetryRejectsOversizedResponse(t *testing.T) {
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(strings.Repeat("x", defaultDatasourceMaxResponseBytes+1))),
+			}, nil
+		}),
+	}
+
+	_, err := DoRequestWithRetry(context.Background(), "test", client, newTestRequest)
+	queryErr := assertQueryError(t, err, "InvalidDatasourceResponse")
+	if !strings.Contains(queryErr.Message, "exceeded") {
+		t.Fatalf("expected response size message, got %q", queryErr.Message)
+	}
+}
+
 func newTestRequest(ctx context.Context) (*http.Request, error) {
 	return http.NewRequestWithContext(ctx, http.MethodGet, "http://example.test/query", nil)
 }

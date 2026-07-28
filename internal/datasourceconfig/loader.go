@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -107,6 +109,9 @@ func buildHTTPClient(ctx context.Context, reader client.Reader, item v1alpha1.Da
 			Message: "endpoint is empty",
 		}
 	}
+	if err := validateDatasourceEndpoint(item.Spec.Endpoint, item.Spec.NetworkPolicy); err != nil {
+		return nil, err
+	}
 
 	timeout := 10 * time.Second
 	if item.Spec.Timeout.Duration > 0 {
@@ -114,6 +119,7 @@ func buildHTTPClient(ctx context.Context, reader client.Reader, item v1alpha1.Da
 	}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
 	if item.Spec.TLS != nil && item.Spec.TLS.InsecureSkipVerify {
 		if transport.TLSClientConfig == nil {
 			transport.TLSClientConfig = &tls.Config{}
@@ -133,7 +139,109 @@ func buildHTTPClient(ctx context.Context, reader client.Reader, item v1alpha1.Da
 	return &http.Client{
 		Timeout:   timeout,
 		Transport: rt,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return http.ErrUseLastResponse
+			}
+			return validateDatasourceURL(req.URL, item.Spec.NetworkPolicy)
+		},
 	}, nil
+}
+
+func validateDatasourceEndpoint(endpoint string, policy v1alpha1.DataSourceNetworkPolicy) error {
+	parsed, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil {
+		return &ValidationError{
+			Reason:  "DatasourceNetworkPolicyDenied",
+			Message: fmt.Sprintf("endpoint URL is invalid: %v", err),
+		}
+	}
+	return validateDatasourceURL(parsed, policy)
+}
+
+func validateDatasourceURL(parsed *url.URL, policy v1alpha1.DataSourceNetworkPolicy) error {
+	if parsed == nil || strings.TrimSpace(parsed.Hostname()) == "" {
+		return &ValidationError{
+			Reason:  "DatasourceNetworkPolicyDenied",
+			Message: "endpoint host is empty",
+		}
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return &ValidationError{
+			Reason:  "DatasourceNetworkPolicyDenied",
+			Message: fmt.Sprintf("endpoint scheme %q is not allowed", parsed.Scheme),
+		}
+	}
+	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	if !hostAllowed(host, policy.AllowedHosts) {
+		return &ValidationError{
+			Reason:  "DatasourceNetworkPolicyDenied",
+			Message: fmt.Sprintf("endpoint host %q is not allowed by datasource networkPolicy.allowedHosts", host),
+		}
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if err := validateDatasourceIP(ip, policy); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func hostAllowed(host string, allowedHosts []string) bool {
+	if len(allowedHosts) == 0 || strings.HasSuffix(host, ".svc") || strings.HasSuffix(host, ".svc.cluster.local") {
+		return true
+	}
+	for _, allowed := range allowedHosts {
+		allowed = strings.ToLower(strings.TrimSpace(allowed))
+		switch {
+		case allowed == "":
+			continue
+		case allowed == host:
+			return true
+		case strings.HasPrefix(allowed, "*.") && strings.HasSuffix(host, strings.TrimPrefix(allowed, "*")):
+			return true
+		}
+	}
+	return false
+}
+
+func validateDatasourceIP(ip net.IP, policy v1alpha1.DataSourceNetworkPolicy) error {
+	metadataCIDRs := []string{"169.254.169.254/32", "fd00:ec2::254/128"}
+	for _, cidr := range append(metadataCIDRs, policy.DeniedCIDRs...) {
+		if ipInCIDR(ip, cidr) {
+			return &ValidationError{
+				Reason:  "DatasourceNetworkPolicyDenied",
+				Message: fmt.Sprintf("endpoint IP %s is denied by datasource network policy", ip.String()),
+			}
+		}
+	}
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		return &ValidationError{
+			Reason:  "DatasourceNetworkPolicyDenied",
+			Message: fmt.Sprintf("endpoint IP %s is loopback, link-local, or unspecified", ip.String()),
+		}
+	}
+	if ip.IsPrivate() && !ipAllowedByCIDR(ip, policy.AllowedCIDRs) {
+		return &ValidationError{
+			Reason:  "DatasourceNetworkPolicyDenied",
+			Message: fmt.Sprintf("private endpoint IP %s requires datasource networkPolicy.allowedCIDRs", ip.String()),
+		}
+	}
+	return nil
+}
+
+func ipAllowedByCIDR(ip net.IP, cidrs []string) bool {
+	for _, cidr := range cidrs {
+		if ipInCIDR(ip, cidr) {
+			return true
+		}
+	}
+	return false
+}
+
+func ipInCIDR(ip net.IP, cidr string) bool {
+	_, network, err := net.ParseCIDR(strings.TrimSpace(cidr))
+	return err == nil && network.Contains(ip)
 }
 
 func resolveBearerToken(ctx context.Context, reader client.Reader, item v1alpha1.DataSource) (string, error) {

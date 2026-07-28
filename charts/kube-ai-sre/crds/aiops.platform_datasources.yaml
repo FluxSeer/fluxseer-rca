@@ -29,6 +29,21 @@ spec:
                   type: string
                 timeout:
                   type: string
+                networkPolicy:
+                  type: object
+                  properties:
+                    allowedHosts:
+                      type: array
+                      items:
+                        type: string
+                    allowedCIDRs:
+                      type: array
+                      items:
+                        type: string
+                    deniedCIDRs:
+                      type: array
+                      items:
+                        type: string
                 auth:
                   type: object
                   properties:

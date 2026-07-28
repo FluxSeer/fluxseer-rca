@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	defaultDatasourceMaxAttempts = 3
-	defaultDatasourceRetryDelay  = 100 * time.Millisecond
+	defaultDatasourceMaxAttempts      = 3
+	defaultDatasourceRetryDelay       = 100 * time.Millisecond
+	defaultDatasourceMaxResponseBytes = 4 * 1024 * 1024
 )
 
 type QueryError struct {
@@ -87,12 +88,18 @@ func QueryErrorReason(err error, fallback string) string {
 }
 
 func readResponse(resp *http.Response, source string) ([]byte, *QueryError, bool) {
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, defaultDatasourceMaxResponseBytes+1))
 	if err != nil {
 		return nil, &QueryError{
 			Reason:  "DatasourceUnavailable",
 			Message: fmt.Sprintf("%s datasource read response: %v", source, err),
 		}, true
+	}
+	if len(body) > defaultDatasourceMaxResponseBytes {
+		return nil, &QueryError{
+			Reason:  "InvalidDatasourceResponse",
+			Message: fmt.Sprintf("%s datasource response exceeded %d bytes", source, defaultDatasourceMaxResponseBytes),
+		}, false
 	}
 	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
 		return body, nil, false
