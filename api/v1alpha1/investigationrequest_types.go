@@ -197,9 +197,10 @@ type RCANormalizedResult struct {
 }
 
 type RCAProviderResult struct {
-	SchemaVersion    string               `json:"schemaVersion,omitempty"`
-	Digest           *RCADigest           `json:"digest,omitempty"`
-	NormalizedResult *RCANormalizedResult `json:"normalizedResult,omitempty"`
+	SchemaVersion     string               `json:"schemaVersion,omitempty"`
+	ProviderRequestID string               `json:"providerRequestID,omitempty"`
+	Digest            *RCADigest           `json:"digest,omitempty"`
+	NormalizedResult  *RCANormalizedResult `json:"normalizedResult,omitempty"`
 }
 
 type RCAExecution struct {

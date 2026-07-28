@@ -49,6 +49,11 @@ func ParseStructuredText(provider, modelName, text string) (domain.ModelResponse
 	return buildStructuredResponse(provider, modelName, payload), nil
 }
 
+func WithProviderRequestID(resp domain.ModelResponse, requestID string) domain.ModelResponse {
+	resp.ProviderRequestID = strings.TrimSpace(requestID)
+	return resp
+}
+
 func ValidateModelResponse(resp domain.ModelResponse) error {
 	if !resp.Structured {
 		return &ProviderError{

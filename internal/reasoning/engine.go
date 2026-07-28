@@ -77,9 +77,10 @@ func (e *Engine) Analyze(ctx context.Context, input domain.IngestionOutput) (dom
 	}
 
 	return domain.ReasoningOutput{
-		RiskTitle:   riskTitle,
-		RiskSummary: riskSummary,
-		Severity:    severity,
+		RiskTitle:         riskTitle,
+		RiskSummary:       riskSummary,
+		Severity:          severity,
+		ProviderRequestID: response.ProviderRequestID,
 		Confidence: domain.Confidence{
 			Score:            score,
 			Severity:         severity,

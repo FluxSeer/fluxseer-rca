@@ -83,7 +83,7 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 		}
 	}
 
-	body, err := model.DoRequestWithRetry(ctx, p.Name(), p.Timeout, p.Client, func(ctx context.Context) (*http.Request, error) {
+	httpResp, err := model.DoRequestWithRetryMetadata(ctx, p.Name(), p.Timeout, p.Client, func(ctx context.Context) (*http.Request, error) {
 		httpReq, err := model.NewJSONRequest(ctx, http.MethodPost, firstNonEmpty(p.Endpoint, defaultEndpoint), payload)
 		if err != nil {
 			return nil, fmt.Errorf("create claude request: %w", err)
@@ -102,7 +102,7 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 			Text string `json:"text"`
 		} `json:"content"`
 	}
-	if err := json.Unmarshal(body, &decoded); err != nil {
+	if err := json.Unmarshal(httpResp.Body, &decoded); err != nil {
 		return domain.ModelResponse{}, &model.ProviderError{
 			Reason:  "InvalidProviderResponse",
 			Message: fmt.Sprintf("decode claude response: %v", err),
@@ -110,7 +110,11 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 	}
 	for _, item := range decoded.Content {
 		if item.Type == "text" && item.Text != "" {
-			return model.ParseStructuredText(p.Name(), p.Model, item.Text)
+			resp, err := model.ParseStructuredText(p.Name(), p.Model, item.Text)
+			if err != nil {
+				return domain.ModelResponse{}, err
+			}
+			return model.WithProviderRequestID(resp, httpResp.RequestID), nil
 		}
 	}
 	return domain.ModelResponse{}, &model.ProviderError{

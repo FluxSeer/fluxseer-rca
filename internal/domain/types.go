@@ -177,15 +177,16 @@ type Confidence struct {
 }
 
 type ReasoningOutput struct {
-	RiskTitle   string      `json:"riskTitle"`
-	RiskSummary string      `json:"riskSummary"`
-	Severity    Severity    `json:"severity"`
-	Confidence  Confidence  `json:"confidence"`
-	RCA         RCASummary  `json:"rca"`
-	Remediation Remediation `json:"remediation"`
-	RunbookRefs []string    `json:"runbookRefs"`
-	ServiceDocs []string    `json:"serviceDocs"`
-	Provider    string      `json:"provider"`
+	RiskTitle         string      `json:"riskTitle"`
+	RiskSummary       string      `json:"riskSummary"`
+	Severity          Severity    `json:"severity"`
+	Confidence        Confidence  `json:"confidence"`
+	RCA               RCASummary  `json:"rca"`
+	Remediation       Remediation `json:"remediation"`
+	RunbookRefs       []string    `json:"runbookRefs"`
+	ServiceDocs       []string    `json:"serviceDocs"`
+	Provider          string      `json:"provider"`
+	ProviderRequestID string      `json:"providerRequestID,omitempty"`
 }
 
 type ApprovalAction string
@@ -224,9 +225,10 @@ type ModelRequest struct {
 }
 
 type ModelResponse struct {
-	Provider   string         `json:"provider"`
-	Model      string         `json:"model"`
-	Output     map[string]any `json:"output,omitempty"`
-	RawText    string         `json:"rawText,omitempty"`
-	Structured bool           `json:"structured"`
+	Provider          string         `json:"provider"`
+	Model             string         `json:"model"`
+	ProviderRequestID string         `json:"providerRequestID,omitempty"`
+	Output            map[string]any `json:"output,omitempty"`
+	RawText           string         `json:"rawText,omitempty"`
+	Structured        bool           `json:"structured"`
 }
