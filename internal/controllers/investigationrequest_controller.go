@@ -16,6 +16,7 @@ import (
 
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/investigation"
+	"fluxagent/internal/verifier"
 	"fluxagent/internal/version"
 )
 
@@ -298,6 +299,11 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	}
 
 	confidence := float64(rca.Reasoning.Confidence.Score) / 100.0
+	claims, verification := buildRCAClaims(rca, evidence)
+	verifiedScore := confidence
+	if verifiedScore > verification.CoverageScore {
+		verifiedScore = verification.CoverageScore
+	}
 	request.Status.Verdict = &v1alpha1.RCAVerdict{
 		Outcome:         v1alpha1.InvestigationOutcomeConfirmed,
 		Summary:         rca.Reasoning.RiskSummary,
@@ -306,12 +312,12 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 		Confidence:      confidence,
 		ConfidenceDetail: &v1alpha1.RCAConfidence{
 			ProviderScore: confidence,
-			VerifiedScore: confidence,
-			Level:         confidenceLevel(confidence),
-			Method:        "ProviderScoreV1",
+			VerifiedScore: verifiedScore,
+			Level:         confidenceLevel(verifiedScore),
+			Method:        verification.Method,
 		},
 	}
-	request.Status.Claims = buildRCAClaims(rca, evidence)
+	request.Status.Claims = claims
 	request.Status.AlternativeHypotheses = nil
 	request.Status.MissingEvidence = nil
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
@@ -369,20 +375,12 @@ func providerModel(provider *v1alpha1.ModelProvider) string {
 	return provider.Spec.Model
 }
 
-func buildRCAClaims(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult) []v1alpha1.RCAClaim {
-	claimRefs := evidenceIDs(evidence.EvidenceRefs)
-	verification := "Inferred"
-	if len(claimRefs) > 0 {
-		verification = "Supported"
-	}
-
+func buildRCAClaims(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult) ([]v1alpha1.RCAClaim, verifier.Result) {
 	claims := make([]v1alpha1.RCAClaim, 0, 1+len(rca.Reasoning.RCA.Causes))
 	if strings.TrimSpace(rca.Reasoning.RiskSummary) != "" {
 		claims = append(claims, v1alpha1.RCAClaim{
-			ID:           "claim-001",
-			Statement:    rca.Reasoning.RiskSummary,
-			EvidenceRefs: append([]string(nil), claimRefs...),
-			Verification: verification,
+			ID:        "claim-001",
+			Statement: rca.Reasoning.RiskSummary,
 		})
 	}
 	for _, cause := range rca.Reasoning.RCA.Causes {
@@ -390,25 +388,56 @@ func buildRCAClaims(rca investigation.RCAResult, evidence investigation.Evidence
 			continue
 		}
 		claims = append(claims, v1alpha1.RCAClaim{
-			ID:           claimID(len(claims) + 1),
-			Statement:    cause,
-			EvidenceRefs: append([]string(nil), claimRefs...),
-			Verification: verification,
+			ID:        claimID(len(claims) + 1),
+			Statement: cause,
 		})
 	}
-	return claims
+	verification := verifier.VerifyClaims(verifierClaims(claims), verifierEvidenceRefs(evidence.EvidenceRefs))
+	return applyClaimVerification(claims, verification), verification
 }
 
-func evidenceIDs(refs []v1alpha1.EvidenceRef) []string {
-	ids := make([]string, 0, len(refs))
+func verifierClaims(claims []v1alpha1.RCAClaim) []verifier.Claim {
+	out := make([]verifier.Claim, 0, len(claims))
+	for _, claim := range claims {
+		out = append(out, verifier.Claim{
+			ID:        claim.ID,
+			Statement: claim.Statement,
+		})
+	}
+	return out
+}
+
+func verifierEvidenceRefs(refs []v1alpha1.EvidenceRef) []verifier.EvidenceRef {
+	out := make([]verifier.EvidenceRef, 0, len(refs))
 	for index, ref := range refs {
 		id := strings.TrimSpace(ref.ID)
 		if id == "" {
 			id = evidenceID(index + 1)
 		}
-		ids = append(ids, id)
+		out = append(out, verifier.EvidenceRef{
+			ID:      id,
+			Kind:    ref.Kind,
+			Source:  ref.Source,
+			Summary: ref.Summary,
+		})
 	}
-	return ids
+	return out
+}
+
+func applyClaimVerification(claims []v1alpha1.RCAClaim, verification verifier.Result) []v1alpha1.RCAClaim {
+	byID := make(map[string]verifier.ClaimResult, len(verification.Claims))
+	for _, result := range verification.Claims {
+		byID[result.ID] = result
+	}
+	for i := range claims {
+		result, ok := byID[claims[i].ID]
+		if !ok {
+			continue
+		}
+		claims[i].EvidenceRefs = append([]string(nil), result.EvidenceRefs...)
+		claims[i].Verification = result.Verification
+	}
+	return claims
 }
 
 func inferRootCauseType(hypothesis string, causes []string) string {
