@@ -9,7 +9,7 @@ FluxAgent uses datasource adapters to collect evidence without binding the core 
 - Loki is optional and registered only when configured.
 - the read-only path should remain usable when optional adapters are absent.
 
-Current implementation entrypoint: [internal/datasource/interface.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/datasource/interface.go:1)
+Current implementation entrypoint: [internal/datasource/interface.go](../internal/datasource/interface.go)
 
 ## Why Adapters Exist
 
@@ -49,7 +49,7 @@ Planned direction:
 - eventual `DataSource` CRD for runtime configuration
 - degraded conditions instead of hard failure when optional adapters are unavailable
 
-The staged rationale is documented in [architecture/dependency-neutrality.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/dependency-neutrality.md:1).
+The staged rationale is documented in [architecture/dependency-neutrality.md](architecture/dependency-neutrality.md).
 
 ## Query Ownership
 
@@ -83,7 +83,7 @@ The follow-up direction is:
 
 ## Adapter Docs
 
-- [adapters/prometheus.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/adapters/prometheus.md:1)
-- [adapters/loki.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/adapters/loki.md:1)
-- [adapters/kubernetes-events.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/adapters/kubernetes-events.md:1)
-- [adapters/model-providers.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/adapters/model-providers.md:1)
+- [adapters/prometheus.md](adapters/prometheus.md)
+- [adapters/loki.md](adapters/loki.md)
+- [adapters/kubernetes-events.md](adapters/kubernetes-events.md)
+- [adapters/model-providers.md](adapters/model-providers.md)

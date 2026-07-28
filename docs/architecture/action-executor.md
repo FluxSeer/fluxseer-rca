@@ -4,7 +4,7 @@ FluxAgent separates decision-making from execution. The executor layer only runs
 
 ## Router Contract
 
-Source: [internal/executor/router.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/executor/router.go:1)
+Source: [internal/executor/router.go](../../internal/executor/router.go)
 
 The router dispatches by action prefix:
 
@@ -52,7 +52,7 @@ This means controllers and model providers do not need to know how a Kubernetes 
 ### Notification Executor
 
 - can send a real webhook when `FLUXAGENT_WEBHOOK_URL` is configured
-- source: [internal/executor/notification.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/executor/notification.go:1)
+- source: [internal/executor/notification.go](../../internal/executor/notification.go)
 
 ## Architecture Diagram
 

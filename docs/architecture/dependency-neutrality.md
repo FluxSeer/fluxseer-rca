@@ -85,7 +85,7 @@ The core path should know that evidence is metrics, logs, or events. It should n
 
 ## Domain Model Boundary
 
-FluxAgent already has internal domain types such as [internal/domain/types.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/domain/types.go:1).
+FluxAgent already has internal domain types such as [internal/domain/types.go](../../internal/domain/types.go).
 
 That boundary should remain the center of the design:
 

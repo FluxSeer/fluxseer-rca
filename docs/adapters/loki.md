@@ -15,8 +15,8 @@ Env-based example:
 export FLUXAGENT_LOKI_URL=http://your-loki.example
 ```
 
-Implementation source: [internal/datasource/loki/adapter.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/datasource/loki/adapter.go:1)
-Resource loader: [internal/datasourceconfig/loader.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/datasourceconfig/loader.go:1)
+Implementation source: [internal/datasource/loki/adapter.go](../../internal/datasource/loki/adapter.go)
+Resource loader: [internal/datasourceconfig/loader.go](../../internal/datasourceconfig/loader.go)
 
 ## Endpoint Shape
 

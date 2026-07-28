@@ -4,7 +4,7 @@ FluxAgent keeps model providers behind a provider-neutral interface so the contr
 
 ## Provider Contract
 
-Source: [internal/model/interface.go](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/model/interface.go:1)
+Source: [internal/model/interface.go](../../internal/model/interface.go)
 
 ```go
 type Provider interface {
@@ -22,7 +22,7 @@ Implemented provider packages:
 - `claude`
 - `gemini`
 
-See [internal/model](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/internal/model:1).
+See [internal/model](../../internal/model).
 
 ## Architectural Role
 
