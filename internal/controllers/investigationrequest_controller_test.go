@@ -188,8 +188,14 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if !supportedClaimFound {
 		t.Fatalf("expected at least one supported claim citing evidence-001, got %#v", stored.Status.Claims)
 	}
-	if stored.Status.Execution == nil || stored.Status.Execution.Provider != "heuristic" || stored.Status.Execution.Attempts != 1 {
+	if stored.Status.Execution == nil || stored.Status.Execution.Provider != "heuristic" || stored.Status.Execution.AttemptCount != 1 {
 		t.Fatalf("expected RCA execution metadata, got %#v", stored.Status.Execution)
+	}
+	if stored.Status.Execution.ID == "" || !hasPrefix(stored.Status.Execution.ID, "sha256:") {
+		t.Fatalf("expected stable execution id, got %#v", stored.Status.Execution)
+	}
+	if stored.Status.Execution.State != "Finalized" {
+		t.Fatalf("expected finalized execution state, got %#v", stored.Status.Execution)
 	}
 	if stored.Status.Execution.ProviderRef == nil ||
 		stored.Status.Execution.ProviderRef.Name != "heuristic-provider" ||
@@ -201,8 +207,19 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 		stored.Status.Execution.Model != "built-in" {
 		t.Fatalf("expected provider identity metadata, got %#v", stored.Status.Execution)
 	}
-	if stored.Status.Execution.ReasoningPolicyVersion != "rca-v2-compat" || stored.Status.Execution.ControllerVersion == "" {
+	if stored.Status.Execution.RCASchemaVersion != "fluxagent-rca-result-v1" ||
+		stored.Status.Execution.CanonicalizationVersion != "fluxagent-rca-json-v1" ||
+		stored.Status.Execution.ReasoningPolicyVersion != "rca-v2-compat" ||
+		stored.Status.Execution.ControllerVersion == "" {
 		t.Fatalf("expected execution policy and controller versions, got %#v", stored.Status.Execution)
+	}
+	if len(stored.Status.Execution.Attempts) != 1 ||
+		stored.Status.Execution.Attempts[0].ID != "attempt-001" ||
+		stored.Status.Execution.Attempts[0].Result != "Completed" ||
+		!hasPrefix(stored.Status.Execution.Attempts[0].IdempotencyKey, "sha256:") ||
+		stored.Status.Execution.Attempts[0].StartedAt == nil ||
+		stored.Status.Execution.Attempts[0].CompletedAt == nil {
+		t.Fatalf("expected structured execution attempt metadata, got %#v", stored.Status.Execution.Attempts)
 	}
 	if stored.Status.Lineage == nil ||
 		stored.Status.Lineage.Source.Kind != "RiskRule" ||
@@ -730,3 +747,7 @@ func (f fakeInvestigationDataSource) Query(context.Context, datasource.QueryRequ
 	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: records}, nil
 }
 func (f fakeInvestigationDataSource) HealthCheck(context.Context) error { return nil }
+
+func hasPrefix(value string, prefix string) bool {
+	return len(value) >= len(prefix) && value[:len(prefix)] == prefix
+}

@@ -111,18 +111,33 @@ type RCADegradation struct {
 	Reasons            []RCADegradationReason `json:"reasons,omitempty"`
 }
 
+type RCAExecutionAttempt struct {
+	ID                string       `json:"id,omitempty"`
+	ProviderRequestID string       `json:"providerRequestID,omitempty"`
+	IdempotencyKey    string       `json:"idempotencyKey,omitempty"`
+	RetryReason       string       `json:"retryReason,omitempty"`
+	Result            string       `json:"result,omitempty"`
+	StartedAt         *metav1.Time `json:"startedAt,omitempty"`
+	CompletedAt       *metav1.Time `json:"completedAt,omitempty"`
+}
+
 type RCAExecution struct {
-	Provider               string                     `json:"provider,omitempty"`
-	ProviderRef            *NamespacedObjectReference `json:"providerRef,omitempty"`
-	ProviderGeneration     int64                      `json:"providerGeneration,omitempty"`
-	ProviderType           string                     `json:"providerType,omitempty"`
-	Model                  string                     `json:"model,omitempty"`
-	ReasoningPolicyVersion string                     `json:"reasoningPolicyVersion,omitempty"`
-	ControllerVersion      string                     `json:"controllerVersion,omitempty"`
-	Attempts               int32                      `json:"attempts,omitempty"`
-	DurationSeconds        int64                      `json:"durationSeconds,omitempty"`
-	InputTokens            int64                      `json:"inputTokens,omitempty"`
-	OutputTokens           int64                      `json:"outputTokens,omitempty"`
+	ID                      string                     `json:"id,omitempty"`
+	State                   string                     `json:"state,omitempty"`
+	Provider                string                     `json:"provider,omitempty"`
+	ProviderRef             *NamespacedObjectReference `json:"providerRef,omitempty"`
+	ProviderGeneration      int64                      `json:"providerGeneration,omitempty"`
+	ProviderType            string                     `json:"providerType,omitempty"`
+	Model                   string                     `json:"model,omitempty"`
+	RCASchemaVersion        string                     `json:"rcaSchemaVersion,omitempty"`
+	CanonicalizationVersion string                     `json:"canonicalizationVersion,omitempty"`
+	ReasoningPolicyVersion  string                     `json:"reasoningPolicyVersion,omitempty"`
+	ControllerVersion       string                     `json:"controllerVersion,omitempty"`
+	AttemptCount            int32                      `json:"attemptCount,omitempty"`
+	Attempts                []RCAExecutionAttempt      `json:"attempts,omitempty"`
+	DurationSeconds         int64                      `json:"durationSeconds,omitempty"`
+	InputTokens             int64                      `json:"inputTokens,omitempty"`
+	OutputTokens            int64                      `json:"outputTokens,omitempty"`
 }
 
 type InvestigationLineageSource struct {
@@ -259,6 +274,18 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 		if in.Status.Execution.ProviderRef != nil {
 			ref := *in.Status.Execution.ProviderRef
 			execution.ProviderRef = &ref
+		}
+		if in.Status.Execution.Attempts != nil {
+			execution.Attempts = make([]RCAExecutionAttempt, len(in.Status.Execution.Attempts))
+			copy(execution.Attempts, in.Status.Execution.Attempts)
+			for i := range execution.Attempts {
+				if in.Status.Execution.Attempts[i].StartedAt != nil {
+					execution.Attempts[i].StartedAt = in.Status.Execution.Attempts[i].StartedAt.DeepCopy()
+				}
+				if in.Status.Execution.Attempts[i].CompletedAt != nil {
+					execution.Attempts[i].CompletedAt = in.Status.Execution.Attempts[i].CompletedAt.DeepCopy()
+				}
+			}
 		}
 		out.Status.Execution = &execution
 	}
