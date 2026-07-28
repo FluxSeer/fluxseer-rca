@@ -64,6 +64,9 @@ spec:
                       digestCanonicalization: {type: string}
                       redactionProfile: {type: string}
                       truncated: {type: boolean}
+                      truncationReason: {type: string}
+                      limitDimension: {type: string}
+                      limit: {type: integer, format: int64}
                       originalCount: {type: integer, format: int32}
                       retainedCount: {type: integer, format: int32}
                       originalBytes: {type: integer, format: int32}

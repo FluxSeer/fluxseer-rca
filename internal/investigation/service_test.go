@@ -564,6 +564,62 @@ func TestServiceCollectEvidenceAppliesQueryResultLimits(t *testing.T) {
 	}
 }
 
+func TestServiceCollectEvidencePreservesNativeResultLimitMetadata(t *testing.T) {
+	limit := &datasource.NativeResultLimit{
+		Reason:        "NativeResultLimitExceeded",
+		Dimension:     "samples",
+		Limit:         2,
+		OriginalCount: 5,
+		RetainedCount: 2,
+	}
+	before := testutil.ToFloat64(rcametrics.QueryResultLimitExceededTotal.WithLabelValues("metric", "samples"))
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:        "prometheus",
+				queryType:   domain.QueryTypeMetric,
+				records:     []map[string]any{{"metric": "latency", "value": "1"}, {"metric": "latency", "value": "2"}},
+				nativeLimit: limit,
+			},
+		),
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 15 * time.Minute}},
+		QueryBudget: v1alpha1.InvestigationQueryBudget{
+			ResultLimits: v1alpha1.QueryResultLimits{
+				Metrics: v1alpha1.MetricResultLimits{MaxSamples: 2},
+			},
+		},
+	}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Labels: map[string]string{"app": "open-api"},
+		CollectionPlan: []CollectionStep{
+			{Name: "prometheus", DatasourceName: "prometheus", QueryType: domain.QueryTypeMetric, Query: "latency"},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue != nil {
+		t.Fatalf("expected no issue, got %#v", result.Issue)
+	}
+	if len(result.EvidenceRefs) != 2 {
+		t.Fatalf("expected two evidence refs, got %#v", result.EvidenceRefs)
+	}
+	ref := result.EvidenceRefs[0]
+	if !ref.Truncated || ref.TruncationReason != "NativeResultLimitExceeded" || ref.LimitDimension != "samples" || ref.Limit != 2 {
+		t.Fatalf("expected native truncation metadata, got %#v", ref)
+	}
+	if ref.OriginalCount != 5 || ref.RetainedCount != 2 {
+		t.Fatalf("expected native original/retained counts, got %#v", ref)
+	}
+	after := testutil.ToFloat64(rcametrics.QueryResultLimitExceededTotal.WithLabelValues("metric", "samples"))
+	if after != before+1 {
+		t.Fatalf("expected native result limit metric increment, before=%f after=%f", before, after)
+	}
+}
+
 func TestServiceCollectEvidenceBuildsNormalizedObservations(t *testing.T) {
 	service := &Service{
 		Registry: datasource.NewRegistry(
@@ -1016,6 +1072,7 @@ type fakeDataSource struct {
 	queryErr    error
 	delay       time.Duration
 	queryPolicy v1alpha1.DataSourceQueryPolicy
+	nativeLimit *datasource.NativeResultLimit
 }
 
 type capturingModelProvider struct {
@@ -1070,7 +1127,17 @@ func (f fakeDataSource) Query(context.Context, datasource.QueryRequest) (*dataso
 	if f.queryErr != nil {
 		return nil, f.queryErr
 	}
-	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: f.records, Summary: fmt.Sprintf("%s returned %d records", f.name, len(f.records))}, nil
+	result := &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: f.records, Summary: fmt.Sprintf("%s returned %d records", f.name, len(f.records))}
+	if f.nativeLimit != nil {
+		result.Truncated = true
+		result.TruncationReason = f.nativeLimit.Reason
+		result.LimitDimension = f.nativeLimit.Dimension
+		result.Limit = f.nativeLimit.Limit
+		result.OriginalRecordCount = int(f.nativeLimit.OriginalCount)
+		result.RetainedRecordCount = int(f.nativeLimit.RetainedCount)
+		result.NativeLimit = f.nativeLimit
+	}
+	return result, nil
 }
 
 func (f fakeDataSource) HealthCheck(context.Context) error { return nil }

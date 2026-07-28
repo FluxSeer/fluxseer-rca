@@ -159,6 +159,14 @@ spec:
                         logs:
                           type: object
                           properties:
+                            maxStreams:
+                              type: integer
+                              format: int64
+                              minimum: 0
+                            maxEntries:
+                              type: integer
+                              format: int64
+                              minimum: 0
                             maxLines:
                               type: integer
                               format: int64
@@ -505,6 +513,13 @@ spec:
                         type: string
                       truncated:
                         type: boolean
+                      truncationReason:
+                        type: string
+                      limitDimension:
+                        type: string
+                      limit:
+                        type: integer
+                        format: int64
                       originalCount:
                         type: integer
                         format: int32

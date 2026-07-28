@@ -205,7 +205,7 @@ func (s *Service) collectDatasourceQueries(ctx context.Context, spec v1alpha1.In
 				queryResult := func() collectedDatasourceQuery {
 					rcametrics.AddDatasourceQueriesInFlight(schedulerName, 1)
 					defer rcametrics.AddDatasourceQueriesInFlight(schedulerName, -1)
-					return s.collectDatasourceQuery(queryCtx, preflight, now, window, index)
+					return s.collectDatasourceQuery(queryCtx, spec.QueryBudget, preflight, now, window, index)
 				}()
 				results <- queryResult
 			}
@@ -269,19 +269,20 @@ func (s *Service) collectDatasourceQueries(ctx context.Context, spec v1alpha1.In
 	return out, nil
 }
 
-func (s *Service) collectDatasourceQuery(ctx context.Context, preflight PreflightResult, now time.Time, window time.Duration, index int) collectedDatasourceQuery {
+func (s *Service) collectDatasourceQuery(ctx context.Context, budget v1alpha1.InvestigationQueryBudget, preflight PreflightResult, now time.Time, window time.Duration, index int) collectedDatasourceQuery {
 	step := preflight.CollectionPlan[index]
 	collected := collectedDatasourceQuery{
 		index: index,
 		step:  step,
 		request: datasource.QueryRequest{
-			Query:     step.Query,
-			StartTime: now.Add(-window),
-			EndTime:   now,
-			Step:      time.Minute,
-			Labels:    preflight.Labels,
-			Target:    preflight.Target,
-			QueryType: step.QueryType,
+			Query:        step.Query,
+			StartTime:    now.Add(-window),
+			EndTime:      now,
+			Step:         time.Minute,
+			Labels:       preflight.Labels,
+			Target:       preflight.Target,
+			QueryType:    step.QueryType,
+			ResultLimits: budget.ResultLimits,
 		},
 	}
 	source, ok := s.Registry.Get(step.DatasourceName)
@@ -307,6 +308,9 @@ func (s *Service) collectDatasourceQuery(ctx context.Context, preflight Prefligh
 		return collected
 	}
 	rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, queryDuration)
+	if queryResult.NativeLimit != nil {
+		rcametrics.RecordQueryResultLimitExceeded(source.Type(), queryResult.NativeLimit.Dimension)
+	}
 	collected.result = queryResult
 	collected.bytes = queryResultResponseBytes(queryResult)
 	return collected
@@ -349,6 +353,9 @@ func applyQueryResultLimits(result *datasource.QueryResult, queryType domain.Que
 	limited := *result
 	limited.Records = append([]map[string]any(nil), result.Records[:maxRecords]...)
 	limited.Truncated = true
+	limited.TruncationReason = "ResultLimitExceeded"
+	limited.LimitDimension = "records"
+	limited.Limit = maxRecords
 	limited.OriginalRecordCount = len(result.Records)
 	limited.RetainedRecordCount = len(limited.Records)
 	limited.Summary = fmt.Sprintf("%s; result limit retained %d of %d records", result.Summary, len(limited.Records), len(result.Records))
@@ -356,6 +363,9 @@ func applyQueryResultLimits(result *datasource.QueryResult, queryType domain.Que
 }
 
 func evidenceTruncationReason(result *datasource.QueryResult, observation domain.Observation) string {
+	if result != nil && result.NativeLimit != nil {
+		return "native_result_limit"
+	}
 	if result != nil && result.Truncated {
 		return "result_limit"
 	}
@@ -370,7 +380,7 @@ func maxQueryResultRecords(queryType domain.QueryType, limits v1alpha1.QueryResu
 	case domain.QueryTypeMetric:
 		return minPositiveLimit(limits.Metrics.MaxSamples, limits.Metrics.MaxSeries)
 	case domain.QueryTypeLog:
-		return limits.Logs.MaxLines
+		return firstPositiveLimit(limits.Logs.MaxEntries, limits.Logs.MaxLines)
 	case domain.QueryTypeEvent, domain.QueryTypeDeploymentCondition:
 		return limits.Events.MaxRecords
 	default:
@@ -389,6 +399,15 @@ func minPositiveLimit(limits ...int64) int64 {
 		}
 	}
 	return minLimit
+}
+
+func firstPositiveLimit(limits ...int64) int64 {
+	for _, limit := range limits {
+		if limit > 0 {
+			return limit
+		}
+	}
+	return 0
 }
 
 func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRequestSpec, preflight PreflightResult, evidenceResult EvidenceCollectionResult, now time.Time) (RCAResult, error) {
@@ -876,6 +895,9 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 		TimeRange:        domain.TimeRange{Start: req.StartTime.UTC(), End: req.EndTime.UTC()},
 		RedactionProfile: "default-v1",
 		Truncated:        truncated,
+		TruncationReason: firstNonEmpty(result.TruncationReason, nativeLimitReason(result.NativeLimit)),
+		LimitDimension:   firstNonEmpty(result.LimitDimension, nativeLimitDimension(result.NativeLimit)),
+		Limit:            firstNonZeroInt64(result.Limit, nativeLimitValue(result.NativeLimit)),
 		OriginalCount:    originalCount,
 		RetainedCount:    retainedCount,
 		CollectedAt:      collectedAt.UTC(),
@@ -938,7 +960,7 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 	if obs.Value.DeploymentCondition != nil {
 		obs.Value.DeploymentCondition.Message = obs.Summary
 	}
-	obs.ContentDigest = canonicaldigest.String(canonicaldigest.ObservationJSONV1, map[string]any{
+	digestPayload := map[string]any{
 		"schemaVersion":    obs.SchemaVersion,
 		"dataSourceRef":    obs.DataSourceRef,
 		"capability":       obs.Capability,
@@ -953,7 +975,17 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 		"retainedCount":    obs.RetainedCount,
 		"originalBytes":    obs.OriginalBytes,
 		"retainedBytes":    obs.RetainedBytes,
-	})
+	}
+	if obs.TruncationReason != "" {
+		digestPayload["truncationReason"] = obs.TruncationReason
+	}
+	if obs.LimitDimension != "" {
+		digestPayload["limitDimension"] = obs.LimitDimension
+	}
+	if obs.Limit != 0 {
+		digestPayload["limit"] = obs.Limit
+	}
+	obs.ContentDigest = canonicaldigest.String(canonicaldigest.ObservationJSONV1, digestPayload)
 	return obs
 }
 
@@ -973,6 +1005,9 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 			DigestCanonicalization: observation.DigestCanonicalization,
 			RedactionProfile:       observation.RedactionProfile,
 			Truncated:              observation.Truncated,
+			TruncationReason:       observation.TruncationReason,
+			LimitDimension:         observation.LimitDimension,
+			Limit:                  observation.Limit,
 			OriginalCount:          int32(observation.OriginalCount),
 			RetainedCount:          int32(observation.RetainedCount),
 			OriginalBytes:          int32(observation.OriginalBytes),
@@ -1038,6 +1073,36 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func firstNonZeroInt64(values ...int64) int64 {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func nativeLimitReason(limit *datasource.NativeResultLimit) string {
+	if limit == nil {
+		return ""
+	}
+	return limit.Reason
+}
+
+func nativeLimitDimension(limit *datasource.NativeResultLimit) string {
+	if limit == nil {
+		return ""
+	}
+	return limit.Dimension
+}
+
+func nativeLimitValue(limit *datasource.NativeResultLimit) int64 {
+	if limit == nil {
+		return 0
+	}
+	return limit.Limit
 }
 
 func min(a, b int) int {

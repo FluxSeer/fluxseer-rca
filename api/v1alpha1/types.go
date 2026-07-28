@@ -47,6 +47,9 @@ type EvidenceRef struct {
 	DigestCanonicalization string       `json:"digestCanonicalization,omitempty"`
 	RedactionProfile       string       `json:"redactionProfile,omitempty"`
 	Truncated              bool         `json:"truncated,omitempty"`
+	TruncationReason       string       `json:"truncationReason,omitempty"`
+	LimitDimension         string       `json:"limitDimension,omitempty"`
+	Limit                  int64        `json:"limit,omitempty"`
 	OriginalCount          int32        `json:"originalCount,omitempty"`
 	RetainedCount          int32        `json:"retainedCount,omitempty"`
 	OriginalBytes          int32        `json:"originalBytes,omitempty"`

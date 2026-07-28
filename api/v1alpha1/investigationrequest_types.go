@@ -111,7 +111,9 @@ type MetricResultLimits struct {
 }
 
 type LogResultLimits struct {
-	MaxLines int64 `json:"maxLines,omitempty"`
+	MaxStreams int64 `json:"maxStreams,omitempty"`
+	MaxEntries int64 `json:"maxEntries,omitempty"`
+	MaxLines   int64 `json:"maxLines,omitempty"`
 }
 
 type EventResultLimits struct {

@@ -3,7 +3,9 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -46,11 +48,23 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 		return nil, fmt.Errorf("list kubernetes events: %w", err)
 	}
 
-	records := make([]map[string]any, 0)
+	matched := make([]corev1.Event, 0)
 	for _, event := range events.Items {
 		if !eventMatchesTarget(event, req.Target) {
 			continue
 		}
+		matched = append(matched, event)
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		return eventSortKey(matched[i]) < eventSortKey(matched[j])
+	})
+	records := make([]map[string]any, 0, len(matched))
+	limit := nativeRecordLimit("records", req.ResultLimits.Events.MaxRecords, int64(len(matched)))
+	retain := len(matched)
+	if limit != nil {
+		retain = int(limit.RetainedCount)
+	}
+	for _, event := range matched[:retain] {
 		records = append(records, map[string]any{
 			"reason":  event.Reason,
 			"message": event.Message,
@@ -59,12 +73,24 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 		})
 	}
 
-	return &datasource.QueryResult{
-		Source:    a.Name(),
-		QueryType: domain.QueryTypeEvent,
-		Summary:   fmt.Sprintf("Kubernetes returned %d matching events for %s", len(records), req.Target.Name),
-		Records:   records,
-	}, nil
+	result := &datasource.QueryResult{
+		Source:       a.Name(),
+		QueryType:    domain.QueryTypeEvent,
+		Summary:      fmt.Sprintf("Kubernetes returned %d matching events for %s", len(matched), req.Target.Name),
+		Records:      records,
+		NativeCounts: datasource.NativeResultCounts{ResultType: "events", Records: len(matched)},
+	}
+	if limit != nil {
+		result.Truncated = true
+		result.TruncationReason = limit.Reason
+		result.LimitDimension = limit.Dimension
+		result.Limit = limit.Limit
+		result.OriginalRecordCount = int(limit.OriginalCount)
+		result.RetainedRecordCount = int(limit.RetainedCount)
+		result.NativeLimit = limit
+		result.Summary = fmt.Sprintf("%s; native records limit retained %d of %d", result.Summary, limit.RetainedCount, limit.OriginalCount)
+	}
+	return result, nil
 }
 
 func (a Adapter) queryDeploymentConditions(ctx context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {
@@ -83,7 +109,16 @@ func (a Adapter) queryDeploymentConditions(ctx context.Context, req datasource.Q
 	}
 
 	records := make([]map[string]any, 0, len(deployment.Status.Conditions))
-	for _, condition := range deployment.Status.Conditions {
+	conditions := append([]appsv1.DeploymentCondition(nil), deployment.Status.Conditions...)
+	sort.SliceStable(conditions, func(i, j int) bool {
+		return string(conditions[i].Type) < string(conditions[j].Type)
+	})
+	limit := nativeRecordLimit("records", req.ResultLimits.Events.MaxRecords, int64(len(conditions)))
+	retain := len(conditions)
+	if limit != nil {
+		retain = int(limit.RetainedCount)
+	}
+	for _, condition := range conditions[:retain] {
 		records = append(records, map[string]any{
 			"type":    string(condition.Type),
 			"status":  string(condition.Status),
@@ -92,12 +127,24 @@ func (a Adapter) queryDeploymentConditions(ctx context.Context, req datasource.Q
 		})
 	}
 
-	return &datasource.QueryResult{
-		Source:    a.Name(),
-		QueryType: domain.QueryTypeDeploymentCondition,
-		Summary:   fmt.Sprintf("Kubernetes returned %d deployment conditions for %s", len(records), req.Target.Name),
-		Records:   records,
-	}, nil
+	result := &datasource.QueryResult{
+		Source:       a.Name(),
+		QueryType:    domain.QueryTypeDeploymentCondition,
+		Summary:      fmt.Sprintf("Kubernetes returned %d deployment conditions for %s", len(conditions), req.Target.Name),
+		Records:      records,
+		NativeCounts: datasource.NativeResultCounts{ResultType: "deploymentConditions", Records: len(conditions)},
+	}
+	if limit != nil {
+		result.Truncated = true
+		result.TruncationReason = limit.Reason
+		result.LimitDimension = limit.Dimension
+		result.Limit = limit.Limit
+		result.OriginalRecordCount = int(limit.OriginalCount)
+		result.RetainedRecordCount = int(limit.RetainedCount)
+		result.NativeLimit = limit
+		result.Summary = fmt.Sprintf("%s; native records limit retained %d of %d", result.Summary, limit.RetainedCount, limit.OriginalCount)
+	}
+	return result, nil
 }
 
 func (a Adapter) HealthCheck(_ context.Context) error {
@@ -113,4 +160,31 @@ func eventMatchesTarget(event corev1.Event, target domain.ResourceRef) bool {
 	kind := strings.ToLower(event.InvolvedObject.Kind)
 
 	return strings.Contains(involved, name) || kind == strings.ToLower(target.Kind)
+}
+
+func eventSortKey(event corev1.Event) string {
+	timestamp := event.EventTime.Time
+	if timestamp.IsZero() {
+		timestamp = event.LastTimestamp.Time
+	}
+	if timestamp.IsZero() {
+		timestamp = event.FirstTimestamp.Time
+	}
+	if timestamp.IsZero() {
+		timestamp = time.Time{}
+	}
+	return timestamp.UTC().Format(time.RFC3339Nano) + "\xff" + event.Namespace + "\xff" + event.Name
+}
+
+func nativeRecordLimit(dimension string, limit int64, original int64) *datasource.NativeResultLimit {
+	if limit <= 0 || original <= limit {
+		return nil
+	}
+	return &datasource.NativeResultLimit{
+		Reason:        "NativeResultLimitExceeded",
+		Dimension:     dimension,
+		Limit:         limit,
+		OriginalCount: original,
+		RetainedCount: limit,
+	}
 }
