@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -135,79 +136,25 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 		window = 15 * time.Minute
 	}
 
+	collectedQueries, issue := s.collectDatasourceQueries(ctx, spec, preflight, now, window)
+	if issue != nil {
+		result.Issue = issue
+		return result, nil
+	}
+
 	evidenceRefs := make([]v1alpha1.EvidenceRef, 0, len(preflight.CollectionPlan))
 	observations := make([]domain.Observation, 0, len(preflight.CollectionPlan))
 	totalRecords := 0
-	var cumulativeDuration time.Duration
-	var cumulativeResponseBytes int64
-	var activeQueries int32
-	for _, step := range preflight.CollectionPlan {
-		source, ok := s.Registry.Get(step.DatasourceName)
-		if !ok {
-			result.Issue = &Issue{
-				Reason:  "DataSourceNotFound",
-				Message: fmt.Sprintf("datasource %q disappeared from the active registry before evidence collection", step.DatasourceName),
-			}
-			return result, nil
-		}
-		queryRequest := datasource.QueryRequest{
-			Query:     step.Query,
-			StartTime: now.Add(-window),
-			EndTime:   now,
-			Step:      time.Minute,
-			Labels:    preflight.Labels,
-			Target:    preflight.Target,
-			QueryType: step.QueryType,
-		}
-
-		activeQueries++
-		if maxConcurrentQueries := spec.QueryBudget.MaxConcurrentQueries; maxConcurrentQueries > 0 && activeQueries > maxConcurrentQueries {
-			result.Issue = &Issue{
-				Reason:  "QueryBudgetExceeded",
-				Message: fmt.Sprintf("active datasource query count %d exceeds queryBudget.maxConcurrentQueries %d", activeQueries, maxConcurrentQueries),
-			}
-			return result, nil
-		}
-		queryStart := time.Now()
-		queryResult, err := source.Query(ctx, queryRequest)
-		queryDuration := time.Since(queryStart)
-		activeQueries--
-		queryResultLabel := "success"
-		if err != nil {
-			queryResultLabel = datasource.QueryErrorReason(err, "failed")
-			rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, queryDuration)
-			result.Issue = &Issue{
-				Reason:  datasource.QueryErrorReason(err, "DatasourceQueryFailed"),
-				Message: fmt.Sprintf("query datasource %q failed: %v", step.DatasourceName, err),
-			}
-			return result, nil
-		}
-		rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, queryDuration)
-		cumulativeDuration += queryDuration
-		if maxDuration := spec.QueryBudget.MaxCumulativeDuration.Duration; maxDuration > 0 && cumulativeDuration > maxDuration {
-			result.Issue = &Issue{
-				Reason:  "QueryBudgetExceeded",
-				Message: fmt.Sprintf("datasource query cumulative duration %s exceeds queryBudget.maxCumulativeDuration %s", cumulativeDuration, maxDuration),
-			}
-			return result, nil
-		}
-		cumulativeResponseBytes += queryResultResponseBytes(queryResult)
-		if maxBytes := spec.QueryBudget.MaxCumulativeResponseBytes; maxBytes > 0 && cumulativeResponseBytes > maxBytes {
-			result.Issue = &Issue{
-				Reason:  "QueryBudgetExceeded",
-				Message: fmt.Sprintf("datasource query cumulative response bytes %d exceeds queryBudget.maxCumulativeResponseBytes %d", cumulativeResponseBytes, maxBytes),
-			}
-			return result, nil
-		}
-		filtered := filterQueryResult(queryResult, step)
-		normalized := normalizeObservations(filtered, queryRequest, len(observations), now)
+	for _, collected := range collectedQueries {
+		filtered := filterQueryResult(collected.result, collected.step)
+		normalized := normalizeObservations(filtered, collected.request, len(observations), now)
 		for _, observation := range normalized {
 			if observation.Truncated {
 				rcametrics.RecordEvidenceTruncated(string(observation.Type))
 			}
 		}
 		observations = append(observations, normalized...)
-		evidenceRefs = append(evidenceRefs, evidenceRefsFromObservations(normalized, queryRequest)...)
+		evidenceRefs = append(evidenceRefs, evidenceRefsFromObservations(normalized, collected.request)...)
 		totalRecords += len(filtered.Records)
 	}
 
@@ -215,6 +162,163 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 	result.Observations = observations
 	result.Summary = fmt.Sprintf("collected %d evidence records from %d investigation queries", totalRecords, len(preflight.CollectionPlan))
 	return result, nil
+}
+
+type collectedDatasourceQuery struct {
+	index    int
+	step     CollectionStep
+	request  datasource.QueryRequest
+	result   *datasource.QueryResult
+	duration time.Duration
+	bytes    int64
+	issue    *Issue
+}
+
+func (s *Service) collectDatasourceQueries(ctx context.Context, spec v1alpha1.InvestigationRequestSpec, preflight PreflightResult, now time.Time, window time.Duration) ([]collectedDatasourceQuery, *Issue) {
+	plan := preflight.CollectionPlan
+	if len(plan) == 0 {
+		return nil, nil
+	}
+
+	queryCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	concurrency := effectiveDatasourceQueryConcurrency(spec.QueryBudget, len(plan))
+	jobs := make(chan int)
+	results := make(chan collectedDatasourceQuery, len(plan))
+	var wg sync.WaitGroup
+	for worker := 0; worker < concurrency; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				select {
+				case <-queryCtx.Done():
+					continue
+				default:
+				}
+				results <- s.collectDatasourceQuery(queryCtx, preflight, now, window, index)
+			}
+		}()
+	}
+	go func() {
+		defer close(jobs)
+		for index := range plan {
+			select {
+			case <-queryCtx.Done():
+				return
+			case jobs <- index:
+			}
+		}
+	}()
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	collected := make([]collectedDatasourceQuery, len(plan))
+	completed := make([]bool, len(plan))
+	var cumulativeDuration time.Duration
+	var cumulativeResponseBytes int64
+	var firstIssue *Issue
+	for queryResult := range results {
+		if firstIssue != nil {
+			continue
+		}
+		if queryResult.issue != nil {
+			firstIssue = queryResult.issue
+			cancel()
+			continue
+		}
+		cumulativeDuration += queryResult.duration
+		if maxDuration := spec.QueryBudget.MaxCumulativeDuration.Duration; maxDuration > 0 && cumulativeDuration > maxDuration {
+			firstIssue = &Issue{
+				Reason:  "QueryBudgetExceeded",
+				Message: fmt.Sprintf("datasource query cumulative duration %s exceeds queryBudget.maxCumulativeDuration %s", cumulativeDuration, maxDuration),
+			}
+			cancel()
+			continue
+		}
+		cumulativeResponseBytes += queryResult.bytes
+		if maxBytes := spec.QueryBudget.MaxCumulativeResponseBytes; maxBytes > 0 && cumulativeResponseBytes > maxBytes {
+			firstIssue = &Issue{
+				Reason:  "QueryBudgetExceeded",
+				Message: fmt.Sprintf("datasource query cumulative response bytes %d exceeds queryBudget.maxCumulativeResponseBytes %d", cumulativeResponseBytes, maxBytes),
+			}
+			cancel()
+			continue
+		}
+		collected[queryResult.index] = queryResult
+		completed[queryResult.index] = true
+	}
+	if firstIssue != nil {
+		return nil, firstIssue
+	}
+
+	out := make([]collectedDatasourceQuery, 0, len(plan))
+	for index := range plan {
+		if completed[index] {
+			out = append(out, collected[index])
+		}
+	}
+	return out, nil
+}
+
+func (s *Service) collectDatasourceQuery(ctx context.Context, preflight PreflightResult, now time.Time, window time.Duration, index int) collectedDatasourceQuery {
+	step := preflight.CollectionPlan[index]
+	collected := collectedDatasourceQuery{
+		index: index,
+		step:  step,
+		request: datasource.QueryRequest{
+			Query:     step.Query,
+			StartTime: now.Add(-window),
+			EndTime:   now,
+			Step:      time.Minute,
+			Labels:    preflight.Labels,
+			Target:    preflight.Target,
+			QueryType: step.QueryType,
+		},
+	}
+	source, ok := s.Registry.Get(step.DatasourceName)
+	if !ok {
+		collected.issue = &Issue{
+			Reason:  "DataSourceNotFound",
+			Message: fmt.Sprintf("datasource %q disappeared from the active registry before evidence collection", step.DatasourceName),
+		}
+		return collected
+	}
+	queryStart := time.Now()
+	queryResult, err := source.Query(ctx, collected.request)
+	queryDuration := time.Since(queryStart)
+	collected.duration = queryDuration
+	queryResultLabel := "success"
+	if err != nil {
+		queryResultLabel = datasource.QueryErrorReason(err, "failed")
+		rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, queryDuration)
+		collected.issue = &Issue{
+			Reason:  datasource.QueryErrorReason(err, "DatasourceQueryFailed"),
+			Message: fmt.Sprintf("query datasource %q failed: %v", step.DatasourceName, err),
+		}
+		return collected
+	}
+	rcametrics.ObserveDatasourceQuery(source.Type(), queryResultLabel, queryDuration)
+	collected.result = queryResult
+	collected.bytes = queryResultResponseBytes(queryResult)
+	return collected
+}
+
+func effectiveDatasourceQueryConcurrency(budget v1alpha1.InvestigationQueryBudget, planSize int) int {
+	if planSize <= 0 {
+		return 0
+	}
+	concurrency := int(budget.MaxConcurrentQueries)
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	if concurrency > planSize {
+		return planSize
+	}
+	return concurrency
 }
 
 func queryResultResponseBytes(result *datasource.QueryResult) int64 {

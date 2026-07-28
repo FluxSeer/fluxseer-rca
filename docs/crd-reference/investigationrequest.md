@@ -135,7 +135,7 @@ Query field behavior:
 - `queryBudget.maxTimeRange`: maximum allowed `timeRange.lookback` before query execution starts
 - `queryBudget.maxQueriesTotal`: maximum total datasource queries for this investigation
 - `queryBudget.maxQueriesPerSource`: maximum queries referencing the same datasource
-- `queryBudget.maxConcurrentQueries`: maximum active datasource queries allowed for this investigation. The current collector is sequential, so values above `1` are accepted for contract compatibility but do not increase runtime parallelism yet.
+- `queryBudget.maxConcurrentQueries`: maximum active datasource queries allowed for this investigation. Unset or zero keeps the default sequential collector; values above `1` enable bounded parallel datasource queries while preserving deterministic evidence ordering.
 - `queryBudget.maxCumulativeDuration`: maximum cumulative datasource query runtime before evidence collection stops
 - `queryBudget.maxCumulativeResponseBytes`: maximum cumulative datasource response payload size before evidence collection stops
 - `loopPolicy.maxDepth`: maximum allowed lineage depth before execution is blocked; default is `1`
