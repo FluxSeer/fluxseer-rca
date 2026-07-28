@@ -29,6 +29,13 @@ docs/
 │  ├─ loki.md
 │  ├─ kubernetes-events.md
 │  └─ model-providers.md
+├─ backlog/
+│  ├─ v0.2-beta.md
+│  ├─ v0.2-release-reproducibility.md
+│  ├─ v0.3-trustworthy-rca-contract.md
+│  ├─ v0.3-foundation-issues.md
+│  ├─ v0.3-production-readiness.md
+│  └─ archived-decisions.md
 └─ tutorials/
    ├─ quickstart-kind.md
    ├─ investigate-workload.md
@@ -54,6 +61,9 @@ docs/
 - [backlog/v0.2-beta.md](backlog/v0.2-beta.md)
 - [backlog/v0.2-release-reproducibility.md](backlog/v0.2-release-reproducibility.md)
 - [backlog/v0.3-trustworthy-rca-contract.md](backlog/v0.3-trustworthy-rca-contract.md)
+- [backlog/v0.3-foundation-issues.md](backlog/v0.3-foundation-issues.md)
+- [backlog/v0.3-production-readiness.md](backlog/v0.3-production-readiness.md)
+- [backlog/archived-decisions.md](backlog/archived-decisions.md)
 - [releases/v0.2.0-beta.1.md](releases/v0.2.0-beta.1.md)
 - [releases/v0.2.0-beta.1-freeze.md](releases/v0.2.0-beta.1-freeze.md)
 - [releases/v0.2.0-alpha.2.md](releases/v0.2.0-alpha.2.md)
