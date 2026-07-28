@@ -83,6 +83,14 @@ spec:
                   type: string
                 createRiskSignal:
                   type: boolean
+                loopPolicy:
+                  type: object
+                  properties:
+                    maxDepth:
+                      type: integer
+                      format: int32
+                    allowRiskSignalSource:
+                      type: boolean
                 ttlSeconds:
                   type: integer
                   format: int64

@@ -19,6 +19,8 @@ const (
 	annotationNotificationAt     = "fluxagent.aiops.platform/notified-at"
 	annotationNotificationSource = "fluxagent.aiops.platform/notification-source"
 	annotationLineageSource      = "fluxagent.aiops.platform/lineage-source"
+	annotationLineageSourceKind  = "fluxagent.aiops.platform/lineage-source-kind"
+	annotationLineageSourceAPI   = "fluxagent.aiops.platform/lineage-source-api-version"
 	annotationLineageSourceUID   = "fluxagent.aiops.platform/lineage-source-uid"
 	annotationLineageGeneration  = "fluxagent.aiops.platform/lineage-generation"
 	annotationTargetUID          = "fluxagent.aiops.platform/target-uid"

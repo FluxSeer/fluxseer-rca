@@ -330,6 +330,8 @@ func (r *RiskRuleReconciler) upsertInvestigationRequest(ctx context.Context, ris
 		request.Annotations[annotationDetectionSource] = "risk-rule"
 		request.Annotations[annotationTargetRef] = target.Resource.Namespace + "/" + target.Resource.Name
 		request.Annotations[annotationLineageSource] = riskRule.Namespace + "/" + riskRule.Name
+		request.Annotations[annotationLineageSourceKind] = "RiskRule"
+		request.Annotations[annotationLineageSourceAPI] = v1alpha1.SchemeGroupVersion.String()
 		request.Annotations[annotationLineageSourceUID] = string(riskRule.UID)
 		request.Annotations[annotationLineageGeneration] = strconv.FormatInt(riskRule.Generation, 10)
 		request.Annotations[annotationTargetUID] = targetUID(target)
