@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -31,6 +32,7 @@ const (
 	executionStateFinalized         = "Finalized"
 	executionAttemptCompleted       = "Completed"
 	defaultExecutionAttemptID       = "attempt-001"
+	defaultMaxInvestigationDepth    = int32(1)
 )
 
 type InvestigationRequestReconciler struct {
@@ -81,10 +83,12 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 	investigation.Status.Degradation = nil
 	investigation.Status.Execution = nil
 	investigation.Status.EvidenceRefs = nil
-	investigation.Status.Lineage = lineageFromAnnotations(investigation.Annotations)
+	investigation.Status.Lineage = lineageForReconcile(original.Status.Lineage, investigation.Annotations)
 	investigation.Status.LinkedRiskSignalRef = nil
 
-	if invalidMessage := validateInvestigationRequestSpec(investigation.Spec); invalidMessage != "" {
+	if failure := investigationLoopFailure(&investigation); failure != nil {
+		applyLoopPreventedInvestigationStatus(&investigation, failure, now())
+	} else if invalidMessage := validateInvestigationRequestSpec(investigation.Spec); invalidMessage != "" {
 		applyInvalidInvestigationStatus(&investigation, invalidMessage, now())
 	} else {
 		preflight, preflightErr := r.preflight(ctx, &investigation)
@@ -146,6 +150,53 @@ func applyInvestigationStatusBudget(request *v1alpha1.InvestigationRequest, now 
 	request.Status.Degradation.Partial = true
 	request.Status.Degradation.Reasons = appendDegradationReason(request.Status.Degradation.Reasons, reason)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, reason.Code, reason.Message, request.Generation, now)
+}
+
+func applyLoopPreventedInvestigationStatus(request *v1alpha1.InvestigationRequest, failure *v1alpha1.InvestigationFailure, now time.Time) {
+	request.Status.Phase = v1alpha1.PhaseFailed
+	request.Status.Message = failure.Message
+	request.Status.Outcome = v1alpha1.InvestigationOutcomeUnknown
+	request.Status.Failure = failure
+	completedAt := metav1.NewTime(now)
+	request.Status.CompletedAt = &completedAt
+	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, failure.Code, failure.Message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, failure.Code, failure.Message, request.Generation, now)
+}
+
+func investigationLoopFailure(request *v1alpha1.InvestigationRequest) *v1alpha1.InvestigationFailure {
+	lineage := request.Status.Lineage
+	if lineage == nil {
+		return nil
+	}
+	maxDepth := request.Spec.LoopPolicy.MaxDepth
+	if maxDepth <= 0 {
+		maxDepth = defaultMaxInvestigationDepth
+	}
+	if lineage.InvestigationDepth >= maxDepth {
+		return &v1alpha1.InvestigationFailure{
+			Code:      "InvestigationDepthLimitExceeded",
+			Message:   fmt.Sprintf("investigation lineage depth %d reached maxDepth %d", lineage.InvestigationDepth, maxDepth),
+			Stage:     v1alpha1.InvestigationStageValidation,
+			Retryable: false,
+		}
+	}
+	if strings.EqualFold(lineage.Source.Kind, "RiskSignal") && !request.Spec.LoopPolicy.AllowRiskSignalSource {
+		return &v1alpha1.InvestigationFailure{
+			Code:      "RiskSignalSourceBlocked",
+			Message:   "default loop policy blocks investigations sourced from RiskSignal",
+			Stage:     v1alpha1.InvestigationStageValidation,
+			Retryable: false,
+		}
+	}
+	if strings.EqualFold(lineage.Source.Kind, "RiskSignal") && strings.TrimSpace(lineage.Source.UID) == "" {
+		return &v1alpha1.InvestigationFailure{
+			Code:      "RiskSignalSourceUIDRequired",
+			Message:   "RiskSignal-sourced investigations require lineage source UID for loop prevention",
+			Stage:     v1alpha1.InvestigationStageValidation,
+			Retryable: false,
+		}
+	}
+	return nil
 }
 
 func (r *InvestigationRequestReconciler) persistProviderCompletedCheckpoint(ctx context.Context, request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, executionID string, now time.Time) error {
@@ -640,6 +691,25 @@ func lineageTargetUID(lineage *v1alpha1.InvestigationLineage) string {
 	return lineage.TargetUID
 }
 
+func lineageForReconcile(existing *v1alpha1.InvestigationLineage, annotations map[string]string) *v1alpha1.InvestigationLineage {
+	if existing != nil {
+		return copyInvestigationLineage(existing)
+	}
+	return lineageFromAnnotations(annotations)
+}
+
+func copyInvestigationLineage(in *v1alpha1.InvestigationLineage) *v1alpha1.InvestigationLineage {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	if in.FindingIdentity != nil {
+		identity := *in.FindingIdentity
+		out.FindingIdentity = &identity
+	}
+	return &out
+}
+
 func lineageFromAnnotations(annotations map[string]string) *v1alpha1.InvestigationLineage {
 	sourceRef := strings.TrimSpace(annotations[annotationLineageSource])
 	fingerprint := strings.TrimSpace(annotations[annotationFindingFingerprint])
@@ -651,10 +721,18 @@ func lineageFromAnnotations(annotations map[string]string) *v1alpha1.Investigati
 	namespace, name := splitNamespacedName(sourceRef)
 	generation, _ := strconv.ParseInt(strings.TrimSpace(annotations[annotationLineageGeneration]), 10, 64)
 	depth, _ := strconv.ParseInt(strings.TrimSpace(annotations[annotationInvestigationDepth]), 10, 32)
+	sourceKind := strings.TrimSpace(annotations[annotationLineageSourceKind])
+	if sourceKind == "" {
+		sourceKind = "RiskRule"
+	}
+	sourceAPI := strings.TrimSpace(annotations[annotationLineageSourceAPI])
+	if sourceAPI == "" {
+		sourceAPI = v1alpha1.SchemeGroupVersion.String()
+	}
 	return &v1alpha1.InvestigationLineage{
 		Source: v1alpha1.InvestigationLineageSource{
-			APIVersion: v1alpha1.SchemeGroupVersion.String(),
-			Kind:       "RiskRule",
+			APIVersion: sourceAPI,
+			Kind:       sourceKind,
 			Namespace:  namespace,
 			Name:       name,
 			UID:        strings.TrimSpace(annotations[annotationLineageSourceUID]),

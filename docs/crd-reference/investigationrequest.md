@@ -125,6 +125,8 @@ Query field behavior:
 - `queryTemplate`: templated query rendered against target metadata
 - `reasons[]`: optional event reason filter for `queryType: event`
 - `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
+- `loopPolicy.maxDepth`: maximum allowed lineage depth before execution is blocked; default is `1`
+- `loopPolicy.allowRiskSignalSource`: opt-in escape hatch for investigations sourced from `RiskSignal`; default is `false`
 
 If `modelProviderRef.name` is empty, FluxAgent falls back to the built-in heuristic provider.
 
@@ -294,6 +296,8 @@ Legal terminal combinations are:
 Non-terminal phases should leave `outcome`, `failure`, and `completedAt` unset. `status.degradation` is orthogonal to phase and outcome; a completed investigation may still be degraded if it reached a conclusion with partial evidence.
 
 `status.lineage` records where the investigation came from when it was created by another FluxAgent workflow. For `RiskRule` routing, it includes the source rule reference, source UID and generation, target UID, compatibility finding fingerprint, structured finding identity, and investigation depth. This lets downstream consumers trace `RiskRule -> InvestigationRequest -> optional RiskSignal` without treating `RiskSignal` as the canonical RCA surface.
+
+Lineage in `status.lineage` is the canonical loop-prevention signal after it has been initialized. Lineage annotations are auxiliary seed metadata used for newly created requests. By default, FluxAgent blocks `RiskSignal`-sourced investigations and any request whose `investigationDepth` reaches `spec.loopPolicy.maxDepth`; blocked requests finish as `phase: Failed`, `outcome: Unknown`, with a non-retryable validation failure.
 
 When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to the emitted `RiskSignal`. The RCA itself remains on `InvestigationRequest.status`; the linked `RiskSignal` represents a materialized finding for downstream workflows, not the canonical RCA result.
 

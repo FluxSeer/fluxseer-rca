@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"fluxagent/api/v1alpha1"
@@ -356,6 +357,118 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 	}
 	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected RCAReady true on promoted risk signal, got %#v", cond)
+	}
+}
+
+func TestLineageForReconcilePrefersStatusLineageWhenAnnotationsMissing(t *testing.T) {
+	existing := &v1alpha1.InvestigationLineage{
+		Source: v1alpha1.InvestigationLineageSource{
+			APIVersion: v1alpha1.SchemeGroupVersion.String(),
+			Kind:       "RiskRule",
+			Namespace:  "fluxagent-system",
+			Name:       "latency-regression",
+			UID:        "riskrule-uid",
+			Generation: 4,
+		},
+		TargetUID:          "deployment-uid",
+		FindingFingerprint: "sha256:abc123",
+		InvestigationDepth: 0,
+	}
+
+	got := lineageForReconcile(existing, nil)
+	if got == nil || got.Source.Kind != "RiskRule" || got.Source.UID != "riskrule-uid" || got.TargetUID != "deployment-uid" {
+		t.Fatalf("expected existing status lineage to be preserved, got %#v", got)
+	}
+	got.Source.UID = "mutated"
+	if existing.Source.UID != "riskrule-uid" {
+		t.Fatalf("expected lineage copy to avoid mutating existing status, got %#v", existing)
+	}
+}
+
+func TestInvestigationRequestReconcilerBlocksRiskSignalSourceByDefault(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	request := loopPolicyTestRequest("risk-signal-loop", map[string]string{
+		annotationLineageSource:      "fluxagent-system/discovered-open-api",
+		annotationLineageSourceKind:  "RiskSignal",
+		annotationLineageSourceAPI:   v1alpha1.SchemeGroupVersion.String(),
+		annotationLineageSourceUID:   "risk-signal-uid",
+		annotationTargetUID:          "deployment-uid",
+		annotationInvestigationDepth: "0",
+	})
+	provider := &countingModelProvider{}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request).
+		Build()
+	reconciler := loopPolicyTestReconciler(client, scheme, provider)
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseFailed || stored.Status.Outcome != v1alpha1.InvestigationOutcomeUnknown {
+		t.Fatalf("expected failed unknown loop-prevented status, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if stored.Status.Failure == nil || stored.Status.Failure.Code != "RiskSignalSourceBlocked" {
+		t.Fatalf("expected RiskSignalSourceBlocked failure, got %#v", stored.Status.Failure)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("expected provider not to be called when loop policy blocks request, got %d", provider.calls)
+	}
+}
+
+func TestInvestigationRequestReconcilerEnforcesInvestigationDepthLimit(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	request := loopPolicyTestRequest("depth-limit", map[string]string{
+		annotationLineageSource:      "fluxagent-system/latency-regression",
+		annotationLineageSourceKind:  "RiskRule",
+		annotationLineageSourceAPI:   v1alpha1.SchemeGroupVersion.String(),
+		annotationLineageSourceUID:   "riskrule-uid",
+		annotationTargetUID:          "deployment-uid",
+		annotationInvestigationDepth: "1",
+	})
+	provider := &countingModelProvider{}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request).
+		Build()
+	reconciler := loopPolicyTestReconciler(client, scheme, provider)
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Failure == nil || stored.Status.Failure.Code != "InvestigationDepthLimitExceeded" {
+		t.Fatalf("expected InvestigationDepthLimitExceeded failure, got %#v", stored.Status.Failure)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("expected provider not to be called when depth policy blocks request, got %d", provider.calls)
 	}
 }
 
@@ -855,6 +968,52 @@ func (f fakeInvestigationDataSource) Query(context.Context, datasource.QueryRequ
 	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: records}, nil
 }
 func (f fakeInvestigationDataSource) HealthCheck(context.Context) error { return nil }
+
+func loopPolicyTestRequest(name string, annotations map[string]string) *v1alpha1.InvestigationRequest {
+	return &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   "fluxagent-system",
+			Generation:  1,
+			Annotations: annotations,
+		},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "Deployment",
+				Name:       "open-api",
+				APIVersion: "apps/v1",
+			},
+			DataSources: []v1alpha1.LocalObjectReference{
+				{Name: "kubernetes-events"},
+			},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "counting-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+			CreateRiskSignal: true,
+		},
+	}
+}
+
+func loopPolicyTestReconciler(kubeClient client.Client, scheme *runtime.Scheme, provider *countingModelProvider) *InvestigationRequestReconciler {
+	return &InvestigationRequestReconciler{
+		Client: kubeClient,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client: kubeClient,
+			Registry: datasource.NewRegistry(
+				fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent},
+			),
+			Resolver: modelgateway.KubeResolver{Client: kubeClient},
+			Gateway: &modelgateway.Gateway{
+				Base: knowledge.NewBase(),
+				Providers: model.NewRegistry(
+					provider,
+				),
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 7, 6, 10, 45, 0, 0, time.UTC) },
+	}
+}
 
 type countingModelProvider struct {
 	calls int
