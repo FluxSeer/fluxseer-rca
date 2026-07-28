@@ -35,7 +35,19 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "investigate-open-api", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "investigate-open-api",
+			Namespace:  "fluxagent-system",
+			Generation: 1,
+			Annotations: map[string]string{
+				annotationLineageSource:      "fluxagent-system/latency-regression",
+				annotationLineageSourceUID:   "riskrule-uid",
+				annotationLineageGeneration:  "4",
+				annotationTargetUID:          "deployment-uid",
+				annotationFindingFingerprint: "sha256:abc123",
+				annotationInvestigationDepth: "0",
+			},
+		},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace:  "prod",
@@ -188,6 +200,16 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	}
 	if stored.Status.Execution.ReasoningPolicyVersion != "rca-v2-compat" || stored.Status.Execution.ControllerVersion == "" {
 		t.Fatalf("expected execution policy and controller versions, got %#v", stored.Status.Execution)
+	}
+	if stored.Status.Lineage == nil ||
+		stored.Status.Lineage.Source.Kind != "RiskRule" ||
+		stored.Status.Lineage.Source.Namespace != "fluxagent-system" ||
+		stored.Status.Lineage.Source.Name != "latency-regression" ||
+		stored.Status.Lineage.Source.UID != "riskrule-uid" ||
+		stored.Status.Lineage.Source.Generation != 4 ||
+		stored.Status.Lineage.TargetUID != "deployment-uid" ||
+		stored.Status.Lineage.FindingFingerprint != "sha256:abc123" {
+		t.Fatalf("expected investigation lineage, got %#v", stored.Status.Lineage)
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionTargetResolved); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected TargetResolved true condition, got %#v", cond)

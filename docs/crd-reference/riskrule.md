@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Use `RiskRule` to select workloads, query datasources, and turn matching evidence into `RiskSignal`.
+Use `RiskRule` to select workloads, query datasources, and turn matching evidence into a direct `RiskSignal` or an `InvestigationRequest`.
 
 ## Signal Shape
 
@@ -24,6 +24,24 @@ Supported query types include:
 - `log`
 - `event`
 - `deploymentCondition`
+
+## Investigation Routing
+
+`spec.investigationPolicy.mode` controls what FluxAgent creates after a rule match:
+
+- `DirectRiskSignal`: default v0.2-compatible path. The controller materializes a `RiskSignal` directly.
+- `CreateRequest`: opt-in v0.3 path. The controller creates or updates a deterministic `InvestigationRequest` and lets `InvestigationRequest.status` own the canonical RCA result.
+
+Example:
+
+```yaml
+spec:
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true
+```
+
+`CreateRequest` uses a deterministic identity derived from the `RiskRule`, target, normalized window bucket, and finding fingerprint. Repeated reconciles for the same finding update the same request instead of creating unbounded objects. The created request carries lineage annotations that the `InvestigationRequest` controller writes to `status.lineage`.
 
 ## Status Conditions
 

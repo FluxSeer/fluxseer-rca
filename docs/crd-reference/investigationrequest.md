@@ -232,6 +232,8 @@ These fields are compact normalized-observation metadata. They let consumers aud
 
 `status.phase` describes workflow lifecycle. `status.outcome` and `status.verdict.outcome` describe RCA result semantics. A failed datasource or provider execution can therefore be `phase: Failed` and `outcome: ExecutionFailed`, while a successful read-only investigation can be `phase: Completed` and `outcome: Confirmed`.
 
+`status.lineage` records where the investigation came from when it was created by another FluxAgent workflow. For `RiskRule` routing, it includes the source rule reference, source UID and generation, target UID, finding fingerprint, and investigation depth. This lets downstream consumers trace `RiskRule -> InvestigationRequest -> optional RiskSignal` without treating `RiskSignal` as the canonical RCA surface.
+
 When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to the emitted `RiskSignal`. The RCA itself remains on `InvestigationRequest.status`; the linked `RiskSignal` represents a materialized finding for downstream workflows, not the canonical RCA result.
 
 If `ttlSeconds` is greater than zero, FluxAgent keeps the completed request for that many seconds after `status.completedAt`, then deletes it automatically.

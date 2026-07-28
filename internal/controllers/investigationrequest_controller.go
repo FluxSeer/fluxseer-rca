@@ -67,6 +67,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 	investigation.Status.Degradation = nil
 	investigation.Status.Execution = nil
 	investigation.Status.EvidenceRefs = nil
+	investigation.Status.Lineage = lineageFromAnnotations(investigation.Annotations)
 	investigation.Status.LinkedRiskSignalRef = nil
 
 	if invalidMessage := validateInvestigationRequestSpec(investigation.Spec); invalidMessage != "" {
@@ -373,6 +374,40 @@ func providerModel(provider *v1alpha1.ModelProvider) string {
 		return ""
 	}
 	return provider.Spec.Model
+}
+
+func lineageFromAnnotations(annotations map[string]string) *v1alpha1.InvestigationLineage {
+	sourceRef := strings.TrimSpace(annotations[annotationLineageSource])
+	fingerprint := strings.TrimSpace(annotations[annotationFindingFingerprint])
+	targetUID := strings.TrimSpace(annotations[annotationTargetUID])
+	if sourceRef == "" && fingerprint == "" && targetUID == "" {
+		return nil
+	}
+
+	namespace, name := splitNamespacedName(sourceRef)
+	generation, _ := strconv.ParseInt(strings.TrimSpace(annotations[annotationLineageGeneration]), 10, 64)
+	depth, _ := strconv.ParseInt(strings.TrimSpace(annotations[annotationInvestigationDepth]), 10, 32)
+	return &v1alpha1.InvestigationLineage{
+		Source: v1alpha1.InvestigationLineageSource{
+			APIVersion: v1alpha1.SchemeGroupVersion.String(),
+			Kind:       "RiskRule",
+			Namespace:  namespace,
+			Name:       name,
+			UID:        strings.TrimSpace(annotations[annotationLineageSourceUID]),
+			Generation: generation,
+		},
+		TargetUID:          targetUID,
+		FindingFingerprint: fingerprint,
+		InvestigationDepth: int32(depth),
+	}
+}
+
+func splitNamespacedName(value string) (string, string) {
+	parts := strings.SplitN(strings.TrimSpace(value), "/", 2)
+	if len(parts) != 2 {
+		return "", strings.TrimSpace(value)
+	}
+	return parts[0], parts[1]
 }
 
 func buildRCAClaims(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult) ([]v1alpha1.RCAClaim, verifier.Result) {

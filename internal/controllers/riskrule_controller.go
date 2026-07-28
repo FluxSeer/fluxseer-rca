@@ -2,8 +2,13 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,7 +64,7 @@ func (r *RiskRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	original := rule.DeepCopy()
-	statusMessage := fmt.Sprintf("processed %d targets; %d produced RiskSignal", targets, riskCount)
+	statusMessage := fmt.Sprintf("processed %d targets; %d produced %s", targets, riskCount, producedObjectKind(rule.Spec.InvestigationPolicy.Mode))
 	if targets == 0 {
 		statusMessage = "no matching targets discovered for risk rule"
 	}
@@ -117,12 +122,18 @@ func (r *RiskRuleReconciler) reconcileTargets(ctx context.Context, riskRule *v1a
 		if len(matches) == 0 {
 			continue
 		}
-		rcaResult, err := r.analyzeRCA(ctx, riskRule, target, matches, now)
-		if err != nil {
-			return len(targets), riskCount, summary, err
-		}
-		if err := r.upsertRiskSignal(ctx, riskRule, target, matches, rcaResult, issues, now); err != nil {
-			return len(targets), riskCount, summary, err
+		if investigationPolicyMode(riskRule.Spec.InvestigationPolicy.Mode) == v1alpha1.RiskRuleInvestigationModeCreateRequest {
+			if err := r.upsertInvestigationRequest(ctx, riskRule, target, matches, now); err != nil {
+				return len(targets), riskCount, summary, err
+			}
+		} else {
+			rcaResult, err := r.analyzeRCA(ctx, riskRule, target, matches, now)
+			if err != nil {
+				return len(targets), riskCount, summary, err
+			}
+			if err := r.upsertRiskSignal(ctx, riskRule, target, matches, rcaResult, issues, now); err != nil {
+				return len(targets), riskCount, summary, err
+			}
 		}
 		riskCount++
 	}
@@ -289,6 +300,46 @@ func (r *RiskRuleReconciler) upsertRiskSignal(ctx context.Context, riskRule *v1a
 	return nil
 }
 
+func (r *RiskRuleReconciler) upsertInvestigationRequest(ctx context.Context, riskRule *v1alpha1.RiskRule, target rule.Target, matches []rule.Match, now time.Time) error {
+	fingerprint := findingFingerprint(matches)
+	windowBucket := normalizedWindowBucket(riskRule.Spec.Window.Duration, now)
+	name := investigationRequestName(riskRule.Name, target.Resource.Name, fingerprint, windowBucket)
+
+	request := &v1alpha1.InvestigationRequest{}
+	request.Name = name
+	request.Namespace = riskRule.Namespace
+
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, request, func() error {
+		if request.Labels == nil {
+			request.Labels = map[string]string{}
+		}
+		if request.Annotations == nil {
+			request.Annotations = map[string]string{}
+		}
+		request.Labels[labelManagedBy] = "riskrule-controller"
+		request.Labels[labelRiskRule] = riskRule.Name
+		request.Annotations[annotationDetectionSource] = "risk-rule"
+		request.Annotations[annotationTargetRef] = target.Resource.Namespace + "/" + target.Resource.Name
+		request.Annotations[annotationLineageSource] = riskRule.Namespace + "/" + riskRule.Name
+		request.Annotations[annotationLineageSourceUID] = string(riskRule.UID)
+		request.Annotations[annotationLineageGeneration] = strconv.FormatInt(riskRule.Generation, 10)
+		request.Annotations[annotationTargetUID] = targetUID(target)
+		request.Annotations[annotationFindingFingerprint] = fingerprint
+		request.Annotations[annotationInvestigationDepth] = "0"
+		request.Annotations[annotationWindowBucket] = windowBucket
+
+		request.Spec.Target = resourceToTargetRef(target.Resource)
+		request.Spec.TimeRange = v1alpha1.InvestigationTimeRange{Lookback: riskRule.Spec.Window}
+		request.Spec.Question = fmt.Sprintf("Investigate RiskRule %s for %s/%s", riskRule.Name, target.Resource.Namespace, target.Resource.Name)
+		request.Spec.Queries = investigationQueriesFromMatches(matches)
+		request.Spec.ModelProviderRef = riskRule.Spec.AI.ProviderRef
+		request.Spec.Mode = v1alpha1.InvestigationModeReadOnly
+		request.Spec.CreateRiskSignal = riskRule.Spec.InvestigationPolicy.CreateRiskSignal
+		return nil
+	})
+	return err
+}
+
 func firstIssue(current *evaluationIssue, candidate evaluationIssue) *evaluationIssue {
 	if current != nil {
 		return current
@@ -387,6 +438,99 @@ func signalWithRenderedQuery(signal v1alpha1.RiskRuleSignal, renderedQuery strin
 		signal.QueryTemplate = renderedQuery
 	}
 	return signal
+}
+
+func investigationPolicyMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case v1alpha1.RiskRuleInvestigationModeCreateRequest:
+		return v1alpha1.RiskRuleInvestigationModeCreateRequest
+	default:
+		return v1alpha1.RiskRuleInvestigationModeDirectRiskSignal
+	}
+}
+
+func producedObjectKind(mode string) string {
+	if investigationPolicyMode(mode) == v1alpha1.RiskRuleInvestigationModeCreateRequest {
+		return "InvestigationRequest"
+	}
+	return "RiskSignal"
+}
+
+func investigationQueriesFromMatches(matches []rule.Match) []v1alpha1.InvestigationQuery {
+	queries := make([]v1alpha1.InvestigationQuery, 0, len(matches))
+	for _, match := range matches {
+		sourceName, queryType, ok := rule.SourceRefForSignal(match.Signal)
+		if !ok {
+			continue
+		}
+		queries = append(queries, v1alpha1.InvestigationQuery{
+			Name:          match.Signal.Name,
+			DatasourceRef: v1alpha1.LocalObjectReference{Name: sourceName},
+			QueryType:     string(queryType),
+			Query:         match.Signal.Query,
+			QueryTemplate: match.Signal.QueryTemplate,
+			Reasons:       append([]string(nil), match.Signal.Reasons...),
+		})
+	}
+	return queries
+}
+
+func normalizedWindowBucket(window time.Duration, now time.Time) string {
+	if window <= 0 {
+		window = 10 * time.Minute
+	}
+	return strconv.FormatInt(now.UTC().Truncate(window).Unix(), 10)
+}
+
+func findingFingerprint(matches []rule.Match) string {
+	payload := make([]map[string]any, 0, len(matches))
+	for _, match := range matches {
+		evidence := make([]map[string]string, 0, len(match.Evidence))
+		for _, ref := range match.Evidence {
+			evidence = append(evidence, map[string]string{
+				"kind":    ref.Kind,
+				"source":  ref.Source,
+				"query":   ref.Query,
+				"summary": ref.Summary,
+				"reason":  ref.Reason,
+			})
+		}
+		sort.Slice(evidence, func(i, j int) bool {
+			return evidence[i]["kind"]+evidence[i]["source"]+evidence[i]["summary"] < evidence[j]["kind"]+evidence[j]["source"]+evidence[j]["summary"]
+		})
+		payload = append(payload, map[string]any{
+			"signal":   match.Signal.Name,
+			"summary":  match.Summary,
+			"severity": match.Severity,
+			"evidence": evidence,
+		})
+	}
+	sort.Slice(payload, func(i, j int) bool {
+		return fmt.Sprint(payload[i]["signal"], payload[i]["summary"]) < fmt.Sprint(payload[j]["signal"], payload[j]["summary"])
+	})
+	raw, _ := json.Marshal(payload)
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func investigationRequestName(ruleName, targetName, fingerprint, windowBucket string) string {
+	suffixSource := fingerprint + ":" + windowBucket
+	sum := sha256.Sum256([]byte(suffixSource))
+	suffix := hex.EncodeToString(sum[:])[:12]
+	name := strings.ToLower(ruleName + "-" + targetName + "-" + suffix)
+	name = strings.ReplaceAll(name, "_", "-")
+	name = strings.ReplaceAll(name, ".", "-")
+	if len(name) <= 63 {
+		return strings.TrimSuffix(name, "-")
+	}
+	return strings.TrimSuffix(name[:63], "-")
+}
+
+func targetUID(target rule.Target) string {
+	if strings.TrimSpace(target.UID) != "" {
+		return target.UID
+	}
+	return target.Resource.APIVersion + "/" + target.Resource.Kind + "/" + target.Resource.Namespace + "/" + target.Resource.Name
 }
 
 func resourceToTargetRef(resource domain.ResourceRef) v1alpha1.TargetRef {

@@ -97,6 +97,22 @@ type RCAExecution struct {
 	OutputTokens           int64                      `json:"outputTokens,omitempty"`
 }
 
+type InvestigationLineageSource struct {
+	APIVersion string `json:"apiVersion,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Namespace  string `json:"namespace,omitempty"`
+	Name       string `json:"name,omitempty"`
+	UID        string `json:"uid,omitempty"`
+	Generation int64  `json:"generation,omitempty"`
+}
+
+type InvestigationLineage struct {
+	Source             InvestigationLineageSource `json:"source,omitempty"`
+	TargetUID          string                     `json:"targetUID,omitempty"`
+	FindingFingerprint string                     `json:"findingFingerprint,omitempty"`
+	InvestigationDepth int32                      `json:"investigationDepth,omitempty"`
+}
+
 type InvestigationRequestStatus struct {
 	ResourceStatus        `json:",inline"`
 	Outcome               string                     `json:"outcome,omitempty"`
@@ -113,6 +129,7 @@ type InvestigationRequestStatus struct {
 	StartedAt             *metav1.Time               `json:"startedAt,omitempty"`
 	CompletedAt           *metav1.Time               `json:"completedAt,omitempty"`
 	EvidenceRefs          []EvidenceRef              `json:"evidenceRefs,omitempty"`
+	Lineage               *InvestigationLineage      `json:"lineage,omitempty"`
 	LinkedRiskSignalRef   *NamespacedObjectReference `json:"linkedRiskSignalRef,omitempty"`
 	Conditions            []metav1.Condition         `json:"conditions,omitempty"`
 }
@@ -201,6 +218,10 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 			execution.ProviderRef = &ref
 		}
 		out.Status.Execution = &execution
+	}
+	if in.Status.Lineage != nil {
+		lineage := *in.Status.Lineage
+		out.Status.Lineage = &lineage
 	}
 	if in.Status.LinkedRiskSignalRef != nil {
 		ref := *in.Status.LinkedRiskSignalRef

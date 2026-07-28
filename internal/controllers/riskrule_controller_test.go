@@ -275,6 +275,160 @@ func TestRiskRuleReconcilerCreatesIdempotentRiskSignalFromMatchingDeployment(t *
 	}
 }
 
+func TestRiskRuleReconcilerRoutesMatchesToInvestigationRequest(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 7, 28, 8, 30, 0, 0, time.UTC)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "open-api",
+			Namespace: "prod",
+			UID:       types.UID("deployment-open-api-uid"),
+			Labels:    map[string]string{"app": "open-api"},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "open-api"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "open-api"},
+				},
+			},
+		},
+	}
+	ruleObj := &v1alpha1.RiskRule{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: v1alpha1.SchemeGroupVersion.String(),
+			Kind:       "RiskRule",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "latency-regression",
+			Namespace:  "fluxagent-test",
+			UID:        types.UID("riskrule-latency-uid"),
+			Generation: 4,
+		},
+		Spec: v1alpha1.RiskRuleSpec{
+			Interval: metav1.Duration{Duration: 2 * time.Minute},
+			Window:   metav1.Duration{Duration: 10 * time.Minute},
+			Severity: "warning",
+			TargetSelector: v1alpha1.TargetSelector{
+				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
+				WorkloadSelector: v1alpha1.WorkloadSelector{
+					MatchLabels: map[string]string{"app": "open-api"},
+					Kinds:       []string{"Deployment"},
+				},
+			},
+			Signals: []v1alpha1.RiskRuleSignal{
+				{
+					Name:          "p95-latency",
+					DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus-main"},
+					QueryType:     "metric",
+					QueryTemplate: `sum(rate(http_requests_total{namespace="{{ .namespace }}",app="{{ .app }}"}[5m]))`,
+					Threshold: v1alpha1.RiskThreshold{
+						Operator: ">",
+						Value:    1.5,
+					},
+				},
+			},
+			AI: v1alpha1.RiskRuleAI{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: "heuristic-provider"},
+			},
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{
+				Mode:             v1alpha1.RiskRuleInvestigationModeCreateRequest,
+				CreateRiskSignal: true,
+			},
+		},
+	}
+
+	promSource := &fakeRuleDataSource{
+		name:      "prometheus-main",
+		queryType: domain.QueryTypeMetric,
+		result: &datasource.QueryResult{
+			Source:    "prometheus-main",
+			QueryType: domain.QueryTypeMetric,
+			Records:   []map[string]any{{"value": "2.1"}},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskRule{}, &v1alpha1.RiskSignal{}, &v1alpha1.InvestigationRequest{}).
+		WithObjects(ruleObj, deployment).
+		Build()
+
+	reconciler := &RiskRuleReconciler{
+		Client:   client,
+		Scheme:   scheme,
+		Registry: datasource.NewRegistry(promSource),
+		Resolver: modelgateway.KubeResolver{Client: client},
+		Gateway: &modelgateway.Gateway{
+			Base:      knowledge.NewBase(),
+			Providers: model.NewRegistry(heuristic.Provider{}),
+		},
+		Now: func() time.Time { return now },
+	}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace}}
+	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("first reconcile failed: %v", err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("second reconcile failed: %v", err)
+	}
+
+	var requests v1alpha1.InvestigationRequestList
+	if err := client.List(context.Background(), &requests); err != nil {
+		t.Fatalf("failed to list investigation requests: %v", err)
+	}
+	if len(requests.Items) != 1 {
+		t.Fatalf("expected 1 investigation request, got %d", len(requests.Items))
+	}
+	investigation := requests.Items[0]
+	if investigation.Namespace != "fluxagent-test" {
+		t.Fatalf("expected investigation request in rule namespace, got %s", investigation.Namespace)
+	}
+	if investigation.Spec.Target.Namespace != "prod" || investigation.Spec.Target.Name != "open-api" {
+		t.Fatalf("expected target prod/open-api, got %#v", investigation.Spec.Target)
+	}
+	if len(investigation.Spec.Queries) != 1 || investigation.Spec.Queries[0].DatasourceRef.Name != "prometheus-main" {
+		t.Fatalf("expected one routed investigation query, got %#v", investigation.Spec.Queries)
+	}
+	if investigation.Spec.Queries[0].Query != `sum(rate(http_requests_total{namespace="prod",app="open-api"}[5m]))` {
+		t.Fatalf("expected rendered investigation query, got %#v", investigation.Spec.Queries[0])
+	}
+	if !investigation.Spec.CreateRiskSignal {
+		t.Fatalf("expected createRiskSignal propagated")
+	}
+	if investigation.Annotations[annotationLineageSource] != "fluxagent-test/latency-regression" ||
+		investigation.Annotations[annotationLineageSourceUID] != "riskrule-latency-uid" ||
+		investigation.Annotations[annotationLineageGeneration] != "4" ||
+		investigation.Annotations[annotationTargetUID] != "deployment-open-api-uid" ||
+		!strings.HasPrefix(investigation.Annotations[annotationFindingFingerprint], "sha256:") {
+		t.Fatalf("expected lineage annotations, got %#v", investigation.Annotations)
+	}
+
+	var signals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &signals); err != nil {
+		t.Fatalf("failed to list risk signals: %v", err)
+	}
+	if len(signals.Items) != 0 {
+		t.Fatalf("expected no direct risk signals, got %d", len(signals.Items))
+	}
+
+	var storedRule v1alpha1.RiskRule
+	if err := client.Get(context.Background(), types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace}, &storedRule); err != nil {
+		t.Fatalf("failed to fetch rule: %v", err)
+	}
+	if storedRule.Status.Message != "processed 1 targets; 1 produced InvestigationRequest" {
+		t.Fatalf("unexpected rule status message: %s", storedRule.Status.Message)
+	}
+}
+
 func TestRiskRuleReconcilerUsesDatasourceRefQueryTypeAndTemplate(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
