@@ -1,6 +1,6 @@
 # FluxAgent Release Checkpoint
 
-Last verified: 2026-07-23
+Last verified: 2026-07-24
 
 This document records what the repository can actually do today, what remains incomplete, and which local checks were used to verify the current state.
 
@@ -17,10 +17,10 @@ Kubernetes-native, evidence-first SRE investigation and risk analysis control pl
 Current release scope:
 
 ```text
-v0.2 focuses on read-only RCA workflows and is currently a beta candidate.
+v0.2 focuses on read-only RCA workflows and is published as v0.2.0-beta.1.
 ```
 
-The repository currently represents a verified `v0.2 read-only RCA beta candidate`:
+The repository currently represents the published `v0.2.0-beta.1` read-only RCA beta:
 
 - runnable read-only `RiskSignal` operator
 - `RiskRule`-driven evidence collection and RCA flow
@@ -35,7 +35,32 @@ The repository currently represents a verified `v0.2 read-only RCA beta candidat
 - optional `InvestigationRequest` to `RiskSignal` promotion
 - `RiskSignal` and `InvestigationRequest` TTL cleanup behavior
 
-It is past the original `v0.2` alpha checkpoint and has passed the local and kind beta candidate gates. It is not a production-hardened remediation release or a complete `v0.3` release.
+It is past the original `v0.2` alpha checkpoint, passed the local and kind beta gates, and was published as a prerelease. It is not a production-hardened remediation release or a complete `v0.3` release.
+
+Release identity:
+
+```text
+Status: Published prerelease
+Tag: v0.2.0-beta.1
+Tag commit: e37841baa7f4313577cc8942a77345856b709020
+GitHub Release URL: https://github.com/FluxSeer/FluxAgent/releases/tag/v0.2.0-beta.1
+```
+
+Published artifacts:
+
+```text
+operator image:
+  test-harbor.fluxseer.com/fluxseer/fluxagent/operator:v0.2.0-beta.1
+  digest: sha256:dc363ad07be5e4ec345c2d6f7aa369761ba138e157551c968445b65c7602901b
+
+demo-observability image:
+  test-harbor.fluxseer.com/fluxseer/fluxagent/demo-observability:v0.2.0-beta.1
+  digest: sha256:5e7e46e73b0efb0925431ae137b07b6830540eb54439ee2d4524873db7a57c81
+
+Helm OCI chart:
+  test-harbor.fluxseer.com/fluxseer/fluxagent/charts/kube-ai-sre:0.2.0-beta.1
+  digest: sha256:0924e95465d146d0473594bb96fa00d67d4fd7115ff6cca6d99183a816470828
+```
 
 ## Post `v0.2.0-alpha.2` Mainline Work
 
@@ -131,7 +156,7 @@ The following items are still incomplete or only partially complete:
 
 If this repository needs a concise status label today, the defensible description is:
 
-`v0.2 read-only RCA beta candidate`: runnable read-only RCA platform with datasource contracts, evidence redaction, degraded-state visibility, hosted provider validation, and CRD-first ad-hoc investigation.
+`v0.2.0-beta.1 read-only RCA beta`: runnable read-only RCA platform with datasource contracts, evidence redaction, degraded-state visibility, hosted provider validation, and CRD-first ad-hoc investigation.
 
 The project should not yet be presented as:
 
@@ -200,9 +225,9 @@ The kind gates verified:
 
 ## Recommended Next Milestone
 
-The beta candidate gate defined in `docs/backlog/v0.2-beta.md` has passed on current `main`.
+The beta candidate gate defined in `docs/backlog/v0.2-beta.md` passed before publication.
 
-The latest release freeze pass is recorded in `docs/releases/v0.2.0-beta.1-freeze.md`. The functional gate is green, but tagging is blocked until release image and manifest reproducibility are fixed.
+The historical release freeze pass is recorded in `docs/releases/v0.2.0-beta.1-freeze.md`. Its blocking findings were resolved before `v0.2.0-beta.1` was tagged and published.
 
 Verified validation commands:
 
@@ -214,14 +239,10 @@ kind get clusters
 git status --short --branch
 ```
 
-Before tagging `v0.2.0-beta.1`:
+Post-release documentation guardrails:
 
-1. confirm `git status --short --branch` is still clean and synchronized with `origin/main`
-2. tag the verified commit, not a later unverified commit
-3. keep beta claims limited to a read-only RCA beta with guarded remediation as a secondary path
-4. keep OpenTelemetry and CloudWatch documented as not production-ready paths
-5. keep provider and datasource coverage claims limited to the currently wired and tested behavior
-6. confirm CRD YAML and generated code are consistent
-7. confirm release notes, manifests, and release image references correspond to the same commit
-8. smoke test or explicitly document upgrade and uninstall boundaries
-9. rerun the full beta gate against immutable release image references rather than local `latest` images
+1. keep beta claims limited to a read-only RCA beta with guarded remediation as a secondary path
+2. keep OpenTelemetry and CloudWatch documented as not production-ready paths
+3. keep provider and datasource coverage claims limited to the currently wired and tested behavior
+4. keep historical `v0.2.0-beta.1` artifact references pointed at the actual Harbor release paths
+5. describe GHCR as the planned canonical public registry until those artifacts are published there
