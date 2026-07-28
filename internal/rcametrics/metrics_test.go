@@ -54,3 +54,12 @@ func TestRecordEvidenceTruncated(t *testing.T) {
 		t.Fatalf("expected evidence truncation counter increment, before=%f after=%f", before, after)
 	}
 }
+
+func TestRecordQueryPolicyDecision(t *testing.T) {
+	before := testutil.ToFloat64(QueryPolicyDecisionsTotal.WithLabelValues("prometheus", "rejected", "template_not_allowed"))
+	RecordQueryPolicyDecision("Prometheus", "Rejected", "Template Not Allowed")
+	after := testutil.ToFloat64(QueryPolicyDecisionsTotal.WithLabelValues("prometheus", "rejected", "template_not_allowed"))
+	if after != before+1 {
+		t.Fatalf("expected query policy decision counter increment, before=%f after=%f", before, after)
+	}
+}

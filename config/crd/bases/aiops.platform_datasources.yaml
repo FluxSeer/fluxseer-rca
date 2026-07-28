@@ -44,6 +44,21 @@ spec:
                       type: array
                       items:
                         type: string
+                queryPolicy:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                    allowedTemplates:
+                      type: array
+                      items:
+                        type: string
+                    maxRange:
+                      type: string
+                    allowRegexMatchers:
+                      type: boolean
+                    requireTargetScope:
+                      type: boolean
                 auth:
                   type: object
                   properties:

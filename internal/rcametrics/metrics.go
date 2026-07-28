@@ -15,6 +15,7 @@ var AllowedLabels = map[string][]string{
 	"fluxagent_datasource_query_duration_seconds": {"datasource_type", "result"},
 	"fluxagent_evidence_truncated_total":          {"kind", "reason"},
 	"fluxagent_claim_verification_total":          {"verification_status"},
+	"fluxagent_query_policy_decisions_total":      {"backend", "decision", "reason"},
 	"fluxagent_deduplication_hits_total":          {"source"},
 	"fluxagent_loop_prevention_total":             {"reason"},
 	"fluxagent_status_update_conflicts_total":     {"resource"},
@@ -77,6 +78,13 @@ var (
 		},
 		AllowedLabels["fluxagent_claim_verification_total"],
 	)
+	QueryPolicyDecisionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fluxagent_query_policy_decisions_total",
+			Help: "Total FluxAgent query policy decisions by backend, decision, and low-cardinality reason.",
+		},
+		AllowedLabels["fluxagent_query_policy_decisions_total"],
+	)
 	DeduplicationHitsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxagent_deduplication_hits_total",
@@ -115,6 +123,7 @@ func init() {
 		DatasourceQueryDurationSeconds,
 		EvidenceTruncatedTotal,
 		ClaimVerificationTotal,
+		QueryPolicyDecisionsTotal,
 		DeduplicationHitsTotal,
 		LoopPreventionTotal,
 		StatusUpdateConflictsTotal,
@@ -149,6 +158,10 @@ func RecordEvidenceTruncated(kind string, reason string) {
 
 func RecordClaimVerification(status string) {
 	ClaimVerificationTotal.WithLabelValues(normalizeLabel(status, "unknown")).Inc()
+}
+
+func RecordQueryPolicyDecision(backend string, decision string, reason string) {
+	QueryPolicyDecisionsTotal.WithLabelValues(normalizeLabel(backend, "unknown"), normalizeLabel(decision, "unknown"), normalizeReason(reason)).Inc()
 }
 
 func RecordDeduplicationHit(source string) {

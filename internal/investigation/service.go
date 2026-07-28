@@ -21,6 +21,7 @@ import (
 	"fluxagent/internal/domain"
 	evidencepkg "fluxagent/internal/evidence"
 	"fluxagent/internal/modelgateway"
+	"fluxagent/internal/querypolicy"
 	"fluxagent/internal/rcametrics"
 	"fluxagent/internal/rule"
 	"fluxagent/internal/statusbudget"
@@ -600,6 +601,7 @@ func (s *Service) resolveDefaultDatasourcePlan(spec v1alpha1.InvestigationReques
 	names := make([]string, 0, len(spec.DataSources))
 	plan := make([]CollectionStep, 0, len(spec.DataSources))
 	missing := make([]string, 0, len(spec.DataSources))
+	lookback := effectiveInvestigationLookback(spec)
 	for _, ref := range spec.DataSources {
 		name := strings.TrimSpace(ref.Name)
 		if name == "" {
@@ -614,6 +616,23 @@ func (s *Service) resolveDefaultDatasourcePlan(spec v1alpha1.InvestigationReques
 		step, queryTypeIssue := buildDefaultCollectionStep(source, target, labels)
 		if queryTypeIssue != nil {
 			return names, plan, nil, queryTypeIssue
+		}
+		decision := querypolicy.Validate(source, querypolicy.Request{
+			DatasourceName: name,
+			TemplateName:   step.Name,
+			FromTemplate:   true,
+			Query:          step.Query,
+			QueryType:      step.QueryType,
+			Lookback:       lookback,
+			Target:         target,
+			Labels:         labels,
+		})
+		rcametrics.RecordQueryPolicyDecision(source.Type(), decision.Decision, decision.Reason)
+		if decision.Decision == querypolicy.DecisionRejected {
+			return names, plan, nil, &Issue{
+				Reason:  "QueryPolicyRejected",
+				Message: decision.Message,
+			}
 		}
 		names = append(names, name)
 		plan = append(plan, step)
@@ -631,6 +650,7 @@ func (s *Service) resolveQueryPlan(spec v1alpha1.InvestigationRequestSpec, targe
 	names := make([]string, 0, len(spec.Queries))
 	plan := make([]CollectionStep, 0, len(spec.Queries))
 	missing := make([]string, 0, len(spec.Queries))
+	lookback := effectiveInvestigationLookback(spec)
 	for _, querySpec := range spec.Queries {
 		name := strings.TrimSpace(querySpec.DatasourceRef.Name)
 		if name == "" {
@@ -662,9 +682,27 @@ func (s *Service) resolveQueryPlan(spec v1alpha1.InvestigationRequestSpec, targe
 				Message: fmt.Sprintf("render investigation query %q failed: %v", firstNonEmpty(querySpec.Name, name), err),
 			}
 		}
+		templateName := firstNonEmpty(querySpec.Name, name)
+		decision := querypolicy.Validate(source, querypolicy.Request{
+			DatasourceName: name,
+			TemplateName:   templateName,
+			FromTemplate:   strings.TrimSpace(querySpec.QueryTemplate) != "",
+			Query:          queryText,
+			QueryType:      queryType,
+			Lookback:       lookback,
+			Target:         target,
+			Labels:         labels,
+		})
+		rcametrics.RecordQueryPolicyDecision(source.Type(), decision.Decision, decision.Reason)
+		if decision.Decision == querypolicy.DecisionRejected {
+			return names, plan, nil, &Issue{
+				Reason:  "QueryPolicyRejected",
+				Message: decision.Message,
+			}
+		}
 		names = appendIfMissing(names, name)
 		plan = append(plan, CollectionStep{
-			Name:           firstNonEmpty(querySpec.Name, name),
+			Name:           templateName,
 			DatasourceName: name,
 			QueryType:      queryType,
 			Query:          queryText,
@@ -678,6 +716,13 @@ func (s *Service) resolveQueryPlan(spec v1alpha1.InvestigationRequestSpec, targe
 		}, nil
 	}
 	return names, plan, nil, nil
+}
+
+func effectiveInvestigationLookback(spec v1alpha1.InvestigationRequestSpec) time.Duration {
+	if spec.TimeRange.Lookback.Duration > 0 {
+		return spec.TimeRange.Lookback.Duration
+	}
+	return 15 * time.Minute
 }
 
 func (s *Service) resolveProvider(ctx context.Context, namespace string, ref v1alpha1.LocalObjectReference) (*v1alpha1.ModelProvider, *Issue, error) {

@@ -92,7 +92,7 @@ func TestRegisterFromResourcesBuildsRegistry(t *testing.T) {
 	if !found {
 		t.Fatal("expected prometheus datasource in registry")
 	}
-	promAdapter, ok := promSource.(promadapter.Adapter)
+	promAdapter, ok := unwrapPolicySource(promSource).(promadapter.Adapter)
 	if !ok {
 		t.Fatalf("expected prometheus adapter, got %T", promSource)
 	}
@@ -114,7 +114,7 @@ func TestRegisterFromResourcesBuildsRegistry(t *testing.T) {
 	if !found {
 		t.Fatal("expected loki datasource in registry")
 	}
-	lokiAdapter, ok := lokiSource.(lokiadapter.Adapter)
+	lokiAdapter, ok := unwrapPolicySource(lokiSource).(lokiadapter.Adapter)
 	if !ok {
 		t.Fatalf("expected loki adapter, got %T", lokiSource)
 	}
@@ -126,9 +126,44 @@ func TestRegisterFromResourcesBuildsRegistry(t *testing.T) {
 	if !found {
 		t.Fatal("expected kubernetes events datasource in registry")
 	}
-	if _, ok := k8sSource.(k8sadapter.Adapter); !ok {
+	if _, ok := unwrapPolicySource(k8sSource).(k8sadapter.Adapter); !ok {
 		t.Fatalf("expected kubernetes adapter, got %T", k8sSource)
 	}
+}
+
+func TestBuildSourceFromResourceValidatesQueryPolicy(t *testing.T) {
+	_, err := BuildSourceFromResource(context.Background(), nil, v1alpha1.DataSource{
+		Spec: v1alpha1.DataSourceSpec{
+			Type:     "prometheus",
+			Endpoint: "http://prometheus.example",
+			QueryPolicy: v1alpha1.DataSourceQueryPolicy{
+				Mode: "UnknownMode",
+			},
+		},
+	}, nil)
+	if validationErr, ok := err.(*ValidationError); !ok || validationErr.Reason != "QueryPolicyInvalid" {
+		t.Fatalf("expected QueryPolicyInvalid, got %T %v", err, err)
+	}
+
+	_, err = BuildSourceFromResource(context.Background(), nil, v1alpha1.DataSource{
+		Spec: v1alpha1.DataSourceSpec{
+			Type:     "prometheus",
+			Endpoint: "http://prometheus.example",
+			QueryPolicy: v1alpha1.DataSourceQueryPolicy{
+				MaxRange: metav1.Duration{Duration: -time.Second},
+			},
+		},
+	}, nil)
+	if validationErr, ok := err.(*ValidationError); !ok || validationErr.Reason != "QueryPolicyInvalid" {
+		t.Fatalf("expected QueryPolicyInvalid, got %T %v", err, err)
+	}
+}
+
+func unwrapPolicySource(source datasource.DataSource) datasource.DataSource {
+	if wrapped, ok := source.(policyDataSource); ok {
+		return wrapped.DataSource
+	}
+	return source
 }
 
 func TestBuildHTTPClientRejectsDeniedDatasourceEndpoints(t *testing.T) {
