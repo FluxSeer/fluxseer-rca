@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"fluxagent/api/v1alpha1"
@@ -25,6 +26,8 @@ import (
 	"fluxagent/internal/modelgateway"
 	"fluxagent/internal/rcametrics"
 )
+
+type clientObject = client.Object
 
 func TestServicePreflightResolvesTargetDatasourcesAndProvider(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -100,6 +103,133 @@ func TestServicePreflightResolvesTargetDatasourcesAndProvider(t *testing.T) {
 	}
 	if len(result.CollectionPlan) != 2 {
 		t.Fatalf("expected two collection steps, got %#v", result.CollectionPlan)
+	}
+}
+
+func TestServicePreflightResolvesNonDeploymentTargets(t *testing.T) {
+	cases := []struct {
+		name               string
+		target             v1alpha1.TargetRef
+		object             clientObject
+		wantKind           string
+		wantAPIVersion     string
+		wantService        string
+		wantGeneratedLabel string
+	}{
+		{
+			name: "statefulset",
+			target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "StatefulSet",
+				Name:       "orders-db",
+				APIVersion: "apps/v1",
+			},
+			object: &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "orders-db", Namespace: "prod"},
+				Spec: appsv1.StatefulSetSpec{
+					Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "orders-db"}}},
+				},
+			},
+			wantKind:           "StatefulSet",
+			wantAPIVersion:     "apps/v1",
+			wantService:        "orders-db",
+			wantGeneratedLabel: `app="orders-db"`,
+		},
+		{
+			name: "daemonset",
+			target: v1alpha1.TargetRef{
+				Namespace: "prod",
+				Kind:      "DaemonSet",
+				Name:      "node-agent",
+			},
+			object: &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "node-agent", Namespace: "prod", Labels: map[string]string{"app": "node-agent"}},
+			},
+			wantKind:           "DaemonSet",
+			wantAPIVersion:     "apps/v1",
+			wantService:        "node-agent",
+			wantGeneratedLabel: `app="node-agent"`,
+		},
+		{
+			name: "replicaset",
+			target: v1alpha1.TargetRef{
+				Namespace: "prod",
+				Kind:      "ReplicaSet",
+				Name:      "checkout-abc123",
+			},
+			object: &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "checkout-abc123", Namespace: "prod"},
+				Spec: appsv1.ReplicaSetSpec{
+					Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "checkout"}}},
+				},
+			},
+			wantKind:           "ReplicaSet",
+			wantAPIVersion:     "apps/v1",
+			wantService:        "checkout",
+			wantGeneratedLabel: `app="checkout"`,
+		},
+		{
+			name: "pod",
+			target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "Pod",
+				Name:       "checkout-abc123",
+				APIVersion: "v1",
+			},
+			object: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "checkout-abc123", Namespace: "prod", Labels: map[string]string{"app": "checkout"}},
+			},
+			wantKind:           "Pod",
+			wantAPIVersion:     "v1",
+			wantService:        "checkout",
+			wantGeneratedLabel: `app="checkout"`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := appsv1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add apps scheme: %v", err)
+			}
+			if err := corev1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add core scheme: %v", err)
+			}
+			if err := v1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add aiops scheme: %v", err)
+			}
+			kubeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tc.object).
+				Build()
+			service := &Service{
+				Client: kubeClient,
+				Registry: datasource.NewRegistry(
+					fakeDataSource{name: "prometheus", queryType: domain.QueryTypeMetric},
+				),
+				Resolver: modelgateway.KubeResolver{Client: kubeClient},
+			}
+
+			result, err := service.Preflight(context.Background(), "prod", v1alpha1.InvestigationRequestSpec{
+				Target:      tc.target,
+				DataSources: []v1alpha1.LocalObjectReference{{Name: "prometheus"}},
+			})
+			if err != nil {
+				t.Fatalf("preflight failed: %v", err)
+			}
+			if result.TargetIssue != nil {
+				t.Fatalf("expected target to resolve, got %#v", result.TargetIssue)
+			}
+			if result.Target.Kind != tc.wantKind || result.Target.APIVersion != tc.wantAPIVersion || result.Target.Service != tc.wantService {
+				t.Fatalf("unexpected resolved target %#v", result.Target)
+			}
+			if len(result.CollectionPlan) != 1 {
+				t.Fatalf("expected one generated collection step, got %#v", result.CollectionPlan)
+			}
+			if !strings.Contains(result.CollectionPlan[0].Query, tc.wantGeneratedLabel) {
+				t.Fatalf("expected generated query to include %s, got %q", tc.wantGeneratedLabel, result.CollectionPlan[0].Query)
+			}
+		})
 	}
 }
 
