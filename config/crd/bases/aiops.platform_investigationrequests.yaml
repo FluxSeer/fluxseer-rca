@@ -101,6 +101,17 @@ spec:
                   format: date-time
                 outcome:
                   type: string
+                failure:
+                  type: object
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+                    stage:
+                      type: string
+                    retryable:
+                      type: boolean
                 summary:
                   type: string
                 hypothesis:
@@ -192,6 +203,24 @@ spec:
                       type: array
                       items:
                         type: string
+                    reasons:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          code:
+                            type: string
+                          stage:
+                            type: string
+                          sourceRef:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                          message:
+                            type: string
                 execution:
                   type: object
                   properties:

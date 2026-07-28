@@ -8,6 +8,9 @@ import (
 const (
 	PhasePending          = "Pending"
 	PhaseObserved         = "Observed"
+	PhaseCollecting       = "Collecting"
+	PhaseReasoning        = "Reasoning"
+	PhaseVerifying        = "Verifying"
 	PhaseConfirmed        = "Confirmed"
 	PhaseNotified         = "Notified"
 	PhasePolicyChecked    = "PolicyChecked"

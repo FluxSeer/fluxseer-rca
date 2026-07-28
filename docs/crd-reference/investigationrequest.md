@@ -148,6 +148,8 @@ Implemented status fields:
 - `phase`
 - `message`
 - `provider`
+- `outcome`
+- `failure`
 - `summary`
 - `hypothesis`
 - `confidence`
@@ -169,7 +171,6 @@ Target structured status fields:
 - `claims[]`
 - `alternativeHypotheses[]`
 - `missingEvidence[]`
-- `degradation`
 - `execution`
 - rich evidence provenance
 
@@ -179,7 +180,7 @@ These fields are the v0.3 target contract. New integrations should check the gen
 
 `status.verdict` is the top-level RCA conclusion:
 
-- `outcome`: RCA result semantics such as `Confirmed`, `Inconclusive`, `NoIssueFound`, or `ExecutionFailed`
+- `outcome`: RCA result semantics such as `Confirmed`, `Inconclusive`, `NoIssueFound`, or `Unknown`
 - `summary`: compact human-readable conclusion
 - `rootCauseEntity`: Kubernetes target most directly associated with the conclusion
 - `rootCauseType`: coarse category such as `CrashLoop`, `LatencyRegression`, `ResourcePressure`, `ConfigurationMismatch`, or `WorkloadDegradation`
@@ -214,7 +215,14 @@ FluxAgent applies a deterministic heuristic verifier before writing claims. In t
 
 These fields are compact normalized-observation metadata. They let consumers audit which query and redacted observation supported the RCA without storing raw Prometheus payloads, large Loki excerpts, or unredacted Kubernetes objects in status.
 
-`status.alternativeHypotheses[]`, `status.missingEvidence[]`, and `status.degradation` are reserved for partial-failure and claim-hardening semantics. They let FluxAgent report uncertainty explicitly instead of silently presenting an incomplete RCA as fully proven.
+`status.failure` records workflow failure details when an investigation cannot reach a completed RCA state:
+
+- `code`: stable machine-readable reason
+- `message`: human-readable detail
+- `stage`: workflow stage such as `Validation`, `TargetResolution`, `EvidenceCollection`, or `Reasoning`
+- `retryable`: whether a later reconcile or recreated request may reasonably succeed without a spec change
+
+`status.alternativeHypotheses[]`, `status.missingEvidence[]`, and `status.degradation` are reserved for partial-failure and claim-hardening semantics. They let FluxAgent report uncertainty explicitly instead of silently presenting an incomplete RCA as fully proven. `status.degradation.reasons[]` uses structured `code`, `stage`, optional `sourceRef`, and `message` fields.
 
 `status.execution` records RCA execution metadata:
 
@@ -230,7 +238,29 @@ These fields are compact normalized-observation metadata. They let consumers aud
 - `inputTokens`
 - `outputTokens`
 
-`status.phase` describes workflow lifecycle. `status.outcome` and `status.verdict.outcome` describe RCA result semantics. A failed datasource or provider execution can therefore be `phase: Failed` and `outcome: ExecutionFailed`, while a successful read-only investigation can be `phase: Completed` and `outcome: Confirmed`.
+`status.phase` describes workflow lifecycle. `status.outcome` and `status.verdict.outcome` describe RCA result semantics.
+
+Canonical lifecycle phases for `InvestigationRequest` are:
+
+- `Pending`
+- `Collecting`
+- `Reasoning`
+- `Verifying`
+- `Completed`
+- `Failed`
+
+`Observed` is retained only as a compatibility phase for older resources and non-InvestigationRequest controllers.
+
+Legal terminal combinations are:
+
+- `phase: Completed`, `outcome: Confirmed`
+- `phase: Completed`, `outcome: Inconclusive`
+- `phase: Completed`, `outcome: NoIssueFound`
+- `phase: Failed`, `outcome: Unknown`, `failure` set
+
+`ExecutionFailed` is deprecated as an RCA outcome. Failed datasource or provider execution is represented as `phase: Failed`, `outcome: Unknown`, and a populated `status.failure`.
+
+Non-terminal phases should leave `outcome`, `failure`, and `completedAt` unset. `status.degradation` is orthogonal to phase and outcome; a completed investigation may still be degraded if it reached a conclusion with partial evidence.
 
 `status.lineage` records where the investigation came from when it was created by another FluxAgent workflow. For `RiskRule` routing, it includes the source rule reference, source UID and generation, target UID, finding fingerprint, and investigation depth. This lets downstream consumers trace `RiskRule -> InvestigationRequest -> optional RiskSignal` without treating `RiskSignal` as the canonical RCA surface.
 
