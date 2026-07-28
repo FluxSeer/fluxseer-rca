@@ -3,6 +3,7 @@ package investigation
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -208,6 +209,120 @@ func TestServiceCollectEvidenceNormalizesResults(t *testing.T) {
 	}
 	if result.Summary != "collected 2 evidence records from 2 investigation queries" {
 		t.Fatalf("unexpected summary %q", result.Summary)
+	}
+}
+
+func TestServiceCollectEvidenceBuildsNormalizedObservations(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "loki",
+				queryType: domain.QueryTypeLog,
+				records: []map[string]any{
+					{"line": "timeout token=secret-one"},
+					{"line": "retry token=secret-two"},
+					{"line": "rate limit token=secret-three"},
+					{"line": "connection refused token=secret-four"},
+					{"line": "pool exhausted token=secret-five"},
+					{"line": "extra line token=secret-six"},
+				},
+			},
+		),
+	}
+
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 10 * time.Minute}},
+	}, PreflightResult{
+		Target: domain.ResourceRef{
+			Namespace: "prod",
+			Name:      "open-api",
+			Kind:      "Deployment",
+			Service:   "open-api",
+		},
+		Labels: map[string]string{"app": "open-api"},
+		CollectionPlan: []CollectionStep{
+			{
+				Name:           "timeout-logs",
+				DatasourceName: "loki",
+				QueryType:      domain.QueryTypeLog,
+				Query:          `{namespace="prod",app="open-api"} |= "timeout"`,
+			},
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue != nil {
+		t.Fatalf("expected no issue, got %#v", result.Issue)
+	}
+	if len(result.Observations) != 5 {
+		t.Fatalf("expected five retained observations, got %#v", result.Observations)
+	}
+	if len(result.EvidenceRefs) != len(result.Observations) {
+		t.Fatalf("expected evidence refs to match observations, got refs=%d observations=%d", len(result.EvidenceRefs), len(result.Observations))
+	}
+	first := result.Observations[0]
+	if first.ID != "evidence-001" {
+		t.Fatalf("expected stable observation id evidence-001, got %#v", first)
+	}
+	if first.SchemaVersion != "observation.fluxagent.io/v1alpha1" {
+		t.Fatalf("expected schema version, got %#v", first)
+	}
+	if first.Type != domain.ObservationTypeLog || first.Value.Log == nil {
+		t.Fatalf("expected log observation, got %#v", first)
+	}
+	if strings.Contains(first.Summary, "secret-one") || !strings.Contains(first.Summary, "[REDACTED]") {
+		t.Fatalf("expected redacted summary before digest, got %q", first.Summary)
+	}
+	if !strings.HasPrefix(first.QueryDigest, "sha256:") || len(first.QueryDigest) != len("sha256:")+64 {
+		t.Fatalf("expected sha256 query digest, got %q", first.QueryDigest)
+	}
+	if !strings.HasPrefix(first.ContentDigest, "sha256:") || len(first.ContentDigest) != len("sha256:")+64 {
+		t.Fatalf("expected sha256 content digest, got %q", first.ContentDigest)
+	}
+	if !first.Truncated || first.OriginalCount != 6 || first.RetainedCount != 5 {
+		t.Fatalf("expected truncation metadata, got %#v", first)
+	}
+	if !first.TimeRange.Start.Equal(now.Add(-10*time.Minute)) || !first.TimeRange.End.Equal(now) {
+		t.Fatalf("expected evidence time range from lookback, got %#v", first.TimeRange)
+	}
+
+	ref := result.EvidenceRefs[0]
+	if ref.ID != first.ID || ref.QueryDigest != first.QueryDigest || ref.ContentDigest != first.ContentDigest {
+		t.Fatalf("expected evidence ref to carry observation metadata, got ref=%#v observation=%#v", ref, first)
+	}
+	if ref.RedactionProfile != "default-v1" || !ref.Truncated || ref.OriginalCount != 6 || ref.RetainedCount != 5 {
+		t.Fatalf("expected evidence ref truncation and redaction metadata, got %#v", ref)
+	}
+	if ref.CollectedAt == nil || !ref.CollectedAt.Time.Equal(now) {
+		t.Fatalf("expected evidence ref collectedAt %s, got %#v", now.Format(time.RFC3339), ref.CollectedAt)
+	}
+}
+
+func TestNormalizeObservationContentDigestExcludesCollectedAt(t *testing.T) {
+	req := datasource.QueryRequest{
+		Query:     `{namespace="prod"} |= "timeout"`,
+		StartTime: time.Date(2026, 7, 6, 11, 50, 0, 0, time.UTC),
+		EndTime:   time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC),
+		Target:    domain.ResourceRef{Namespace: "prod", Name: "open-api", Service: "open-api"},
+		QueryType: domain.QueryTypeLog,
+	}
+	result := &datasource.QueryResult{
+		Source:    "loki",
+		QueryType: domain.QueryTypeLog,
+		Records:   []map[string]any{{"line": "timeout token=secret-one"}},
+	}
+	record := map[string]any{"line": "timeout token=secret-one"}
+
+	first := normalizeObservation(record, result, req, 0, 1, 1, false, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	second := normalizeObservation(record, result, req, 0, 1, 1, false, time.Date(2026, 7, 6, 12, 1, 0, 0, time.UTC))
+
+	if first.ContentDigest != second.ContentDigest {
+		t.Fatalf("expected content digest to ignore collectedAt, got first=%s second=%s", first.ContentDigest, second.ContentDigest)
+	}
+	if first.CollectedAt.Equal(second.CollectedAt) {
+		t.Fatalf("expected collectedAt to remain distinct, got first=%s second=%s", first.CollectedAt, second.CollectedAt)
 	}
 }
 

@@ -135,7 +135,7 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 		out.Status.CompletedAt = completed
 	}
 	if in.Status.EvidenceRefs != nil {
-		out.Status.EvidenceRefs = append([]EvidenceRef(nil), in.Status.EvidenceRefs...)
+		out.Status.EvidenceRefs = deepcopyEvidenceRefs(in.Status.EvidenceRefs)
 	}
 	if in.Status.Verdict != nil {
 		verdict := *in.Status.Verdict
