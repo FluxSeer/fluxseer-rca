@@ -11,13 +11,17 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 default_render="${tmpdir}/default.yaml"
+legacy_render="${tmpdir}/legacy.yaml"
 remediation_render="${tmpdir}/remediation.yaml"
 experimental_render="${tmpdir}/experimental.yaml"
 default_clusterrole="${tmpdir}/default-clusterrole.yaml"
+legacy_clusterrole="${tmpdir}/legacy-clusterrole.yaml"
 remediation_clusterrole="${tmpdir}/remediation-clusterrole.yaml"
 experimental_clusterrole="${tmpdir}/experimental-clusterrole.yaml"
 
 helm template fluxagent "${chart}" --namespace fluxagent-system >"${default_render}"
+helm template fluxagent "${chart}" --namespace fluxagent-system \
+  --set features.legacyDeploymentRisk.enabled=true >"${legacy_render}"
 helm template fluxagent "${chart}" --namespace fluxagent-system \
   --set features.remediation.enabled=true \
   --set rbac.profile=remediation >"${remediation_render}"
@@ -37,6 +41,7 @@ extract_clusterrole() {
 }
 
 extract_clusterrole "${default_render}" "${default_clusterrole}"
+extract_clusterrole "${legacy_render}" "${legacy_clusterrole}"
 extract_clusterrole "${remediation_render}" "${remediation_clusterrole}"
 extract_clusterrole "${experimental_render}" "${experimental_clusterrole}"
 
@@ -70,6 +75,13 @@ assert_not_contains "${default_clusterrole}" 'resources: ["jobs"]' "Job mutation
 assert_not_contains "${default_clusterrole}" 'resources: ["configmaps"]' "ConfigMap mutation in default ClusterRole"
 assert_not_contains "${default_clusterrole}" 'resources: ["remediationplans", "agentactions"]' "remediation write permissions in default ClusterRole"
 assert_not_contains "${default_clusterrole}" 'resources: ["remediationplans/status", "agentactions/status"]' "remediation status permissions in default ClusterRole"
+
+assert_contains "${legacy_render}" "--enable-legacy-deployment-risk=true" "legacy deployment watcher opt-in"
+assert_contains "${legacy_render}" "--enable-remediation=false" "remediation remains disabled for legacy-only opt-in"
+assert_contains "${legacy_clusterrole}" 'resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]' "legacy profile has workload read permissions"
+assert_not_contains "${legacy_clusterrole}" 'resources: ["remediationplans", "agentactions"]' "legacy profile does not add remediation writes"
+assert_not_contains "${legacy_clusterrole}" 'resources: ["jobs"]' "legacy profile does not add Job mutation"
+assert_not_contains "${legacy_clusterrole}" 'resources: ["configmaps"]' "legacy profile does not add ConfigMap mutation"
 
 assert_contains "${remediation_render}" "--enable-remediation=true" "remediation controller opt-in"
 assert_contains "${remediation_clusterrole}" 'resources: ["remediationplans", "agentactions"]' "remediation CRD permissions"
