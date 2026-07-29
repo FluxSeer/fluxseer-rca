@@ -1351,6 +1351,7 @@ func verifierEvidenceRefs(refs []v1alpha1.EvidenceRef) []verifier.EvidenceRef {
 			Kind:    ref.Kind,
 			Source:  ref.Source,
 			Summary: ref.Summary,
+			Reason:  ref.Reason,
 		})
 	}
 	return out

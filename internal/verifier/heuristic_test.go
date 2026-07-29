@@ -14,7 +14,7 @@ func TestVerifyClaimsMarksRelevantEvidenceSupported(t *testing.T) {
 		},
 	)
 
-	if result.Method != MethodHeuristicEvidenceCoverageV1 {
+	if result.Method != MethodDomainEvidenceCoverageV2 {
 		t.Fatalf("expected verifier method, got %#v", result)
 	}
 	if result.CoverageScore != 1 {
@@ -80,5 +80,86 @@ func TestVerifyClaimsWithoutEvidenceIsUnverified(t *testing.T) {
 	}
 	if result.Claims[0].Verification != VerificationUnverified {
 		t.Fatalf("expected unverified claim, got %#v", result.Claims[0])
+	}
+}
+
+func TestVerifyClaimsAppliesDomainSpecificSupportRequirements(t *testing.T) {
+	tests := []struct {
+		name       string
+		claim      string
+		evidence   []EvidenceRef
+		wantStatus string
+		wantRefs   int
+	}{
+		{
+			name:  "image pull requires image pull event",
+			claim: "ImagePullBackOff is caused by a missing container image",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "ErrImagePull", Summary: "failed to pull image"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   1,
+		},
+		{
+			name:  "crash loop requires crashloop event",
+			claim: "CrashLoopBackOff is causing repeated pod restarts",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "BackOff", Summary: "container crashed repeatedly"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   1,
+		},
+		{
+			name:  "oomkilled requires event and memory metric",
+			claim: "OOMKilled is caused by memory pressure",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "OOMKilled", Summary: "container was killed after exceeding memory limit"},
+				{ID: "evidence-002", Kind: "metric", Source: "prometheus", Summary: "container_memory_working_set_bytes above limit"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   2,
+		},
+		{
+			name:  "latency regression requires metric evidence",
+			claim: "Latency regression is causing slow responses",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "metric", Source: "prometheus", Summary: "p95 latency increased above threshold"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   1,
+		},
+		{
+			name:  "oomkilled event alone is insufficient",
+			claim: "OOMKilled is caused by memory pressure",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "OOMKilled", Summary: "container was killed after exceeding memory limit"},
+			},
+			wantStatus: VerificationUnsupported,
+			wantRefs:   0,
+		},
+		{
+			name:  "latency claim is not supported by timeout log alone",
+			claim: "Latency regression is causing slow responses",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "log", Source: "loki", Summary: "request timeout observed"},
+			},
+			wantStatus: VerificationUnsupported,
+			wantRefs:   0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := VerifyClaims([]Claim{{ID: "claim-001", Statement: tt.claim}}, tt.evidence)
+			if len(result.Claims) != 1 {
+				t.Fatalf("expected one claim result, got %#v", result)
+			}
+			if result.Claims[0].Verification != tt.wantStatus {
+				t.Fatalf("expected %s, got %#v", tt.wantStatus, result.Claims[0])
+			}
+			if len(result.Claims[0].EvidenceRefs) != tt.wantRefs {
+				t.Fatalf("expected %d evidence refs, got %#v", tt.wantRefs, result.Claims[0])
+			}
+		})
 	}
 }
