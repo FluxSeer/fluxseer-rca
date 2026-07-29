@@ -89,10 +89,11 @@ type RCAResult struct {
 }
 
 type Service struct {
-	Client   client.Reader
-	Registry *datasource.Registry
-	Resolver modelgateway.ProviderResolver
-	Gateway  *modelgateway.Gateway
+	Client        client.Reader
+	Registry      *datasource.Registry
+	Resolver      modelgateway.ProviderResolver
+	Gateway       *modelgateway.Gateway
+	EvidenceStore evidencepkg.SnapshotStore
 }
 
 func (s *Service) Preflight(ctx context.Context, namespace string, spec v1alpha1.InvestigationRequestSpec) (PreflightResult, error) {
@@ -166,8 +167,57 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 
 	result.EvidenceRefs = evidenceRefs
 	result.Observations = observations
+	if issue := s.applyEvidenceRetention(ctx, spec.EvidenceRetention, &result, now); issue != nil {
+		result.Issue = issue
+		return result, nil
+	}
 	result.Summary = fmt.Sprintf("collected %d evidence records from %d investigation queries", totalRecords, len(preflight.CollectionPlan))
 	return result, nil
+}
+
+func (s *Service) applyEvidenceRetention(ctx context.Context, policy v1alpha1.EvidenceRetentionPolicy, result *EvidenceCollectionResult, now time.Time) *Issue {
+	mode := strings.TrimSpace(policy.Mode)
+	if mode == "" || mode == v1alpha1.EvidenceRetentionModeMetadataOnly {
+		return nil
+	}
+	if mode != v1alpha1.EvidenceRetentionModeNormalizedSnapshot {
+		return &Issue{
+			Reason:  "EvidenceRetentionUnsupported",
+			Message: fmt.Sprintf("evidence retention mode %q is not supported", mode),
+		}
+	}
+	if s.EvidenceStore == nil {
+		return &Issue{
+			Reason:  "EvidenceRetentionStoreUnavailable",
+			Message: "evidenceRetention.mode=NormalizedSnapshot requires a configured evidence snapshot store",
+		}
+	}
+	if storageName := strings.TrimSpace(policy.StorageRef.Name); storageName != "" && storageName != s.EvidenceStore.Name() {
+		return &Issue{
+			Reason:  "EvidenceRetentionStoreUnavailable",
+			Message: fmt.Sprintf("evidence retention storageRef %q does not match configured store %q", storageName, s.EvidenceStore.Name()),
+		}
+	}
+	expiresAt := evidencepkg.NormalizedSnapshotExpiry(now, policy)
+	for index, observation := range result.Observations {
+		if index >= len(result.EvidenceRefs) {
+			break
+		}
+		payloadRef, err := s.EvidenceStore.StoreNormalizedSnapshot(ctx, evidencepkg.NormalizedSnapshot{
+			Policy:      policy,
+			Observation: observation,
+			CreatedAt:   metav1.NewTime(now),
+			ExpiresAt:   expiresAt,
+		})
+		if err != nil {
+			return &Issue{
+				Reason:  "EvidenceRetentionWriteFailed",
+				Message: fmt.Sprintf("failed to store normalized evidence snapshot: %v", err),
+			}
+		}
+		result.EvidenceRefs[index].PayloadRef = &payloadRef
+	}
+	return nil
 }
 
 type collectedDatasourceQuery struct {

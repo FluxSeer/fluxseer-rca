@@ -20,6 +20,7 @@ import (
 	"fluxagent/internal/canonicaldigest"
 	"fluxagent/internal/dataclassification"
 	"fluxagent/internal/domain"
+	evidencepkg "fluxagent/internal/evidence"
 	"fluxagent/internal/investigation"
 	"fluxagent/internal/rcametrics"
 	"fluxagent/internal/statusbudget"
@@ -566,9 +567,20 @@ func validateEvidenceRetention(policy v1alpha1.EvidenceRetentionPolicy) string {
 	if mode == "" || mode == v1alpha1.EvidenceRetentionModeMetadataOnly {
 		return ""
 	}
+	if policy.Encryption.Required {
+		return "spec.evidenceRetention.encryption.required is not supported by the current evidence retention adapters"
+	}
+	switch deletionPolicy := strings.TrimSpace(policy.DeletionPolicy); deletionPolicy {
+	case "", v1alpha1.EvidenceRetentionDeletionPolicyRetain, v1alpha1.EvidenceRetentionDeletionPolicyDelete:
+	default:
+		return "unsupported evidence retention deletionPolicy: " + deletionPolicy
+	}
 	switch mode {
 	case v1alpha1.EvidenceRetentionModeNormalizedSnapshot:
-		return "spec.evidenceRetention.mode=NormalizedSnapshot is defined by the API contract but external evidence snapshot storage is not supported in this release"
+		if strings.TrimSpace(policy.StorageRef.Name) != evidencepkg.LocalFilesystemStoreName {
+			return "spec.evidenceRetention.mode=NormalizedSnapshot requires spec.evidenceRetention.storageRef.name=local-filesystem"
+		}
+		return ""
 	case v1alpha1.EvidenceRetentionModeRawSnapshot:
 		return "spec.evidenceRetention.mode=RawSnapshot requires explicit raw evidence retention support and is not supported in this release"
 	default:
