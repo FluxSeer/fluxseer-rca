@@ -35,6 +35,8 @@ docs/
 │  ├─ v0.3-trustworthy-rca-contract.md
 │  ├─ v0.3-foundation-issues.md
 │  ├─ v0.3-production-readiness.md
+│  ├─ v0.3-schema-freeze-audit.md
+│  ├─ v0.3-naming-api-review.md
 │  └─ archived-decisions.md
 └─ tutorials/
    ├─ quickstart-kind.md
@@ -87,6 +89,8 @@ docs/
 
 - Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
 - Current release scope: `v0.2.0-beta.1` is a published prerelease focused on read-only RCA workflows.
+- Current v0.3 engineering state: the P0 RCA contract is frozen, with `make verify-release-v0.3-beta` as the release candidate verification entrypoint.
+- Frozen v0.3 API identity: `aiops.platform/v1alpha1`.
 - `RemediationPlan` and `AgentAction` remain guarded experimental expansion paths.
 - Hosted model integrations are limited to OpenAI API, Claude API, and Gemini API; heuristic remains the no-secret default.
 - Prometheus, Loki, and Kubernetes Events adapters are wired into the runnable demo path.
