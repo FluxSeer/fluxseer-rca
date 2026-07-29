@@ -90,11 +90,13 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *RiskSignalReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		Named("risksignal-remediation").
-		For(&v1alpha1.RiskSignal{}).
-		Owns(&v1alpha1.RemediationPlan{}).
-		Complete(r)
+		For(&v1alpha1.RiskSignal{})
+	if r.Enabled {
+		builder = builder.Owns(&v1alpha1.RemediationPlan{})
+	}
+	return builder.Complete(r)
 }
 
 func evidenceSummaries(evidence []v1alpha1.EvidenceRef) []string {

@@ -51,6 +51,9 @@ helm template fluxagent "${chart}" --namespace fluxagent-system \
 echo "==> v0.3 schema freeze audit: rule pack rendering"
 bash "${root}/hack/verify-rule-packs.sh"
 
+echo "==> v0.3 schema freeze audit: RBAC profile rendering"
+bash "${root}/hack/verify-rbac-profiles.sh"
+
 echo "==> v0.3 schema freeze audit: schema contract smoke checks"
 grep -q "kind: PrometheusRule" "${tmpdir}/helm-full.yaml"
 grep -q "fluxagent_queue_depth" "${tmpdir}/helm-full.yaml"
