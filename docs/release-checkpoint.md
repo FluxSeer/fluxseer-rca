@@ -1,6 +1,6 @@
 # FluxAgent Release Checkpoint
 
-Last verified: 2026-07-24
+Last verified: 2026-07-29
 
 This document records what the repository can actually do today, what remains incomplete, and which local checks were used to verify the current state.
 
@@ -14,10 +14,16 @@ Product positioning:
 Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
 ```
 
-Current release scope:
+Published release scope:
 
 ```text
 v0.2 focuses on read-only RCA workflows and is published as v0.2.0-beta.1.
+```
+
+Current v0.3 candidate scope:
+
+```text
+v0.3.0-beta.1 freezes the RCA status contract and has passed the aggregate release candidate gate. Artifact publication is pending.
 ```
 
 The repository currently represents the published `v0.2.0-beta.1` read-only RCA beta:
@@ -35,7 +41,7 @@ The repository currently represents the published `v0.2.0-beta.1` read-only RCA 
 - optional `InvestigationRequest` to `RiskSignal` promotion
 - `RiskSignal` and `InvestigationRequest` TTL cleanup behavior
 
-It is past the original `v0.2` alpha checkpoint, passed the local and kind beta gates, and was published as a prerelease. It is not a production-hardened remediation release or a complete `v0.3` release.
+It is past the original `v0.2` alpha checkpoint, passed the local and kind beta gates, and was published as a prerelease. The v0.3 RCA contract is frozen and approved for beta publication, but v0.3 artifacts have not yet been published.
 
 Release identity:
 
@@ -61,6 +67,54 @@ Helm OCI chart:
   test-harbor.fluxseer.com/fluxseer/fluxagent/charts/kube-ai-sre:0.2.0-beta.1
   digest: sha256:0924e95465d146d0473594bb96fa00d67d4fd7115ff6cca6d99183a816470828
 ```
+
+## v0.3.0-beta.1 Publication Candidate
+
+Status:
+
+```text
+v0.3 schema frozen:                    YES
+v0.3 release candidate gate:           IMPLEMENTED
+v0.3 release candidate verification:   PASSED
+candidate version:                     v0.3.0-beta.1
+release approved for publication:      READY
+release published:                     NO
+```
+
+Identity:
+
+```text
+Frozen API identity: aiops.platform/v1alpha1
+Schema freeze baseline: 2821e254b65fc54bf6fa521aec89bf7c48240667
+Release candidate gate commit: ab4f2bbbde95b99fe2336535e3c16c71a64ef1b9
+```
+
+Verified command:
+
+```sh
+make verify-release-v0.3-beta
+```
+
+Observed result on 2026-07-29:
+
+```text
+PASS
+```
+
+Verified coverage:
+
+- frozen RCA contract verification
+- Go tests and rendered manifests
+- rule pack rendering and kind validation
+- kind E2E `RiskRule -> RiskSignal -> RCA`
+- `InvestigationRequest` E2E and degraded-provider scenarios
+- artifact identity
+- packaging consistency
+- reproducible image build
+- Helm install, upgrade, uninstall, and CRD retention
+- release cleanup hygiene
+
+Publication remains pending. Published image digests, chart digests, and GitHub Release URL must be recorded after tag-based artifact publication and provenance verification.
 
 ## Post `v0.2.0-alpha.2` Mainline Work
 
