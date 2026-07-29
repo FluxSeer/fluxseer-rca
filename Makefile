@@ -3,7 +3,10 @@ GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
 VERSION ?= dev
 RELEASE_VERSION ?= $(if $(filter dev,$(VERSION)),v0.2.0-beta.1,$(VERSION))
-V0_3_RELEASE_VERSION ?= v0.3.0-beta.1
+V0_3_RELEASE_VERSION ?= v0.3.0-beta.2
+V0_3_PREVIOUS_RELEASE_VERSION ?= v0.3.0-beta.1
+V0_3_PUBLISHED_CHART_OCI ?= oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent
+V0_3_PUBLISHED_IMAGE_REPOSITORY ?= ghcr.io/fluxseer/fluxagent/operator
 GIT_COMMIT := $(shell git rev-parse HEAD)
 GIT_DIRTY := $(shell test -z "$$(git status --porcelain)" && echo false || echo true)
 SOURCE_DATE_EPOCH := $(shell git show -s --format=%ct HEAD)
@@ -21,7 +24,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -135,6 +138,9 @@ verify-investigation-kind:
 verify-lifecycle-kind:
 	VERSION=$(VERSION) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) bash test/e2e/kind/verify_lifecycle_kind.sh
 
+verify-v0.3-beta-upgrade-kind:
+	VERSION=$(V0_3_RELEASE_VERSION) PREVIOUS_VERSION=$(V0_3_PREVIOUS_RELEASE_VERSION) PUBLISHED_CHART_OCI=$(V0_3_PUBLISHED_CHART_OCI) PUBLISHED_IMAGE_REPOSITORY=$(V0_3_PUBLISHED_IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) bash test/e2e/kind/verify_v0_3_beta_upgrade_kind.sh
+
 verify-v0.2-beta:
 	$(GO) test ./...
 	kubectl kustomize config/default >/tmp/fluxagent-config-default.yaml
@@ -197,6 +203,7 @@ verify-release-v0.3-beta:
 	$(MAKE) verify-packaging-consistency VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-packaging-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
 	$(MAKE) verify-build-reproducibility VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-reproducibility-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
 	$(MAKE) verify-lifecycle-kind VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-lifecycle-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-v0.3-beta-upgrade-kind V0_3_RELEASE_VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-upgrade-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
 	$(MAKE) verify-release-cleanup VERSION=$(V0_3_RELEASE_VERSION)
 
 verify-release-v0.3-rc: verify-release-v0.3-beta
