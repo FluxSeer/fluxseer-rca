@@ -14,9 +14,21 @@ controller:
   healthProbeBindAddress: ":8081"
   enableLeaderElection: false
   enableRemediation: false
+  enableLegacyDeploymentRisk: false
   extraArgs: []
   extraEnv: []
   resources: {}
+
+features:
+  legacyDeploymentRisk:
+    enabled: false
+  remediation:
+    enabled: false
+  experimentalExecutor:
+    enabled: false
+
+rbac:
+  profile: readOnlyRCA
 
 metrics:
   prometheusRule:

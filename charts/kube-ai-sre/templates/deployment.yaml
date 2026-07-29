@@ -27,7 +27,8 @@ spec:
             - --metrics-bind-address={{ .Values.controller.metricsBindAddress }}
             - --health-probe-bind-address={{ .Values.controller.healthProbeBindAddress }}
             - --leader-elect={{ .Values.controller.enableLeaderElection }}
-            - --enable-remediation={{ .Values.controller.enableRemediation }}
+            - --enable-remediation={{ or .Values.controller.enableRemediation .Values.features.remediation.enabled }}
+            - --enable-legacy-deployment-risk={{ or .Values.controller.enableLegacyDeploymentRisk .Values.features.legacyDeploymentRisk.enabled }}
             {{- range .Values.controller.extraArgs }}
             - {{ . | quote }}
             {{- end }}
