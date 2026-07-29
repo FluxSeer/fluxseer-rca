@@ -63,6 +63,15 @@ rulePacks:
     window: 10m
     severity: warning
     rcaEnabled: true
+    trafficAnomaly:
+      comparisonOffset: 30m
+      increaseRatio: 3
+      minimumCurrentRate: 10
+    resourceThresholds:
+      cpuUsageCores: 0.8
+      cpuThrottlingRatio: 0.2
+      memoryWorkingSetBytes: 1073741824
+      memoryNearLimitRatio: 0.9
     providerRef:
       name: ""
   lokiBaseline:

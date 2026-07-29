@@ -25,6 +25,24 @@ spec:
       threshold:
         operator: ">"
         value: 0
+    - name: request-rate-surge
+      datasourceRef:
+        name: {{ .Values.rulePacks.prometheusBaseline.datasourceRef.name | quote }}
+      queryType: metric
+      queryTemplate: |
+        (
+          sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m]))
+          /
+          clamp_min(sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m] offset {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.comparisonOffset }})), 0.001)
+        )
+        *
+        (
+          sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m]))
+          > bool {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.minimumCurrentRate }}
+        )
+      threshold:
+        operator: ">"
+        value: {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.increaseRatio }}
     - name: high-latency
       datasourceRef:
         name: {{ .Values.rulePacks.prometheusBaseline.datasourceRef.name | quote }}
@@ -51,7 +69,18 @@ spec:
         sum(rate(container_cpu_usage_seconds_total{namespace="{{ "{{ .namespace }}" }}",pod=~"{{ "{{ .name }}" }}.*"}[5m]))
       threshold:
         operator: ">"
-        value: 0.8
+        value: {{ .Values.rulePacks.prometheusBaseline.resourceThresholds.cpuUsageCores }}
+    - name: cpu-throttling
+      datasourceRef:
+        name: {{ .Values.rulePacks.prometheusBaseline.datasourceRef.name | quote }}
+      queryType: metric
+      queryTemplate: |
+        sum(rate(container_cpu_cfs_throttled_periods_total{namespace="{{ "{{ .namespace }}" }}",pod=~"{{ "{{ .name }}" }}.*"}[5m]))
+        /
+        clamp_min(sum(rate(container_cpu_cfs_periods_total{namespace="{{ "{{ .namespace }}" }}",pod=~"{{ "{{ .name }}" }}.*"}[5m])), 1)
+      threshold:
+        operator: ">"
+        value: {{ .Values.rulePacks.prometheusBaseline.resourceThresholds.cpuThrottlingRatio }}
     - name: memory-saturation
       datasourceRef:
         name: {{ .Values.rulePacks.prometheusBaseline.datasourceRef.name | quote }}
@@ -60,7 +89,18 @@ spec:
         sum(container_memory_working_set_bytes{namespace="{{ "{{ .namespace }}" }}",pod=~"{{ "{{ .name }}" }}.*"})
       threshold:
         operator: ">"
-        value: 1073741824
+        value: {{ .Values.rulePacks.prometheusBaseline.resourceThresholds.memoryWorkingSetBytes }}
+    - name: memory-near-limit
+      datasourceRef:
+        name: {{ .Values.rulePacks.prometheusBaseline.datasourceRef.name | quote }}
+      queryType: metric
+      queryTemplate: |
+        sum(container_memory_working_set_bytes{namespace="{{ "{{ .namespace }}" }}",pod=~"{{ "{{ .name }}" }}.*"})
+        /
+        clamp_min(sum(kube_pod_container_resource_limits{namespace="{{ "{{ .namespace }}" }}",pod=~"{{ "{{ .name }}" }}.*",resource="memory"}), 1)
+      threshold:
+        operator: ">"
+        value: {{ .Values.rulePacks.prometheusBaseline.resourceThresholds.memoryNearLimitRatio }}
   ai:
     rcaEnabled: {{ .Values.rulePacks.prometheusBaseline.rcaEnabled }}
     {{- if .Values.rulePacks.prometheusBaseline.providerRef.name }}
