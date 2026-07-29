@@ -1,0 +1,18 @@
+{{- if .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "fluxagent.fullname" . }}-workqueue
+  namespace: {{ default .Release.Namespace .Values.metrics.prometheusRule.namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: fluxagent.workqueue
+      rules:
+        - record: fluxagent_queue_depth
+          expr: {{ .Values.metrics.prometheusRule.workqueueDepthExpr | quote }}
+{{- end }}

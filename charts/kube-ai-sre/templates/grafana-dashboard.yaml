@@ -1,0 +1,74 @@
+{{- if .Values.metrics.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fluxagent.fullname" . }}-dashboard
+  namespace: {{ default .Release.Namespace .Values.metrics.grafanaDashboard.namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+    {{- with .Values.metrics.grafanaDashboard.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  fluxagent-dashboard.json: |
+    {
+      "title": "FluxAgent RCA Control Plane",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Controller Workqueue Depth",
+          "targets": [
+            {
+              "expr": "workqueue_depth",
+              "legendFormat": "{{`{{name}}`}}"
+            },
+            {
+              "expr": "fluxagent_queue_depth",
+              "legendFormat": "fluxagent_queue_depth {{`{{name}}`}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Datasource Scheduler",
+          "targets": [
+            {
+              "expr": "fluxagent_datasource_query_queue_depth",
+              "legendFormat": "queued {{`{{scheduler}}`}}"
+            },
+            {
+              "expr": "fluxagent_datasource_queries_in_flight",
+              "legendFormat": "in flight {{`{{scheduler}}`}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Controller Queue And Work Duration",
+          "targets": [
+            {
+              "expr": "rate(workqueue_queue_duration_seconds_sum[5m]) / clamp_min(rate(workqueue_queue_duration_seconds_count[5m]), 1)",
+              "legendFormat": "queue {{`{{name}}`}}"
+            },
+            {
+              "expr": "rate(workqueue_work_duration_seconds_sum[5m]) / clamp_min(rate(workqueue_work_duration_seconds_count[5m]), 1)",
+              "legendFormat": "work {{`{{name}}`}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "RCA Results",
+          "targets": [
+            {
+              "expr": "sum by (outcome) (rate(fluxagent_investigation_total[5m]))",
+              "legendFormat": "{{`{{outcome}}`}}"
+            }
+          ]
+        }
+      ]
+    }
+{{- end }}

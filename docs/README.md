@@ -57,6 +57,7 @@ docs/
 - [product-requirements.md](product-requirements.md)
 - [competitive-positioning.md](competitive-positioning.md)
 - [helm-rulepacks.md](helm-rulepacks.md)
+- [metrics.md](metrics.md)
 - [release-checkpoint.md](release-checkpoint.md)
 - [backlog/v0.2-beta.md](backlog/v0.2-beta.md)
 - [backlog/v0.2-release-reproducibility.md](backlog/v0.2-release-reproducibility.md)

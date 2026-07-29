@@ -18,6 +18,18 @@ controller:
   extraEnv: []
   resources: {}
 
+metrics:
+  prometheusRule:
+    enabled: false
+    namespace: ""
+    labels: {}
+    workqueueDepthExpr: "sum by (name) (workqueue_depth)"
+  grafanaDashboard:
+    enabled: false
+    namespace: ""
+    labels:
+      grafana_dashboard: "1"
+
 modelGateway:
   provider: heuristic
 
