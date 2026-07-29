@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -207,6 +208,11 @@ func TestBuildHTTPClientRejectsDeniedDatasourceEndpoints(t *testing.T) {
 		{name: "loopback", endpoint: "http://127.0.0.1:9090"},
 		{name: "link-local", endpoint: "http://169.254.10.20:9090"},
 		{name: "private-without-allowlist", endpoint: "http://10.32.0.15:9090"},
+		{name: "ipv6-loopback", endpoint: "http://[::1]:9090"},
+		{name: "ipv6-link-local", endpoint: "http://[fe80::1]:9090"},
+		{name: "ipv6-unspecified", endpoint: "http://[::]:9090"},
+		{name: "ipv6-metadata", endpoint: "http://[fd00:ec2::254]:9090"},
+		{name: "ipv4-mapped-metadata", endpoint: "http://[::ffff:169.254.169.254]:9090"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -258,7 +264,33 @@ func TestBuildHTTPClientRevalidatesRedirectTarget(t *testing.T) {
 		t.Fatalf("parse redirect URL: %v", err)
 	}
 	err = client.CheckRedirect(&http.Request{URL: redirectURL}, []*http.Request{{URL: &url.URL{Scheme: "http", Host: "prometheus.example"}}})
-	expectNetworkPolicyDenied(t, err)
+	validationErr := expectNetworkPolicyDenied(t, err)
+	if !strings.Contains(validationErr.Message, "redirect target") || !strings.Contains(validationErr.Message, "169.254.169.254") {
+		t.Fatalf("expected redirect diagnostic with denied host, got %q", validationErr.Message)
+	}
+}
+
+func TestBuildHTTPClientRevalidatesRedirectAllowedHosts(t *testing.T) {
+	client, err := buildHTTPClient(context.Background(), nil, v1alpha1.DataSource{
+		Spec: v1alpha1.DataSourceSpec{
+			Type:     "prometheus",
+			Endpoint: "http://prometheus.example",
+			NetworkPolicy: v1alpha1.DataSourceNetworkPolicy{
+				AllowedHosts: []string{"prometheus.example"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected client build to succeed, got %v", err)
+	}
+	redirectURL, err := url.Parse("http://evil.example/metrics")
+	if err != nil {
+		t.Fatalf("parse redirect URL: %v", err)
+	}
+	validationErr := expectNetworkPolicyDenied(t, client.CheckRedirect(&http.Request{URL: redirectURL}, []*http.Request{{URL: &url.URL{Scheme: "http", Host: "prometheus.example"}}}))
+	if !strings.Contains(validationErr.Message, "redirect target") || !strings.Contains(validationErr.Message, "evil.example") {
+		t.Fatalf("expected redirect host allowlist diagnostic, got %q", validationErr.Message)
+	}
 }
 
 func TestDatasourcePolicyDialContextRejectsDeniedResolvedIP(t *testing.T) {
@@ -275,9 +307,37 @@ func TestDatasourcePolicyDialContextRejectsDeniedResolvedIP(t *testing.T) {
 	)
 
 	_, err := dial(context.Background(), "tcp", "prometheus.example:9090")
-	expectNetworkPolicyDenied(t, err)
+	validationErr := expectNetworkPolicyDenied(t, err)
+	if !strings.Contains(validationErr.Message, "prometheus.example") || !strings.Contains(validationErr.Message, "169.254.169.254") {
+		t.Fatalf("expected resolved host/IP diagnostic, got %q", validationErr.Message)
+	}
 	if dialCalled {
 		t.Fatal("expected denied resolved IP to block before dial")
+	}
+}
+
+func TestDatasourcePolicyDialContextRejectsIPv4MappedMetadataIP(t *testing.T) {
+	dialCalled := false
+	dial := datasourcePolicyDialContext(
+		v1alpha1.DataSourceNetworkPolicy{},
+		func(context.Context, string) ([]net.IPAddr, error) {
+			return []net.IPAddr{{IP: net.ParseIP("::ffff:169.254.169.254")}}, nil
+		},
+		func(context.Context, string, string) (net.Conn, error) {
+			dialCalled = true
+			return nil, errors.New("unexpected dial")
+		},
+	)
+
+	validationErr := expectNetworkPolicyDenied(t, func() error {
+		_, err := dial(context.Background(), "tcp", "prometheus.example:9090")
+		return err
+	}())
+	if !strings.Contains(validationErr.Message, "169.254.169.254") {
+		t.Fatalf("expected IPv4-mapped metadata diagnostic, got %q", validationErr.Message)
+	}
+	if dialCalled {
+		t.Fatal("expected IPv4-mapped denied IP to block before dial")
 	}
 }
 
@@ -350,7 +410,7 @@ func TestDatasourcePolicyDialContextAllowsClusterServicePrivateIP(t *testing.T) 
 	}
 }
 
-func expectNetworkPolicyDenied(t *testing.T, err error) {
+func expectNetworkPolicyDenied(t *testing.T, err error) *ValidationError {
 	t.Helper()
 	validationErr, ok := err.(*ValidationError)
 	if !ok {
@@ -359,6 +419,7 @@ func expectNetworkPolicyDenied(t *testing.T, err error) {
 	if validationErr.Reason != "DatasourceNetworkPolicyDenied" {
 		t.Fatalf("expected DatasourceNetworkPolicyDenied, got %#v", validationErr)
 	}
+	return validationErr
 }
 
 func TestBearerRoundTripperAddsAuthorizationHeader(t *testing.T) {
