@@ -1,0 +1,35 @@
+{
+  "name": "latency-no-issue",
+  "profile": "LatencyRegression",
+  "datasources": [
+    {
+      "name": "prometheus",
+      "queryType": "metric",
+      "records": [
+        {
+          "metric": "http_request_duration_seconds_p95",
+          "value": "0"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Should not be called",
+    "riskSummary": "Provider should not be called when required evidence is normal.",
+    "severity": "low",
+    "confidenceScore": 1,
+    "rationale": "unexpected",
+    "rcaHypothesis": "unexpected",
+    "rcaCauses": [
+      "unexpected"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "NoIssueFound",
+    "rootCauseType": "NoIssueFound",
+    "claimVerification": "",
+    "providerCalls": 0
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "pod-imagepullbackoff",
+  "profile": "ImagePullBackOff",
+  "target": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "namespace": "prod",
+    "name": "checkout-api-abc123"
+  },
+  "datasources": [
+    {
+      "name": "kubernetes-events",
+      "queryType": "event",
+      "records": [
+        {
+          "reason": "ErrImagePull",
+          "message": "failed to pull image test-harbor.fluxseer.com/checkout/api:bad"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "ImagePullBackOff on checkout pod",
+    "riskSummary": "The pod cannot pull the configured image.",
+    "severity": "medium",
+    "confidenceScore": 80,
+    "rationale": "event evidence reports ErrImagePull",
+    "rcaHypothesis": "The pod image pull is failing because the image reference is unavailable.",
+    "rcaCauses": [
+      "ErrImagePull events were observed"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "WorkloadDegradation",
+    "claimVerification": "Supported",
+    "providerCalls": 1
+  }
+}

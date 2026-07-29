@@ -9,10 +9,12 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"fluxagent/api/v1alpha1"
@@ -27,9 +29,17 @@ import (
 type rawToFinalFixture struct {
 	Name             string                `json:"name"`
 	Profile          string                `json:"profile"`
+	Target           fixtureTarget         `json:"target"`
 	Datasources      []fixtureDatasource   `json:"datasources"`
 	ProviderResponse map[string]any        `json:"providerResponse"`
 	Expected         rawToFinalExpectation `json:"expected"`
+}
+
+type fixtureTarget struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Namespace  string `json:"namespace"`
+	Name       string `json:"name"`
 }
 
 type fixtureDatasource struct {
@@ -43,6 +53,7 @@ type rawToFinalExpectation struct {
 	Outcome           string `json:"outcome"`
 	RootCauseType     string `json:"rootCauseType"`
 	ClaimVerification string `json:"claimVerification"`
+	ProviderCalls     int    `json:"providerCalls"`
 }
 
 type fixtureRCAProvider struct {
@@ -102,8 +113,8 @@ func TestRawToFinalE2EFixtureReplay(t *testing.T) {
 			if !hasClaimVerification(stored.Status.Claims, fixture.Expected.ClaimVerification) {
 				t.Fatalf("expected claim verification %s, got %#v", fixture.Expected.ClaimVerification, stored.Status.Claims)
 			}
-			if provider.calls != 1 {
-				t.Fatalf("expected provider to be called once, got %d", provider.calls)
+			if provider.calls != fixture.Expected.ProviderCalls {
+				t.Fatalf("expected provider to be called %d times, got %d", fixture.Expected.ProviderCalls, provider.calls)
 			}
 		})
 	}
@@ -115,17 +126,21 @@ func fixtureReconciler(t *testing.T, fixture rawToFinalFixture) (*InvestigationR
 	if err := appsv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("add apps scheme: %v", err)
 	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("add aiops scheme: %v", err)
 	}
+	target := fixtureTargetOrDefault(fixture.Target)
 	request := &v1alpha1.InvestigationRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: fixture.Name, Namespace: "fluxagent-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
-				Namespace:  "prod",
-				Kind:       "Deployment",
-				Name:       "open-api",
-				APIVersion: "apps/v1",
+				Namespace:  target.Namespace,
+				Kind:       target.Kind,
+				Name:       target.Name,
+				APIVersion: target.APIVersion,
 			},
 			DataSources:          fixtureDatasourceRefs(fixture.Datasources),
 			ModelProviderRef:     v1alpha1.LocalObjectReference{Name: "fixture-provider"},
@@ -140,7 +155,7 @@ func fixtureReconciler(t *testing.T, fixture rawToFinalFixture) (*InvestigationR
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
-		WithObjects(request, evidenceRequirementDeployment(), providerObj).
+		WithObjects(append(fixtureTargetObjects(target), request, providerObj)...).
 		Build()
 	provider := &fixtureRCAProvider{output: fixture.ProviderResponse}
 	return &InvestigationRequestReconciler{
@@ -159,6 +174,26 @@ func fixtureReconciler(t *testing.T, fixture rawToFinalFixture) (*InvestigationR
 		},
 		Now: func() time.Time { return time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC) },
 	}, request, provider
+}
+
+func fixtureTargetOrDefault(target fixtureTarget) fixtureTarget {
+	if target.Kind == "" {
+		return fixtureTarget{APIVersion: "apps/v1", Kind: "Deployment", Namespace: "prod", Name: "open-api"}
+	}
+	return target
+}
+
+func fixtureTargetObjects(target fixtureTarget) []client.Object {
+	switch target.Kind {
+	case "Pod":
+		return []client.Object{
+			&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: target.Name, Namespace: target.Namespace, Labels: map[string]string{"app": target.Name}},
+			},
+		}
+	default:
+		return []client.Object{evidenceRequirementDeployment()}
+	}
 }
 
 func fixtureDatasourceRefs(items []fixtureDatasource) []v1alpha1.LocalObjectReference {
@@ -182,6 +217,9 @@ func fixtureDataSources(items []fixtureDatasource) []datasource.DataSource {
 }
 
 func hasClaimVerification(claims []v1alpha1.RCAClaim, verification string) bool {
+	if verification == "" {
+		return true
+	}
 	for _, claim := range claims {
 		if claim.Verification == verification {
 			return true
