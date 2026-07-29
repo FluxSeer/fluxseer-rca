@@ -4,7 +4,7 @@ Kubernetes-native SRE RCA control plane for teams that want explicit, auditable,
 
 Current release: `v0.2.0-beta.1`
 
-Status: `v0.2 read-only RCA beta / early v0.3 RCA contract hardening`
+Status: `v0.2 read-only RCA beta / v0.3 RCA contract frozen, release candidate gate pending`
 
 FluxAgent turns production signals and operator questions into structured, evidence-linked RCA resources in Kubernetes.
 
@@ -40,7 +40,7 @@ flowchart LR
     IR[InvestigationRequest]
     Evidence[Bounded Evidence Collection]
     Reasoning[Reasoning Provider]
-    Verify["Claim Verification<br/>(v0.3 target)"]
+    Verify["Claim Verification"]
     RCA[Structured RCA Status]
 
     Signal --> IR
@@ -59,7 +59,7 @@ InvestigationRequest
 -> structured status with compact evidence references
 ```
 
-The `v0.3` direction is to harden claim verification into a stricter RCA contract:
+The frozen `v0.3` RCA contract hardens claim verification into a stricter audit surface:
 
 ```text
 Claim
@@ -69,7 +69,7 @@ Claim
 
 ## Example RCA Status
 
-The v0.3 target status contract makes important RCA claims machine-checkable instead of returning only Markdown prose:
+The v0.3 status contract makes important RCA claims machine-checkable instead of returning only Markdown prose:
 
 ```yaml
 status:
@@ -150,7 +150,7 @@ Target for `v0.3`:
 - `execution`
 - richer evidence provenance and claim verification semantics
 
-`confidence` is a provider- or verifier-derived ranking score, not a calibrated probability of correctness. `RiskSignal.spec.confidence`, `RiskSignal.status.rcaCauses[].confidence`, and `RemediationPlan.spec.confidence` use integer scores from `0` to `100`; the v0.3 target `InvestigationRequest.status.verdict.confidence` uses a normalized score from `0.0` to `1.0`.
+`confidence` is a provider- or verifier-derived ranking score, not a calibrated probability of correctness. `RiskSignal.spec.confidence`, `RiskSignal.status.rcaCauses[].confidence`, and `RemediationPlan.spec.confidence` use integer scores from `0` to `100`; the v0.3 `InvestigationRequest.status.verdict.confidence` contract uses a normalized score from `0.0` to `1.0`.
 
 ## Security Posture
 
@@ -275,9 +275,9 @@ Enable this explicitly with `--enable-remediation=true`.
 - `RemediationPlan`: experimental proposed mitigation workflow
 - `AgentAction`: experimental guarded executable action with approval context
 
-`ModelProvider` is the current `v1alpha1` API name for reasoning backends, including the built-in heuristic path. `v0.3` will review whether this should become `ReasoningProvider` before a breaking API cut.
+`ModelProvider` is the frozen `v1alpha1` API name for reasoning backends, including the built-in heuristic path.
 
-The current API group is `aiops.platform/v1alpha1`. `v0.3` should review whether the public API group should move to a project-owned group such as `fluxagent.io/v1alpha1` or `aiops.fluxseer.com/v1alpha1` before a `v1beta1` contract.
+The frozen v0.3 API group is `aiops.platform/v1alpha1`. Any future API-group or resource rename requires an explicit migration path; it is not treated as a cosmetic change after the v0.3 schema freeze.
 
 See:
 

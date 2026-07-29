@@ -3,6 +3,7 @@ GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
 VERSION ?= dev
 RELEASE_VERSION ?= $(if $(filter dev,$(VERSION)),v0.2.0-beta.1,$(VERSION))
+V0_3_RELEASE_VERSION ?= v0.3.0-beta.1
 GIT_COMMIT := $(shell git rev-parse HEAD)
 GIT_DIRTY := $(shell test -z "$$(git status --porcelain)" && echo false || echo true)
 SOURCE_DATE_EPOCH := $(shell git show -s --format=%ct HEAD)
@@ -20,7 +21,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -180,6 +181,22 @@ verify-release-v0.2-beta:
 	$(MAKE) verify-build-reproducibility VERSION=$(RELEASE_VERSION) IMAGE_TAG=release-reproducibility-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
 	$(MAKE) verify-lifecycle-kind VERSION=$(RELEASE_VERSION) IMAGE_TAG=release-lifecycle-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
 	$(MAKE) verify-release-cleanup VERSION=$(RELEASE_VERSION)
+
+verify-release-v0.3-beta:
+	$(MAKE) verify-release-inputs VERSION=$(V0_3_RELEASE_VERSION)
+	$(MAKE) verify-v0.3-schema-freeze
+	$(MAKE) verify-v0.2-beta
+	$(MAKE) verify-rule-packs
+	$(MAKE) verify-rule-packs-kind VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-rulepack-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-e2e-kind VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-e2e-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-investigation-kind VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-investigation-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-artifact-identity VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-identity-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-packaging-consistency VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-packaging-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-build-reproducibility VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-reproducibility-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-lifecycle-kind VERSION=$(V0_3_RELEASE_VERSION) IMAGE_TAG=release-lifecycle-test TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)
+	$(MAKE) verify-release-cleanup VERSION=$(V0_3_RELEASE_VERSION)
+
+verify-release-v0.3-rc: verify-release-v0.3-beta
 
 build-images:
 	docker buildx build --load --platform $(TARGET_PLATFORM) --provenance=false --sbom=false \

@@ -35,12 +35,18 @@ if [[ -n "${running_release_containers}" ]]; then
 fi
 
 release_test_tags=(
+  fluxagent/operator:release-rulepack-test
+  fluxagent/demo-observability:release-rulepack-test
   fluxagent/operator:release-e2e-test
   fluxagent/demo-observability:release-e2e-test
   fluxagent/operator:release-investigation-test
   fluxagent/demo-observability:release-investigation-test
   fluxagent/operator:release-identity-test
   fluxagent/demo-observability:release-identity-test
+  fluxagent/operator:release-packaging-test
+  fluxagent/demo-observability:release-packaging-test
+  fluxagent/operator:release-reproducibility-test
+  fluxagent/demo-observability:release-reproducibility-test
   fluxagent/operator:release-lifecycle-test
   fluxagent/demo-observability:release-lifecycle-test
 )

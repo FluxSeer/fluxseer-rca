@@ -277,6 +277,10 @@ spec:
   endpoint: http://fluxagent-observability:8080/demo/providers/openai/auth-failed
   timeout: 2s
   maxTokens: 256
+  dataPolicy:
+    allowExternalTransmission: true
+    maximumClassification: Confidential
+    requireRedaction: true
   apiKeySecretRef:
     name: openai-demo-secret
     key: api-key
@@ -292,6 +296,10 @@ spec:
   endpoint: http://fluxagent-observability:8080/demo/providers/openai/rate-limited
   timeout: 2s
   maxTokens: 256
+  dataPolicy:
+    allowExternalTransmission: true
+    maximumClassification: Confidential
+    requireRedaction: true
   apiKeySecretRef:
     name: openai-demo-secret
     key: api-key
