@@ -2,9 +2,9 @@
 
 Kubernetes-native SRE RCA control plane for teams that want explicit, auditable, and security-first AI-assisted investigation.
 
-Current release: `v0.2.0-beta.1`
+Current release: `v0.3.0-beta.1`
 
-Status: `v0.2 read-only RCA beta / v0.3 RCA contract frozen, release candidate gate passed, publication pending`
+Status: `v0.3 RCA contract frozen, beta published, provenance verified`
 
 FluxAgent turns production signals and operator questions into structured, evidence-linked RCA resources in Kubernetes.
 

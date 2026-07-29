@@ -35,6 +35,7 @@ docs/
 │  ├─ v0.3-trustworthy-rca-contract.md
 │  ├─ v0.3-foundation-issues.md
 │  ├─ v0.3-production-readiness.md
+│  ├─ v0.3-beta-stabilization.md
 │  ├─ v0.3-schema-freeze-audit.md
 │  ├─ v0.3-naming-api-review.md
 │  └─ archived-decisions.md
@@ -66,6 +67,7 @@ docs/
 - [backlog/v0.3-trustworthy-rca-contract.md](backlog/v0.3-trustworthy-rca-contract.md)
 - [backlog/v0.3-foundation-issues.md](backlog/v0.3-foundation-issues.md)
 - [backlog/v0.3-production-readiness.md](backlog/v0.3-production-readiness.md)
+- [backlog/v0.3-beta-stabilization.md](backlog/v0.3-beta-stabilization.md)
 - [backlog/v0.3-schema-freeze-audit.md](backlog/v0.3-schema-freeze-audit.md)
 - [backlog/v0.3-naming-api-review.md](backlog/v0.3-naming-api-review.md)
 - [backlog/archived-decisions.md](backlog/archived-decisions.md)
@@ -89,8 +91,8 @@ docs/
 ## Current Product Truth
 
 - Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
-- Current release scope: `v0.2.0-beta.1` is a published prerelease focused on read-only RCA workflows.
-- Current v0.3 engineering state: the P0 RCA contract is frozen and `make verify-release-v0.3-beta` has passed for the `v0.3.0-beta.1` publication candidate.
+- Current release scope: `v0.3.0-beta.1` is a published prerelease with frozen RCA contract, published GHCR images, published Helm OCI chart, and verified provenance.
+- Current v0.3 engineering state: beta stabilization and evidence-driven optimization.
 - Frozen v0.3 API identity: `aiops.platform/v1alpha1`.
 - `RemediationPlan` and `AgentAction` remain guarded experimental expansion paths.
 - Hosted model integrations are limited to OpenAI API, Claude API, and Gemini API; heuristic remains the no-secret default.
