@@ -102,15 +102,27 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 		if evidenceErr != nil {
 			return ctrl.Result{}, evidenceErr
 		}
-		if gate := evaluateEvidenceRequirements(investigation.Spec, evidence); gate != nil && !gate.Complete {
-			applyEvidenceRequirementInconclusiveStatus(&investigation, evidence, *gate, now())
-			applyInvestigationStatusBudget(&investigation, now())
-			if !reflect.DeepEqual(original.Status, investigation.Status) {
-				if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
-					return ctrl.Result{}, err
+		if gate := evaluateEvidenceRequirements(investigation.Spec, evidence); gate != nil {
+			switch {
+			case !gate.Complete:
+				applyEvidenceRequirementInconclusiveStatus(&investigation, evidence, *gate, now())
+				applyInvestigationStatusBudget(&investigation, now())
+				if !reflect.DeepEqual(original.Status, investigation.Status) {
+					if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
+						return ctrl.Result{}, err
+					}
 				}
+				return ttlResult, nil
+			case gate.NoIssueFound:
+				applyEvidenceRequirementNoIssueFoundStatus(&investigation, evidence, *gate, now())
+				applyInvestigationStatusBudget(&investigation, now())
+				if !reflect.DeepEqual(original.Status, investigation.Status) {
+					if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
+						return ctrl.Result{}, err
+					}
+				}
+				return ttlResult, nil
 			}
-			return ttlResult, nil
 		}
 		executionID := investigationExecutionID(&investigation, preflight, evidence)
 		rca := emptyRCAResult()
@@ -167,10 +179,11 @@ func applyInvestigationStatusBudget(request *v1alpha1.InvestigationRequest, now 
 }
 
 type evidenceRequirementGate struct {
-	Profile  string
-	Complete bool
-	Missing  []v1alpha1.RCAMissingEvidence
-	Message  string
+	Profile      string
+	Complete     bool
+	NoIssueFound bool
+	Missing      []v1alpha1.RCAMissingEvidence
+	Message      string
 }
 
 func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult) *evidenceRequirementGate {
@@ -200,7 +213,12 @@ func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, eviden
 		}
 	}
 	if len(missing) == 0 {
-		return &evidenceRequirementGate{Profile: profile, Complete: true}
+		return &evidenceRequirementGate{
+			Profile:      profile,
+			Complete:     true,
+			NoIssueFound: evidenceProfileHasNoIssue(profile, evidence),
+			Message:      fmt.Sprintf("required evidence profile %q is complete", profile),
+		}
 	}
 	return &evidenceRequirementGate{
 		Profile:  profile,
@@ -212,13 +230,95 @@ func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, eviden
 
 func requiredEvidenceKindsForProfile(profile string) []string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
-	case "imagepullbackoff":
+	case "crashloopbackoff", "imagepullbackoff":
 		return []string{string(domain.QueryTypeEvent)}
-	case "latencyregression", "rolloutlatencyregression":
+	case "oomkilled":
+		return []string{string(domain.QueryTypeEvent), string(domain.QueryTypeMetric)}
+	case "latencyregression":
 		return []string{string(domain.QueryTypeMetric)}
+	case "rolloutlatencyregression":
+		return []string{string(domain.QueryTypeMetric), "deploymentCondition"}
 	default:
 		return nil
 	}
+}
+
+func evidenceProfileHasNoIssue(profile string, evidence investigation.EvidenceCollectionResult) bool {
+	profileKey := strings.ToLower(strings.TrimSpace(profile))
+	if profileKey == "" {
+		return false
+	}
+	relevant := 0
+	for _, ref := range evidence.EvidenceRefs {
+		if !evidenceRefRelevantForProfile(profileKey, ref) {
+			continue
+		}
+		relevant++
+		if evidenceRefMatchesProfileIssue(profileKey, ref) {
+			return false
+		}
+	}
+	return relevant > 0
+}
+
+func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) bool {
+	kind := strings.ToLower(strings.TrimSpace(ref.Kind))
+	switch profile {
+	case "crashloopbackoff", "imagepullbackoff":
+		return kind == string(domain.QueryTypeEvent)
+	case "oomkilled":
+		return kind == string(domain.QueryTypeEvent) || kind == string(domain.QueryTypeMetric)
+	case "latencyregression":
+		return kind == string(domain.QueryTypeMetric)
+	case "rolloutlatencyregression":
+		return kind == string(domain.QueryTypeMetric) || kind == strings.ToLower("deploymentCondition")
+	default:
+		return false
+	}
+}
+
+func evidenceRefMatchesProfileIssue(profile string, ref v1alpha1.EvidenceRef) bool {
+	text := strings.ToLower(strings.Join([]string{ref.Kind, ref.Source, ref.Reason, ref.Summary}, " "))
+	switch profile {
+	case "imagepullbackoff":
+		return containsAny(text, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
+	case "crashloopbackoff":
+		return containsAny(text, "crashloopbackoff", "backoff", "back-off", "container crashed", "unhealthy", "killing")
+	case "oomkilled":
+		return containsAny(text, "oomkilled", "out of memory", "memory pressure", "memory limit") || metricEvidenceValueAboveZero(ref)
+	case "latencyregression":
+		return metricEvidenceValueAboveZero(ref)
+	case "rolloutlatencyregression":
+		return metricEvidenceValueAboveZero(ref) ||
+			containsAny(text, "progressdeadlinexceeded", "unavailable", "replicafailure", "available=false", "progressing=false")
+	default:
+		return false
+	}
+}
+
+func containsAny(value string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(value, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func metricEvidenceValueAboveZero(ref v1alpha1.EvidenceRef) bool {
+	if strings.ToLower(strings.TrimSpace(ref.Kind)) != string(domain.QueryTypeMetric) {
+		return false
+	}
+	var lastValue *float64
+	for _, token := range strings.FieldsFunc(ref.Summary, func(r rune) bool {
+		return !(r == '.' || r == '-' || r >= '0' && r <= '9')
+	}) {
+		value, err := strconv.ParseFloat(strings.TrimSpace(token), 64)
+		if err == nil {
+			lastValue = &value
+		}
+	}
+	return lastValue != nil && *lastValue > 0
 }
 
 func applyEvidenceRequirementInconclusiveStatus(request *v1alpha1.InvestigationRequest, evidence investigation.EvidenceCollectionResult, gate evidenceRequirementGate, now time.Time) {
@@ -265,6 +365,45 @@ func applyEvidenceRequirementInconclusiveStatus(request *v1alpha1.InvestigationR
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "RequiredEvidenceMissing", "RCA is inconclusive because required evidence is incomplete", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationInconclusive", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, "RequiredEvidenceMissing", gate.Message, request.Generation, now)
+}
+
+func applyEvidenceRequirementNoIssueFoundStatus(request *v1alpha1.InvestigationRequest, evidence investigation.EvidenceCollectionResult, gate evidenceRequirementGate, now time.Time) {
+	message := fmt.Sprintf("required evidence profile %q is complete and no matching issue evidence was found", gate.Profile)
+	request.Status.Provider = ""
+	request.Status.EvidenceRefs = evidence.EvidenceRefs
+	request.Status.Summary = message
+	request.Status.Hypothesis = ""
+	request.Status.Confidence = 0
+	request.Status.Outcome = v1alpha1.InvestigationOutcomeNoIssueFound
+	request.Status.Failure = nil
+	request.Status.MissingEvidence = nil
+	request.Status.Degradation = nil
+	request.Status.Verdict = &v1alpha1.RCAVerdict{
+		Outcome:       v1alpha1.InvestigationOutcomeNoIssueFound,
+		Summary:       message,
+		RootCauseType: "NoIssueFound",
+		Confidence:    0,
+		ConfidenceDetail: &v1alpha1.RCAConfidence{
+			ProviderScore: 0,
+			VerifiedScore: 0,
+			Level:         "None",
+			Method:        "RequiredEvidenceProfileV1",
+		},
+	}
+	request.Status.Claims = nil
+	request.Status.AlternativeHypotheses = nil
+	request.Status.Execution = nil
+	completedAt := metav1.NewTime(now)
+	request.Status.CompletedAt = &completedAt
+	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseCompleted, message, request.Generation, now)
+	rcametrics.RecordInvestigation(request.Namespace, "heuristic", request.Status.Outcome, "unknown")
+	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionTrue, "TargetResolved", "target resource was resolved successfully", request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionTrue, "AllDatasourcesResolved", "all referenced datasources were resolved", request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "RequiredEvidenceComplete", gate.Message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionTrue, "NoIssueFound", message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "NoIssueFound", message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "investigation completed without degradation", request.Generation, now)
 }
 
 func applyLoopPreventedInvestigationStatus(request *v1alpha1.InvestigationRequest, failure *v1alpha1.InvestigationFailure, now time.Time) {

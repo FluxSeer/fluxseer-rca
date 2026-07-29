@@ -782,7 +782,13 @@ func TestInvestigationRequestReconcilerMarksInconclusiveWhenRequiredEvidenceMiss
 		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
 		WithObjects(request, evidenceRequirementDeployment(), provider).
 		Build()
-	reconciler := evidenceRequirementTestReconciler(client, scheme, counter, fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent})
+	reconciler := evidenceRequirementTestReconciler(client, scheme, counter, fakeInvestigationDataSource{
+		name:      "kubernetes-events",
+		queryType: domain.QueryTypeEvent,
+		records: []map[string]any{
+			{"reason": "ErrImagePull", "message": "failed to pull image"},
+		},
+	})
 
 	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
@@ -811,6 +817,63 @@ func TestInvestigationRequestReconcilerMarksInconclusiveWhenRequiredEvidenceMiss
 	}
 }
 
+func TestInvestigationRequestReconcilerMarksNoIssueFoundWhenRequiredEvidenceNormal(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	request := evidenceRequirementTestRequest("latency-normal-metric", "LatencyRegression", "prometheus")
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
+	}
+	counter := &countingModelProvider{}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, evidenceRequirementDeployment(), provider).
+		Build()
+	reconciler := evidenceRequirementTestReconciler(client, scheme, counter, fakeInvestigationDataSource{
+		name:      "prometheus",
+		queryType: domain.QueryTypeMetric,
+		records: []map[string]any{
+			{"metric": "http_request_latency_regression_ratio", "value": "0"},
+		},
+	})
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseCompleted || stored.Status.Outcome != v1alpha1.InvestigationOutcomeNoIssueFound {
+		t.Fatalf("expected completed NoIssueFound status, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if stored.Status.Failure != nil {
+		t.Fatalf("expected no workflow failure for NoIssueFound status, got %#v", stored.Status.Failure)
+	}
+	if len(stored.Status.MissingEvidence) != 0 {
+		t.Fatalf("expected no missing evidence, got %#v", stored.Status.MissingEvidence)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "RequiredEvidenceComplete" {
+		t.Fatalf("expected EvidenceCollectionReady true RequiredEvidenceComplete, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "NoIssueFound" {
+		t.Fatalf("expected RCAReady true NoIssueFound, got %#v", cond)
+	}
+	if counter.calls != 0 {
+		t.Fatalf("expected provider not to be called when profile evidence is normal, got %d", counter.calls)
+	}
+}
+
 func TestEvidenceNativeLimitDegradation(t *testing.T) {
 	degradation := evidenceNativeLimitDegradation(investigation.EvidenceCollectionResult{
 		EvidenceRefs: []v1alpha1.EvidenceRef{
@@ -834,6 +897,78 @@ func TestEvidenceNativeLimitDegradation(t *testing.T) {
 	}
 }
 
+func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
+	tests := []struct {
+		name         string
+		profile      string
+		refs         []v1alpha1.EvidenceRef
+		wantComplete bool
+		wantNoIssue  bool
+		wantMissing  []string
+	}{
+		{
+			name:    "oomkilled requires event and metric",
+			profile: "OOMKilled",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeEvent), Reason: "Normal", Summary: "pod completed without restart"},
+			},
+			wantComplete: false,
+			wantMissing:  []string{string(domain.QueryTypeMetric)},
+		},
+		{
+			name:    "rollout latency requires metric and deployment condition",
+			profile: "RolloutLatencyRegression",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeMetric), Summary: "metric rollout_latency_regression returned value 0.00"},
+			},
+			wantComplete: false,
+			wantMissing:  []string{"deploymentCondition"},
+		},
+		{
+			name:    "crashloop event complete with abnormal evidence",
+			profile: "CrashLoopBackOff",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeEvent), Reason: "BackOff", Summary: "container crashed repeatedly"},
+			},
+			wantComplete: true,
+			wantNoIssue:  false,
+		},
+		{
+			name:    "latency metric complete and normal",
+			profile: "LatencyRegression",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeMetric), Summary: "metric latency_regression_ratio returned value 0.00"},
+			},
+			wantComplete: true,
+			wantNoIssue:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gate := evaluateEvidenceRequirements(v1alpha1.InvestigationRequestSpec{
+				EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: tt.profile},
+			}, investigation.EvidenceCollectionResult{EvidenceRefs: tt.refs})
+			if gate == nil {
+				t.Fatalf("expected evidence requirement gate")
+			}
+			if gate.Complete != tt.wantComplete {
+				t.Fatalf("expected complete=%v, got %v", tt.wantComplete, gate.Complete)
+			}
+			if gate.NoIssueFound != tt.wantNoIssue {
+				t.Fatalf("expected noIssueFound=%v, got %v", tt.wantNoIssue, gate.NoIssueFound)
+			}
+			if len(gate.Missing) != len(tt.wantMissing) {
+				t.Fatalf("expected missing %v, got %#v", tt.wantMissing, gate.Missing)
+			}
+			for i, want := range tt.wantMissing {
+				if gate.Missing[i].Source != want {
+					t.Fatalf("expected missing[%d]=%s, got %#v", i, want, gate.Missing)
+				}
+			}
+		})
+	}
+}
+
 func TestInvestigationRequestReconcilerAllowsImagePullBackOffWhenEventEvidencePresent(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
@@ -853,7 +988,13 @@ func TestInvestigationRequestReconcilerAllowsImagePullBackOffWhenEventEvidencePr
 		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
 		WithObjects(request, evidenceRequirementDeployment(), provider).
 		Build()
-	reconciler := evidenceRequirementTestReconciler(client, scheme, counter, fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent})
+	reconciler := evidenceRequirementTestReconciler(client, scheme, counter, fakeInvestigationDataSource{
+		name:      "kubernetes-events",
+		queryType: domain.QueryTypeEvent,
+		records: []map[string]any{
+			{"reason": "ErrImagePull", "message": "failed to pull image"},
+		},
+	})
 
 	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
@@ -1345,6 +1486,7 @@ func TestInvestigationRequestReconcilerMarksQueryTypeMismatch(t *testing.T) {
 type fakeInvestigationDataSource struct {
 	name      string
 	queryType domain.QueryType
+	records   []map[string]any
 }
 
 func (f fakeInvestigationDataSource) Name() string { return f.name }
@@ -1362,7 +1504,11 @@ func (f fakeInvestigationDataSource) Capabilities() datasource.Capabilities {
 	}
 }
 func (f fakeInvestigationDataSource) Query(context.Context, datasource.QueryRequest) (*datasource.QueryResult, error) {
-	records := []map[string]any{}
+	records := f.records
+	if records != nil {
+		return &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: records}, nil
+	}
+	records = []map[string]any{}
 	switch f.queryType {
 	case domain.QueryTypeEvent:
 		records = []map[string]any{

@@ -135,7 +135,7 @@ Query field behavior:
 - `queryTemplate`: templated query rendered against target metadata
 - `reasons[]`: optional event reason filter for `queryType: event`
 - `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
-- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `LatencyRegression`, and `RolloutLatencyRegression`.
+- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `OOMKilled`, `LatencyRegression`, and `RolloutLatencyRegression`.
 - `evidenceRetention.mode`: external evidence retention mode. Current supported runtime behavior is `MetadataOnly`.
 - `evidenceRetention.retention`: requested external payload retention duration for future snapshot modes.
 - `evidenceRetention.storageRef.name`: external evidence storage configuration reference for future snapshot modes.
@@ -159,7 +159,19 @@ Query field behavior:
 
 If `modelProviderRef.name` is empty, FluxAgent falls back to the built-in heuristic provider.
 
-When an evidence requirements profile is configured, FluxAgent checks required evidence before calling the model provider. Missing required evidence produces `phase: Completed`, `outcome: Inconclusive`, `status.missingEvidence[]`, and a `RequiredEvidenceMissing` degradation reason. This is not a workflow failure. `ImagePullBackOff` requires event evidence. `LatencyRegression` and `RolloutLatencyRegression` require metric evidence. `NoIssueFound` is only valid after required evidence is complete.
+When an evidence requirements profile is configured, FluxAgent checks required evidence before calling the model provider. Missing required evidence produces `phase: Completed`, `outcome: Inconclusive`, `status.missingEvidence[]`, and a `RequiredEvidenceMissing` degradation reason. This is not a workflow failure.
+
+Current required evidence profiles:
+
+| Profile | Required Evidence |
+| --- | --- |
+| `ImagePullBackOff` | Kubernetes event evidence |
+| `CrashLoopBackOff` | Kubernetes event evidence |
+| `OOMKilled` | Kubernetes event evidence and metric evidence |
+| `LatencyRegression` | Metric evidence |
+| `RolloutLatencyRegression` | Metric evidence and deployment condition evidence |
+
+If required evidence is complete and profile-specific checks find no matching abnormal signal, FluxAgent completes the request with `phase: Completed`, `outcome: NoIssueFound`, and does not call the model provider. `NoIssueFound` is only valid after required evidence is complete; inability to collect required evidence remains `Inconclusive`.
 
 External evidence storage is disabled by default. FluxAgent currently accepts only the default `MetadataOnly` retention behavior. `NormalizedSnapshot` and `RawSnapshot` are reserved contract values and are rejected by validation until a secure external evidence storage adapter is implemented.
 
