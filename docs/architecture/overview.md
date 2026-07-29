@@ -8,11 +8,11 @@ Product positioning:
 Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
 ```
 
-Current release scope is narrower: `v0.2.0-beta.1` is a published prerelease focused on read-only RCA workflows.
+Current release scope is narrower than a general AI SRE platform: `v0.3.0-beta.1` is a published prerelease focused on read-only RCA workflows and a frozen RCA status contract.
 
-The current runnable default path is read-only detection: observe workload risk, create a `RiskSignal`, and notify without mutating the target workload.
+The current runnable default path is read-only RCA: evaluate explicit `RiskRule` or `InvestigationRequest` resources, collect bounded evidence, write canonical RCA status, and optionally materialize a `RiskSignal` without mutating the target workload.
 
-The newest runnable layer is read-only ad-hoc investigation through a dedicated workflow resource.
+The legacy annotation-driven Deployment watcher is retained only as an explicit opt-in path.
 
 Guarded remediation remains a separate optional expansion path. Only when it is explicitly enabled and passes guardrails can a `RiskSignal` lead to a `RemediationPlan`, an `AgentAction`, and an executed side effect.
 
@@ -85,7 +85,7 @@ See [dependency-neutrality.md](dependency-neutrality.md) for the staged directio
 
 ### 3. Detection Service Layer
 
-The default `v0.1` runtime uses `DeploymentRiskReconciler` plus `detector.Service`.
+The legacy annotation-driven runtime uses `DeploymentRiskReconciler` plus `detector.Service`. This watcher is disabled by default and retained as an explicit opt-in path.
 
 Responsibilities:
 
@@ -274,17 +274,18 @@ This layer makes sure risk detection and guarded execution both leave an observa
 - execution summaries
 - rollback metadata
 
-## Primary Flow: Background Read-only Detection
+## Primary Flow: Background Read-only RCA
 
 The default path is:
 
 ```text
-Signal Sources
-→ Datasource Adapters
-→ Detection Service
-→ Finding
-→ RiskSignal
-→ Notification
+RiskRule / Alert / Manual Request
+→ InvestigationRequest
+→ Bounded Evidence Collection
+→ ModelProvider
+→ Claim Verification
+→ InvestigationRequest.status
+→ optional RiskSignal
 ```
 
 In runtime terms:
@@ -296,7 +297,7 @@ In runtime terms:
 5. The controller creates or updates a `RiskSignal`.
 6. `RiskSignalNotificationReconciler` sends a webhook notification when configured.
 
-This is the main open-source entry point and the default runtime truth of `v0.1`.
+This is a legacy bootstrap path. The main open-source entry point is now the `RiskRule` and `InvestigationRequest` path.
 
 ## Early Flow: Ad-hoc Read-only Investigation
 
@@ -501,7 +502,7 @@ flowchart LR
 
 FluxAgent can already be described externally as:
 
-`FluxAgent is a Kubernetes-native SRE investigation control plane with background detection, ad-hoc read-only investigation workflows, and optional AI-assisted reasoning.`
+`FluxAgent is a Kubernetes-native SRE investigation control plane with explicit recurring detection, ad-hoc read-only investigation workflows, and optional AI-assisted reasoning.`
 
 It should not yet be described as:
 
@@ -509,4 +510,4 @@ It should not yet be described as:
 
 That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.
 
-The conservative release label is `v0.2.0-beta.1 read-only RCA beta`.
+The conservative release label is `v0.3.0-beta.1 RCA contract beta`.

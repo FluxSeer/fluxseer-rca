@@ -67,6 +67,21 @@ Claim
 -> Verification status
 ```
 
+## Capability Maturity
+
+FluxAgent does not treat every CRD, adapter, and controller as equally mature:
+
+- Canonical core: `InvestigationRequest`, `DataSource`, `ModelProvider`.
+- Bootstrap detection: `RiskRule`.
+- Materialized findings and compatibility output: `RiskSignal`.
+- Guarded experimental path: `RemediationPlan`, `AgentAction`.
+- Legacy opt-in path: annotation-driven Deployment risk detection.
+- Scaffold adapters: OpenTelemetry and CloudWatch.
+
+The default Helm install enables the read-only RCA path, heuristic provider, and Kubernetes baseline rule pack. It does not enable hosted providers, remediation controllers, legacy Deployment watching, or experimental executor permissions.
+
+See [docs/capability-maturity.md](docs/capability-maturity.md) for the full maturity matrix.
+
 ## Example RCA Status
 
 The v0.3 status contract makes important RCA claims machine-checkable instead of returning only Markdown prose:
