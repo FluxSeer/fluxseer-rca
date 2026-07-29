@@ -64,6 +64,7 @@ docs/
 - [backlog/v0.3-trustworthy-rca-contract.md](backlog/v0.3-trustworthy-rca-contract.md)
 - [backlog/v0.3-foundation-issues.md](backlog/v0.3-foundation-issues.md)
 - [backlog/v0.3-production-readiness.md](backlog/v0.3-production-readiness.md)
+- [backlog/v0.3-schema-freeze-audit.md](backlog/v0.3-schema-freeze-audit.md)
 - [backlog/v0.3-naming-api-review.md](backlog/v0.3-naming-api-review.md)
 - [backlog/archived-decisions.md](backlog/archived-decisions.md)
 - [releases/v0.2.0-beta.1.md](releases/v0.2.0-beta.1.md)
