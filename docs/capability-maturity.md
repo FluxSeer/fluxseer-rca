@@ -90,6 +90,8 @@ Executor-like permissions such as Job or ConfigMap mutation require the broader 
 
 ```yaml
 features:
+  remediation:
+    enabled: true
   experimentalExecutor:
     enabled: true
 rbac:
