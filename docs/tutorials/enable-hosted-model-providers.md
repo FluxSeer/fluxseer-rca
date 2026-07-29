@@ -17,6 +17,8 @@ The flow is:
 
 ## 1. Create A Secret
 
+Provider credential `Secret` objects must be created in the same namespace as the `ModelProvider`. With the default Helm install, FluxAgent grants Secret read permission only in the controller namespace. Cross-namespace provider credentials require explicit additional RBAC and are not part of the default profile.
+
 Examples:
 
 - [config/samples/model-provider-openai-secret.yaml](../../config/samples/model-provider-openai-secret.yaml)
@@ -134,6 +136,7 @@ Examples:
 ## Notes
 
 - Hosted providers require real network reachability from the FluxAgent manager pod.
+- Hosted provider `apiKeySecretRef` is namespaced to the `ModelProvider`; the API does not support arbitrary cross-namespace Secret references.
 - FluxAgent redacts evidence before provider-bound reasoning, but redaction does not automatically lower data classification.
 - If `spec.timeout` is omitted, hosted providers default to `15s` per request.
 - Hosted providers retry transient timeout, `429`, and `5xx` failures up to 3 attempts total.

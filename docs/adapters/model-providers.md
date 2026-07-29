@@ -25,6 +25,8 @@ Typical pattern:
 2. create one `ModelProvider` per hosted model choice
 3. point `RiskRule.spec.ai.providerRef.name` at the desired provider
 
+Provider token `Secret` objects are namespace-local to the `ModelProvider`. The default Helm RBAC grants Secret read permission only in the FluxAgent controller namespace, so cross-namespace provider credentials require explicit additional RoleBinding configuration.
+
 Example provider choices:
 
 ```yaml
