@@ -17,16 +17,16 @@ Kubernetes-native, evidence-first SRE investigation and risk analysis control pl
 Published release scope:
 
 ```text
-v0.2 focuses on read-only RCA workflows and is published as v0.2.0-beta.1.
+v0.3.0-beta.1 is the current published prerelease. v0.2.0-beta.1 remains the earlier read-only RCA beta.
 ```
 
-Current v0.3 candidate scope:
+Current v0.3 release scope:
 
 ```text
-v0.3.0-beta.1 freezes the RCA status contract and has passed the aggregate release candidate gate. Artifact publication is pending.
+v0.3.0-beta.1 freezes the RCA status contract, passed the aggregate release candidate gate, and has been published as a prerelease with provenance verified.
 ```
 
-The repository currently represents the published `v0.2.0-beta.1` read-only RCA beta:
+The repository currently represents the published `v0.3.0-beta.1` RCA contract beta:
 
 - runnable read-only `RiskSignal` operator
 - `RiskRule`-driven evidence collection and RCA flow
@@ -40,10 +40,16 @@ The repository currently represents the published `v0.2.0-beta.1` read-only RCA 
 - `fluxagent investigate` CLI wrapper around `InvestigationRequest`
 - optional `InvestigationRequest` to `RiskSignal` promotion
 - `RiskSignal` and `InvestigationRequest` TTL cleanup behavior
+- frozen structured RCA status contract on `InvestigationRequest.status`
+- evidence-linked claim verification and compatibility projections
+- durable provider execution checkpoint semantics
+- deterministic execution identity, finding identity, incident occurrence, and lineage
+- provider data egress policy with explicit hosted-provider opt-in
+- low-cardinality RCA metrics and replay-oriented fixtures
 
-It is past the original `v0.2` alpha checkpoint, passed the local and kind beta gates, and was published as a prerelease. The v0.3 RCA contract is frozen and approved for beta publication, but v0.3 artifacts have not yet been published.
+It is past the original `v0.2` alpha checkpoint, passed the local and kind beta gates, and was published as a prerelease. The v0.3 RCA contract is frozen and `v0.3.0-beta.1` has also been published as a prerelease.
 
-Release identity:
+Historical v0.2 release identity:
 
 ```text
 Status: Published prerelease
@@ -68,7 +74,7 @@ Helm OCI chart:
   digest: sha256:0924e95465d146d0473594bb96fa00d67d4fd7115ff6cca6d99183a816470828
 ```
 
-## v0.3.0-beta.1 Publication Candidate
+## v0.3.0-beta.1 Published Prerelease
 
 Status:
 
@@ -78,7 +84,8 @@ v0.3 release candidate gate:           IMPLEMENTED
 v0.3 release candidate verification:   PASSED
 candidate version:                     v0.3.0-beta.1
 release approved for publication:      READY
-release published:                     NO
+release published:                     YES
+provenance verification:               PASSED
 ```
 
 Identity:
@@ -87,6 +94,8 @@ Identity:
 Frozen API identity: aiops.platform/v1alpha1
 Schema freeze baseline: 2821e254b65fc54bf6fa521aec89bf7c48240667
 Release candidate gate commit: ab4f2bbbde95b99fe2336535e3c16c71a64ef1b9
+Release commit: b55f57920eb4ebcef2e454c18ba9437081362287
+GitHub Release URL: https://github.com/FluxSeer/FluxAgent/releases/tag/v0.3.0-beta.1
 ```
 
 Verified command:
@@ -114,7 +123,26 @@ Verified coverage:
 - Helm install, upgrade, uninstall, and CRD retention
 - release cleanup hygiene
 
-Publication remains pending. Published image digests, chart digests, and GitHub Release URL must be recorded after tag-based artifact publication and provenance verification.
+Published artifacts:
+
+```text
+operator image:
+  ghcr.io/fluxseer/fluxagent/operator:v0.3.0-beta.1
+  digest: sha256:2573a6180957a2aaad0db10ab43d0b828b5381854a7426af8b6c66c20b30bafe
+
+demo-observability image:
+  ghcr.io/fluxseer/fluxagent/demo-observability:v0.3.0-beta.1
+  digest: sha256:10357ad614d691804673b188bec93f3b5dc2e88873aa52985400f1a1922e804a
+
+Helm OCI chart:
+  oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent
+  version: 0.3.0-beta.1
+  digest: sha256:c8228c93ca7fd59ff7f99eac5adbbda125dfe0dfe7bb733b0e873a8f01b38b9d
+```
+
+Published image metadata was verified from GHCR. Binary `version`, binary `gitCommit`, OCI version labels, OCI revision labels, Helm chart version, and Helm appVersion all match the release identity.
+
+The active post-publication phase is `v0.3 Beta Stabilization and Evidence-Driven Optimization`.
 
 ## Post `v0.2.0-alpha.2` Mainline Work
 
@@ -210,11 +238,11 @@ The following items are still incomplete or only partially complete:
 
 If this repository needs a concise status label today, the defensible description is:
 
-`v0.2.0-beta.1 read-only RCA beta`: runnable read-only RCA platform with datasource contracts, evidence redaction, degraded-state visibility, hosted provider validation, and CRD-first ad-hoc investigation.
+`v0.3.0-beta.1 RCA contract beta`: published prerelease with frozen RCA status contract, evidence-linked claims, provider data boundary, deterministic identity semantics, release gate coverage, and verified GHCR/Helm artifact provenance.
 
 The project should not yet be presented as:
 
-- fully complete `v0.3`
+- production-stable `v0.3`
 - production-hardened remediation platform
 - provider-complete multi-backend RCA system
 
