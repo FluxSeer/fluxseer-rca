@@ -1,0 +1,29 @@
+{
+  "provider": "gemini",
+  "model": "gemini-fixture",
+  "response": {
+    "riskTitle": "Image pull failure",
+    "riskSummary": "Gemini identified ErrImagePull events for the new workload image.",
+    "severity": "medium",
+    "confidenceScore": 76,
+    "rationale": "Kubernetes events consistently report image pull failures",
+    "rcaHypothesis": "The deployment references an unavailable container image.",
+    "rcaCauses": [
+      "ErrImagePull events were emitted by affected pods",
+      "the image reference is not pullable by the cluster"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "riskTitle": "Image pull failure",
+    "riskSummary": "Gemini identified ErrImagePull events for the new workload image.",
+    "severity": "medium",
+    "confidenceScore": 76,
+    "hypothesis": "The deployment references an unavailable container image.",
+    "causes": [
+      "ErrImagePull events were emitted by affected pods",
+      "the image reference is not pullable by the cluster"
+    ],
+    "actionType": "notification.sendSlack"
+  }
+}
