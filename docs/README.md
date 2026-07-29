@@ -73,6 +73,7 @@ docs/
 - [backlog/v0.3-naming-api-review.md](backlog/v0.3-naming-api-review.md)
 - [backlog/archived-decisions.md](backlog/archived-decisions.md)
 - [releases/v0.3.0-beta.1.md](releases/v0.3.0-beta.1.md)
+- [releases/v0.3.0-beta.2.md](releases/v0.3.0-beta.2.md)
 - [releases/v0.2.0-beta.1.md](releases/v0.2.0-beta.1.md)
 - [releases/v0.2.0-beta.1-freeze.md](releases/v0.2.0-beta.1-freeze.md)
 - [releases/v0.2.0-alpha.2.md](releases/v0.2.0-alpha.2.md)
@@ -93,7 +94,7 @@ docs/
 
 - Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
 - Current release scope: `v0.3.0-beta.1` is a published prerelease with frozen RCA contract, published GHCR images, published Helm OCI chart, and verified provenance.
-- Current v0.3 engineering state: beta stabilization and evidence-driven optimization.
+- Current v0.3 engineering state: `v0.3.0-beta.2` stabilization candidate for runtime default hardening and least-privilege RBAC.
 - Frozen v0.3 API identity: `aiops.platform/v1alpha1`.
 - Capability maturity is tracked in [capability-maturity.md](capability-maturity.md); not every CRD or adapter is part of the default supported path.
 - `RemediationPlan` and `AgentAction` remain guarded experimental expansion paths.

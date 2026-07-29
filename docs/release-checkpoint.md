@@ -144,6 +144,31 @@ Published image metadata was verified from GHCR. Binary `version`, binary `gitCo
 
 The active post-publication phase is `v0.3 Beta Stabilization and Evidence-Driven Optimization`.
 
+## v0.3.0-beta.2 Stabilization Candidate
+
+Status:
+
+```text
+candidate version:                     v0.3.0-beta.2
+schema changes:                        NONE
+runtime default hardening:             COMPLETE
+default RBAC profile:                  READ-ONLY RCA
+legacy Deployment watcher:             OPT-IN
+experimental remediation/action path:  OPT-IN
+publication status:                    NOT PUBLISHED
+```
+
+Candidate scope:
+
+- default Helm runtime disables the legacy annotation-driven `DeploymentRiskReconciler`
+- default ClusterRole no longer grants cluster-wide Secret read
+- default ClusterRole no longer grants Job or ConfigMap mutation permissions
+- remediation/action controller and RBAC remain explicit opt-in
+- provider credential Secrets are namespace-local to the `ModelProvider`
+- capability maturity documentation distinguishes supported, beta, experimental, legacy, and scaffold paths
+
+Candidate release notes are tracked in `docs/releases/v0.3.0-beta.2.md`.
+
 ## Post `v0.2.0-alpha.2` Mainline Work
 
 The `v0.2.0-alpha.2` tag points at `8208049`.
