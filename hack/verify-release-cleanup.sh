@@ -49,6 +49,8 @@ release_test_tags=(
   fluxagent/demo-observability:release-reproducibility-test
   fluxagent/operator:release-lifecycle-test
   fluxagent/demo-observability:release-lifecycle-test
+  fluxagent/operator:release-upgrade-test
+  fluxagent/demo-observability:release-upgrade-test
 )
 
 docker image rm "${release_test_tags[@]}" >/dev/null 2>&1 || true
