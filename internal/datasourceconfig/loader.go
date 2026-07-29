@@ -223,7 +223,16 @@ func buildHTTPClient(ctx context.Context, reader client.Reader, item v1alpha1.Da
 			if len(via) >= 10 {
 				return http.ErrUseLastResponse
 			}
-			return validateDatasourceURL(req.URL, item.Spec.NetworkPolicy)
+			if err := validateDatasourceURL(req.URL, item.Spec.NetworkPolicy); err != nil {
+				if validationErr, ok := err.(*ValidationError); ok {
+					return &ValidationError{
+						Reason:  validationErr.Reason,
+						Message: fmt.Sprintf("redirect target %q rejected by datasource network policy: %s", req.URL.Host, validationErr.Message),
+					}
+				}
+				return err
+			}
+			return nil
 		},
 	}, nil
 }
@@ -319,10 +328,29 @@ func datasourcePolicyDialContext(policy v1alpha1.DataSourceNetworkPolicy, lookup
 }
 
 func validateDatasourceResolvedIP(host string, ip net.IP, policy v1alpha1.DataSourceNetworkPolicy) error {
-	if isClusterServiceHost(host) {
-		return validateDatasourceIP(ip, policy, true)
+	if strings.TrimSpace(host) == "" {
+		host = "<empty>"
 	}
-	return validateDatasourceIP(ip, policy, false)
+	if isClusterServiceHost(host) {
+		if err := validateDatasourceIP(ip, policy, true); err != nil {
+			return wrapResolvedIPError(host, ip, err)
+		}
+		return nil
+	}
+	if err := validateDatasourceIP(ip, policy, false); err != nil {
+		return wrapResolvedIPError(host, ip, err)
+	}
+	return nil
+}
+
+func wrapResolvedIPError(host string, ip net.IP, err error) error {
+	if validationErr, ok := err.(*ValidationError); ok {
+		return &ValidationError{
+			Reason:  validationErr.Reason,
+			Message: fmt.Sprintf("datasource host %q resolved to denied IP %s: %s", host, ip.String(), validationErr.Message),
+		}
+	}
+	return err
 }
 
 func hostAllowed(host string, allowedHosts []string) bool {
@@ -348,28 +376,39 @@ func isClusterServiceHost(host string) bool {
 }
 
 func validateDatasourceIP(ip net.IP, policy v1alpha1.DataSourceNetworkPolicy, allowPrivate bool) error {
+	policyIP := ipForNetworkPolicy(ip)
 	metadataCIDRs := []string{"169.254.169.254/32", "fd00:ec2::254/128"}
 	for _, cidr := range append(metadataCIDRs, policy.DeniedCIDRs...) {
-		if ipInCIDR(ip, cidr) {
+		if ipInCIDR(policyIP, cidr) {
 			return &ValidationError{
 				Reason:  "DatasourceNetworkPolicyDenied",
-				Message: fmt.Sprintf("endpoint IP %s is denied by datasource network policy", ip.String()),
+				Message: fmt.Sprintf("endpoint IP %s is denied by datasource network policy", policyIP.String()),
 			}
 		}
 	}
-	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+	if policyIP.IsLoopback() || policyIP.IsLinkLocalUnicast() || policyIP.IsLinkLocalMulticast() || policyIP.IsUnspecified() {
 		return &ValidationError{
 			Reason:  "DatasourceNetworkPolicyDenied",
-			Message: fmt.Sprintf("endpoint IP %s is loopback, link-local, or unspecified", ip.String()),
+			Message: fmt.Sprintf("endpoint IP %s is loopback, link-local, or unspecified", policyIP.String()),
 		}
 	}
-	if ip.IsPrivate() && !allowPrivate && !ipAllowedByCIDR(ip, policy.AllowedCIDRs) {
+	if policyIP.IsPrivate() && !allowPrivate && !ipAllowedByCIDR(policyIP, policy.AllowedCIDRs) {
 		return &ValidationError{
 			Reason:  "DatasourceNetworkPolicyDenied",
-			Message: fmt.Sprintf("private endpoint IP %s requires datasource networkPolicy.allowedCIDRs", ip.String()),
+			Message: fmt.Sprintf("private endpoint IP %s requires datasource networkPolicy.allowedCIDRs", policyIP.String()),
 		}
 	}
 	return nil
+}
+
+func ipForNetworkPolicy(ip net.IP) net.IP {
+	if ip == nil {
+		return ip
+	}
+	if ipv4 := ip.To4(); ipv4 != nil {
+		return ipv4
+	}
+	return ip
 }
 
 func ipAllowedByCIDR(ip net.IP, cidrs []string) bool {
