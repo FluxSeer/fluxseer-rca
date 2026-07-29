@@ -1,0 +1,6 @@
+{{- if and .Values.features.experimentalExecutor.enabled (not (or .Values.controller.enableRemediation .Values.features.remediation.enabled)) -}}
+{{- fail "features.experimentalExecutor.enabled=true requires features.remediation.enabled=true or controller.enableRemediation=true" -}}
+{{- end -}}
+{{- if and (eq .Values.rbac.profile "experimentalExecutor") (not (or .Values.controller.enableRemediation .Values.features.remediation.enabled)) -}}
+{{- fail "rbac.profile=experimentalExecutor requires features.remediation.enabled=true or controller.enableRemediation=true" -}}
+{{- end -}}

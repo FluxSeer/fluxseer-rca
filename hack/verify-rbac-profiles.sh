@@ -14,6 +14,7 @@ default_render="${tmpdir}/default.yaml"
 legacy_render="${tmpdir}/legacy.yaml"
 remediation_render="${tmpdir}/remediation.yaml"
 experimental_render="${tmpdir}/experimental.yaml"
+invalid_experimental_render="${tmpdir}/invalid-experimental.yaml"
 default_clusterrole="${tmpdir}/default-clusterrole.yaml"
 legacy_clusterrole="${tmpdir}/legacy-clusterrole.yaml"
 remediation_clusterrole="${tmpdir}/remediation-clusterrole.yaml"
@@ -29,6 +30,20 @@ helm template fluxagent "${chart}" --namespace fluxagent-system \
   --set features.remediation.enabled=true \
   --set features.experimentalExecutor.enabled=true \
   --set rbac.profile=experimentalExecutor >"${experimental_render}"
+
+if helm template fluxagent "${chart}" --namespace fluxagent-system \
+  --set features.experimentalExecutor.enabled=true \
+  --set rbac.profile=experimentalExecutor >"${invalid_experimental_render}" 2>&1; then
+  echo "expected experimentalExecutor profile to fail without remediation enabled" >&2
+  exit 1
+fi
+assert_invalid_experimental_message() {
+  if ! grep -Fq "requires features.remediation.enabled=true" "${invalid_experimental_render}"; then
+    echo "invalid experimentalExecutor profile failed with unexpected message:" >&2
+    cat "${invalid_experimental_render}" >&2
+    exit 1
+  fi
+}
 
 extract_clusterrole() {
   local source="$1"
@@ -91,5 +106,6 @@ assert_not_contains "${remediation_clusterrole}" 'resources: ["configmaps"]' "Co
 
 assert_contains "${experimental_clusterrole}" 'resources: ["jobs"]' "experimental executor Job permissions"
 assert_contains "${experimental_clusterrole}" 'resources: ["configmaps"]' "experimental executor ConfigMap permissions"
+assert_invalid_experimental_message
 
 echo "RBAC profile verification passed"
