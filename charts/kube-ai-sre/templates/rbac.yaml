@@ -6,29 +6,36 @@ metadata:
     {{- include "fluxagent.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
-    resources: ["events", "pods", "namespaces"]
+    resources: ["events", "pods", "namespaces", "services"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get"]
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["aiops.platform"]
     resources: ["datasources", "investigationrequests", "modelproviders", "riskrules"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["aiops.platform"]
-    resources: ["risksignals", "remediationplans", "agentactions"]
+    resources: ["investigationrequests", "risksignals"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["aiops.platform"]
-    resources: ["datasources/status", "investigationrequests/status", "modelproviders/status", "riskrules/status", "risksignals/status", "remediationplans/status", "agentactions/status"]
+    resources: ["datasources/status", "investigationrequests/status", "modelproviders/status", "riskrules/status", "risksignals/status"]
     verbs: ["get", "update", "patch"]
+  {{- if or .Values.controller.enableRemediation .Values.features.remediation.enabled (eq .Values.rbac.profile "remediation") (eq .Values.rbac.profile "experimentalExecutor") }}
+  - apiGroups: ["aiops.platform"]
+    resources: ["remediationplans", "agentactions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["aiops.platform"]
+    resources: ["remediationplans/status", "agentactions/status"]
+    verbs: ["get", "update", "patch"]
+  {{- end }}
+  {{- if or .Values.features.experimentalExecutor.enabled (eq .Values.rbac.profile "experimentalExecutor") }}
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -40,6 +47,34 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: fluxagent-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "fluxagent.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fluxagent-provider-secret-reader
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fluxagent-provider-secret-reader
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fluxagent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fluxagent-provider-secret-reader
 subjects:
   - kind: ServiceAccount
     name: {{ include "fluxagent.serviceAccountName" . }}

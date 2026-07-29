@@ -2,3 +2,5 @@ resources:
   - service_account.yaml
   - role.yaml
   - role_binding.yaml
+  - provider_secret_reader_role.yaml
+  - provider_secret_reader_role_binding.yaml
