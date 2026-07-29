@@ -227,7 +227,7 @@ jobs:
           source_date_epoch="$(git show -s --format=%ct HEAD)"
           build_date="$(./hack/source-date.sh "$source_date_epoch")"
           image_tag="ci-$(date -u '+%Y%m%d%H%M%S')-${GITHUB_SHA::7}"
-          chart_version="0.2.0-test.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}.g${GITHUB_SHA::7}"
+          chart_version="0.3.0-test.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}.g${GITHUB_SHA::7}"
           printf '%s' "$token" | docker login "$registry" --username "$user" --password-stdin
           printf '%s' "$token" | helm registry login "$registry" --username "$user" --password-stdin
           echo "registry=$registry" >> "$GITHUB_OUTPUT"
@@ -346,7 +346,7 @@ jobs:
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           repository_prefix="$owner/${OCI_REPOSITORY_NAME}"
           image_tag="main-${GITHUB_SHA::7}"
-          chart_version="0.2.0-main.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}.g${GITHUB_SHA::7}"
+          chart_version="0.3.0-main.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}.g${GITHUB_SHA::7}"
           source_date_epoch="$(git show -s --format=%ct HEAD)"
           build_date="$(./hack/source-date.sh "$source_date_epoch")"
           printf '%s' "$GHCR_TOKEN" | docker login "$registry" --username "$GITHUB_ACTOR" --password-stdin
