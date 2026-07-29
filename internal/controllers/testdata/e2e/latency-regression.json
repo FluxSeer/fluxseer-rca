@@ -39,6 +39,7 @@
     "phase": "Completed",
     "outcome": "Confirmed",
     "rootCauseType": "LatencyRegression",
-    "claimVerification": "Supported"
+    "claimVerification": "Supported",
+    "providerCalls": 1
   }
 }
