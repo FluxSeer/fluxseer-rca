@@ -136,9 +136,9 @@ Query field behavior:
 - `reasons[]`: optional event reason filter for `queryType: event`
 - `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
 - `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `OOMKilled`, `LatencyRegression`, and `RolloutLatencyRegression`.
-- `evidenceRetention.mode`: external evidence retention mode. Current supported runtime behavior is `MetadataOnly`.
-- `evidenceRetention.retention`: requested external payload retention duration for future snapshot modes.
-- `evidenceRetention.storageRef.name`: external evidence storage configuration reference for future snapshot modes.
+- `evidenceRetention.mode`: external evidence retention mode. Current supported runtime behavior is `MetadataOnly` or `NormalizedSnapshot` with the built-in `local-filesystem` store.
+- `evidenceRetention.retention`: requested external payload retention duration for retained normalized snapshots.
+- `evidenceRetention.storageRef.name`: external evidence storage configuration reference. Current supported value for `NormalizedSnapshot` is `local-filesystem`.
 - `evidenceRetention.encryption.required`: whether future retained payloads must be encrypted.
 - `evidenceRetention.deletionPolicy`: future external payload deletion behavior, `Retain` or `Delete`.
 - `evidenceRetention.accessPolicy.namespaceScoped`: whether future payload access must remain namespace-scoped.
@@ -173,7 +173,7 @@ Current required evidence profiles:
 
 If required evidence is complete and profile-specific checks find no matching abnormal signal, FluxAgent completes the request with `phase: Completed`, `outcome: NoIssueFound`, and does not call the model provider. `NoIssueFound` is only valid after required evidence is complete; inability to collect required evidence remains `Inconclusive`.
 
-External evidence storage is disabled by default. FluxAgent currently accepts only the default `MetadataOnly` retention behavior. `NormalizedSnapshot` and `RawSnapshot` are reserved contract values and are rejected by validation until a secure external evidence storage adapter is implemented.
+External evidence storage is disabled by default. `MetadataOnly` remains the default. `NormalizedSnapshot` is supported only with `storageRef.name: local-filesystem` and a controller runtime evidence store directory configured through `FLUXAGENT_EVIDENCE_STORE_DIR`. Snapshot payload references store only `scheme`, digest, expiry, encryption flag, and retention class; they do not expose local file paths or access credentials. `RawSnapshot` remains rejected because raw evidence retention requires a separate opt-in storage and security review.
 
 When `queryBudget` is configured, FluxAgent rejects invalid limits, excessive lookback windows, or excessive query counts during validation before contacting datasources. It stops evidence collection when cumulative datasource duration or response-byte limits are exceeded. Native result-kind limits are enforced after datasource responses are decoded and before flattening/normalization; the generic flat-record limit remains a compatibility fallback. Exceeded result limits retain bounded partial evidence, set truncation metadata, and preserve deterministic record order.
 
@@ -280,7 +280,7 @@ These fields are compact normalized-observation metadata. They let consumers aud
 
 Normalized observations carry the same computed classification summary. When multiple evidence items contribute to an observation or provider bundle, FluxAgent uses the highest classification level and the union of sensitivity tags. Redaction does not automatically lower classification; a redacted credential-like log sample remains classified conservatively.
 
-When future retention adapters create external evidence payloads, `payloadRef` may record `scheme`, `digest`, `encrypted`, `expiresAt`, and `retentionClass`. `payloadRef` must not contain signed URLs, credentials, bearer tokens, inline secrets, or provider-specific authorization material. It is a verifiable pointer, not an access credential.
+When retention adapters create external evidence payloads, `payloadRef` records `scheme`, `digest`, `encrypted`, `expiresAt`, and `retentionClass`. `payloadRef` must not contain signed URLs, credentials, bearer tokens, inline secrets, filesystem paths, or provider-specific authorization material. It is a verifiable pointer, not an access credential.
 
 `queryDigest` and `contentDigest` use `digestAlgorithm: sha256` and `digestCanonicalization: fluxagent-observation-json-v1`. The v1 canonicalization contract uses deterministic JSON object keys, preserves array order unless a field-specific contract says otherwise, normalizes strings to Unicode NFC, excludes non-semantic collection timestamps from content digests, and expects timestamp producers to write UTC timestamps.
 

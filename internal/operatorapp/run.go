@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,6 +27,7 @@ import (
 	promadapter "fluxagent/internal/datasource/prometheus"
 	"fluxagent/internal/datasourceconfig"
 	"fluxagent/internal/detector"
+	evidencepkg "fluxagent/internal/evidence"
 	"fluxagent/internal/executor"
 	"fluxagent/internal/guardrails"
 	"fluxagent/internal/investigation"
@@ -163,10 +165,11 @@ func Run(args []string, out io.Writer) error {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Service: &investigation.Service{
-			Client:   mgr.GetClient(),
-			Registry: registry,
-			Resolver: resolver,
-			Gateway:  gateway,
+			Client:        mgr.GetClient(),
+			Registry:      registry,
+			Resolver:      resolver,
+			Gateway:       gateway,
+			EvidenceStore: evidenceStoreFromEnv(),
 		},
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create InvestigationRequest controller: %w", err)
@@ -216,6 +219,14 @@ func Run(args []string, out io.Writer) error {
 
 	ctrl.Log.WithName("setup").Info("starting fluxagent manager")
 	return mgr.Start(ctrl.SetupSignalHandler())
+}
+
+func evidenceStoreFromEnv() evidencepkg.SnapshotStore {
+	root := os.Getenv("FLUXAGENT_EVIDENCE_STORE_DIR")
+	if strings.TrimSpace(root) == "" {
+		return nil
+	}
+	return evidencepkg.LocalFilesystemStore{Root: root}
 }
 
 func parseDurationEnv(key string, fallback time.Duration) time.Duration {

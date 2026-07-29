@@ -21,6 +21,7 @@ import (
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
+	evidencepkg "fluxagent/internal/evidence"
 	"fluxagent/internal/investigation"
 	"fluxagent/internal/knowledge"
 	"fluxagent/internal/model"
@@ -531,12 +532,20 @@ func TestValidateInvestigationQueryBudgetRejectsNegativeValues(t *testing.T) {
 	}
 }
 
-func TestValidateEvidenceRetentionRejectsUnsupportedSnapshots(t *testing.T) {
+func TestValidateEvidenceRetentionSnapshotModes(t *testing.T) {
 	if message := validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{}); message != "" {
 		t.Fatalf("expected empty retention policy to be accepted, got %q", message)
 	}
 	if message := validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{Mode: v1alpha1.EvidenceRetentionModeMetadataOnly}); message != "" {
 		t.Fatalf("expected MetadataOnly retention policy to be accepted, got %q", message)
+	}
+	if message := validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{
+		Mode: v1alpha1.EvidenceRetentionModeNormalizedSnapshot,
+		StorageRef: v1alpha1.LocalObjectReference{
+			Name: evidencepkg.LocalFilesystemStoreName,
+		},
+	}); message != "" {
+		t.Fatalf("expected local NormalizedSnapshot retention policy to be accepted, got %q", message)
 	}
 
 	message := validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{Mode: v1alpha1.EvidenceRetentionModeRawSnapshot})
@@ -545,8 +554,19 @@ func TestValidateEvidenceRetentionRejectsUnsupportedSnapshots(t *testing.T) {
 	}
 
 	message = validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{Mode: v1alpha1.EvidenceRetentionModeNormalizedSnapshot})
-	if !strings.Contains(message, "NormalizedSnapshot") || !strings.Contains(message, "not supported") {
-		t.Fatalf("expected NormalizedSnapshot rejection, got %q", message)
+	if !strings.Contains(message, "NormalizedSnapshot") || !strings.Contains(message, "local-filesystem") {
+		t.Fatalf("expected NormalizedSnapshot storageRef rejection, got %q", message)
+	}
+
+	message = validateEvidenceRetention(v1alpha1.EvidenceRetentionPolicy{
+		Mode: v1alpha1.EvidenceRetentionModeNormalizedSnapshot,
+		StorageRef: v1alpha1.LocalObjectReference{
+			Name: evidencepkg.LocalFilesystemStoreName,
+		},
+		Encryption: v1alpha1.EvidenceRetentionEncryption{Required: true},
+	})
+	if !strings.Contains(message, "encryption.required") {
+		t.Fatalf("expected encryption rejection, got %q", message)
 	}
 }
 

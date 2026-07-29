@@ -3,6 +3,7 @@ package investigation
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"fluxagent/api/v1alpha1"
 	"fluxagent/internal/datasource"
 	"fluxagent/internal/domain"
+	evidencepkg "fluxagent/internal/evidence"
 	"fluxagent/internal/knowledge"
 	"fluxagent/internal/model"
 	"fluxagent/internal/model/heuristic"
@@ -402,6 +404,99 @@ func TestServiceCollectEvidenceNormalizesResults(t *testing.T) {
 	}
 	if result.Summary != "collected 2 evidence records from 2 investigation queries" {
 		t.Fatalf("unexpected summary %q", result.Summary)
+	}
+}
+
+func TestServiceCollectEvidenceStoresNormalizedSnapshots(t *testing.T) {
+	storeRoot := t.TempDir()
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				records: []map[string]any{
+					{"metric": "http_requests_total", "value": "0.95"},
+				},
+			},
+		),
+		EvidenceStore: evidencepkg.LocalFilesystemStore{Root: storeRoot},
+	}
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 15 * time.Minute}},
+		EvidenceRetention: v1alpha1.EvidenceRetentionPolicy{
+			Mode:      v1alpha1.EvidenceRetentionModeNormalizedSnapshot,
+			Retention: metav1.Duration{Duration: time.Hour},
+			StorageRef: v1alpha1.LocalObjectReference{
+				Name: evidencepkg.LocalFilesystemStoreName,
+			},
+		},
+	}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Labels: map[string]string{"app": "open-api"},
+		CollectionPlan: []CollectionStep{
+			{
+				Name:           "prometheus",
+				DatasourceName: "prometheus",
+				QueryType:      domain.QueryTypeMetric,
+				Query:          "metric-query",
+			},
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue != nil {
+		t.Fatalf("expected no issue, got %#v", result.Issue)
+	}
+	if len(result.EvidenceRefs) != 1 || result.EvidenceRefs[0].PayloadRef == nil {
+		t.Fatalf("expected payloadRef on retained evidence, got %#v", result.EvidenceRefs)
+	}
+	payloadRef := result.EvidenceRefs[0].PayloadRef
+	if payloadRef.Scheme != "file" || !strings.HasPrefix(payloadRef.Digest, "sha256:") || payloadRef.RetentionClass != "normalized-snapshot" {
+		t.Fatalf("unexpected payloadRef metadata: %#v", payloadRef)
+	}
+	if payloadRef.ExpiresAt == nil || !payloadRef.ExpiresAt.Time.Equal(now.Add(time.Hour)) {
+		t.Fatalf("expected retention expiry, got %#v", payloadRef)
+	}
+	files, err := os.ReadDir(storeRoot)
+	if err != nil {
+		t.Fatalf("read evidence store: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected one snapshot file, got %d", len(files))
+	}
+}
+
+func TestServiceCollectEvidenceRequiresConfiguredSnapshotStore(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				records:   []map[string]any{{"metric": "http_requests_total", "value": "0.95"}},
+			},
+		),
+	}
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		EvidenceRetention: v1alpha1.EvidenceRetentionPolicy{
+			Mode: v1alpha1.EvidenceRetentionModeNormalizedSnapshot,
+			StorageRef: v1alpha1.LocalObjectReference{
+				Name: evidencepkg.LocalFilesystemStoreName,
+			},
+		},
+	}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Labels: map[string]string{"app": "open-api"},
+		CollectionPlan: []CollectionStep{
+			{Name: "prometheus", DatasourceName: "prometheus", QueryType: domain.QueryTypeMetric, Query: "metric-query"},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "EvidenceRetentionStoreUnavailable" {
+		t.Fatalf("expected store unavailable issue, got %#v", result.Issue)
 	}
 }
 
