@@ -1,0 +1,29 @@
+{
+  "provider": "openai",
+  "model": "gpt-fixture",
+  "response": {
+    "riskTitle": "Checkout latency regression",
+    "riskSummary": "OpenAI correlated a p95 latency increase with timeout logs after the rollout.",
+    "severity": "high",
+    "confidenceScore": 91,
+    "rationale": "metric and log evidence aligned with deployment timing",
+    "rcaHypothesis": "The latest checkout rollout increased upstream timeout latency.",
+    "rcaCauses": [
+      "p95 latency increased after rollout",
+      "timeout logs increased in the same window"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "riskTitle": "Checkout latency regression",
+    "riskSummary": "OpenAI correlated a p95 latency increase with timeout logs after the rollout.",
+    "severity": "high",
+    "confidenceScore": 91,
+    "hypothesis": "The latest checkout rollout increased upstream timeout latency.",
+    "causes": [
+      "p95 latency increased after rollout",
+      "timeout logs increased in the same window"
+    ],
+    "actionType": "notification.sendSlack"
+  }
+}

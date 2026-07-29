@@ -1,0 +1,29 @@
+{
+  "provider": "claude",
+  "model": "claude-fixture",
+  "response": {
+    "riskTitle": "CrashLoopBackOff after config rollout",
+    "riskSummary": "Claude linked repeated BackOff events to a bad startup configuration.",
+    "severity": "high",
+    "confidenceScore": 84,
+    "rationale": "event evidence and startup logs point to config failure",
+    "rcaHypothesis": "The new configuration introduced invalid startup arguments.",
+    "rcaCauses": [
+      "BackOff events show repeated container crashes",
+      "startup logs report invalid arguments"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "riskTitle": "CrashLoopBackOff after config rollout",
+    "riskSummary": "Claude linked repeated BackOff events to a bad startup configuration.",
+    "severity": "high",
+    "confidenceScore": 84,
+    "hypothesis": "The new configuration introduced invalid startup arguments.",
+    "causes": [
+      "BackOff events show repeated container crashes",
+      "startup logs report invalid arguments"
+    ],
+    "actionType": "notification.sendSlack"
+  }
+}

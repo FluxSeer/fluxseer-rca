@@ -1,0 +1,29 @@
+{
+  "provider": "heuristic",
+  "model": "heuristic-fixture",
+  "response": {
+    "riskTitle": "OOMKilled workload",
+    "riskSummary": "Heuristic RCA detected OOMKilled events and memory pressure metrics.",
+    "severity": "medium",
+    "confidenceScore": 68,
+    "rationale": "event and metric signals both indicate memory pressure",
+    "rcaHypothesis": "The workload exceeded its memory limit and was killed by the kubelet.",
+    "rcaCauses": [
+      "OOMKilled events were observed",
+      "memory working set approached the configured limit"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "riskTitle": "OOMKilled workload",
+    "riskSummary": "Heuristic RCA detected OOMKilled events and memory pressure metrics.",
+    "severity": "medium",
+    "confidenceScore": 68,
+    "hypothesis": "The workload exceeded its memory limit and was killed by the kubelet.",
+    "causes": [
+      "OOMKilled events were observed",
+      "memory working set approached the configured limit"
+    ],
+    "actionType": "notification.sendSlack"
+  }
+}
