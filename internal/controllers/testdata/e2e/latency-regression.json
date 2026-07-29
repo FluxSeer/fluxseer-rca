@@ -1,0 +1,44 @@
+{
+  "name": "latency-regression",
+  "profile": "LatencyRegression",
+  "datasources": [
+    {
+      "name": "prometheus",
+      "queryType": "metric",
+      "records": [
+        {
+          "metric": "http_request_duration_seconds_p95",
+          "value": "2.30"
+        }
+      ]
+    },
+    {
+      "name": "kubernetes-events",
+      "queryType": "event",
+      "records": [
+        {
+          "reason": "DeploymentUpdated",
+          "message": "checkout-api rollout completed before latency increased"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Latency regression after rollout",
+    "riskSummary": "p95 latency increased after the checkout rollout.",
+    "severity": "high",
+    "confidenceScore": 88,
+    "rationale": "metric evidence shows a latency regression",
+    "rcaHypothesis": "The checkout rollout introduced a latency regression.",
+    "rcaCauses": [
+      "p95 latency increased after rollout"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "LatencyRegression",
+    "claimVerification": "Supported"
+  }
+}
