@@ -28,7 +28,9 @@ The Kubernetes adapter stays read-only and does not require a separate in-cluste
 
 ## Event Keywords
 
-Per-workload override annotation:
+The supported path is to set event reasons on `RiskRule` or `InvestigationRequest` queries.
+
+The legacy Deployment annotation path also accepts this per-workload override when `--enable-legacy-deployment-risk=true` is explicitly enabled:
 
 - `fluxagent.aiops.platform/event-keywords`
 
@@ -41,7 +43,7 @@ If not provided, FluxAgent looks for these keywords:
 
 ## Detection Behavior
 
-When a matching event is found, FluxAgent creates a high-severity finding:
+When a matching event is found through the legacy path, FluxAgent creates a high-severity finding:
 
 - signal type: `workload.kubernetes_event`
 - confidence: `90`

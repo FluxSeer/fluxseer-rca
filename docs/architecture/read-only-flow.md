@@ -1,6 +1,8 @@
-# Read-only RiskSignal Flow
+# Legacy Read-only RiskSignal Flow
 
-This document describes the default `v0.1` runtime path. This is the path that should be treated as the main open-source entry point today.
+This document describes the legacy annotation-driven `DeploymentRiskReconciler` path.
+
+This is no longer the default open-source entry point. The current default path is `RiskRule -> InvestigationRequest -> canonical RCA status -> optional RiskSignal`.
 
 For the ad-hoc investigation path, see [investigation-flow.md](investigation-flow.md).
 
@@ -19,10 +21,11 @@ Default behavior:
 - register Loki adapter when `FLUXAGENT_LOKI_URL` is set
 - register webhook notification controller when `FLUXAGENT_WEBHOOK_URL` is set
 - keep remediation disabled unless `--enable-remediation=true`
+- keep legacy Deployment annotation detection disabled unless `--enable-legacy-deployment-risk=true`
 
 ## Flow Summary
 
-The default runtime path is:
+The legacy runtime path is:
 
 ```text
 Signal Sources
@@ -37,7 +40,7 @@ This path is intentionally separate from remediation. It is designed to detect a
 
 ## Resource Selection
 
-The controller watches all `Deployment` resources, but detection only runs for workloads annotated with:
+When explicitly enabled, the controller watches `Deployment` resources, but detection only runs for workloads annotated with:
 
 ```yaml
 metadata:
@@ -52,7 +55,7 @@ Optional per-workload annotations:
 - `fluxagent.aiops.platform/loki-query`
 - `fluxagent.aiops.platform/event-keywords`
 
-See [examples/sample-app/deployment.yaml](../../examples/sample-app/deployment.yaml).
+The default Helm chart does not enable this watcher. Prefer `RiskRule` resources for new recurring detection.
 
 ## Control Flow
 
@@ -66,14 +69,14 @@ See [examples/sample-app/deployment.yaml](../../examples/sample-app/deployment.y
 
 ## Workflow State
 
-In this path, the `RiskSignal` CRD is the workflow state carrier.
+In this legacy path, the `RiskSignal` CRD is the workflow state carrier.
 
 Typical progression:
 
 1. `RiskSignal`: `Confirmed`
 2. `RiskSignal`: `Notified`
 
-If remediation is later enabled, the same `RiskSignal` may become the upstream input to a separate guarded flow. That does not change the fact that the default path is read-only.
+If remediation is later enabled, the same `RiskSignal` may become the upstream input to a separate guarded flow. That does not change the fact that this path is read-only.
 
 ## Signal Semantics
 
@@ -154,4 +157,4 @@ This mode does not:
 - create `RemediationPlan`
 - create `AgentAction`
 
-This boundary is the reason `v0.1` is safe to describe publicly as a read-only operator rather than an autonomous remediation system.
+This boundary is the reason the legacy path is safe to keep as an opt-in read-only bootstrap path rather than an autonomous remediation system.

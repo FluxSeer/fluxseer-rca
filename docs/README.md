@@ -59,6 +59,7 @@ docs/
 - [architecture/v0.2-adapter-neutral-backlog.md](architecture/v0.2-adapter-neutral-backlog.md)
 - [product-requirements.md](product-requirements.md)
 - [competitive-positioning.md](competitive-positioning.md)
+- [capability-maturity.md](capability-maturity.md)
 - [helm-rulepacks.md](helm-rulepacks.md)
 - [metrics.md](metrics.md)
 - [release-checkpoint.md](release-checkpoint.md)
@@ -94,6 +95,7 @@ docs/
 - Current release scope: `v0.3.0-beta.1` is a published prerelease with frozen RCA contract, published GHCR images, published Helm OCI chart, and verified provenance.
 - Current v0.3 engineering state: beta stabilization and evidence-driven optimization.
 - Frozen v0.3 API identity: `aiops.platform/v1alpha1`.
+- Capability maturity is tracked in [capability-maturity.md](capability-maturity.md); not every CRD or adapter is part of the default supported path.
 - `RemediationPlan` and `AgentAction` remain guarded experimental expansion paths.
 - Hosted model integrations are limited to OpenAI API, Claude API, and Gemini API; heuristic remains the no-secret default.
 - Prometheus, Loki, and Kubernetes Events adapters are wired into the runnable demo path.

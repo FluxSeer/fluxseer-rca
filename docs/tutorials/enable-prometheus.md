@@ -1,6 +1,6 @@
 # Enable Prometheus
 
-Prometheus is optional in FluxAgent, but it is already wired into the read-only detector.
+Prometheus is optional in FluxAgent and is used through `DataSource`, `RiskRule`, and `InvestigationRequest`.
 
 ## Local Run
 
@@ -21,22 +21,41 @@ env:
     value: http://prometheus.monitoring.svc:9090
 ```
 
-## Workload Annotation
+## DataSource And RiskRule
 
-Add annotations to a target `Deployment`:
+Create a `DataSource` and reference it from a `RiskRule` or `InvestigationRequest` query:
 
 ```yaml
+apiVersion: aiops.platform/v1alpha1
+kind: DataSource
 metadata:
-  annotations:
-    fluxagent.aiops.platform/enabled: "true"
-    fluxagent.aiops.platform/prometheus-query: |
-      sum(rate(http_requests_total{namespace="demo",app="my-app",status=~"5.."}[5m]))
-    fluxagent.aiops.platform/prometheus-threshold: "0.2"
+  name: prometheus
+spec:
+  type: prometheus
+  endpoint: http://prometheus.monitoring.svc:9090
+---
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: prometheus-latency
+spec:
+  signals:
+    - name: elevated-5xx-rate
+      datasourceRef:
+        name: prometheus
+      queryType: metric
+      queryTemplate: |
+        sum(rate(http_requests_total{namespace="demo",app="my-app",status=~"5.."}[5m]))
+      threshold:
+        operator: ">"
+        value: 0.2
 ```
 
 ## What Happens
 
 - FluxAgent calls Prometheus `query_range`
 - returned series are parsed into evidence records
-- values above the threshold create a medium-severity finding
-- the resulting evidence is attached to `RiskSignal.spec.evidence`
+- values above the threshold can create a `RiskSignal` or `InvestigationRequest` depending on rule policy
+- the resulting evidence is stored as compact evidence references
+
+The legacy Deployment annotation path is available only when `--enable-legacy-deployment-risk=true` is explicitly set.

@@ -1,6 +1,6 @@
 # Enable Loki
 
-Loki is optional in FluxAgent, but it is already wired into the read-only detector.
+Loki is optional in FluxAgent and is used through `DataSource`, `RiskRule`, and `InvestigationRequest`.
 
 ## Local Run
 
@@ -17,19 +17,39 @@ env:
     value: http://loki.monitoring.svc:3100
 ```
 
-## Workload Annotation
+## DataSource And RiskRule
 
 ```yaml
+apiVersion: aiops.platform/v1alpha1
+kind: DataSource
 metadata:
-  annotations:
-    fluxagent.aiops.platform/enabled: "true"
-    fluxagent.aiops.platform/loki-query: |
-      {namespace="demo",app="my-app"} |= "error"
+  name: loki
+spec:
+  type: loki
+  endpoint: http://loki.monitoring.svc:3100
+---
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: loki-errors
+spec:
+  signals:
+    - name: error-logs
+      datasourceRef:
+        name: loki
+      queryType: log
+      queryTemplate: |
+        {namespace="demo",app="my-app"} |= "error"
+      threshold:
+        operator: count_gt
+        value: 0
 ```
 
 ## What Happens
 
 - FluxAgent calls Loki `query_range`
 - matching log lines are converted into evidence
-- any non-empty result creates a medium-severity finding
-- the first log line is used as the evidence summary
+- any non-empty result can create a `RiskSignal` or `InvestigationRequest` depending on rule policy
+- log samples are redacted and bounded before they reach provider reasoning
+
+The legacy Deployment annotation path is available only when `--enable-legacy-deployment-risk=true` is explicitly set.
