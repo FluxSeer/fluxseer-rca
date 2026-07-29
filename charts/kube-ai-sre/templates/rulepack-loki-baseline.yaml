@@ -53,6 +53,24 @@ spec:
       threshold:
         operator: count_gt
         value: 0
+    - name: retry
+      datasourceRef:
+        name: {{ .Values.rulePacks.lokiBaseline.datasourceRef.name | quote }}
+      queryType: log
+      queryTemplate: |
+        {namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"} |~ "(?i)retry|retries|retrying"
+      threshold:
+        operator: count_gt
+        value: 0
+    - name: rate-limit
+      datasourceRef:
+        name: {{ .Values.rulePacks.lokiBaseline.datasourceRef.name | quote }}
+      queryType: log
+      queryTemplate: |
+        {namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"} |~ "(?i)rate limit|rate-limit|too many requests|\\b429\\b"
+      threshold:
+        operator: count_gt
+        value: 0
     - name: connection-refused
       datasourceRef:
         name: {{ .Values.rulePacks.lokiBaseline.datasourceRef.name | quote }}

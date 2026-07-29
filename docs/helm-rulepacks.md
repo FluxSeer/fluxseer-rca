@@ -31,6 +31,15 @@ rulePacks:
     window: 10m
     severity: warning
     rcaEnabled: true
+    trafficAnomaly:
+      comparisonOffset: 30m
+      increaseRatio: 3
+      minimumCurrentRate: 10
+    resourceThresholds:
+      cpuUsageCores: 0.8
+      cpuThrottlingRatio: 0.2
+      memoryWorkingSetBytes: 1073741824
+      memoryNearLimitRatio: 0.9
     providerRef:
       name: ""
   lokiBaseline:
@@ -66,6 +75,13 @@ When `defaultTargetSelector.namespaceSelector.matchNames` is omitted, the chart 
 | `rulePacks.prometheusBaseline.window` | `10m` | Evidence lookback window. |
 | `rulePacks.prometheusBaseline.severity` | `warning` | Severity used on generated `RiskSignal` resources. |
 | `rulePacks.prometheusBaseline.rcaEnabled` | `true` | Enables RCA enrichment. With no providerRef, FluxAgent uses the built-in heuristic provider. |
+| `rulePacks.prometheusBaseline.trafficAnomaly.comparisonOffset` | `30m` | Offset used to compare current request rate against a previous baseline window. |
+| `rulePacks.prometheusBaseline.trafficAnomaly.increaseRatio` | `3` | Current/request baseline ratio required for the request-rate-surge signal. |
+| `rulePacks.prometheusBaseline.trafficAnomaly.minimumCurrentRate` | `10` | Minimum current request rate before request-rate-surge can trigger. |
+| `rulePacks.prometheusBaseline.resourceThresholds.cpuUsageCores` | `0.8` | CPU usage cores threshold for the cpu-saturation signal. |
+| `rulePacks.prometheusBaseline.resourceThresholds.cpuThrottlingRatio` | `0.2` | CPU throttled-period ratio threshold. |
+| `rulePacks.prometheusBaseline.resourceThresholds.memoryWorkingSetBytes` | `1073741824` | Absolute memory working set fallback threshold. |
+| `rulePacks.prometheusBaseline.resourceThresholds.memoryNearLimitRatio` | `0.9` | Memory working set divided by configured memory limit threshold. |
 | `rulePacks.prometheusBaseline.providerRef.name` | `""` | Optional `ModelProvider` name for RCA. |
 | `rulePacks.lokiBaseline.enabled` | `false` | Creates `fluxagent-loki-baseline`. Requires a matching `DataSource`. |
 | `rulePacks.lokiBaseline.datasourceRef.name` | `loki` | `DataSource` name used by Loki signals. |
@@ -78,6 +94,25 @@ When `defaultTargetSelector.namespaceSelector.matchNames` is omitted, the chart 
 ## Override Examples
 
 The Kubernetes baseline combines Kubernetes Events with `deploymentCondition` checks, so it can detect an unavailable Deployment even when the relevant Event stream is incomplete.
+
+The Prometheus baseline includes portable traffic and resource signals:
+
+- 5xx rate
+- request-rate surge compared to an offset baseline with minimum-volume guard
+- p95 latency
+- pod restart rate
+- CPU usage
+- CPU throttling ratio
+- memory working set
+- memory near configured limit
+
+The Loki baseline includes common log symptoms:
+
+- panic, fatal, and exception
+- timeout
+- retry
+- rate-limit / 429
+- connection refused
 
 Limit scanning to app namespaces:
 
@@ -164,6 +199,7 @@ Portable baseline examples:
 - Deployment unavailable
 - CPU throttling
 - memory near limit
+- request-rate surge with minimum-volume guard
 - restart increase
 
 Application profile examples:
