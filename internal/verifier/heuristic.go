@@ -10,6 +10,7 @@ const (
 	VerificationUnverified   = "Unverified"
 
 	MethodHeuristicEvidenceCoverageV1 = "HeuristicEvidenceCoverageV1"
+	MethodDomainEvidenceCoverageV2    = "DomainEvidenceCoverageV2"
 
 	EvidenceRoleSupports     = "Supports"
 	EvidenceRoleContradicts  = "Contradicts"
@@ -27,6 +28,7 @@ type EvidenceRef struct {
 	Kind    string
 	Summary string
 	Source  string
+	Reason  string
 }
 
 type ClaimResult struct {
@@ -51,7 +53,7 @@ type Result struct {
 func VerifyClaims(claims []Claim, evidence []EvidenceRef) Result {
 	result := Result{
 		Claims: make([]ClaimResult, 0, len(claims)),
-		Method: MethodHeuristicEvidenceCoverageV1,
+		Method: MethodDomainEvidenceCoverageV2,
 	}
 	if len(claims) == 0 {
 		return result
@@ -59,7 +61,10 @@ func VerifyClaims(claims []Claim, evidence []EvidenceRef) Result {
 
 	supported := 0
 	for _, claim := range claims {
-		matches := matchingEvidenceIDs(claim.Statement, evidence)
+		matches, domainClaim := domainSupportEvidenceIDs(claim.Statement, evidence)
+		if !domainClaim {
+			matches = matchingEvidenceIDs(claim.Statement, evidence)
+		}
 		contradictions := contradictoryEvidenceIDs(claim.Statement, evidence)
 		verification := VerificationInferred
 		if len(evidence) == 0 {
@@ -141,7 +146,7 @@ func matchingEvidenceIDs(statement string, evidence []EvidenceRef) []string {
 }
 
 func evidenceSupportsStatement(statement string, ref EvidenceRef) bool {
-	evidenceText := normalizeText(ref.Kind + " " + ref.Source + " " + ref.Summary)
+	evidenceText := evidenceText(ref)
 	if evidenceText == "" {
 		return false
 	}
@@ -154,7 +159,7 @@ func evidenceSupportsStatement(statement string, ref EvidenceRef) bool {
 }
 
 func evidenceContradictsStatement(statement string, ref EvidenceRef) bool {
-	evidenceText := normalizeText(ref.Kind + " " + ref.Source + " " + ref.Summary)
+	evidenceText := evidenceText(ref)
 	if evidenceText == "" {
 		return false
 	}
@@ -167,6 +172,83 @@ func evidenceContradictsStatement(statement string, ref EvidenceRef) bool {
 		}
 	}
 	return false
+}
+
+func domainSupportEvidenceIDs(statement string, evidence []EvidenceRef) ([]string, bool) {
+	profile := domainProfile(statement)
+	if profile == "" {
+		return nil, false
+	}
+	ids := make([]string, 0, len(evidence))
+	requiredKinds := requiredDomainKinds(profile)
+	coveredKinds := map[string]bool{}
+	for _, ref := range evidence {
+		id := strings.TrimSpace(ref.ID)
+		if id == "" || !domainEvidenceSupports(profile, ref) {
+			continue
+		}
+		ids = append(ids, id)
+		coveredKinds[strings.ToLower(strings.TrimSpace(ref.Kind))] = true
+	}
+	for _, kind := range requiredKinds {
+		if !coveredKinds[kind] {
+			return nil, true
+		}
+	}
+	return ids, true
+}
+
+func domainProfile(statement string) string {
+	statement = normalizeText(statement)
+	switch {
+	case containsAny(statement, "imagepullbackoff", "errimagepull", "image pull", "pull image", "failed to pull"):
+		return "imagepullbackoff"
+	case containsAny(statement, "crashloopbackoff", "crash loop", "crashloop", "backoff", "restarting", "restart"):
+		return "crashloopbackoff"
+	case containsAny(statement, "oomkilled", "out of memory", "memory limit", "memory pressure"):
+		return "oomkilled"
+	case containsAny(statement, "latency regression", "high latency", "p95 latency", "p99 latency", "timeout", "slow response"):
+		return "latencyregression"
+	default:
+		return ""
+	}
+}
+
+func requiredDomainKinds(profile string) []string {
+	switch profile {
+	case "imagepullbackoff", "crashloopbackoff":
+		return []string{"event"}
+	case "oomkilled":
+		return []string{"event", "metric"}
+	case "latencyregression":
+		return []string{"metric"}
+	default:
+		return nil
+	}
+}
+
+func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
+	kind := strings.ToLower(strings.TrimSpace(ref.Kind))
+	text := evidenceText(ref)
+	switch profile {
+	case "imagepullbackoff":
+		return kind == "event" && containsAny(text, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
+	case "crashloopbackoff":
+		return kind == "event" && containsAny(text, "crashloopbackoff", "backoff", "back off", "container crashed", "restarting failed container")
+	case "oomkilled":
+		switch kind {
+		case "event":
+			return containsAny(text, "oomkilled", "out of memory", "memory limit")
+		case "metric":
+			return containsAny(text, "memory", "working set", "rss", "container_memory")
+		default:
+			return false
+		}
+	case "latencyregression":
+		return kind == "metric" && containsAny(text, "latency", "duration", "response time", "p95", "p99", "histogram")
+	default:
+		return false
+	}
 }
 
 func evidenceTerms(statement string) []string {
@@ -182,6 +264,10 @@ func evidenceTerms(statement string) []string {
 	default:
 		return importantTokens(statement)
 	}
+}
+
+func evidenceText(ref EvidenceRef) string {
+	return normalizeText(ref.Kind + " " + ref.Source + " " + ref.Reason + " " + ref.Summary)
 }
 
 func importantTokens(text string) []string {

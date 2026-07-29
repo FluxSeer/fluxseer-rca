@@ -176,7 +176,7 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Verdict.ConfidenceDetail.VerifiedScore <= 0 || stored.Status.Verdict.ConfidenceDetail.VerifiedScore > stored.Status.Confidence {
 		t.Fatalf("expected bounded verified confidence, got %#v", stored.Status.Verdict.ConfidenceDetail)
 	}
-	if stored.Status.Verdict.ConfidenceDetail.Level == "" || stored.Status.Verdict.ConfidenceDetail.Method != "HeuristicEvidenceCoverageV1" {
+	if stored.Status.Verdict.ConfidenceDetail.Level == "" || stored.Status.Verdict.ConfidenceDetail.Method != verifier.MethodDomainEvidenceCoverageV2 {
 		t.Fatalf("expected confidence level and method, got %#v", stored.Status.Verdict.ConfidenceDetail)
 	}
 	if len(stored.Status.Claims) == 0 {
@@ -200,7 +200,7 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Execution == nil || stored.Status.Execution.Provider != "heuristic" || stored.Status.Execution.AttemptCount != 1 {
 		t.Fatalf("expected RCA execution metadata, got %#v", stored.Status.Execution)
 	}
-	if stored.Status.Execution.VerifierVersion != verifier.MethodHeuristicEvidenceCoverageV1 {
+	if stored.Status.Execution.VerifierVersion != verifier.MethodDomainEvidenceCoverageV2 {
 		t.Fatalf("expected verifier version on execution, got %#v", stored.Status.Execution)
 	}
 	if stored.Status.Execution.ID == "" || !hasPrefix(stored.Status.Execution.ID, "sha256:") {
