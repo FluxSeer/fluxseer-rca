@@ -50,10 +50,12 @@ func Run(args []string, out io.Writer) error {
 	var probeAddr string
 	var enableLeaderElection bool
 	var enableRemediation bool
+	var enableLegacyDeploymentRisk bool
 	fs.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	fs.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	fs.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	fs.BoolVar(&enableRemediation, "enable-remediation", false, "Enable RemediationPlan and AgentAction reconciliation.")
+	fs.BoolVar(&enableLegacyDeploymentRisk, "enable-legacy-deployment-risk", false, "Enable legacy annotation-driven Deployment risk reconciliation.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -130,8 +132,6 @@ func Run(args []string, out io.Writer) error {
 	if err := datasourceconfig.RegisterFromResources(context.Background(), mgr.GetAPIReader(), registry, mgr.GetClient()); err != nil {
 		return fmt.Errorf("unable to register datasource resources: %w", err)
 	}
-	detectionInterval := parseDurationEnv("FLUXAGENT_SCAN_INTERVAL", 30*time.Second)
-
 	if err := (&controllers.DataSourceReconciler{
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
@@ -140,15 +140,18 @@ func Run(args []string, out io.Writer) error {
 		return fmt.Errorf("unable to create DataSource controller: %w", err)
 	}
 
-	if err := (&controllers.DeploymentRiskReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Detector: &detector.Service{
-			Registry: registry,
-		},
-		Interval: detectionInterval,
-	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("unable to create DeploymentRisk controller: %w", err)
+	if enableLegacyDeploymentRisk {
+		detectionInterval := parseDurationEnv("FLUXAGENT_SCAN_INTERVAL", 30*time.Second)
+		if err := (&controllers.DeploymentRiskReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Detector: &detector.Service{
+				Registry: registry,
+			},
+			Interval: detectionInterval,
+		}).SetupWithManager(mgr); err != nil {
+			return fmt.Errorf("unable to create DeploymentRisk controller: %w", err)
+		}
 	}
 
 	if err := (&controllers.RiskRuleReconciler{
