@@ -34,6 +34,16 @@ for source_crd in "${root}"/config/crd/bases/*.yaml; do
   diff -u "${source_crd}" "${chart_crd}" >/dev/null
 done
 
+echo "==> v0.3 schema freeze audit: frozen baseline"
+(
+  cd "${root}"
+  if ! git rev-parse --verify v0.3.0-beta.1^{commit} >/dev/null 2>&1; then
+    echo "missing frozen baseline tag: v0.3.0-beta.1" >&2
+    exit 1
+  fi
+  git diff --exit-code v0.3.0-beta.1 -- api/v1alpha1 config/crd/bases charts/kube-ai-sre/crds >/dev/null
+)
+
 echo "==> v0.3 schema freeze audit: Kustomize render"
 kubectl kustomize "${root}/config/default" >"${tmpdir}/config-default.yaml"
 kubectl kustomize "${root}/examples/kind" >"${tmpdir}/examples-kind.yaml"
