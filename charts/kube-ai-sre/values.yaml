@@ -99,6 +99,46 @@ rulePacks:
     rcaEnabled: true
     providerRef:
       name: ""
+  applicationProfiles:
+    enabled: false
+    profiles: []
+    # - name: checkout-web
+    #   datasourceRef:
+    #     name: prometheus
+    #   severity: warning
+    #   interval: 2m
+    #   window: 10m
+    #   providerRef:
+    #     name: ""
+    #   signals:
+    #     requestRate:
+    #       enabled: true
+    #       queryTemplate: |
+    #         sum(rate(http_requests_total{namespace="{{ .namespace }}",app="{{ .app }}"}[5m]))
+    #       threshold:
+    #         operator: ">"
+    #         value: 100
+    #     errorRate:
+    #       enabled: true
+    #       queryTemplate: |
+    #         sum(rate(http_requests_total{namespace="{{ .namespace }}",app="{{ .app }}",status=~"5.."}[5m]))
+    #       threshold:
+    #         operator: ">"
+    #         value: 1
+    #     latencyP95:
+    #       enabled: true
+    #       queryTemplate: |
+    #         histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="{{ .namespace }}",app="{{ .app }}"}[5m])) by (le))
+    #       threshold:
+    #         operator: ">"
+    #         value: 1
+    #     queueDepth:
+    #       enabled: true
+    #       queryTemplate: |
+    #         max(queue_depth{namespace="{{ .namespace }}",app="{{ .app }}"})
+    #       threshold:
+    #         operator: ">"
+    #         value: 100
 
 notification:
   slackWebhookSecretRef: ""
