@@ -24,6 +24,7 @@ Frozen API identity: `aiops.platform/v1alpha1`
 - [Architecture overview](architecture/overview.md)
 - [Mermaid architecture diagrams](architecture/mermaid-diagrams.md)
 - [Capability maturity](capability-maturity.md)
+- [Runtime modes](runtime-modes.md)
 - [Release checkpoint](release-checkpoint.md)
 - [Quickstart with kind](tutorials/quickstart-kind.md)
 - [Investigate a workload](tutorials/investigate-workload.md)
@@ -74,6 +75,7 @@ Adapter references:
 
 Operations and packaging:
 
+- [Runtime modes](runtime-modes.md)
 - [Helm rule packs](helm-rulepacks.md)
 - [Metrics](metrics.md)
 - [GitHub repository setup](github-repo.md)
