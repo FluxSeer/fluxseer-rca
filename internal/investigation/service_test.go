@@ -1397,6 +1397,80 @@ func TestServiceGenerateRCABlocksHostedProviderWithoutExternalTransmission(t *te
 	if hosted.calls != 0 {
 		t.Fatalf("expected hosted provider not to be called, got %d", hosted.calls)
 	}
+	if len(result.EgressAttempts) != 1 {
+		t.Fatalf("expected one rejected egress attempt, got %#v", result.EgressAttempts)
+	}
+	if result.EgressAttempts[0].Decision != "Rejected" || result.EgressAttempts[0].Result != "Rejected" {
+		t.Fatalf("expected rejected hosted attempt, got %#v", result.EgressAttempts[0])
+	}
+}
+
+func TestServiceGenerateRCARecordsFallbackProviderEgressAttempts(t *testing.T) {
+	hosted := &capturingModelProvider{name: "openai"}
+	service := &Service{
+		Gateway: &modelgateway.Gateway{
+			Base: knowledge.NewBase(),
+			Providers: model.NewRegistry(
+				failingModelProvider{name: "broken", reason: "ProviderUnavailable"},
+				hosted,
+			),
+			Resolver: serviceResolverStub{
+				providers: map[string]*v1alpha1.ModelProvider{
+					"fluxagent-system/fallback-openai": {
+						ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system", Generation: 7},
+						Spec: v1alpha1.ModelProviderSpec{
+							Provider: "openai",
+							Model:    "gpt-test",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Provider: &v1alpha1.ModelProvider{
+			ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system", Generation: 3},
+			Spec: v1alpha1.ModelProviderSpec{
+				Provider: "broken",
+				Model:    "broken-model",
+				FallbackProviderRef: v1alpha1.LocalObjectReference{
+					Name: "fallback-openai",
+				},
+			},
+		},
+	}, EvidenceCollectionResult{
+		Summary: "collected 1 evidence records from 1 datasource",
+		EvidenceRefs: []v1alpha1.EvidenceRef{
+			{Kind: "metric", Source: "prometheus", Summary: "latency high"},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("generate RCA failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "ProviderDataPolicyDenied" {
+		t.Fatalf("expected fallback ProviderDataPolicyDenied issue, got %#v", result.Issue)
+	}
+	if hosted.calls != 0 {
+		t.Fatalf("expected fallback hosted provider not to be called, got %d", hosted.calls)
+	}
+	if len(result.EgressAttempts) != 2 {
+		t.Fatalf("expected primary and fallback attempts, got %#v", result.EgressAttempts)
+	}
+	if result.EgressAttempts[0].ProviderRef == nil || result.EgressAttempts[0].ProviderRef.Name != "primary-broken" || result.EgressAttempts[0].Result != "ProviderUnavailable" {
+		t.Fatalf("expected primary unavailable attempt, got %#v", result.EgressAttempts[0])
+	}
+	fallbackAttempt := result.EgressAttempts[1]
+	if fallbackAttempt.ProviderRef == nil || fallbackAttempt.ProviderRef.Name != "fallback-openai" {
+		t.Fatalf("expected fallback provider ref, got %#v", fallbackAttempt.ProviderRef)
+	}
+	if fallbackAttempt.Decision != "Rejected" || fallbackAttempt.Result != "ProviderDataPolicyDenied" || fallbackAttempt.Reason != "ProviderDataPolicyDenied" {
+		t.Fatalf("expected fallback rejected policy attempt, got %#v", fallbackAttempt)
+	}
+	if fallbackAttempt.ProviderGeneration != 7 || fallbackAttempt.EvidenceBundleDigest == "" {
+		t.Fatalf("expected fallback generation and bundle digest, got %#v", fallbackAttempt)
+	}
 }
 
 func TestServiceGenerateRCAFiltersHostedProviderEvidenceByDataPolicy(t *testing.T) {
@@ -1594,6 +1668,42 @@ func (p *capturingModelProvider) Complete(_ context.Context, req domain.ModelReq
 			"actionType":      "notification.sendSlack",
 		},
 	}, nil
+}
+
+type failingModelProvider struct {
+	name   string
+	reason string
+}
+
+func (p failingModelProvider) Name() string { return p.name }
+
+func (p failingModelProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	reason := p.reason
+	if reason == "" {
+		reason = "ProviderUnavailable"
+	}
+	return domain.ModelResponse{}, &model.ProviderError{
+		Reason:  reason,
+		Message: "provider is unavailable",
+	}
+}
+
+type serviceResolverStub struct {
+	providers map[string]*v1alpha1.ModelProvider
+}
+
+func (r serviceResolverStub) Resolve(_ context.Context, namespace string, ref *v1alpha1.LocalObjectReference) (*v1alpha1.ModelProvider, error) {
+	if ref == nil || ref.Name == "" {
+		return modelgateway.DefaultHeuristicProvider(namespace), nil
+	}
+	provider, ok := r.providers[namespace+"/"+ref.Name]
+	if !ok {
+		return nil, &modelgateway.ResolveError{
+			Reason:  "ProviderNotFound",
+			Message: "provider not found",
+		}
+	}
+	return provider, nil
 }
 
 func (f fakeDataSource) Name() string { return f.name }

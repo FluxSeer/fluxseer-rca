@@ -280,6 +280,55 @@ func TestGatewayReevaluatesFallbackProviderExternalTransmissionPolicy(t *testing
 	}
 }
 
+func TestGatewayTraceRecordsPrimaryAndFallbackAttempts(t *testing.T) {
+	primary := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "broken",
+			Model:    "gpt-broken",
+			FallbackProviderRef: v1alpha1.LocalObjectReference{
+				Name: "fallback-openai",
+			},
+		},
+	}
+	fallback := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			Model:    "gpt-5.1",
+		},
+	}
+	openai := &namedCaptureProvider{name: "openai"}
+	gateway := &Gateway{
+		Base:      knowledge.NewBase(),
+		Providers: model.NewRegistry(failingProvider{}, openai),
+		Resolver: resolverStub{
+			providers: map[string]*v1alpha1.ModelProvider{
+				"fluxagent-system/fallback-openai": fallback,
+			},
+		},
+	}
+
+	_, trace, err := gateway.AnalyzeIngestionWithTrace(context.Background(), primary, domain.IngestionOutput{
+		Context: domain.IncidentContext{
+			Resource: domain.ResourceRef{Namespace: "prod", Name: "payments-api", Kind: "Deployment"},
+			Summary:  "error rate increased after rollout",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected fallback hosted provider policy denial")
+	}
+	if len(trace.Attempts) != 2 {
+		t.Fatalf("expected primary and fallback attempts, got %#v", trace.Attempts)
+	}
+	if trace.Attempts[0].Provider.Name != "primary-broken" || trace.Attempts[0].Result != "ProviderUnavailable" {
+		t.Fatalf("expected primary unavailable attempt, got %#v", trace.Attempts[0])
+	}
+	if trace.Attempts[1].Provider.Name != "fallback-openai" || trace.Attempts[1].Result != "ProviderDataPolicyDenied" {
+		t.Fatalf("expected fallback policy denied attempt, got %#v", trace.Attempts[1])
+	}
+}
+
 func TestGatewayAllowsLocalFallbackAfterHostedProviderPolicyDenial(t *testing.T) {
 	primary := &v1alpha1.ModelProvider{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-openai", Namespace: "fluxagent-system"},
