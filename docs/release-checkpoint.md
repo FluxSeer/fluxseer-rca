@@ -57,7 +57,7 @@ Historical v0.2 release identity:
 Status: Published prerelease
 Tag: v0.2.0-beta.1
 Tag commit: e37841baa7f4313577cc8942a77345856b709020
-GitHub Release URL: https://github.com/FluxSeer/FluxAgent/releases/tag/v0.2.0-beta.1
+GitHub Release URL: https://github.com/FluxSeer/fluxseer-rca/releases/tag/v0.2.0-beta.1
 ```
 
 Published artifacts:
@@ -96,7 +96,7 @@ Identity:
 API group/version identity: aiops.platform/v1alpha1
 Release commit: d0f39e677d1e9aa3693e589aba3b23a80d5c8ef7
 Tag: v0.3.0-beta.2
-GitHub Release URL: https://github.com/FluxSeer/FluxAgent/releases/tag/v0.3.0-beta.2
+GitHub Release URL: https://github.com/FluxSeer/fluxseer-rca/releases/tag/v0.3.0-beta.2
 ```
 
 Verified command:
@@ -162,7 +162,7 @@ API group/version identity: aiops.platform/v1alpha1
 Schema freeze baseline: 2821e254b65fc54bf6fa521aec89bf7c48240667
 Release candidate gate commit: ab4f2bbbde95b99fe2336535e3c16c71a64ef1b9
 Release commit: b55f57920eb4ebcef2e454c18ba9437081362287
-GitHub Release URL: https://github.com/FluxSeer/FluxAgent/releases/tag/v0.3.0-beta.1
+GitHub Release URL: https://github.com/FluxSeer/fluxseer-rca/releases/tag/v0.3.0-beta.1
 ```
 
 Verified command:
