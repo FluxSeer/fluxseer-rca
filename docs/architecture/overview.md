@@ -121,7 +121,7 @@ FluxAgent exposes its workflow through Kubernetes-native CRDs:
 - `RemediationPlan`
 - `AgentAction`
 
-`v0.2` establishes `DataSource`, `RiskRule`, and `ModelProvider` as read-only RCA configuration contracts. The early `v0.3` layer establishes `InvestigationRequest` as the ad-hoc investigation contract.
+`v0.3` keeps `DataSource`, `RiskRule`, and `ModelProvider` as read-only RCA configuration contracts and establishes `InvestigationRequest` as the canonical ad-hoc investigation and RCA status contract.
 
 The API group is `aiops.platform/v1alpha1`.
 
