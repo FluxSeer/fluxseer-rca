@@ -107,4 +107,7 @@ spec:
     providerRef:
       name: {{ .Values.rulePacks.prometheusBaseline.providerRef.name | quote }}
     {{- end }}
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true
 {{- end }}
