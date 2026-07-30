@@ -631,6 +631,21 @@ func TestValidateInvestigationRequestSpecUsesUnsupportedRetentionModeReason(t *t
 	}
 }
 
+func TestValidateInvestigationRequestSpecRejectsUnknownQueryRetentionMode(t *testing.T) {
+	issue := validateInvestigationRequestSpecIssue(v1alpha1.InvestigationRequestSpec{
+		Target: v1alpha1.TargetRef{
+			Namespace: "prod",
+			Kind:      "Deployment",
+			Name:      "open-api",
+		},
+		DataSources:    []v1alpha1.LocalObjectReference{{Name: "kubernetes-events"}},
+		QueryRetention: v1alpha1.QueryRetentionPolicy{Mode: "PlaintextForever"},
+	})
+	if issue == nil || issue.Reason != "InvalidSpec" || !strings.Contains(issue.Message, "queryRetention") {
+		t.Fatalf("expected InvalidSpec queryRetention issue, got %#v", issue)
+	}
+}
+
 func TestProviderEgressAuditUsesFilteredMetadataOnly(t *testing.T) {
 	provider := &v1alpha1.ModelProvider{
 		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},

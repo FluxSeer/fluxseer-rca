@@ -1068,7 +1068,7 @@ func TestNormalizeObservationTruncatesLargeLogEvidence(t *testing.T) {
 	}
 
 	observation := normalizeObservations(result, req, 0, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))[0]
-	ref := evidenceRefsFromObservations([]domain.Observation{observation}, req)[0]
+	ref := evidenceRefsFromObservations([]domain.Observation{observation}, req, v1alpha1.QueryRetentionPolicy{})[0]
 
 	if !observation.Truncated || observation.OriginalBytes <= observation.RetainedBytes {
 		t.Fatalf("expected truncated observation byte metadata, got %#v", observation)
@@ -1146,6 +1146,7 @@ func TestServiceCollectEvidencePreservesDatasourceQueryReason(t *testing.T) {
 }
 
 func TestServiceCollectEvidenceUsesConfiguredQueryPlan(t *testing.T) {
+	const configuredQuery = `sum(rate(custom_metric_total{namespace="prod"}[2m]))`
 	prom := &capturingDataSource{
 		name:      "prometheus",
 		queryType: domain.QueryTypeMetric,
@@ -1170,18 +1171,93 @@ func TestServiceCollectEvidenceUsesConfiguredQueryPlan(t *testing.T) {
 				Name:           "custom-metric",
 				DatasourceName: "prometheus",
 				QueryType:      domain.QueryTypeMetric,
-				Query:          `sum(rate(custom_metric_total{namespace="prod"}[2m]))`,
+				Query:          configuredQuery,
 			},
 		},
 	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("collect evidence failed: %v", err)
 	}
-	if prom.lastQuery == nil || prom.lastQuery.Query != `sum(rate(custom_metric_total{namespace="prod"}[2m]))` {
+	if prom.lastQuery == nil || prom.lastQuery.Query != configuredQuery {
 		t.Fatalf("expected configured query to be used, got %#v", prom.lastQuery)
 	}
-	if len(result.EvidenceRefs) != 1 || result.EvidenceRefs[0].Query != `sum(rate(custom_metric_total{namespace="prod"}[2m]))` {
-		t.Fatalf("expected evidence to carry configured query, got %#v", result.EvidenceRefs)
+	if len(result.EvidenceRefs) != 1 || result.EvidenceRefs[0].Query != "" || result.EvidenceRefs[0].QueryDigest == "" {
+		t.Fatalf("expected evidence to retain query digest only by default, got %#v", result.EvidenceRefs)
+	}
+}
+
+func TestServiceCollectEvidenceHonorsQueryRetentionPolicy(t *testing.T) {
+	const secretQuery = `sum(rate(custom_metric_total{namespace="prod",token=super-secret}[2m]))`
+	tests := []struct {
+		name             string
+		retention        v1alpha1.QueryRetentionPolicy
+		wantQuery        string
+		wantQueryPresent bool
+		wantRedacted     bool
+	}{
+		{
+			name:      "digest only",
+			retention: v1alpha1.QueryRetentionPolicy{Mode: v1alpha1.QueryRetentionModeDigestOnly},
+			wantQuery: "",
+		},
+		{
+			name:             "full",
+			retention:        v1alpha1.QueryRetentionPolicy{Mode: v1alpha1.QueryRetentionModeFull},
+			wantQuery:        secretQuery,
+			wantQueryPresent: true,
+		},
+		{
+			name:         "redacted",
+			retention:    v1alpha1.QueryRetentionPolicy{Mode: v1alpha1.QueryRetentionModeRedacted},
+			wantRedacted: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prom := &capturingDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				records:   []map[string]any{{"metric": "custom_metric", "value": "3.14"}},
+			}
+			service := &Service{Registry: datasource.NewRegistry(prom)}
+			result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+				QueryRetention: tt.retention,
+			}, PreflightResult{
+				Target: domain.ResourceRef{
+					Namespace: "prod",
+					Name:      "open-api",
+					Kind:      "Deployment",
+					Service:   "open-api",
+				},
+				Labels: map[string]string{"app": "open-api"},
+				CollectionPlan: []CollectionStep{{
+					Name:           "custom-metric",
+					DatasourceName: "prometheus",
+					QueryType:      domain.QueryTypeMetric,
+					Query:          secretQuery,
+				}},
+			}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+			if err != nil {
+				t.Fatalf("collect evidence failed: %v", err)
+			}
+			if len(result.EvidenceRefs) != 1 {
+				t.Fatalf("expected one evidence ref, got %#v", result.EvidenceRefs)
+			}
+			if !tt.wantRedacted && result.EvidenceRefs[0].Query != tt.wantQuery {
+				t.Fatalf("expected retained query %q, got %q", tt.wantQuery, result.EvidenceRefs[0].Query)
+			}
+			if tt.wantQueryPresent && result.EvidenceRefs[0].Query == "" {
+				t.Fatal("expected query to be retained")
+			}
+			if tt.wantRedacted {
+				if strings.Contains(result.EvidenceRefs[0].Query, "super-secret") || !strings.Contains(result.EvidenceRefs[0].Query, "[REDACTED]") {
+					t.Fatalf("expected redacted retained query, got %q", result.EvidenceRefs[0].Query)
+				}
+			}
+			if result.EvidenceRefs[0].QueryDigest == "" {
+				t.Fatalf("expected query digest to remain available, got %#v", result.EvidenceRefs[0])
+			}
+		})
 	}
 }
 

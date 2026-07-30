@@ -116,7 +116,7 @@ func runNormalizationFixture(t *testing.T, fixture normalizationFixture) normali
 	observations := normalizeObservations(result, req, 0, collectedAt)
 	return normalizationGolden{
 		Observations: observations,
-		EvidenceRefs: evidenceRefsFromObservations(observations, req),
+		EvidenceRefs: evidenceRefsFromObservations(observations, req, v1alpha1.QueryRetentionPolicy{}),
 	}
 }
 

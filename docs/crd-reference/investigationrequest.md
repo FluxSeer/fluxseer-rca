@@ -175,6 +175,16 @@ If required evidence is complete and profile-specific checks find no matching ab
 
 External evidence storage is disabled by default. `MetadataOnly` remains the default. `NormalizedSnapshot` is supported only with `storageRef.name: local-filesystem` and a controller runtime evidence store directory configured through `FLUXAGENT_EVIDENCE_STORE_DIR`. Snapshot payload references store only `scheme`, digest, expiry, encryption flag, and retention class; they do not expose local file paths or access credentials. `RawSnapshot` remains rejected because raw evidence retention requires a separate opt-in storage and security review.
 
+`queryRetention.mode` controls whether rendered datasource query text is persisted in `status.evidenceRefs[]`:
+
+| Mode | Behavior |
+| --- | --- |
+| unset / `DigestOnly` | Persist `queryDigest` only; do not persist rendered query text. |
+| `Redacted` | Persist pattern-redacted rendered query text and `queryDigest`. |
+| `Full` | Persist full rendered query text and `queryDigest`; use only when policy allows. |
+
+The default is `DigestOnly` to reduce accidental leakage of tenant names, token-like matchers, internal hostnames, or other sensitive values embedded in query strings.
+
 When `queryBudget` is configured, FluxAgent rejects invalid limits, excessive lookback windows, or excessive query counts during validation before contacting datasources. It stops evidence collection when cumulative datasource duration or response-byte limits are exceeded. Native result-kind limits are enforced after datasource responses are decoded and before flattening/normalization; the generic flat-record limit remains a compatibility fallback. Exceeded result limits retain bounded partial evidence, set truncation metadata, and preserve deterministic record order.
 
 ### Mode Contract
@@ -394,6 +404,8 @@ Condition types:
 - `EvidenceCollectionReady`
 - `RCAReady`
 - `Degraded`
+
+Current top-level conditions are the supported external integration surface for common workflow health checks. Consumers should prefer condition type, status, reason, and observedGeneration over provider-specific execution internals whenever possible.
 
 Common reasons:
 
