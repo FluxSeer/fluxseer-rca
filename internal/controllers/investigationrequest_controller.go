@@ -545,6 +545,9 @@ func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) st
 	if len(spec.DataSources) == 0 && len(spec.Queries) == 0 {
 		return "spec.dataSources or spec.queries must include at least one datasource reference"
 	}
+	if len(spec.DataSources) > 0 && len(spec.Queries) > 0 {
+		return "spec.dataSources and spec.queries are mutually exclusive; use dataSources for controller-planned evidence or queries for user-planned evidence"
+	}
 	if message := validateEvidenceRetention(spec.EvidenceRetention); message != "" {
 		return message
 	}

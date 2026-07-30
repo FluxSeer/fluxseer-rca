@@ -491,16 +491,16 @@ Discovered-signal emission must carry lineage and avoid investigation loops. By 
 
 ### InvestigationRequest Modes
 
-`InvestigationRequest.spec.dataSources[]` and `InvestigationRequest.spec.queries[]` should be mutually exclusive.
+`InvestigationRequest.spec.dataSources[]` and `InvestigationRequest.spec.queries[]` are mutually exclusive planning modes.
 
-Required behavior:
+Runtime behavior:
 
 - exactly one mode should be specified
-- if both are set, reject the spec or surface `InvalidSpec`
-- if neither is set, reject the spec or surface `InvalidSpec`
+- if both are set, surface `InvalidSpec`
+- if neither is set, surface `InvalidSpec`
 - controller behavior should not silently prefer one mode over the other
 
-Preferred CRD validation:
+Optional future CRD admission validation:
 
 ```yaml
 x-kubernetes-validations:
