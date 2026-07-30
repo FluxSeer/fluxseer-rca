@@ -1,14 +1,19 @@
-# FluxAgent
+# FluxSeer RCA
 
 Kubernetes-native SRE RCA control plane for teams that want explicit, auditable, and security-first AI-assisted investigation.
 
-Current release: `v0.3.0-beta.1`
+Current release: `v0.3.0-beta.2`
 
-Status: `v0.3 RCA contract frozen, beta published, provenance verified`
+Status: `v0.3 RCA contract frozen, beta.2 published, provenance verified`
 
-FluxAgent turns production signals and operator questions into structured, evidence-linked RCA resources in Kubernetes.
+FluxSeer RCA is the forward-looking product name for the project currently
+published as FluxAgent. Existing `fluxagent` binaries, Helm artifacts, CRDs,
+metrics, and documentation remain compatibility surfaces until a dedicated
+rename release completes the migration.
 
-FluxAgent exists for platform teams that need to answer:
+FluxSeer RCA turns production signals and operator questions into governed, evidence-verifiable, and replayable RCA workflows in Kubernetes.
+
+FluxSeer RCA exists for platform teams that need to answer:
 
 ```text
 What evidence did this RCA use?
@@ -17,11 +22,24 @@ Which datasources failed or degraded?
 Can this investigation be audited, reproduced from recorded query metadata, and compared later?
 ```
 
-FluxAgent is the Kubernetes control plane and audit contract around RCA. It is not an all-in-one monitoring stack, not a free-form cluster agent, and not an autonomous production remediation system.
+FluxSeer RCA is the Kubernetes control plane and audit contract around RCA. It is not an all-in-one monitoring stack, not a free-form cluster agent, and not an autonomous production remediation system.
 
-FluxAgent does not grant reasoning providers unrestricted cluster access. It sends only bounded, normalized, and redacted evidence collected through declared investigation policies and datasource capabilities.
+FluxSeer RCA does not grant reasoning providers unrestricted cluster access. It sends only bounded, normalized, and redacted evidence collected through declared investigation policies and datasource capabilities.
 
 ## Why FluxAgent
+
+RCA often starts as an urgent, one-off investigation and ends as an ephemeral answer in Slack, a dashboard, or a terminal. After the incident, teams may not know which evidence was checked, which model produced the answer, which claims were supported, which data left the cluster, or whether a later model version would produce a worse conclusion.
+
+FluxAgent exists to turn that workflow into durable Kubernetes API state:
+
+```text
+temporary RCA answer
+-> governed investigation workflow
+-> evidence-linked claims
+-> policy-aware reasoning
+-> auditable execution record
+-> replayable evaluation artifact
+```
 
 FluxAgent is built around four product decisions:
 
@@ -31,6 +49,8 @@ FluxAgent is built around four product decisions:
 - Read-only default behavior with heuristic RCA available without external API calls.
 
 This positioning is intentionally narrower than a general AI SRE agent. `RiskRule` is an optional bootstrap signal source, not an attempt to replace Alertmanager or own all Kubernetes detection. Remediation CRDs are optional extensions, not the default product path.
+
+Alert assistants help operators respond faster. FluxAgent helps platform teams standardize and govern how RCA is collected, reasoned about, verified, recorded, and replayed.
 
 ## Minimum Flow
 
@@ -50,7 +70,7 @@ flowchart LR
     Verify --> RCA
 ```
 
-The current `v0.2` release supports the operator-first RCA path:
+The current `v0.3` beta supports the operator-first RCA path:
 
 ```text
 InvestigationRequest
@@ -81,6 +101,8 @@ FluxAgent does not treat every CRD, adapter, and controller as equally mature:
 The default Helm install enables the read-only RCA path, heuristic provider, and Kubernetes baseline rule pack. It does not enable hosted providers, remediation controllers, legacy Deployment watching, or experimental executor permissions.
 
 See [docs/capability-maturity.md](docs/capability-maturity.md) for the full maturity matrix.
+
+See [docs/runtime-modes.md](docs/runtime-modes.md) for the supported runtime, provider, evidence, RBAC, and rule-pack switching surfaces.
 
 ## Example RCA Status
 
@@ -148,14 +170,14 @@ status:
     durationSeconds: 4
 ```
 
-Implemented in `v0.2.0-beta.1`:
+Compatibility status projections:
 
 - compatibility RCA status fields: `summary`, `hypothesis`, `confidence`, `provider`
 - compact `evidenceRefs`
 - `linkedRiskSignalRef`
 - workflow and readiness conditions
 
-Target for `v0.3`:
+Canonical v0.3 status fields:
 
 - `verdict`
 - `claims`
@@ -229,9 +251,9 @@ flowchart LR
     Status --> Notify
 ```
 
-Current `v0.2` implements bounded evidence collection, provider reasoning, status conditions, compact evidence references, and the first structured RCA status fields. Evidence-linked claim verification is the `v0.3` hardening target.
+Current `v0.3` implements bounded evidence collection, provider reasoning, status conditions, compact evidence references, evidence-linked claims, verification status, deterministic identities, provider execution audit, and compatibility status projections.
 
-In `v0.2`, external alerting systems integrate by creating `InvestigationRequest` resources through the Kubernetes API. Built-in alert receivers, webhook ingress, Kubernetes Event to `InvestigationRequest` adapters, and `RiskSignal`-triggered reinvestigation are future producer adapters. Reinvestigation must be policy-gated to avoid loops.
+In `v0.3`, external alerting systems integrate by creating `InvestigationRequest` resources through the Kubernetes API. Built-in alert receivers, webhook ingress, Kubernetes Event to `InvestigationRequest` adapters, and `RiskSignal`-triggered reinvestigation remain future producer adapters. Reinvestigation must be policy-gated to avoid loops.
 
 Read the long-form architecture in [docs/architecture/overview.md](docs/architecture/overview.md).
 
@@ -329,12 +351,10 @@ See:
 
 ### Install The Beta Chart
 
-Current `v0.2.0-beta.1` distribution uses the FluxSeer Harbor registry. GHCR is the planned canonical public registry, but it should not be used in install snippets until the chart and images are published there with anonymous pull enabled.
-
 ```bash
 helm install fluxagent \
-  oci://test-harbor.fluxseer.com/fluxseer/fluxagent/charts/kube-ai-sre \
-  --version 0.2.0-beta.1 \
+  oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent \
+  --version 0.3.0-beta.2 \
   --namespace fluxagent-system \
   --create-namespace
 
@@ -461,7 +481,7 @@ See:
 ```bash
 cd FluxAgent
 GOWORK=off go test ./...
-make verify-v0.2-beta
+make verify-v0.3-schema-freeze
 ```
 
 ### Enable Hosted RCA Providers
@@ -520,7 +540,7 @@ For a full end-to-end validation of the kind flow, run:
 make verify-e2e-kind
 ```
 
-`verify-e2e-kind` is part of the `v0.2` beta validation set. It covers both:
+`verify-e2e-kind` remains part of the beta validation set. It covers both:
 
 - the read-only `RiskRule -> RiskSignal` path
 - the operator-first `InvestigationRequest -> structured RCA status` path with optional discovered-signal materialization
@@ -545,36 +565,37 @@ This target will:
 
 ## Current Scope
 
-FluxAgent is a working open-source RCA control plane, but its RCA contract and adapter reliability are not yet production-hardened across all environments.
+FluxAgent is a working open-source RCA control plane with a frozen v0.3 RCA status contract. The contract is publishable as a beta, while runtime reliability and field coverage still need broader real-cluster validation.
 
 Implemented today:
 
 - `InvestigationRequest`-based read-only RCA workflow with configurable `queries[]`
-- compatibility RCA status fields with compact evidence IDs
+- frozen structured RCA status with compatibility projections and compact evidence IDs
+- evidence-linked claims, alternative hypotheses, missing evidence, degradation, execution audit, lineage, and deterministic identities
+- provider data classification and hosted-provider egress policy on the canonical `InvestigationRequest` path
+- replay-oriented fixtures and schema-freeze verification
 - bounded Kubernetes Events, Prometheus, and Loki evidence collection
 - heuristic, OpenAI, Claude, and Gemini reasoning paths
 - optional discovered `RiskSignal` materialization
 - optional bootstrap `RiskRule -> RiskSignal` flow
+- baseline rule packs
 - controller-runtime manager and reconcilers
 - webhook notification flow
 - provider-neutral model abstractions
 - optional guarded remediation path
 - kind demo scaffolding
 
-RCA contract gaps:
+Stabilization work:
 
-- stricter evidence-linked claim verification
-- alternative hypothesis disposition beyond the initial field shape
-- richer evidence provenance with query digests, redaction flags, truncation flags, and content digests
-- replay modes that distinguish metadata replay, re-query replay, and snapshot replay
 - RCA evaluation harness for provider and heuristic regressions
 - bounded adaptive investigation beyond static datasource plans
-- explicit abstention outcomes such as `Inconclusive` or `InsufficientEvidence`
+- broader replay corpus and real-cluster dogfooding
+- dashboards and operator diagnostics
 
 Operational gaps:
 
 - production-hardened auth, retries, and backoff for all adapters
-- production-hardened vendor auth, retry, and response-governance coverage
+- broader production-grade vendor response-governance coverage
 - GitOps PR backends and approval UX
 - admission policies and richer multi-cluster support
 

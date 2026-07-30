@@ -6,7 +6,7 @@
 
 Use `DataSource` to describe how FluxAgent should connect to a datasource without hard-coding every connection through manager environment variables.
 
-Current `v0.2` batch support:
+Current supported datasource types:
 
 - `prometheus`
 - `loki`

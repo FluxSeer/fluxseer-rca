@@ -397,6 +397,50 @@ func TestLineageForReconcilePrefersStatusLineageWhenAnnotationsMissing(t *testin
 	}
 }
 
+func TestValidateInvestigationRequestSpecEnforcesEvidencePlanningMode(t *testing.T) {
+	base := v1alpha1.InvestigationRequestSpec{
+		Target: v1alpha1.TargetRef{
+			Namespace: "prod",
+			Kind:      "Deployment",
+			Name:      "open-api",
+		},
+	}
+
+	withDataSources := base
+	withDataSources.DataSources = []v1alpha1.LocalObjectReference{{Name: "prometheus"}}
+	if message := validateInvestigationRequestSpec(withDataSources); message != "" {
+		t.Fatalf("expected dataSources-only spec to be accepted, got %q", message)
+	}
+
+	withQueries := base
+	withQueries.Queries = []v1alpha1.InvestigationQuery{{
+		DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus"},
+		QueryType:     string(domain.QueryTypeMetric),
+		Query:         "up",
+	}}
+	if message := validateInvestigationRequestSpec(withQueries); message != "" {
+		t.Fatalf("expected queries-only spec to be accepted, got %q", message)
+	}
+
+	ambiguous := base
+	ambiguous.DataSources = []v1alpha1.LocalObjectReference{{Name: "prometheus"}}
+	ambiguous.Queries = []v1alpha1.InvestigationQuery{{
+		DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus"},
+		QueryType:     string(domain.QueryTypeMetric),
+		Query:         "up",
+	}}
+	message := validateInvestigationRequestSpec(ambiguous)
+	if !strings.Contains(message, "mutually exclusive") {
+		t.Fatalf("expected mutually exclusive evidence planning rejection, got %q", message)
+	}
+
+	neither := base
+	message = validateInvestigationRequestSpec(neither)
+	if !strings.Contains(message, "at least one datasource reference") {
+		t.Fatalf("expected missing datasource/query rejection, got %q", message)
+	}
+}
+
 func TestValidateInvestigationQueryBudgetRejectsExcessiveLookback(t *testing.T) {
 	message := validateInvestigationQueryBudget(v1alpha1.InvestigationRequestSpec{
 		TimeRange: v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 2 * time.Hour}},

@@ -8,7 +8,7 @@ Product positioning:
 Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
 ```
 
-Current release scope is narrower than a general AI SRE platform: `v0.3.0-beta.1` is a published prerelease focused on read-only RCA workflows and a frozen RCA status contract.
+Current release scope is narrower than a general AI SRE platform: `v0.3.0-beta.2` is a published prerelease focused on read-only RCA workflows, a frozen RCA status contract, runtime default hardening, and least-privilege RBAC defaults.
 
 The current runnable default path is read-only RCA: evaluate explicit `RiskRule` or `InvestigationRequest` resources, collect bounded evidence, write canonical RCA status, and optionally materialize a `RiskSignal` without mutating the target workload.
 
@@ -38,6 +38,8 @@ FluxAgent treats dependencies in three separate categories:
 That distinction matters because the project goal is integration without structural lock-in.
 
 See [../product-requirements.md](../product-requirements.md) for the product positioning, release-scope, CRD contract, graceful-degradation, evidence-storage, and release-freeze baseline.
+
+See [mermaid-diagrams.md](mermaid-diagrams.md) for maintained Mermaid architecture, relationship, sequence, class, deployment, and release diagrams.
 
 ## High-level Architecture
 
@@ -119,7 +121,7 @@ FluxAgent exposes its workflow through Kubernetes-native CRDs:
 - `RemediationPlan`
 - `AgentAction`
 
-`v0.2` establishes `DataSource`, `RiskRule`, and `ModelProvider` as read-only RCA configuration contracts. The early `v0.3` layer establishes `InvestigationRequest` as the ad-hoc investigation contract.
+`v0.3` keeps `DataSource`, `RiskRule`, and `ModelProvider` as read-only RCA configuration contracts and establishes `InvestigationRequest` as the canonical ad-hoc investigation and RCA status contract.
 
 The API group is `aiops.platform/v1alpha1`.
 
@@ -510,4 +512,4 @@ It should not yet be described as:
 
 That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.
 
-The conservative release label is `v0.3.0-beta.1 RCA contract beta`.
+The conservative release label is `v0.3.0-beta.2 RCA contract beta`.

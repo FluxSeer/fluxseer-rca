@@ -1,12 +1,26 @@
-# FluxAgent Product Requirements Baseline
+# FluxSeer RCA Product Requirements Baseline
 
-Last updated: 2026-07-23
+Last updated: 2026-07-30
 
 This document consolidates the product requirements that should guide README, architecture, CRD, and release-scope wording.
 
 ## Product Positioning
 
-FluxAgent is a Kubernetes-native control plane for evidence-verifiable root cause analysis.
+FluxSeer RCA is the forward-looking product name for the Kubernetes-native
+control plane for evidence-verifiable root cause analysis currently published
+as FluxAgent.
+
+Current compatibility name:
+
+```text
+FluxAgent
+```
+
+Target product name:
+
+```text
+FluxSeer RCA
+```
 
 Long-term positioning:
 
@@ -14,13 +28,20 @@ Long-term positioning:
 Kubernetes-native, evidence-verifiable RCA control plane.
 ```
 
+Product philosophy:
+
+```text
+FluxSeer RCA turns RCA into a governed, evidence-verifiable,
+and replayable Kubernetes-native workflow.
+```
+
 Current release scope:
 
 ```text
-v0.2.0-beta.1 is a published prerelease focused on read-only RCA workflows.
+v0.3.0-beta.2 is a published prerelease with the frozen v0.3 RCA status contract, hardened read-only defaults, least-privilege default RBAC, GHCR images, Helm OCI packaging, and verified provenance.
 ```
 
-The long-term product positioning is intentionally narrower than a general AI SRE agent. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it.
+The long-term product positioning is intentionally narrower than a general AI SRE agent. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it. The product rename must not be used as a shortcut for breaking the current v1alpha1 API, metric, annotation, or release-artifact compatibility surfaces.
 
 ## Product Principles
 
@@ -93,6 +114,17 @@ Remediation must remain downstream from RCA and must not grant reasoning provide
 
 FluxAgent exists to give Kubernetes platform teams an auditable RCA workflow substrate without requiring them to adopt a black-box AI monitoring agent, a full replacement observability stack, or a specific model vendor.
 
+The core advantage is not that FluxAgent can also use AI to look at Kubernetes problems. The core advantage is that it turns temporary, opaque, and hard-to-repeat RCA into governed workflow state.
+
+FluxAgent should solve operational problems platform teams actually feel:
+
+- nobody knows what was checked during an incident
+- different responders reach different conclusions for the same symptoms
+- AI answers cannot be tied back to evidence
+- sensitive data transmission is invisible or uncontrolled
+- model upgrades cannot be evaluated against previous investigations
+- incident knowledge does not become reusable assets
+
 The intended value is:
 
 - teams define what matters through native Kubernetes resources
@@ -105,6 +137,88 @@ The intended value is:
 - optional remediation remains guarded and secondary
 
 This project intentionally accepts some YAML and CRD learning cost in exchange for high customizability, provider neutrality, lower default resource usage, and security-first data boundaries.
+
+The minimum compelling promise is:
+
+```text
+Every important RCA claim can be traced to evidence.
+Every hosted provider transmission can be governed and audited.
+Every investigation can become a reusable replay or evaluation input.
+```
+
+FluxAgent should become useful first for teams that already have Kubernetes, Prometheus, Loki, Alertmanager, and GitOps, but need AI-assisted RCA to satisfy platform governance instead of bypassing it.
+
+## Product Moats
+
+### RCA Contract
+
+FluxAgent should standardize:
+
+- verdict
+- claim
+- evidence linkage
+- missing evidence
+- degradation semantics
+- execution metadata
+
+### Replay Corpus
+
+FluxAgent should make completed investigations reusable for:
+
+- provider regression tests
+- prompt and model upgrade comparison
+- heuristic regression
+- verifier regression
+- rule-pack evaluation
+- offline reruns without querying production datasources
+
+### Policy Governance
+
+FluxAgent should keep these controls explicit and auditable:
+
+- query policy
+- data classification
+- redaction
+- hosted provider egress
+- evidence retention
+- RBAC profiles
+
+### Kubernetes Ecosystem Integration
+
+FluxAgent should integrate through Kubernetes-native surfaces:
+
+- `RiskRule`
+- `InvestigationRequest`
+- `RiskSignal`
+- Prometheus and Alertmanager
+- Argo CD and Argo Rollouts
+- Kyverno or Gatekeeper
+- Grafana
+- GitHub and notification systems
+
+### Community Assets
+
+The long-term community asset should be high-quality, replayable, and verifiable Kubernetes incident knowledge:
+
+- web API profiles
+- worker profiles
+- queue profiles
+- database client profiles
+- ingress profiles
+- resource contention profiles
+- traffic anomaly profiles
+
+## Non-Goals And False Wedges
+
+FluxAgent should avoid product directions that dilute the control-plane value:
+
+- building another AI Kubernetes chatbot
+- claiming that CRDs alone make a control plane
+- treating provider count as the main product value
+- making automatic remediation the proof of completeness
+- prioritizing dashboard or Slack UX before replay, policy, and contract quality
+
+The project should first prove that it can produce trusted, traceable, and repeatable RCA. Autonomous action remains downstream and guarded.
 
 ## Security Principles
 
@@ -125,21 +239,25 @@ Required security posture:
 
 ## Current Runtime Scope
 
-The current verified beta candidate includes:
+The current published beta release includes:
 
-- `RiskRule`-driven recurring detection
-- `DataSource`-backed evidence collection
-- `ModelProvider`-backed RCA generation
-- `RiskSignal` output with evidence and RCA status for read-only rule evaluation
-- `InvestigationRequest` ad-hoc read-only investigation
+- canonical `InvestigationRequest` ad-hoc read-only investigation
+- structured `InvestigationRequest.status` with verdict, claims, alternative hypotheses, missing evidence, degradation, execution, lineage, identity, and compatibility projections
+- `RiskRule`-driven recurring detection and baseline rule packs as bootstrap entrypoints
+- `DataSource`-backed evidence collection for Kubernetes Events, Prometheus, and Loki
+- `ModelProvider`-backed RCA generation with heuristic default plus optional OpenAI, Claude, and Gemini API providers
+- explicit hosted-provider data egress policy on the canonical `InvestigationRequest` path
+- `RiskSignal` output with materialized findings, compact evidence references, and compatibility RCA fields for read-only rule evaluation
 - `fluxagent investigate` as a CLI wrapper around `InvestigationRequest`
 - optional discovered `RiskSignal` materialization from `InvestigationRequest`
 - webhook notification
 - TTL cleanup for `RiskSignal` and `InvestigationRequest`
+- read-only Helm default with the legacy Deployment watcher disabled
+- least-privilege default RBAC without remediation or executor mutation permissions
 
 The current scope does not include production-grade autonomous remediation.
 
-The current scope includes the first structured `InvestigationRequest.status` contract. `v0.3` should harden claim verification, richer evidence provenance, abstention semantics, alternative hypothesis disposition, missing-evidence semantics, and partial-failure behavior.
+The current scope includes the frozen v0.3 structured `InvestigationRequest.status` contract. Future stabilization should improve runtime coverage, fixtures, dashboards, provider accuracy, and compatibility tests without changing the frozen schema unless an explicit schema-freeze exception is accepted.
 
 ## Baseline Rule Pack Contract
 
@@ -286,7 +404,7 @@ These capabilities must not all be granted to the same pod or ServiceAccount.
 
 ## Trustworthy RCA Contract
 
-FluxAgent now includes the first compatibility RCA status contract for `InvestigationRequest`. The next major product hardening target is to add stricter structured RCA fields and make the contract more evidence-verifiable across provider adapters and partial-failure cases.
+FluxAgent now includes the frozen v0.3 structured RCA status contract for `InvestigationRequest`. The next product hardening target is runtime validation, replay coverage, dashboards, provider accuracy, and real-cluster compatibility without changing the frozen schema.
 
 The contract should make this relationship explicit:
 
@@ -296,7 +414,7 @@ Claim
 -> Verification status
 ```
 
-Implemented in `v0.2.0-beta.1`:
+Compatibility status projections:
 
 - summary
 - hypothesis
@@ -306,7 +424,7 @@ Implemented in `v0.2.0-beta.1`:
 - linked discovered `RiskSignal` reference
 - workflow and readiness conditions
 
-Target for `v0.3`:
+Canonical v0.3 status fields:
 
 - verdict summary and outcome
 - root cause entity
@@ -373,16 +491,16 @@ Discovered-signal emission must carry lineage and avoid investigation loops. By 
 
 ### InvestigationRequest Modes
 
-`InvestigationRequest.spec.dataSources[]` and `InvestigationRequest.spec.queries[]` should be mutually exclusive.
+`InvestigationRequest.spec.dataSources[]` and `InvestigationRequest.spec.queries[]` are mutually exclusive planning modes.
 
-Required behavior:
+Runtime behavior:
 
 - exactly one mode should be specified
-- if both are set, reject the spec or surface `InvalidSpec`
-- if neither is set, reject the spec or surface `InvalidSpec`
+- if both are set, surface `InvalidSpec`
+- if neither is set, surface `InvalidSpec`
 - controller behavior should not silently prefer one mode over the other
 
-Preferred CRD validation:
+Optional future CRD admission validation:
 
 ```yaml
 x-kubernetes-validations:

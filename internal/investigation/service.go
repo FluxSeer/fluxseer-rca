@@ -754,6 +754,12 @@ func (s *Service) resolveCollectionPlan(spec v1alpha1.InvestigationRequestSpec, 
 			Message: "spec.dataSources or spec.queries must include at least one datasource reference",
 		}, nil
 	}
+	if len(spec.Queries) > 0 && len(spec.DataSources) > 0 {
+		return nil, nil, &Issue{
+			Reason:  "InvalidSpec",
+			Message: "spec.dataSources and spec.queries are mutually exclusive; use dataSources for controller-planned evidence or queries for user-planned evidence",
+		}, nil
+	}
 	if s.Registry == nil {
 		return nil, nil, &Issue{
 			Reason:  "DatasourceRegistryUnavailable",
