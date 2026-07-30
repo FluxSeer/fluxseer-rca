@@ -788,6 +788,101 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 	}
 }
 
+func TestInvestigationRequestReconcilerPersistsFallbackEgressAttempts(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-denied", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "Deployment",
+				Name:       "open-api",
+				APIVersion: "apps/v1",
+			},
+			DataSources:      []v1alpha1.LocalObjectReference{{Name: "prometheus"}},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "primary-broken"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+		},
+	}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
+	}
+	primary := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system", Generation: 3},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "broken",
+			Model:    "broken-model",
+			FallbackProviderRef: v1alpha1.LocalObjectReference{
+				Name: "fallback-openai",
+			},
+		},
+	}
+	fallback := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system", Generation: 7},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			Model:    "gpt-test",
+		},
+	}
+	kubeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithObjects(request, deployment, primary, fallback).
+		Build()
+	openai := &countingModelProvider{name: "openai"}
+	reconciler := &InvestigationRequestReconciler{
+		Client: kubeClient,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client:   kubeClient,
+			Registry: datasource.NewRegistry(fakeInvestigationDataSource{name: "prometheus", queryType: domain.QueryTypeMetric}),
+			Resolver: modelgateway.KubeResolver{Client: kubeClient},
+			Gateway: &modelgateway.Gateway{
+				Base:      knowledge.NewBase(),
+				Providers: model.NewRegistry(failingControllerModelProvider{name: "broken"}, openai),
+				Resolver:  modelgateway.KubeResolver{Client: kubeClient},
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 7, 6, 12, 30, 0, 0, time.UTC) },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace}}); err != nil {
+		t.Fatal(err)
+	}
+	var stored v1alpha1.InvestigationRequest
+	if err := kubeClient.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if openai.calls != 0 {
+		t.Fatalf("expected fallback hosted provider not to be called, got %d", openai.calls)
+	}
+	if stored.Status.Execution == nil {
+		t.Fatalf("expected failed execution with egress attempts, got %#v", stored.Status.Execution)
+	}
+	if len(stored.Status.Execution.EgressAttempts) != 2 {
+		t.Fatalf("expected primary and fallback egress attempts, got %#v", stored.Status.Execution.EgressAttempts)
+	}
+	if stored.Status.Execution.EgressAttempts[0].ProviderRef == nil ||
+		stored.Status.Execution.EgressAttempts[0].ProviderRef.Name != "primary-broken" ||
+		stored.Status.Execution.EgressAttempts[0].Result != "ProviderUnavailable" {
+		t.Fatalf("expected primary unavailable attempt, got %#v", stored.Status.Execution.EgressAttempts[0])
+	}
+	fallbackAttempt := stored.Status.Execution.EgressAttempts[1]
+	if fallbackAttempt.ProviderRef == nil || fallbackAttempt.ProviderRef.Name != "fallback-openai" {
+		t.Fatalf("expected fallback provider ref, got %#v", fallbackAttempt.ProviderRef)
+	}
+	if fallbackAttempt.Decision != "Rejected" || fallbackAttempt.Result != "ProviderDataPolicyDenied" || fallbackAttempt.EvidenceBundleDigest == "" {
+		t.Fatalf("expected rejected fallback attempt with digest, got %#v", fallbackAttempt)
+	}
+}
+
 func TestInvestigationRequestReconcilerBlocksRiskSignalSourceByDefault(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
@@ -1761,6 +1856,21 @@ func (p *countingModelProvider) Complete(context.Context, domain.ModelRequest) (
 			"actionType":      "notification.sendSlack",
 		},
 	}, nil
+}
+
+type failingControllerModelProvider struct {
+	name string
+}
+
+func (p failingControllerModelProvider) Name() string {
+	return p.name
+}
+
+func (p failingControllerModelProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	return domain.ModelResponse{}, &model.ProviderError{
+		Reason:  "ProviderUnavailable",
+		Message: "provider unavailable",
+	}
 }
 
 func checkpointReasoningOutput() domain.ReasoningOutput {

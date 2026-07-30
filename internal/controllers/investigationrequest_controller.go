@@ -790,8 +790,12 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	if rca.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, rca.Issue.Message, request.Generation, now)
 		applyInvestigationFailure(request, rca.Issue.Reason, rca.Issue.Message, v1alpha1.InvestigationStageReasoning)
-		if rca.Issue.EgressAudit != nil {
-			request.Status.Execution = buildRejectedRCAExecution(request, preflight, evidence, rca.Issue.EgressAudit, investigationExecutionID(request, preflight, evidence), now)
+		if rca.Issue.EgressAudit != nil || len(rca.EgressAttempts) > 0 {
+			audit := rca.Issue.EgressAudit
+			if audit == nil {
+				audit = rca.PrimaryEgress
+			}
+			request.Status.Execution = buildRejectedRCAExecution(request, preflight, evidence, audit, rca.EgressAttempts, investigationExecutionID(request, preflight, evidence), now)
 		}
 		rcametrics.RecordInvestigation(request.Namespace, providerType(preflight.Provider), "failed", "unknown")
 		request.Status.Summary = evidence.Summary
@@ -984,6 +988,13 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 		providerResult.Classification = &classification
 	}
 	egressAudit := providerEgressAudit(preflight.Provider, evidence)
+	if rca.PrimaryEgress != nil {
+		egressAudit = rca.PrimaryEgress
+	}
+	egressAttempts := providerEgressAttempts(preflight.Provider, egressAudit, "Allowed")
+	if len(rca.EgressAttempts) > 0 {
+		egressAttempts = copyProviderEgressAttempts(rca.EgressAttempts)
+	}
 	return &v1alpha1.RCAExecution{
 		ID:                      executionID,
 		State:                   state,
@@ -996,7 +1007,7 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 		CanonicalizationVersion: rcaCanonicalizationVersion,
 		ReasoningPolicyVersion:  reasoningPolicyVersion,
 		EgressAudit:             egressAudit,
-		EgressAttempts:          providerEgressAttempts(preflight.Provider, egressAudit, "Allowed"),
+		EgressAttempts:          egressAttempts,
 		ControllerVersion:       version.Current().Version,
 		AttemptCount:            1,
 		Attempts: []v1alpha1.RCAExecutionAttempt{
@@ -1014,7 +1025,11 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 	}
 }
 
-func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, audit *v1alpha1.ProviderEgressAudit, executionID string, now time.Time) *v1alpha1.RCAExecution {
+func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, audit *v1alpha1.ProviderEgressAudit, attempts []v1alpha1.ProviderEgressAttempt, executionID string, now time.Time) *v1alpha1.RCAExecution {
+	egressAttempts := providerEgressAttempts(preflight.Provider, audit, "Rejected")
+	if len(attempts) > 0 {
+		egressAttempts = copyProviderEgressAttempts(attempts)
+	}
 	return &v1alpha1.RCAExecution{
 		ID:                      executionID,
 		State:                   "ProviderDataPolicyRejected",
@@ -1027,10 +1042,24 @@ func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight
 		CanonicalizationVersion: rcaCanonicalizationVersion,
 		ReasoningPolicyVersion:  reasoningPolicyVersion,
 		EgressAudit:             audit,
-		EgressAttempts:          providerEgressAttempts(preflight.Provider, audit, "Rejected"),
+		EgressAttempts:          egressAttempts,
 		ControllerVersion:       version.Current().Version,
 		DurationSeconds:         investigationDurationSeconds(request, now),
 	}
+}
+
+func copyProviderEgressAttempts(in []v1alpha1.ProviderEgressAttempt) []v1alpha1.ProviderEgressAttempt {
+	out := make([]v1alpha1.ProviderEgressAttempt, len(in))
+	copy(out, in)
+	for i := range out {
+		if in[i].ProviderRef != nil {
+			ref := *in[i].ProviderRef
+			out[i].ProviderRef = &ref
+		}
+		out[i].EvidenceKinds = append([]string(nil), in[i].EvidenceKinds...)
+		out[i].SensitivityTagsSent = append([]string(nil), in[i].SensitivityTagsSent...)
+	}
+	return out
 }
 
 func providerRequestIDFromRCA(rca investigation.RCAResult) string {

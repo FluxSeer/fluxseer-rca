@@ -32,15 +32,32 @@ type Gateway struct {
 	Resolver  ProviderResolver
 }
 
+type Trace struct {
+	Attempts []Attempt
+}
+
+type Attempt struct {
+	Provider *v1alpha1.ModelProvider
+	Result   string
+	Reason   string
+}
+
 func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider, target domain.ResourceRef, matches []rule.Match, now time.Time) (domain.ReasoningOutput, error) {
 	return g.AnalyzeIngestion(ctx, provider, buildIngestionOutput(target, matches, now))
 }
 
 func (g *Gateway) AnalyzeIngestion(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput) (domain.ReasoningOutput, error) {
-	return g.analyzeIngestionWithFallback(ctx, provider, input, map[string]struct{}{})
+	result, _, err := g.AnalyzeIngestionWithTrace(ctx, provider, input)
+	return result, err
 }
 
-func (g *Gateway) analyzeIngestionWithFallback(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput, visited map[string]struct{}) (domain.ReasoningOutput, error) {
+func (g *Gateway) AnalyzeIngestionWithTrace(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput) (domain.ReasoningOutput, Trace, error) {
+	trace := Trace{}
+	result, err := g.analyzeIngestionWithFallback(ctx, provider, input, map[string]struct{}{}, &trace)
+	return result, trace, err
+}
+
+func (g *Gateway) analyzeIngestionWithFallback(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput, visited map[string]struct{}, trace *Trace) (domain.ReasoningOutput, error) {
 	if provider == nil {
 		return domain.ReasoningOutput{}, &AnalyzeError{
 			Reason:  "ProviderUnavailable",
@@ -60,6 +77,7 @@ func (g *Gateway) analyzeIngestionWithFallback(ctx context.Context, provider *v1
 
 	result, err := g.analyzeSingleProvider(ctx, provider, input)
 	if err != nil {
+		recordTraceAttempt(trace, provider, err)
 		analyzeErr, ok := err.(*AnalyzeError)
 		if !ok || !shouldAttemptProviderFallback(provider, analyzeErr.Reason) {
 			return domain.ReasoningOutput{}, err
@@ -68,9 +86,26 @@ func (g *Gateway) analyzeIngestionWithFallback(ctx context.Context, provider *v1
 		if fallbackErr != nil {
 			return domain.ReasoningOutput{}, fallbackErr
 		}
-		return g.analyzeIngestionWithFallback(ctx, fallbackProvider, input, visited)
+		return g.analyzeIngestionWithFallback(ctx, fallbackProvider, input, visited, trace)
 	}
+	recordTraceAttempt(trace, provider, nil)
 	return result, nil
+}
+
+func recordTraceAttempt(trace *Trace, provider *v1alpha1.ModelProvider, err error) {
+	if trace == nil || provider == nil {
+		return
+	}
+	attempt := Attempt{Provider: provider, Result: "Succeeded", Reason: "Completed"}
+	if err != nil {
+		attempt.Result = "Failed"
+		attempt.Reason = "ProviderRequestFailed"
+		if analyzeErr, ok := err.(*AnalyzeError); ok {
+			attempt.Result = analyzeErr.Reason
+			attempt.Reason = analyzeErr.Reason
+		}
+	}
+	trace.Attempts = append(trace.Attempts, attempt)
 }
 
 func (g *Gateway) analyzeSingleProvider(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput) (domain.ReasoningOutput, error) {
