@@ -172,6 +172,41 @@ type AgentActionSpec struct {
 	RollbackPlan []string          `json:"rollbackPlan,omitempty"`
 }
 
+type AgentActionApprovalStatus struct {
+	Approved           bool         `json:"approved,omitempty"`
+	ApprovedBy         string       `json:"approvedBy,omitempty"`
+	Source             string       `json:"source,omitempty"`
+	ActionDigest       string       `json:"actionDigest,omitempty"`
+	ApprovedGeneration int64        `json:"approvedGeneration,omitempty"`
+	ApprovedAt         *metav1.Time `json:"approvedAt,omitempty"`
+}
+
+type AgentActionDryRunStatus struct {
+	Result     string       `json:"result,omitempty"`
+	RecordedAt *metav1.Time `json:"recordedAt,omitempty"`
+}
+
+type AgentActionExecutionStatus struct {
+	Phase      string       `json:"phase,omitempty"`
+	Executor   string       `json:"executor,omitempty"`
+	Summary    string       `json:"summary,omitempty"`
+	FinishedAt *metav1.Time `json:"finishedAt,omitempty"`
+}
+
+type AgentActionEffectivenessStatus struct {
+	Phase           string                     `json:"phase,omitempty"`
+	Message         string                     `json:"message,omitempty"`
+	VerificationRef *NamespacedObjectReference `json:"verificationRef,omitempty"`
+}
+
+type AgentActionStatus struct {
+	ResourceStatus `json:",inline"`
+	Approval       *AgentActionApprovalStatus      `json:"approval,omitempty"`
+	DryRunResult   *AgentActionDryRunStatus        `json:"dryRunResult,omitempty"`
+	Execution      *AgentActionExecutionStatus     `json:"execution,omitempty"`
+	Effectiveness  *AgentActionEffectivenessStatus `json:"effectiveness,omitempty"`
+}
+
 type RiskSignal struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -204,8 +239,8 @@ type AgentAction struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AgentActionSpec `json:"spec,omitempty"`
-	Status ResourceStatus  `json:"status,omitempty"`
+	Spec   AgentActionSpec   `json:"spec,omitempty"`
+	Status AgentActionStatus `json:"status,omitempty"`
 }
 
 type AgentActionList struct {
@@ -381,6 +416,35 @@ func (in *AgentAction) DeepCopyInto(out *AgentAction) {
 	}
 	if in.Spec.RollbackPlan != nil {
 		out.Spec.RollbackPlan = append([]string(nil), in.Spec.RollbackPlan...)
+	}
+	if in.Status.Approval != nil {
+		approval := *in.Status.Approval
+		if in.Status.Approval.ApprovedAt != nil {
+			approval.ApprovedAt = in.Status.Approval.ApprovedAt.DeepCopy()
+		}
+		out.Status.Approval = &approval
+	}
+	if in.Status.DryRunResult != nil {
+		dryRun := *in.Status.DryRunResult
+		if in.Status.DryRunResult.RecordedAt != nil {
+			dryRun.RecordedAt = in.Status.DryRunResult.RecordedAt.DeepCopy()
+		}
+		out.Status.DryRunResult = &dryRun
+	}
+	if in.Status.Execution != nil {
+		execution := *in.Status.Execution
+		if in.Status.Execution.FinishedAt != nil {
+			execution.FinishedAt = in.Status.Execution.FinishedAt.DeepCopy()
+		}
+		out.Status.Execution = &execution
+	}
+	if in.Status.Effectiveness != nil {
+		effectiveness := *in.Status.Effectiveness
+		if in.Status.Effectiveness.VerificationRef != nil {
+			ref := *in.Status.Effectiveness.VerificationRef
+			effectiveness.VerificationRef = &ref
+		}
+		out.Status.Effectiveness = &effectiveness
 	}
 }
 

@@ -227,10 +227,35 @@ func buildAgentAction(input domain.IngestionOutput, reasoning domain.ReasoningOu
 			TTLSeconds:   1800,
 			RollbackPlan: reasoning.Remediation.RollbackPlan,
 		},
-		Status: v1alpha1.ResourceStatus{
-			Phase:     v1alpha1.PhasePolicyChecked,
-			Message:   decision.Reason,
-			UpdatedAt: metav1.NewTime(now),
+		Status: v1alpha1.AgentActionStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{
+				Phase:     v1alpha1.PhasePolicyChecked,
+				Message:   decision.Reason,
+				UpdatedAt: metav1.NewTime(now),
+			},
+			Approval: &v1alpha1.AgentActionApprovalStatus{
+				Approved:           decision.Action == domain.ApprovalAuto,
+				ApprovedBy:         decision.ApprovedBy,
+				Source:             "ControlPlane",
+				ApprovedGeneration: 1,
+				ApprovedAt:         approvalTime(decision, now),
+			},
+			DryRunResult: &v1alpha1.AgentActionDryRunStatus{
+				Result:     decision.DryRunResult,
+				RecordedAt: ptrTime(now),
+			},
 		},
 	}
+}
+
+func approvalTime(decision domain.ApprovalDecision, now time.Time) *metav1.Time {
+	if decision.Action != domain.ApprovalAuto {
+		return nil
+	}
+	return ptrTime(now)
+}
+
+func ptrTime(t time.Time) *metav1.Time {
+	mt := metav1.NewTime(t)
+	return &mt
 }
