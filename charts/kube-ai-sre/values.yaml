@@ -28,7 +28,10 @@ features:
     enabled: false
 
 rbac:
-  profile: readOnlyRCA
+  # Empty means derive the profile from feature flags:
+  # readOnlyRCA, remediation, or experimentalExecutor.
+  # Set explicitly only as an advanced override.
+  profile: ""
 
 metrics:
   prometheusRule:

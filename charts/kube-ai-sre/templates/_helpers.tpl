@@ -33,6 +33,18 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end -}}
 
+{{- define "fluxagent.effectiveRbacProfile" -}}
+{{- if .Values.rbac.profile -}}
+{{- .Values.rbac.profile -}}
+{{- else if .Values.features.experimentalExecutor.enabled -}}
+experimentalExecutor
+{{- else if or .Values.controller.enableRemediation .Values.features.remediation.enabled -}}
+remediation
+{{- else -}}
+readOnlyRCA
+{{- end -}}
+{{- end -}}
+
 {{- define "fluxagent.rulePackTargetSelector" -}}
 {{- $root := .root -}}
 {{- $selector := default dict .selector -}}

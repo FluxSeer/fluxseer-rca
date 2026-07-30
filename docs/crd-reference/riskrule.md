@@ -32,6 +32,11 @@ Supported query types include:
 - `DirectRiskSignal`: default v0.2-compatible path. The controller materializes a `RiskSignal` directly.
 - `CreateRequest`: opt-in v0.3 path. The controller creates or updates a deterministic `InvestigationRequest` and lets `InvestigationRequest.status` own the canonical RCA result.
 
+For compatibility, an unset mode still behaves as `DirectRiskSignal`. Built-in
+Helm rule packs prefer `CreateRequest` so new installs route RCA through the
+canonical `InvestigationRequest` workflow by default while still allowing
+optional `RiskSignal` projection through `createRiskSignal: true`.
+
 Example:
 
 ```yaml

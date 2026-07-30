@@ -64,7 +64,7 @@ Default:
 
 ```yaml
 rbac:
-  profile: readOnlyRCA
+  profile: ""
 features:
   remediation:
     enabled: false
@@ -74,7 +74,7 @@ features:
     enabled: false
 ```
 
-`readOnlyRCA` keeps workload access read-only and grants write access only to FluxAgent-owned RCA resources and statuses.
+An empty `rbac.profile` lets Helm derive the profile from feature flags. The default derived profile is `readOnlyRCA`, which keeps workload access read-only and grants write access only to FluxAgent-owned RCA resources and statuses.
 
 Experimental remediation requires explicit opt-in:
 
@@ -82,8 +82,6 @@ Experimental remediation requires explicit opt-in:
 features:
   remediation:
     enabled: true
-rbac:
-  profile: remediation
 ```
 
 Executor-like permissions such as Job or ConfigMap mutation require the broader experimental profile:
@@ -94,8 +92,8 @@ features:
     enabled: true
   experimentalExecutor:
     enabled: true
-rbac:
-  profile: experimentalExecutor
 ```
+
+Set `rbac.profile` explicitly only as an advanced override.
 
 These profiles do not change CRD installation. Helm CRDs remain installed for API compatibility; runtime controllers and mutation permissions are what remain disabled by default.
