@@ -770,6 +770,22 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 	if len(audit.SensitivityTagsSent) != 0 {
 		t.Fatalf("expected no sensitivity tags sent on rejection, got %#v", audit)
 	}
+	if len(stored.Status.Execution.EgressAttempts) != 1 {
+		t.Fatalf("expected one rejected egress attempt, got %#v", stored.Status.Execution.EgressAttempts)
+	}
+	attempt := stored.Status.Execution.EgressAttempts[0]
+	if attempt.Ordinal != 1 || attempt.Decision != "Rejected" || attempt.Result != "Rejected" || attempt.Reason != "ClassificationExceeded" {
+		t.Fatalf("expected rejected egress attempt metadata, got %#v", attempt)
+	}
+	if attempt.ProviderRef == nil || attempt.ProviderRef.Name != "openai-provider" || attempt.ProviderRef.Namespace != "fluxagent-system" {
+		t.Fatalf("expected provider ref on rejected egress attempt, got %#v", attempt.ProviderRef)
+	}
+	if attempt.ProviderGeneration != modelProvider.Generation {
+		t.Fatalf("expected provider generation %d, got %d", modelProvider.Generation, attempt.ProviderGeneration)
+	}
+	if attempt.EvidenceBundleDigest == "" || attempt.EvidenceBundleDigest != audit.EvidenceBundleDigest {
+		t.Fatalf("expected attempt digest to match audit digest, got attempt=%q audit=%q", attempt.EvidenceBundleDigest, audit.EvidenceBundleDigest)
+	}
 }
 
 func TestInvestigationRequestReconcilerBlocksRiskSignalSourceByDefault(t *testing.T) {

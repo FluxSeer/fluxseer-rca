@@ -404,6 +404,52 @@ spec:
                           type: string
                         classificationPolicyVersion:
                           type: string
+                    egressAttempts:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          ordinal:
+                            type: integer
+                            format: int32
+                          providerRef:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                          providerGeneration:
+                            type: integer
+                            format: int64
+                          providerType:
+                            type: string
+                          decision:
+                            type: string
+                          result:
+                            type: string
+                          reason:
+                            type: string
+                          evidenceBundleDigest:
+                            type: string
+                          evidenceKinds:
+                            type: array
+                            items:
+                              type: string
+                          sensitivityTagsSent:
+                            type: array
+                            items:
+                              type: string
+                          logSamplesIncluded:
+                            type: boolean
+                          maximumClassificationObserved:
+                            type: string
+                          maximumClassificationAllowed:
+                            type: string
+                          maximumClassificationSent:
+                            type: string
+                          classificationPolicyVersion:
+                            type: string
                     controllerVersion:
                       type: string
                     attemptCount:

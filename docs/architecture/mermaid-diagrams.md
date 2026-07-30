@@ -346,6 +346,7 @@ classDiagram
         +RCAMissingEvidence[] missingEvidence
         +RCADegradation degradation
         +RCAExecution execution
+        +ProviderEgressAttempt[] execution_egressAttempts
         +EvidenceRef[] evidenceRefs
         +InvestigationLineage lineage
         +Condition[] conditions
