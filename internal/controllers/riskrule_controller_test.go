@@ -1029,6 +1029,11 @@ func TestRiskRuleReconcilerUsesReferencedHeuristicModelProvider(t *testing.T) {
 	if riskSignal.Status.RCASummary == "" || riskSignal.Status.RCAHypothesis == "" {
 		t.Fatalf("expected RCA fields to be populated: %#v", riskSignal.Status)
 	}
+	if riskSignal.Status.Projection == nil ||
+		riskSignal.Status.Projection.Mode != "DirectRiskSignalCompatibility" ||
+		!riskSignal.Status.Projection.CompatibilityPath {
+		t.Fatalf("expected direct RiskRule RCA compatibility projection, got %#v", riskSignal.Status.Projection)
+	}
 	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected RCAReady true condition, got %#v", cond)
 	}

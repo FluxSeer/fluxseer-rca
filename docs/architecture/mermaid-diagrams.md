@@ -219,12 +219,14 @@ erDiagram
     RiskSignal {
         object spec_target
         object spec_findingIdentity
+        object spec_investigationRef
         array spec_evidence
         string spec_actionType
         int spec_ttlSeconds
         object spec_parameters
         string status_phase
         string status_rcaSummary
+        object status_projection
     }
 
     RemediationPlan {
@@ -355,6 +357,7 @@ classDiagram
     class RiskSignalSpec {
         +TargetRef target
         +FindingIdentity findingIdentity
+        +NamespacedObjectReference investigationRef
         +string signalType
         +string severity
         +int confidence
@@ -370,6 +373,7 @@ classDiagram
         +string rcaHypothesis
         +string rcaProvider
         +RCACause[] rcaCauses
+        +RiskSignalRCAProjectionStatus projection
         +Condition[] conditions
     }
 

@@ -120,26 +120,35 @@ type RCACause struct {
 	Confidence int    `json:"confidence,omitempty"`
 }
 
+type RiskSignalRCAProjectionStatus struct {
+	Mode              string                     `json:"mode,omitempty"`
+	ProjectedFrom     *NamespacedObjectReference `json:"projectedFrom,omitempty"`
+	CompatibilityPath bool                       `json:"compatibilityPath,omitempty"`
+	Message           string                     `json:"message,omitempty"`
+}
+
 type RiskSignalStatus struct {
 	ResourceStatus `json:",inline"`
-	RCASummary     string             `json:"rcaSummary,omitempty"`
-	RCAHypothesis  string             `json:"rcaHypothesis,omitempty"`
-	RCAProvider    string             `json:"rcaProvider,omitempty"`
-	RCACauses      []RCACause         `json:"rcaCauses,omitempty"`
-	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	RCASummary     string                         `json:"rcaSummary,omitempty"`
+	RCAHypothesis  string                         `json:"rcaHypothesis,omitempty"`
+	RCAProvider    string                         `json:"rcaProvider,omitempty"`
+	RCACauses      []RCACause                     `json:"rcaCauses,omitempty"`
+	Projection     *RiskSignalRCAProjectionStatus `json:"projection,omitempty"`
+	Conditions     []metav1.Condition             `json:"conditions,omitempty"`
 }
 
 type RiskSignalSpec struct {
-	Target          TargetRef         `json:"target"`
-	SignalType      string            `json:"signalType"`
-	FindingIdentity *FindingIdentity  `json:"findingIdentity,omitempty"`
-	ActionType      string            `json:"actionType,omitempty"`
-	Severity        string            `json:"severity"`
-	Confidence      int               `json:"confidence"`
-	DryRun          bool              `json:"dryRun"`
-	TTLSeconds      int64             `json:"ttlSeconds,omitempty"`
-	Evidence        []EvidenceRef     `json:"evidence,omitempty"`
-	Parameters      map[string]string `json:"parameters,omitempty"`
+	Target           TargetRef                  `json:"target"`
+	SignalType       string                     `json:"signalType"`
+	FindingIdentity  *FindingIdentity           `json:"findingIdentity,omitempty"`
+	InvestigationRef *NamespacedObjectReference `json:"investigationRef,omitempty"`
+	ActionType       string                     `json:"actionType,omitempty"`
+	Severity         string                     `json:"severity"`
+	Confidence       int                        `json:"confidence"`
+	DryRun           bool                       `json:"dryRun"`
+	TTLSeconds       int64                      `json:"ttlSeconds,omitempty"`
+	Evidence         []EvidenceRef              `json:"evidence,omitempty"`
+	Parameters       map[string]string          `json:"parameters,omitempty"`
 }
 
 type RemediationStep struct {
@@ -269,9 +278,21 @@ func (in *RiskSignal) DeepCopyInto(out *RiskSignal) {
 	if in.Status.RCACauses != nil {
 		out.Status.RCACauses = append([]RCACause(nil), in.Status.RCACauses...)
 	}
+	if in.Status.Projection != nil {
+		projection := *in.Status.Projection
+		if in.Status.Projection.ProjectedFrom != nil {
+			ref := *in.Status.Projection.ProjectedFrom
+			projection.ProjectedFrom = &ref
+		}
+		out.Status.Projection = &projection
+	}
 	if in.Status.Conditions != nil {
 		out.Status.Conditions = make([]metav1.Condition, len(in.Status.Conditions))
 		copy(out.Status.Conditions, in.Status.Conditions)
+	}
+	if in.Spec.InvestigationRef != nil {
+		ref := *in.Spec.InvestigationRef
+		out.Spec.InvestigationRef = &ref
 	}
 }
 

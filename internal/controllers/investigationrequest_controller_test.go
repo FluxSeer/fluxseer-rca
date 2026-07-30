@@ -364,8 +364,19 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 	if riskSignal.Spec.Target.Name != "open-api" {
 		t.Fatalf("unexpected risk signal target %#v", riskSignal.Spec.Target)
 	}
+	if riskSignal.Spec.InvestigationRef == nil ||
+		riskSignal.Spec.InvestigationRef.Name != storedRequest.Name ||
+		riskSignal.Spec.InvestigationRef.Namespace != storedRequest.Namespace {
+		t.Fatalf("expected promoted risk signal to reference canonical investigation, got %#v", riskSignal.Spec.InvestigationRef)
+	}
 	if riskSignal.Status.RCASummary == "" || riskSignal.Status.RCAHypothesis == "" {
 		t.Fatalf("expected RCA fields on promoted risk signal, got %#v", riskSignal.Status)
+	}
+	if riskSignal.Status.Projection == nil ||
+		riskSignal.Status.Projection.Mode != "InvestigationRequestProjection" ||
+		riskSignal.Status.Projection.ProjectedFrom == nil ||
+		riskSignal.Status.Projection.ProjectedFrom.Name != storedRequest.Name {
+		t.Fatalf("expected investigation projection metadata, got %#v", riskSignal.Status.Projection)
 	}
 	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected RCAReady true on promoted risk signal, got %#v", cond)

@@ -1644,6 +1644,7 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 
 		riskSignal.Spec.Target = resourceToTargetRef(preflight.Target)
 		riskSignal.Spec.SignalType = investigationSignalType(preflight)
+		riskSignal.Spec.InvestigationRef = &v1alpha1.NamespacedObjectReference{Name: request.Name, Namespace: request.Namespace}
 		if request.Status.Lineage != nil && request.Status.Lineage.FindingIdentity != nil {
 			identity := *request.Status.Lineage.FindingIdentity
 			riskSignal.Spec.FindingIdentity = &identity
@@ -1679,6 +1680,11 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 		Reasoning:    rca.Reasoning,
 		ProviderName: request.Status.Provider,
 		Condition:    rcaCondition(metav1.ConditionTrue, "ProviderSucceeded", "RCA promoted from investigation request", now),
+		Projection: &v1alpha1.RiskSignalRCAProjectionStatus{
+			Mode:          "InvestigationRequestProjection",
+			ProjectedFrom: &v1alpha1.NamespacedObjectReference{Name: request.Name, Namespace: request.Namespace},
+			Message:       "RiskSignal contains a compact projection; canonical RCA is owned by InvestigationRequest.status.",
+		},
 	})
 	if statusChangedRiskSignal(original, riskSignal) {
 		if err := r.Status().Update(ctx, riskSignal); err != nil && !recordStatusUpdateConflict("RiskSignal", err) {

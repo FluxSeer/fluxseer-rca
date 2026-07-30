@@ -226,6 +226,7 @@ type rcaResult struct {
 	Reasoning    *domain.ReasoningOutput
 	ProviderName string
 	Condition    *metav1.Condition
+	Projection   *v1alpha1.RiskSignalRCAProjectionStatus
 }
 
 func (r *RiskRuleReconciler) analyzeRCA(ctx context.Context, riskRule *v1alpha1.RiskRule, target rule.Target, matches []rule.Match, now time.Time) (rcaResult, error) {
@@ -745,6 +746,7 @@ func applyRCAResult(status *v1alpha1.RiskSignalStatus, rca rcaResult) {
 	status.RCAHypothesis = ""
 	status.RCAProvider = ""
 	status.RCACauses = nil
+	status.Projection = nil
 
 	if rca.Reasoning != nil {
 		status.RCASummary = rca.Reasoning.RiskSummary
@@ -756,6 +758,20 @@ func applyRCAResult(status *v1alpha1.RiskSignalStatus, rca rcaResult) {
 				Cause:      cause,
 				Confidence: rca.Reasoning.Confidence.Score,
 			})
+		}
+	}
+	if rca.Projection != nil {
+		projection := *rca.Projection
+		if rca.Projection.ProjectedFrom != nil {
+			ref := *rca.Projection.ProjectedFrom
+			projection.ProjectedFrom = &ref
+		}
+		status.Projection = &projection
+	} else if rca.Reasoning != nil {
+		status.Projection = &v1alpha1.RiskSignalRCAProjectionStatus{
+			Mode:              "DirectRiskSignalCompatibility",
+			CompatibilityPath: true,
+			Message:           "RCA compatibility fields were written by direct RiskRule analysis; canonical RCA is owned by InvestigationRequest.status.",
 		}
 	}
 
