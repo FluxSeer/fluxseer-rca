@@ -251,6 +251,7 @@ type RCAExecution struct {
 	ReasoningPolicyVersion  string                     `json:"reasoningPolicyVersion,omitempty"`
 	VerifierVersion         string                     `json:"verifierVersion,omitempty"`
 	EgressAudit             *ProviderEgressAudit       `json:"egressAudit,omitempty"`
+	EgressAttempts          []ProviderEgressAttempt    `json:"egressAttempts,omitempty"`
 	ControllerVersion       string                     `json:"controllerVersion,omitempty"`
 	AttemptCount            int32                      `json:"attemptCount,omitempty"`
 	Attempts                []RCAExecutionAttempt      `json:"attempts,omitempty"`
@@ -272,6 +273,24 @@ type ProviderEgressAudit struct {
 	MaximumClassificationAllowed  string   `json:"maximumClassificationAllowed,omitempty"`
 	MaximumClassificationSent     string   `json:"maximumClassificationSent,omitempty"`
 	ClassificationPolicyVersion   string   `json:"classificationPolicyVersion,omitempty"`
+}
+
+type ProviderEgressAttempt struct {
+	Ordinal                       int32                      `json:"ordinal,omitempty"`
+	ProviderRef                   *NamespacedObjectReference `json:"providerRef,omitempty"`
+	ProviderGeneration            int64                      `json:"providerGeneration,omitempty"`
+	ProviderType                  string                     `json:"providerType,omitempty"`
+	Decision                      string                     `json:"decision,omitempty"`
+	Result                        string                     `json:"result,omitempty"`
+	Reason                        string                     `json:"reason,omitempty"`
+	EvidenceBundleDigest          string                     `json:"evidenceBundleDigest,omitempty"`
+	EvidenceKinds                 []string                   `json:"evidenceKinds,omitempty"`
+	SensitivityTagsSent           []string                   `json:"sensitivityTagsSent,omitempty"`
+	LogSamplesIncluded            bool                       `json:"logSamplesIncluded,omitempty"`
+	MaximumClassificationObserved string                     `json:"maximumClassificationObserved,omitempty"`
+	MaximumClassificationAllowed  string                     `json:"maximumClassificationAllowed,omitempty"`
+	MaximumClassificationSent     string                     `json:"maximumClassificationSent,omitempty"`
+	ClassificationPolicyVersion   string                     `json:"classificationPolicyVersion,omitempty"`
 }
 
 type InvestigationLineageSource struct {
@@ -422,6 +441,22 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 				audit.SensitivityTagsSent = append([]string(nil), in.Status.Execution.EgressAudit.SensitivityTagsSent...)
 			}
 			execution.EgressAudit = &audit
+		}
+		if in.Status.Execution.EgressAttempts != nil {
+			execution.EgressAttempts = make([]ProviderEgressAttempt, len(in.Status.Execution.EgressAttempts))
+			copy(execution.EgressAttempts, in.Status.Execution.EgressAttempts)
+			for i := range execution.EgressAttempts {
+				if in.Status.Execution.EgressAttempts[i].ProviderRef != nil {
+					ref := *in.Status.Execution.EgressAttempts[i].ProviderRef
+					execution.EgressAttempts[i].ProviderRef = &ref
+				}
+				if in.Status.Execution.EgressAttempts[i].EvidenceKinds != nil {
+					execution.EgressAttempts[i].EvidenceKinds = append([]string(nil), in.Status.Execution.EgressAttempts[i].EvidenceKinds...)
+				}
+				if in.Status.Execution.EgressAttempts[i].SensitivityTagsSent != nil {
+					execution.EgressAttempts[i].SensitivityTagsSent = append([]string(nil), in.Status.Execution.EgressAttempts[i].SensitivityTagsSent...)
+				}
+			}
 		}
 		if in.Status.Execution.Attempts != nil {
 			execution.Attempts = make([]RCAExecutionAttempt, len(in.Status.Execution.Attempts))

@@ -983,6 +983,7 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 		classification := dataclassification.BundleClassification(egressEvidenceRefsForAudit(evidence.EvidenceRefs, preflight.Provider.Spec.DataPolicy))
 		providerResult.Classification = &classification
 	}
+	egressAudit := providerEgressAudit(preflight.Provider, evidence)
 	return &v1alpha1.RCAExecution{
 		ID:                      executionID,
 		State:                   state,
@@ -994,7 +995,8 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 		RCASchemaVersion:        rcaSchemaVersion,
 		CanonicalizationVersion: rcaCanonicalizationVersion,
 		ReasoningPolicyVersion:  reasoningPolicyVersion,
-		EgressAudit:             providerEgressAudit(preflight.Provider, evidence),
+		EgressAudit:             egressAudit,
+		EgressAttempts:          providerEgressAttempts(preflight.Provider, egressAudit, "Allowed"),
 		ControllerVersion:       version.Current().Version,
 		AttemptCount:            1,
 		Attempts: []v1alpha1.RCAExecutionAttempt{
@@ -1025,6 +1027,7 @@ func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight
 		CanonicalizationVersion: rcaCanonicalizationVersion,
 		ReasoningPolicyVersion:  reasoningPolicyVersion,
 		EgressAudit:             audit,
+		EgressAttempts:          providerEgressAttempts(preflight.Provider, audit, "Rejected"),
 		ControllerVersion:       version.Current().Version,
 		DurationSeconds:         investigationDurationSeconds(request, now),
 	}
@@ -1056,6 +1059,37 @@ func providerEgressAudit(provider *v1alpha1.ModelProvider, evidence investigatio
 		MaximumClassificationSent:     decision.MaximumSent,
 		ClassificationPolicyVersion:   decision.ClassificationVersion,
 	}
+}
+
+func providerEgressAttempts(provider *v1alpha1.ModelProvider, audit *v1alpha1.ProviderEgressAudit, result string) []v1alpha1.ProviderEgressAttempt {
+	if audit == nil {
+		return nil
+	}
+	return []v1alpha1.ProviderEgressAttempt{providerEgressAttempt(provider, audit, 1, result)}
+}
+
+func providerEgressAttempt(provider *v1alpha1.ModelProvider, audit *v1alpha1.ProviderEgressAudit, ordinal int32, result string) v1alpha1.ProviderEgressAttempt {
+	attempt := v1alpha1.ProviderEgressAttempt{
+		Ordinal:                       ordinal,
+		ProviderRef:                   providerRef(provider),
+		ProviderGeneration:            providerGeneration(provider),
+		ProviderType:                  audit.ProviderType,
+		Decision:                      audit.Decision,
+		Result:                        result,
+		Reason:                        audit.Reason,
+		EvidenceBundleDigest:          audit.EvidenceBundleDigest,
+		EvidenceKinds:                 append([]string(nil), audit.EvidenceKinds...),
+		SensitivityTagsSent:           append([]string(nil), audit.SensitivityTagsSent...),
+		LogSamplesIncluded:            audit.LogSamplesIncluded,
+		MaximumClassificationObserved: audit.MaximumClassificationObserved,
+		MaximumClassificationAllowed:  audit.MaximumClassificationAllowed,
+		MaximumClassificationSent:     audit.MaximumClassificationSent,
+		ClassificationPolicyVersion:   audit.ClassificationPolicyVersion,
+	}
+	if attempt.ProviderType == "" {
+		attempt.ProviderType = providerType(provider)
+	}
+	return attempt
 }
 
 func egressEvidenceRefsForAudit(refs []v1alpha1.EvidenceRef, policy v1alpha1.ModelProviderDataPolicy) []v1alpha1.EvidenceRef {
