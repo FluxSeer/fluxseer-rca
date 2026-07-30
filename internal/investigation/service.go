@@ -161,7 +161,7 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 			}
 		}
 		observations = append(observations, normalized...)
-		evidenceRefs = append(evidenceRefs, evidenceRefsFromObservations(normalized, collected.request)...)
+		evidenceRefs = append(evidenceRefs, evidenceRefsFromObservations(normalized, collected.request, spec.QueryRetention)...)
 		totalRecords += len(filtered.Records)
 	}
 
@@ -1155,7 +1155,7 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 	return obs
 }
 
-func evidenceRefsFromObservations(observations []domain.Observation, req datasource.QueryRequest) []v1alpha1.EvidenceRef {
+func evidenceRefsFromObservations(observations []domain.Observation, req datasource.QueryRequest, retention v1alpha1.QueryRetentionPolicy) []v1alpha1.EvidenceRef {
 	refs := make([]v1alpha1.EvidenceRef, 0, len(observations))
 	for _, observation := range observations {
 		collectedAt := metav1Time(observation.CollectedAt)
@@ -1164,7 +1164,7 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 			Kind:                   string(observation.Type),
 			Source:                 observation.DataSourceRef,
 			Summary:                observation.Summary,
-			Query:                  req.Query,
+			Query:                  retainedQuery(req.Query, retention),
 			QueryDigest:            observation.QueryDigest,
 			ContentDigest:          observation.ContentDigest,
 			DigestAlgorithm:        observation.DigestAlgorithm,
@@ -1190,6 +1190,17 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 		refs = append(refs, ref)
 	}
 	return refs
+}
+
+func retainedQuery(query string, retention v1alpha1.QueryRetentionPolicy) string {
+	switch strings.TrimSpace(retention.Mode) {
+	case v1alpha1.QueryRetentionModeFull:
+		return query
+	case v1alpha1.QueryRetentionModeRedacted:
+		return evidencepkg.NewPatternRedactor().RedactText(query)
+	default:
+		return ""
+	}
 }
 
 func metav1Time(value time.Time) metav1.Time {

@@ -119,6 +119,15 @@ spec:
                       properties:
                         namespaceScoped:
                           type: boolean
+                queryRetention:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                      enum:
+                        - DigestOnly
+                        - Redacted
+                        - Full
                 queryBudget:
                   type: object
                   properties:

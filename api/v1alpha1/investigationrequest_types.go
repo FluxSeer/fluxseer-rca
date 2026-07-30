@@ -12,6 +12,10 @@ const (
 	EvidenceRetentionModeNormalizedSnapshot = "NormalizedSnapshot"
 	EvidenceRetentionModeRawSnapshot        = "RawSnapshot"
 
+	QueryRetentionModeDigestOnly = "DigestOnly"
+	QueryRetentionModeRedacted   = "Redacted"
+	QueryRetentionModeFull       = "Full"
+
 	EvidenceRetentionDeletionPolicyRetain = "Retain"
 	EvidenceRetentionDeletionPolicyDelete = "Delete"
 
@@ -63,6 +67,7 @@ type InvestigationRequestSpec struct {
 	CreateRiskSignal     bool                     `json:"createRiskSignal,omitempty"`
 	EvidenceRequirements EvidenceRequirements     `json:"evidenceRequirements,omitempty"`
 	EvidenceRetention    EvidenceRetentionPolicy  `json:"evidenceRetention,omitempty"`
+	QueryRetention       QueryRetentionPolicy     `json:"queryRetention,omitempty"`
 	QueryBudget          InvestigationQueryBudget `json:"queryBudget,omitempty"`
 	LoopPolicy           InvestigationLoopPolicy  `json:"loopPolicy,omitempty"`
 	TTLSeconds           int64                    `json:"ttlSeconds,omitempty"`
@@ -87,6 +92,10 @@ type EvidenceRetentionEncryption struct {
 
 type EvidenceRetentionAccessPolicy struct {
 	NamespaceScoped bool `json:"namespaceScoped,omitempty"`
+}
+
+type QueryRetentionPolicy struct {
+	Mode string `json:"mode,omitempty"`
 }
 
 type InvestigationQueryBudget struct {

@@ -567,6 +567,9 @@ func validateInvestigationRequestSpecIssue(spec v1alpha1.InvestigationRequestSpe
 		}
 		return &specValidationIssue{Reason: reason, Message: message}
 	}
+	if message := validateQueryRetention(spec.QueryRetention); message != "" {
+		return &specValidationIssue{Reason: "InvalidSpec", Message: message}
+	}
 	if message := validateInvestigationQueryBudget(spec); message != "" {
 		return &specValidationIssue{Reason: "InvalidSpec", Message: message}
 	}
@@ -604,6 +607,15 @@ func validateEvidenceRetention(policy v1alpha1.EvidenceRetentionPolicy) string {
 		return "spec.evidenceRetention.mode=RawSnapshot requires explicit raw evidence retention support and is not supported in this release"
 	default:
 		return "unsupported evidence retention mode: " + mode
+	}
+}
+
+func validateQueryRetention(policy v1alpha1.QueryRetentionPolicy) string {
+	switch mode := strings.TrimSpace(policy.Mode); mode {
+	case "", v1alpha1.QueryRetentionModeDigestOnly, v1alpha1.QueryRetentionModeRedacted, v1alpha1.QueryRetentionModeFull:
+		return ""
+	default:
+		return "unsupported queryRetention mode: " + mode
 	}
 }
 
