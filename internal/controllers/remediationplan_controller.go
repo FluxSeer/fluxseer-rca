@@ -2,8 +2,10 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -80,13 +82,38 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	originalAction := action.DeepCopy()
+	recordedAt := metav1.NewTime(now())
+	action.Status.DryRunResult = &v1alpha1.AgentActionDryRunStatus{
+		Result:     decision.DryRunResult,
+		RecordedAt: &recordedAt,
+	}
 	switch decision.Action {
 	case domain.ApprovalAuto:
-		setResourceStatus(&action.Status, v1alpha1.PhaseApproved, decision.Reason, action.Generation, now())
+		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseApproved, decision.Reason, action.Generation, recordedAt.Time)
+		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
+			Approved:           true,
+			ApprovedBy:         decision.ApprovedBy,
+			Source:             "GuardrailsAutoApproval",
+			ActionDigest:       agentActionSpecDigest(action),
+			ApprovedGeneration: action.Generation,
+			ApprovedAt:         &recordedAt,
+		}
 	case domain.ApprovalManual:
-		setResourceStatus(&action.Status, v1alpha1.PhaseWaitingApproval, decision.Reason, action.Generation, now())
+		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseWaitingApproval, decision.Reason, action.Generation, recordedAt.Time)
+		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
+			Approved:           false,
+			Source:             "ManualApprovalRequired",
+			ActionDigest:       agentActionSpecDigest(action),
+			ApprovedGeneration: action.Generation,
+		}
 	default:
-		setResourceStatus(&action.Status, v1alpha1.PhaseRejected, decision.Reason, action.Generation, now())
+		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseRejected, decision.Reason, action.Generation, recordedAt.Time)
+		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
+			Approved:           false,
+			Source:             "GuardrailsRejected",
+			ActionDigest:       agentActionSpecDigest(action),
+			ApprovedGeneration: action.Generation,
+		}
 	}
 	if statusChangedAction(originalAction, action) {
 		if err := r.Status().Update(ctx, action); err != nil && !recordStatusUpdateConflict("AgentAction", err) {
@@ -109,5 +136,5 @@ func statusChangedPlan(before, after *v1alpha1.RemediationPlan) bool {
 }
 
 func statusChangedAction(before, after *v1alpha1.AgentAction) bool {
-	return before.Status != after.Status
+	return !reflect.DeepEqual(before.Status, after.Status)
 }

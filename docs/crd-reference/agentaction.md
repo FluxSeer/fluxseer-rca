@@ -47,6 +47,10 @@ Represent one executable action after policy review and, when required, human ap
 | `status.message` | string | no | Human-readable execution summary or error. |
 | `status.observedGeneration` | integer | no | Last generation observed by the controller. |
 | `status.updatedAt` | string | no | Timestamp of the latest status update. |
+| `status.approval` | object | no | Controller-observed approval state, including source, generation, and action digest. |
+| `status.dryRunResult` | object | no | Controller-owned dry-run or guardrail result. |
+| `status.execution` | object | no | Executor phase, executor name, summary, and finish time. |
+| `status.effectiveness` | object | no | Post-action effectiveness status. `NotVerified` means execution succeeded but remediation impact was not verified. |
 
 ## Field Notes
 
@@ -71,9 +75,13 @@ Backend-specific parameters passed to the executor.
 
 Approval identity. If this is empty, the reconciler keeps the object in `WaitingApproval`.
 
+This field remains a compatibility input in `v1alpha1`. The controller projects the observed approval state into `status.approval` with a source such as `LegacySpecApprovedBy` or `GuardrailsAutoApproval`, plus an `actionDigest` derived from the desired action spec. Future hardening should replace string-only approval with a non-forgeable approval record.
+
 ### `spec.dryRunResult`
 
 Guardrails or validation output that explains what was checked before execution.
+
+This field remains a compatibility projection. Controller-owned dry-run observations are written to `status.dryRunResult`.
 
 ### `spec.ttlSeconds`
 
@@ -95,6 +103,15 @@ Typical phases:
 ## Execution Model
 
 `AgentActionReconciler` sends approved actions to the executor router. In the current repo, most executors simulate the result and persist a status summary.
+
+Execution success is recorded separately from remediation effectiveness:
+
+```text
+status.execution.phase=Succeeded
+status.effectiveness.phase=NotVerified
+```
+
+`Succeeded` means the executor completed the requested action. It does not mean the underlying incident was resolved.
 
 ## Sample
 
