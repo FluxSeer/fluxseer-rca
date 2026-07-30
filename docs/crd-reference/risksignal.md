@@ -152,7 +152,18 @@ Fields that should not be persisted:
 - `logicalFindingIdentity`: dashboard and long-term correlation using apiVersion/kind/namespace/name references instead of object UIDs.
 - `incidentOccurrence`: per-incident identity using object finding identity, source generation, target generation, and the rounded evidence window bucket.
 
-`status.rcaSummary` and other RCA compatibility fields remain projections. In the canonical v0.3 path, the complete RCA result is owned by `InvestigationRequest.status`; `RiskSignal` stores the materialized finding, lineage, compact evidence references, and compatibility RCA fields required by the v0.2 path.
+### `spec.investigationRef` And RCA Projection
+
+`spec.investigationRef` is set when a `RiskSignal` is materialized from a canonical `InvestigationRequest`. It points consumers back to the authoritative RCA execution record.
+
+`status.projection` describes how the RCA compatibility fields were produced:
+
+- `mode: InvestigationRequestProjection`: `RiskSignal` contains a compact projection of `InvestigationRequest.status`.
+- `mode: DirectRiskSignalCompatibility`: direct `RiskRule` RCA wrote compatibility fields without a canonical `InvestigationRequest`.
+- `projectedFrom`: namespaced reference to the canonical `InvestigationRequest` when available.
+- `compatibilityPath`: `true` for legacy/direct RCA paths.
+
+`status.rcaSummary` and other RCA compatibility fields remain projections. In the canonical v0.3 path, the complete RCA result is owned by `InvestigationRequest.status`; `RiskSignal` stores the materialized finding, lineage, compact evidence references, notification state, and compatibility projection fields required by the v0.2 path.
 
 ### `spec.parameters`
 
