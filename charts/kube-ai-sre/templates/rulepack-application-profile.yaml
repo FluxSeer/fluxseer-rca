@@ -1,0 +1,94 @@
+{{- if .Values.rulePacks.applicationProfiles.enabled }}
+{{- range .Values.rulePacks.applicationProfiles.profiles }}
+{{- $profile := . }}
+{{- $datasource := dig "datasourceRef" "name" "prometheus" $profile }}
+{{- $provider := dig "providerRef" "name" "" $profile }}
+{{- $interval := default "2m" $profile.interval }}
+{{- $window := default "10m" $profile.window }}
+{{- $severity := default "warning" $profile.severity }}
+{{- $signals := default dict $profile.signals }}
+{{- if not (or (dig "requestRate" "enabled" false $signals) (dig "errorRate" "enabled" false $signals) (dig "latencyP95" "enabled" false $signals) (dig "queueDepth" "enabled" false $signals)) }}
+{{- fail (printf "rulePacks.applicationProfiles profile %q must enable at least one signal" $profile.name) }}
+{{- end }}
+---
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: {{ printf "fluxagent-app-%s" $profile.name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "fluxagent.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: rule-pack
+    aiops.platform/rule-pack: application-profile
+    aiops.platform/application-profile: {{ $profile.name | quote }}
+  annotations:
+    aiops.platform/rule-pack.description: "Application-specific signal profile"
+spec:
+  {{- include "fluxagent.rulePackTargetSelector" (dict "root" $ "selector" $.Values.rulePacks.defaultTargetSelector) | nindent 2 }}
+  interval: {{ $interval | quote }}
+  window: {{ $window | quote }}
+  severity: {{ $severity | quote }}
+  signals:
+    {{- with (get $signals "requestRate") }}
+    {{- if .enabled }}
+    - name: request-rate
+      datasourceRef:
+        name: {{ $datasource | quote }}
+      queryType: metric
+      queryTemplate: |
+{{ .queryTemplate | nindent 8 }}
+      threshold:
+        operator: {{ dig "threshold" "operator" ">" . | quote }}
+        value: {{ dig "threshold" "value" 0 . }}
+    {{- end }}
+    {{- end }}
+    {{- with (get $signals "errorRate") }}
+    {{- if .enabled }}
+    - name: error-rate
+      datasourceRef:
+        name: {{ $datasource | quote }}
+      queryType: metric
+      queryTemplate: |
+{{ .queryTemplate | nindent 8 }}
+      threshold:
+        operator: {{ dig "threshold" "operator" ">" . | quote }}
+        value: {{ dig "threshold" "value" 0 . }}
+    {{- end }}
+    {{- end }}
+    {{- with (get $signals "latencyP95") }}
+    {{- if .enabled }}
+    - name: latency-p95
+      datasourceRef:
+        name: {{ $datasource | quote }}
+      queryType: metric
+      queryTemplate: |
+{{ .queryTemplate | nindent 8 }}
+      threshold:
+        operator: {{ dig "threshold" "operator" ">" . | quote }}
+        value: {{ dig "threshold" "value" 0 . }}
+    {{- end }}
+    {{- end }}
+    {{- with (get $signals "queueDepth") }}
+    {{- if .enabled }}
+    - name: queue-depth
+      datasourceRef:
+        name: {{ $datasource | quote }}
+      queryType: metric
+      queryTemplate: |
+{{ .queryTemplate | nindent 8 }}
+      threshold:
+        operator: {{ dig "threshold" "operator" ">" . | quote }}
+        value: {{ dig "threshold" "value" 0 . }}
+    {{- end }}
+    {{- end }}
+  ai:
+    rcaEnabled: true
+    {{- if $provider }}
+    providerRef:
+      name: {{ $provider | quote }}
+    {{- end }}
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true
+{{- end }}
+{{- end }}
