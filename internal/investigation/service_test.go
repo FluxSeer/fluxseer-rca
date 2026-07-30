@@ -279,6 +279,56 @@ func TestServicePreflightReportsMissingDatasource(t *testing.T) {
 	}
 }
 
+func TestServicePreflightRejectsAmbiguousEvidencePlanning(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add aiops scheme: %v", err)
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(
+			&appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod"},
+			},
+		).
+		Build()
+
+	service := &Service{
+		Client: client,
+		Registry: datasource.NewRegistry(
+			fakeDataSource{name: "prometheus", queryType: domain.QueryTypeMetric},
+		),
+		Resolver: modelgateway.KubeResolver{Client: client},
+	}
+
+	result, err := service.Preflight(context.Background(), "prod", v1alpha1.InvestigationRequestSpec{
+		Target: v1alpha1.TargetRef{
+			Namespace: "prod",
+			Kind:      "Deployment",
+			Name:      "open-api",
+		},
+		DataSources: []v1alpha1.LocalObjectReference{{Name: "prometheus"}},
+		Queries: []v1alpha1.InvestigationQuery{{
+			DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus"},
+			QueryType:     string(domain.QueryTypeMetric),
+			Query:         "up",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("preflight failed: %v", err)
+	}
+	if result.DatasourceIssue == nil || result.DatasourceIssue.Reason != "InvalidSpec" {
+		t.Fatalf("expected InvalidSpec datasource issue, got %#v", result.DatasourceIssue)
+	}
+	if !strings.Contains(result.DatasourceIssue.Message, "mutually exclusive") {
+		t.Fatalf("expected mutually exclusive message, got %q", result.DatasourceIssue.Message)
+	}
+}
+
 func TestServicePreflightRejectsDisallowedQueryTemplate(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {

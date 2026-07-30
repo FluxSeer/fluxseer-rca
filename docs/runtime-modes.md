@@ -185,9 +185,9 @@ These states are not the same. A provider can be configured while transmission i
 | Controller-planned evidence | `spec.dataSources[]` | FluxAgent chooses datasource-specific default queries. |
 | User-planned evidence | `spec.queries[]` | User supplies explicit query type, datasource, and query or template. |
 
-These fields should be treated as mutually exclusive. If both are set, the request is ambiguous because FluxAgent cannot tell whether the controller or the user owns the evidence plan.
+These fields are mutually exclusive at runtime. If both are set, the request is ambiguous because FluxAgent cannot tell whether the controller or the user owns the evidence plan, so the controller marks the request `InvalidSpec`.
 
-Recommended validation direction:
+Optional future CRD admission validation direction:
 
 ```yaml
 x-kubernetes-validations:
@@ -195,7 +195,7 @@ x-kubernetes-validations:
     message: "dataSources and queries are mutually exclusive"
 ```
 
-Implementation should choose the exact CEL form based on the generated OpenAPI schema. If both arrays are defaulted to `[]`, this can be simplified to `size(self.dataSources) == 0 || size(self.queries) == 0`.
+Any future CEL implementation should choose the exact form based on the generated OpenAPI schema. If both arrays are defaulted to `[]`, this can be simplified to `size(self.dataSources) == 0 || size(self.queries) == 0`.
 
 ## Evidence Retention
 
@@ -386,5 +386,5 @@ In this beta document, `Supported` means implemented, covered by the current run
 1. Derive RBAC from feature flags or clearly demote `rbac.profile` to an advanced override.
 2. Mark `DirectRiskSignal` and `legacyDeploymentRisk` as migration paths in user-facing docs.
 3. Implement the documented `UnsupportedRetentionMode` runtime behavior for `RawSnapshot`.
-4. Enforce `dataSources[]` and `queries[]` mutual exclusion through CRD validation.
+4. Consider CRD-level CEL validation for the already-enforced `dataSources[]` and `queries[]` runtime mutual exclusion.
 5. Move maintainer-only CI/CD channel details out of runtime-mode guidance.

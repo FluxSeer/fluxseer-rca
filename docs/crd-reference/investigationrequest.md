@@ -179,13 +179,13 @@ When `queryBudget` is configured, FluxAgent rejects invalid limits, excessive lo
 
 ### Mode Contract
 
-`dataSources[]` and `queries[]` represent different planning modes and should be mutually exclusive.
+`dataSources[]` and `queries[]` represent different planning modes and are mutually exclusive at runtime.
 
-Contract hardening target:
+Runtime contract:
 
 - exactly one of `dataSources[]` or `queries[]` is set
-- if both are set, the request is rejected or marked `InvalidSpec`
-- if neither is set, the request is rejected or marked `InvalidSpec`
+- if both are set, the request is marked `InvalidSpec`
+- if neither is set, the request is marked `InvalidSpec`
 - controller behavior should not silently prefer one mode over the other
 
 ## Status
