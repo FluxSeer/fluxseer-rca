@@ -1,6 +1,6 @@
 # FluxAgent Product Requirements Baseline
 
-Last updated: 2026-07-23
+Last updated: 2026-07-30
 
 This document consolidates the product requirements that should guide README, architecture, CRD, and release-scope wording.
 
@@ -17,7 +17,7 @@ Kubernetes-native, evidence-verifiable RCA control plane.
 Current release scope:
 
 ```text
-v0.2.0-beta.1 is a published prerelease focused on read-only RCA workflows.
+v0.3.0-beta.2 is a published prerelease with the frozen v0.3 RCA status contract, hardened read-only defaults, least-privilege default RBAC, GHCR images, Helm OCI packaging, and verified provenance.
 ```
 
 The long-term product positioning is intentionally narrower than a general AI SRE agent. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it.
@@ -125,21 +125,25 @@ Required security posture:
 
 ## Current Runtime Scope
 
-The current verified beta candidate includes:
+The current published beta release includes:
 
-- `RiskRule`-driven recurring detection
-- `DataSource`-backed evidence collection
-- `ModelProvider`-backed RCA generation
-- `RiskSignal` output with evidence and RCA status for read-only rule evaluation
-- `InvestigationRequest` ad-hoc read-only investigation
+- canonical `InvestigationRequest` ad-hoc read-only investigation
+- structured `InvestigationRequest.status` with verdict, claims, alternative hypotheses, missing evidence, degradation, execution, lineage, identity, and compatibility projections
+- `RiskRule`-driven recurring detection and baseline rule packs as bootstrap entrypoints
+- `DataSource`-backed evidence collection for Kubernetes Events, Prometheus, and Loki
+- `ModelProvider`-backed RCA generation with heuristic default plus optional OpenAI, Claude, and Gemini API providers
+- explicit hosted-provider data egress policy on the canonical `InvestigationRequest` path
+- `RiskSignal` output with materialized findings, compact evidence references, and compatibility RCA fields for read-only rule evaluation
 - `fluxagent investigate` as a CLI wrapper around `InvestigationRequest`
 - optional discovered `RiskSignal` materialization from `InvestigationRequest`
 - webhook notification
 - TTL cleanup for `RiskSignal` and `InvestigationRequest`
+- read-only Helm default with the legacy Deployment watcher disabled
+- least-privilege default RBAC without remediation or executor mutation permissions
 
 The current scope does not include production-grade autonomous remediation.
 
-The current scope includes the first structured `InvestigationRequest.status` contract. `v0.3` should harden claim verification, richer evidence provenance, abstention semantics, alternative hypothesis disposition, missing-evidence semantics, and partial-failure behavior.
+The current scope includes the frozen v0.3 structured `InvestigationRequest.status` contract. Future stabilization should improve runtime coverage, fixtures, dashboards, provider accuracy, and compatibility tests without changing the frozen schema unless an explicit schema-freeze exception is accepted.
 
 ## Baseline Rule Pack Contract
 
@@ -286,7 +290,7 @@ These capabilities must not all be granted to the same pod or ServiceAccount.
 
 ## Trustworthy RCA Contract
 
-FluxAgent now includes the first compatibility RCA status contract for `InvestigationRequest`. The next major product hardening target is to add stricter structured RCA fields and make the contract more evidence-verifiable across provider adapters and partial-failure cases.
+FluxAgent now includes the frozen v0.3 structured RCA status contract for `InvestigationRequest`. The next product hardening target is runtime validation, replay coverage, dashboards, provider accuracy, and real-cluster compatibility without changing the frozen schema.
 
 The contract should make this relationship explicit:
 
@@ -296,7 +300,7 @@ Claim
 -> Verification status
 ```
 
-Implemented in `v0.2.0-beta.1`:
+Compatibility status projections:
 
 - summary
 - hypothesis
@@ -306,7 +310,7 @@ Implemented in `v0.2.0-beta.1`:
 - linked discovered `RiskSignal` reference
 - workflow and readiness conditions
 
-Target for `v0.3`:
+Canonical v0.3 status fields:
 
 - verdict summary and outcome
 - root cause entity
