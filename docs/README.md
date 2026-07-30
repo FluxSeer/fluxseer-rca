@@ -8,6 +8,7 @@ FluxAgent is documented as a Kubernetes-native SRE investigation control plane w
 docs/
 ├─ architecture/
 │  ├─ overview.md
+│  ├─ mermaid-diagrams.md
 │  ├─ dependency-neutrality.md
 │  ├─ read-only-flow.md
 │  ├─ investigation-flow.md
@@ -51,6 +52,7 @@ docs/
 ## Start Here
 
 - [architecture/overview.md](architecture/overview.md)
+- [architecture/mermaid-diagrams.md](architecture/mermaid-diagrams.md)
 - [architecture/dependency-neutrality.md](architecture/dependency-neutrality.md)
 - [architecture/read-only-flow.md](architecture/read-only-flow.md)
 - [architecture/investigation-flow.md](architecture/investigation-flow.md)
@@ -93,8 +95,8 @@ docs/
 ## Current Product Truth
 
 - Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
-- Current release scope: `v0.3.0-beta.1` is a published prerelease with frozen RCA contract, published GHCR images, published Helm OCI chart, and verified provenance.
-- Current v0.3 engineering state: `v0.3.0-beta.2` stabilization candidate for runtime default hardening and least-privilege RBAC.
+- Current release scope: `v0.3.0-beta.2` is a published prerelease with frozen RCA contract, runtime default hardening, least-privilege RBAC defaults, published GHCR images, published Helm OCI chart, and verified provenance.
+- Current v0.3 engineering state: post-`v0.3.0-beta.2` stabilization and experimental optimization.
 - Frozen v0.3 API identity: `aiops.platform/v1alpha1`.
 - Capability maturity is tracked in [capability-maturity.md](capability-maturity.md); not every CRD or adapter is part of the default supported path.
 - `RemediationPlan` and `AgentAction` remain guarded experimental expansion paths.
