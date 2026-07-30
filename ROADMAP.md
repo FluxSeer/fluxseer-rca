@@ -177,7 +177,7 @@ The dependency-neutral follow-up work is intentionally split into three PR-sized
 2. capability-based datasource contract
 3. degraded status conditions
 
-See [docs/architecture/v0.2-adapter-neutral-backlog.md](/Users/czhuang/Chongzhe-workspace/HomeLab/FluxSeer/FluxAgent/docs/architecture/v0.2-adapter-neutral-backlog.md:1) for scope, acceptance, and non-goals of each batch.
+See [docs/architecture/v0.2-adapter-neutral-backlog.md](docs/architecture/v0.2-adapter-neutral-backlog.md) for scope, acceptance, and non-goals of each batch.
 
 ### Batch 1: `DataSource` CRD
 
