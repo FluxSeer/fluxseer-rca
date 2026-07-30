@@ -1,4 +1,4 @@
-# FluxAgent
+# FluxSeer RCA
 
 Kubernetes-native SRE RCA control plane for teams that want explicit, auditable, and security-first AI-assisted investigation.
 
@@ -6,9 +6,14 @@ Current release: `v0.3.0-beta.2`
 
 Status: `v0.3 RCA contract frozen, beta.2 published, provenance verified`
 
-FluxAgent turns production signals and operator questions into structured, evidence-linked RCA resources in Kubernetes.
+FluxSeer RCA is the forward-looking product name for the project currently
+published as FluxAgent. Existing `fluxagent` binaries, Helm artifacts, CRDs,
+metrics, and documentation remain compatibility surfaces until a dedicated
+rename release completes the migration.
 
-FluxAgent exists for platform teams that need to answer:
+FluxSeer RCA turns production signals and operator questions into governed, evidence-verifiable, and replayable RCA workflows in Kubernetes.
+
+FluxSeer RCA exists for platform teams that need to answer:
 
 ```text
 What evidence did this RCA use?
@@ -17,11 +22,24 @@ Which datasources failed or degraded?
 Can this investigation be audited, reproduced from recorded query metadata, and compared later?
 ```
 
-FluxAgent is the Kubernetes control plane and audit contract around RCA. It is not an all-in-one monitoring stack, not a free-form cluster agent, and not an autonomous production remediation system.
+FluxSeer RCA is the Kubernetes control plane and audit contract around RCA. It is not an all-in-one monitoring stack, not a free-form cluster agent, and not an autonomous production remediation system.
 
-FluxAgent does not grant reasoning providers unrestricted cluster access. It sends only bounded, normalized, and redacted evidence collected through declared investigation policies and datasource capabilities.
+FluxSeer RCA does not grant reasoning providers unrestricted cluster access. It sends only bounded, normalized, and redacted evidence collected through declared investigation policies and datasource capabilities.
 
 ## Why FluxAgent
+
+RCA often starts as an urgent, one-off investigation and ends as an ephemeral answer in Slack, a dashboard, or a terminal. After the incident, teams may not know which evidence was checked, which model produced the answer, which claims were supported, which data left the cluster, or whether a later model version would produce a worse conclusion.
+
+FluxAgent exists to turn that workflow into durable Kubernetes API state:
+
+```text
+temporary RCA answer
+-> governed investigation workflow
+-> evidence-linked claims
+-> policy-aware reasoning
+-> auditable execution record
+-> replayable evaluation artifact
+```
 
 FluxAgent is built around four product decisions:
 
@@ -31,6 +49,8 @@ FluxAgent is built around four product decisions:
 - Read-only default behavior with heuristic RCA available without external API calls.
 
 This positioning is intentionally narrower than a general AI SRE agent. `RiskRule` is an optional bootstrap signal source, not an attempt to replace Alertmanager or own all Kubernetes detection. Remediation CRDs are optional extensions, not the default product path.
+
+Alert assistants help operators respond faster. FluxAgent helps platform teams standardize and govern how RCA is collected, reasoned about, verified, recorded, and replayed.
 
 ## Minimum Flow
 

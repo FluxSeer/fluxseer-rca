@@ -1,10 +1,20 @@
 # Open Source Positioning
 
-FluxAgent is positioned as a Kubernetes-native control plane for evidence-verifiable RCA, not as a bot tied to one monitoring stack and not as a general-purpose agent shell first.
+FluxSeer RCA is the forward-looking product name for the project currently
+published as FluxAgent. It is positioned as a Kubernetes-native control plane
+for evidence-verifiable RCA, not as a bot tied to one monitoring stack and not
+as a general-purpose agent shell first.
 
-FluxAgent favors explicit Kubernetes-native configuration over automatic discovery. It is for teams that want to define investigation scope, datasource boundaries, and model-provider choices themselves, accepting some CRD learning cost in exchange for customizability, low default resource usage, and auditability.
+Its open-source value is:
 
-Security is part of the product positioning. FluxAgent is read-only by default, secret-minimizing by design, and usable in heuristic-only mode without sending evidence to an external model provider.
+```text
+turn RCA from an ephemeral AI answer
+into governed, evidence-verifiable, replayable Kubernetes workflow state
+```
+
+FluxSeer RCA favors explicit Kubernetes-native configuration over automatic discovery. It is for teams that want to define investigation scope, datasource boundaries, and model-provider choices themselves, accepting some CRD learning cost in exchange for customizability, low default resource usage, and auditability.
+
+Security is part of the product positioning. FluxSeer RCA is read-only by default, secret-minimizing by design, and usable in heuristic-only mode without sending evidence to an external model provider.
 
 ## What Is Open Source Here
 
@@ -53,6 +63,8 @@ That means the current early investigation layer is:
 - reusable investigation orchestration
 - auditable RCA results
 - evidence-linked claims and verification status
+- policy-governed provider egress
+- replayable investigation artifacts
 
 It does not mean:
 
@@ -60,3 +72,17 @@ It does not mean:
 - large chat-first UX work
 - remediation-first expansion
 - competing on the largest rule catalog
+
+## What Should Become Valuable
+
+FluxAgent should create open-source value around assets that platform teams can inspect, adapt, and test:
+
+- stable RCA status contracts
+- rule packs with explicit scope and thresholds
+- replay fixtures
+- provider comparison fixtures
+- verifier rules
+- policy examples for query, egress, classification, and retention
+- Kubernetes-native integration examples
+
+The long-term network effect should come from high-quality, reusable Kubernetes incident knowledge and rule packs, not from hiding diagnosis logic behind a hosted service.
