@@ -83,6 +83,7 @@ Operations and packaging:
 - [Runtime modes](runtime-modes.md)
 - [Helm rule packs](helm-rulepacks.md)
 - [Metrics](metrics.md)
+- [Kubernetes ecosystem integration contract](ecosystem-integration-contract.md)
 - [GitHub repository setup](github-repo.md)
 
 Product positioning:

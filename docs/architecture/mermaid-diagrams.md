@@ -42,9 +42,11 @@ flowchart TB
     GitOps -->|applies CRDs and manifests| KubeAPI
     ExternalAlert -->|future producer creates| KubeAPI
 
-    KubeAPI <-->|watch / status update| FluxAgent
-    FluxAgent -->|read-only list/get/watch| Workloads
-    FluxAgent -->|read events| Events
+    KubeAPI -->|watch events delivered through API server| FluxAgent
+    FluxAgent -->|status updates| KubeAPI
+    FluxAgent -->|list/get/watch workloads and events through RBAC| KubeAPI
+    KubeAPI --> Workloads
+    KubeAPI --> Events
     FluxAgent -->|bounded metric queries| Prometheus
     FluxAgent -->|bounded log queries| Loki
     FluxAgent -->|hosted RCA API call| OpenAI
@@ -137,9 +139,9 @@ flowchart TB
     DSRec --> DSRegistry
     RRRec --> DSRegistry
     RRRec --> TargetDiscovery
-    RRRec --> Gateway
-    RRRec --> RS
-    RRRec --> IR
+    RRRec -.legacy direct RCA compatibility.-> Gateway
+    RRRec -.legacy materialized finding compatibility.-> RS
+    RRRec -->|canonical v0.3 path| IR
     IRRec --> InvSvc
     InvSvc --> DSRegistry
     InvSvc --> QueryPolicy
@@ -236,8 +238,12 @@ erDiagram
         object spec_target
         string spec_actionType
         object spec_parameters
-        string spec_dryRunResult
-        string spec_approvedBy
+        string spec_approvedBy_legacy
+        string spec_dryRunResult_legacy
+        object status_approval
+        object status_dryRunResult
+        object status_execution
+        object status_effectiveness
         string status_phase
     }
 
@@ -311,6 +317,10 @@ classDiagram
         +string maximumClassification
     }
 
+    class QueryRetentionPolicy {
+        +string mode
+    }
+
     class InvestigationRequestSpec {
         +TargetRef target
         +InvestigationTimeRange timeRange
@@ -321,6 +331,7 @@ classDiagram
         +string mode
         +EvidenceRequirements evidenceRequirements
         +EvidenceRetentionPolicy evidenceRetention
+        +QueryRetentionPolicy queryRetention
         +InvestigationQueryBudget queryBudget
         +InvestigationLoopPolicy loopPolicy
         +bool createRiskSignal
@@ -337,6 +348,7 @@ classDiagram
         +RCAExecution execution
         +EvidenceRef[] evidenceRefs
         +InvestigationLineage lineage
+        +Condition[] conditions
     }
 
     class RiskSignalSpec {
@@ -360,8 +372,16 @@ classDiagram
         +Condition[] conditions
     }
 
+    class AgentActionStatus {
+        +AgentActionApprovalStatus approval
+        +AgentActionDryRunStatus dryRunResult
+        +AgentActionExecutionStatus execution
+        +AgentActionEffectivenessStatus effectiveness
+    }
+
     ResourceStatus <|-- InvestigationRequestStatus
     ResourceStatus <|-- RiskSignalStatus
+    ResourceStatus <|-- AgentActionStatus
     EvidenceRef --> DataClassification
     InvestigationRequestSpec --> TargetRef
     InvestigationRequestStatus --> EvidenceRef
@@ -386,15 +406,15 @@ flowchart LR
 
     DSRec -->|owns status only| DSStatus[DataSource.status]
     RRRec -->|owns status and finding materialization| RRStatus[RiskRule.status]
-    RRRec -->|creates / updates| RS[RiskSignal]
-    RRRec -->|optional canonical mode| IR[InvestigationRequest]
+    RRRec -.legacy compatibility creates / updates.-> RS[RiskSignal]
+    RRRec -->|canonical mode creates / updates| IR[InvestigationRequest]
     IRRec -->|owns canonical RCA status| IRStatus[InvestigationRequest.status]
     IRRec -->|optional discovered finding| RS
     RSRec -->|owns TTL and optional downstream transition| RSStatus[RiskSignal.status]
     NotifyRec -->|notification side effect only when configured| Notify[Webhook notification]
     RPRec -->|guardrails and approval state| RPStatus[RemediationPlan.status]
-    RPRec -->|creates or updates action with Approved / WaitingApproval / Rejected state| AA[AgentAction]
-    AARec -->|executes only when spec.approvedBy is set| AAStatus[AgentAction.status]
+    RPRec -->|creates or updates action and status-first approval state| AA[AgentAction]
+    AARec -->|executes only when approval status is satisfied; spec.approvedBy is legacy compatibility| AAStatus[AgentAction.status]
 ```
 
 ## Read-only RiskRule Flow
@@ -535,6 +555,7 @@ flowchart TD
     LocalProvider[Local heuristic provider]
     LocalAudit[Persist local-provider execution metadata]
     LocalResult[Local provider result]
+    CommonRCA[Common RCA result]
     Filter[Filter evidence by allowedEvidenceKinds]
     External{allowExternalTransmission?}
     Tags{Denied sensitivity tag present?}
@@ -548,7 +569,8 @@ flowchart TD
     ResolveFallback[Resolve fallback provider]
     FallbackPolicy[Re-evaluate fallback provider dataPolicy]
     FallbackAllowed{Fallback egress allowed or local?}
-    FallbackAudit[Persist fallback attempt audit]
+    FallbackAllowedAudit[Persist allowed fallback attempt audit]
+    FallbackRejectedAudit[Persist rejected fallback attempt audit]
     FallbackCall[Call fallback provider]
     ProviderResult[Provider result]
     ProviderIssue[Provider issue propagated]
@@ -560,6 +582,8 @@ flowchart TD
     ProviderType -- local heuristic --> LocalProvider
     LocalProvider --> LocalAudit
     LocalAudit --> LocalResult
+    LocalResult --> CommonRCA
+    CommonRCA --> ProviderResult
     ProviderType -- hosted provider --> Filter
     Filter --> External
     External -- no --> Rejected
@@ -580,9 +604,10 @@ flowchart TD
     Fallback -- no --> ProviderIssue
     ResolveFallback --> FallbackPolicy
     FallbackPolicy --> FallbackAllowed
-    FallbackAllowed -- yes --> FallbackAudit
-    FallbackAllowed -- no --> ProviderIssue
-    FallbackAudit --> FallbackCall
+    FallbackAllowed -- yes --> FallbackAllowedAudit
+    FallbackAllowed -- no --> FallbackRejectedAudit
+    FallbackRejectedAudit --> ProviderIssue
+    FallbackAllowedAudit --> FallbackCall
     FallbackCall --> ProviderResult
     Rejected --> RejectedAudit
     RejectedAudit --> Failed
@@ -768,12 +793,12 @@ sequenceDiagram
     participant AAC as AgentActionReconciler
     participant Exec as executor.Router
 
-    Note over RS,AAC: Disabled by default. Requires explicit feature and RBAC profile. Current AgentAction approval and dry-run fields are experimental and tracked for hardening.
+    Note over RS,AAC: Disabled by default. Requires explicit feature and RBAC profile. AgentAction status has approval, dry-run, execution, and effectiveness fields; legacy spec.approvedBy/spec.dryRunResult compatibility is tracked for hardening.
     RS-->>RSC: confirmed signal
     RSC->>RP: optional guarded plan creation
     RP-->>RPC: reconcile plan
     RPC->>Guard: evaluate action type, namespace, severity, approval
-    RPC->>AA: create or update AgentAction with dryRunResult
+    RPC->>AA: create or update AgentAction and status.dryRunResult
     alt rejected by guardrail
         RPC->>RP: status.phase=Rejected
         RPC->>AA: status.phase=Rejected
@@ -782,15 +807,16 @@ sequenceDiagram
     else manual approval required
         RPC->>RP: status.phase=WaitingApproval
         RPC->>AA: status.phase=WaitingApproval
-        AA-->>AAC: reconcile action without spec.approvedBy
+        AA-->>AAC: reconcile action without approved status
         AAC-->>AA: keep WaitingApproval
     else auto approved
         RPC->>RP: status.phase=Approved
-        RPC->>AA: status.phase=Approved and spec.approvedBy set
+        RPC->>AA: status.phase=Approved and status.approval recorded
         AA-->>AAC: reconcile approved action
         AAC->>Exec: execute or simulate
         Exec-->>AAC: result
-        AAC->>AA: status.phase=Succeeded or Failed
+        AAC->>AA: status.execution.phase=Succeeded or Failed
+        AAC->>AA: status.effectiveness remains Pending until post-action verification exists
     end
 ```
 
@@ -806,8 +832,9 @@ flowchart TB
     RBAC[ClusterRole / Role / Bindings]
     Secrets[Provider Secret in controller namespace]
     SecretOwner[User / Secret manager]
-    ReadOnly[default read-only profile]
-    Remediate[experimentalExecutor profile]
+    ReadOnly[derived read-only profile]
+    Remediate[derived experimentalExecutor profile]
+    Validation[Helm fail-fast validation]
 
     Values --> Chart
     Chart --> CRDs
@@ -817,8 +844,9 @@ flowchart TB
     SecretOwner --> Secrets
     RBAC -->|namespaced Secret reader| Secrets
 
-    Values --> ReadOnly
-    Values --> Remediate
+    Values --> Validation
+    Validation --> ReadOnly
+    Validation --> Remediate
     ReadOnly -->|default| RBAC
     ReadOnly -->|no workload mutation permissions| SA
     Remediate -->|requires remediation and executor features| RBAC
