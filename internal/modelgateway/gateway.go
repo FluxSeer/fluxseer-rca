@@ -75,6 +75,12 @@ func (g *Gateway) analyzeIngestionWithFallback(ctx context.Context, provider *v1
 
 func (g *Gateway) analyzeSingleProvider(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput) (domain.ReasoningOutput, error) {
 	providerType := strings.ToLower(strings.TrimSpace(provider.Spec.Provider))
+	if requiresAPIKey(providerType) && !provider.Spec.DataPolicy.AllowExternalTransmission {
+		return domain.ReasoningOutput{}, &AnalyzeError{
+			Reason:  "ProviderDataPolicyDenied",
+			Message: fmt.Sprintf("ModelProvider %q requires spec.dataPolicy.allowExternalTransmission=true before evidence can be sent to hosted provider %q", provider.Name, provider.Spec.Provider),
+		}
+	}
 	modelProvider, ok := g.Providers.Get(providerType)
 	if !ok {
 		return domain.ReasoningOutput{}, &AnalyzeError{
@@ -115,7 +121,7 @@ func shouldAttemptProviderFallback(provider *v1alpha1.ModelProvider, reason stri
 		return false
 	}
 	switch reason {
-	case "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "InvalidProviderResponse", "APIKeyMissing", "SecretRefMissing", "SecretReaderUnavailable", "SecretReadFailed", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty":
+	case "ProviderUnavailable", "ProviderUnsupported", "ProviderDataPolicyDenied", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "InvalidProviderResponse", "APIKeyMissing", "SecretRefMissing", "SecretReaderUnavailable", "SecretReadFailed", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty":
 		return true
 	default:
 		return false
