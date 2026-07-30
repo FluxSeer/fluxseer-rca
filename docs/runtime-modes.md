@@ -4,7 +4,9 @@ This document defines the supported mode switches in FluxAgent and separates use
 
 Current release baseline: `v0.3.0-beta.2`
 
-Frozen API identity: `aiops.platform/v1alpha1`
+Current API identity: `aiops.platform/v1alpha1`
+
+The API group and version identity are fixed for the current v0.3 line. This does not mean that every v1alpha1 schema field is generally available or stable.
 
 ## Mode Ownership
 
@@ -40,11 +42,11 @@ Status reports what actually happened.
 
 These are the primary mode choices an installer or API user should understand.
 
-| Surface | Modes | Default | Scope |
+| Surface | Modes | Preferred / Default | Scope |
 | --- | --- | --- | --- |
 | Runtime capability | read-only RCA, remediation, experimental executor | read-only RCA | Helm |
-| RCA provider | heuristic, OpenAI, Claude, Gemini | heuristic | `ModelProvider` / `RiskRule` / `InvestigationRequest` |
-| RCA entry | `InvestigationRequest`, `RiskRule` | `InvestigationRequest` for canonical RCA | CRD |
+| RCA provider | heuristic, OpenAI, Claude, Gemini | heuristic | `ModelProvider` reference |
+| RCA entry | `InvestigationRequest`, `RiskRule` | Canonical path: `InvestigationRequest` | CRD |
 | Evidence planning | `dataSources[]`, `queries[]` | request-defined | `InvestigationRequest` |
 | Evidence retention | `MetadataOnly`, `NormalizedSnapshot`, `RawSnapshot` | `MetadataOnly` | `InvestigationRequest` |
 | Query security | `LegacyUnrestricted`, `TemplatesOnly` | compatibility-dependent | `DataSource` |
@@ -52,7 +54,7 @@ These are the primary mode choices an installer or API user should understand.
 
 ## Runtime Capability
 
-Helm exposes capability flags:
+Helm exposes current runtime feature flags:
 
 ```yaml
 features:
@@ -116,6 +118,10 @@ spec:
     mode: CreateRequest
 ```
 
+`InvestigationRequest.status` is the authoritative execution record for canonical RCA.
+
+`RiskSignal` may expose a materialized or compatibility-oriented view of the finding, but it must not become a second authoritative owner of investigation execution state.
+
 ## Investigation Execution
 
 `InvestigationRequest.spec.mode` currently supports only:
@@ -160,7 +166,7 @@ spec:
       - CredentialLike
 ```
 
-Useful status distinctions should stay clear:
+The following are conceptually distinct states, although they may not yet exist as separate condition types:
 
 ```text
 ProviderConfigured
@@ -185,9 +191,11 @@ Recommended validation direction:
 
 ```yaml
 x-kubernetes-validations:
-  - rule: "!(has(self.dataSources) && size(self.dataSources) > 0 && has(self.queries) && size(self.queries) > 0)"
+  - rule: "!has(self.dataSources) || size(self.dataSources) == 0 || !has(self.queries) || size(self.queries) == 0"
     message: "dataSources and queries are mutually exclusive"
 ```
+
+Implementation should choose the exact CEL form based on the generated OpenAPI schema. If both arrays are defaulted to `[]`, this can be simplified to `size(self.dataSources) == 0 || size(self.queries) == 0`.
 
 ## Evidence Retention
 
@@ -197,7 +205,7 @@ Evidence retention controls what FluxAgent keeps after collection and normalizat
 | --- | --- | --- |
 | `MetadataOnly` | Supported / default | Persist compact metadata, digests, summaries, and references. |
 | `NormalizedSnapshot` | Beta / opt-in | Persist normalized evidence snapshots through the configured evidence store. |
-| `RawSnapshot` | Reserved / unsupported | API contract exists, but runtime should reject or degrade explicitly. |
+| `RawSnapshot` | Reserved / unsupported | API contract exists, but v0.3 runtime should fail the request explicitly. |
 
 `NormalizedSnapshot` requires an evidence store, currently configured through:
 
@@ -205,17 +213,17 @@ Evidence retention controls what FluxAgent keeps after collection and normalizat
 FLUXAGENT_EVIDENCE_STORE_DIR
 ```
 
-`RawSnapshot` must not be silently accepted. Runtime behavior should be explicit:
+`RawSnapshot` must not be silently accepted or downgraded.
+
+Required v0.3 runtime behavior:
 
 ```text
-Rejected: UnsupportedRetentionMode
+status.phase=Failed
+condition Ready=False
+reason=UnsupportedRetentionMode
 ```
 
-or:
-
-```text
-Degraded to MetadataOnly
-```
+Until this behavior is implemented, `RawSnapshot` must be treated as an unsupported contract value and must not be advertised as a usable capability.
 
 ## Query Security
 
@@ -354,6 +362,8 @@ Do not document these as user-facing runtime modes. They belong in release engin
 
 ## Support Matrix
 
+In this beta document, `Supported` means implemented, covered by the current runtime path, and intended for use in `v0.3.0-beta.2`. It does not imply general availability or compatibility guarantees beyond the documented API group/version identity.
+
 | Capability | Support level |
 | --- | --- |
 | `readOnly` investigation mode | Supported |
@@ -375,6 +385,6 @@ Do not document these as user-facing runtime modes. They belong in release engin
 
 1. Derive RBAC from feature flags or clearly demote `rbac.profile` to an advanced override.
 2. Mark `DirectRiskSignal` and `legacyDeploymentRisk` as migration paths in user-facing docs.
-3. Add explicit runtime behavior for unsupported `RawSnapshot`.
+3. Implement the documented `UnsupportedRetentionMode` runtime behavior for `RawSnapshot`.
 4. Enforce `dataSources[]` and `queries[]` mutual exclusion through CRD validation.
 5. Move maintainer-only CI/CD channel details out of runtime-mode guidance.
