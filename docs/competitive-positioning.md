@@ -1,12 +1,21 @@
 # Competitive Positioning
 
-FluxAgent should not try to become the broadest AI SRE agent.
+FluxSeer RCA is the forward-looking product name for the project currently
+published as FluxAgent. It should not try to become the broadest AI SRE agent.
 
 Its strongest lane is:
 
 ```text
 Kubernetes-native control plane for evidence-verifiable RCA.
 ```
+
+Sharper positioning:
+
+```text
+FluxSeer RCA makes Kubernetes RCA governable, verifiable, and replayable.
+```
+
+FluxSeer RCA does not merely generate RCA answers. It provides the control, evidence contract, policy boundary, and execution record required to trust and operationalize RCA at scale.
 
 ## Strategic Boundary
 
@@ -55,6 +64,55 @@ Did a later version produce a better RCA?
 ```
 
 That is the difference between an RCA control plane and a chatbot wrapper.
+
+## Alert Assistant Versus RCA Control Plane
+
+Alert assistants optimize the human response experience after an alert fires:
+
+```text
+alert
+-> incident context
+-> summary
+-> operator workflow
+```
+
+FluxAgent should optimize governance and reproducibility of the RCA itself:
+
+```text
+request
+-> bounded evidence
+-> policy-governed reasoning
+-> verified claims
+-> Kubernetes status
+-> replay and evaluation
+```
+
+This is a difference in system of record and control ownership. FluxAgent should be judged less by how quickly it posts a narrative summary and more by whether another controller, GitOps workflow, security reviewer, or future model-evaluation run can trust the recorded RCA state.
+
+## Practical Wedge
+
+The most credible wedge is:
+
+```text
+Evidence-verifiable RCA for Kubernetes alerts and investigations.
+```
+
+Concrete promise:
+
+- every important RCA claim traces to evidence
+- every hosted AI transmission has policy and audit context
+- every investigation can become a replay or evaluation input
+
+The minimum valuable scenario is:
+
+```text
+Deployment unavailable / CrashLoopBackOff / OOMKilled
+-> Kubernetes Events + Pod state + Prometheus + Loki
+-> heuristic or hosted AI RCA
+-> verifier checks evidence linkage
+-> InvestigationRequest.status records the result
+-> replay fixture protects future changes from regression
+```
 
 ## Deferred Work
 
