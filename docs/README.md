@@ -1,10 +1,15 @@
-# FluxAgent Docs
+# FluxSeer RCA Docs
 
-FluxAgent is documented as a Kubernetes-native RCA control plane with optional AI-assisted reasoning, a safe default path, and an optional guarded execution path.
+FluxSeer RCA is the forward-looking product name for the Kubernetes-native RCA
+control plane currently published as FluxAgent. The current beta artifacts still
+use `fluxagent` names for compatibility.
 
 Current published release: `v0.3.0-beta.2`
 
-Frozen API identity: `aiops.platform/v1alpha1`
+Current API identity: `aiops.platform/v1alpha1`
+
+The API group/version identity is fixed for the current v0.3 line. This does
+not mean all future v1alpha1 schema fields are GA-stable.
 
 ## Current Product Truth
 
@@ -82,8 +87,10 @@ Operations and packaging:
 
 Product positioning:
 
+- [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [Open source positioning](open-source-positioning.md)
 - [Competitive positioning](competitive-positioning.md)
+- [v0.3 product direction backlog](backlog/v0.3-product-direction.md)
 
 ## Tutorials
 
@@ -111,6 +118,8 @@ Historical releases:
 
 Current planning:
 
+- [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
+- [v0.3 product direction](backlog/v0.3-product-direction.md)
 - [v0.3 beta stabilization](backlog/v0.3-beta-stabilization.md)
 - [v0.3 naming and API review](backlog/v0.3-naming-api-review.md)
 

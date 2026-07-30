@@ -1,8 +1,14 @@
 # GitHub Repo Metadata
 
-This file contains suggested GitHub repository settings for FluxAgent.
+This file contains suggested GitHub repository settings for the project as it
+moves from the historical `FluxAgent` name to the public `FluxSeer RCA` product
+name.
 
 ## Repository Name
+
+`fluxseer-rca`
+
+Historical name:
 
 `FluxAgent`
 
@@ -10,11 +16,11 @@ This file contains suggested GitHub repository settings for FluxAgent.
 
 Short description:
 
-`Kubernetes-native control plane for evidence-verifiable root cause analysis.`
+`Kubernetes-native RCA control plane with governed, evidence-verifiable, and replayable investigations.`
 
 Alternative shorter version:
 
-`CRD-first RCA workflow and audit contract for Kubernetes platforms.`
+`CRD-first RCA workflow, evidence, and audit contract for Kubernetes platforms.`
 
 ## Suggested Topics
 
@@ -36,9 +42,17 @@ Alternative shorter version:
 ## Suggested README Opening
 
 ```markdown
-# FluxAgent
+# FluxSeer RCA
 
 Kubernetes-native control plane for evidence-verifiable RCA.
+```
+
+Compatibility note:
+
+```markdown
+FluxSeer RCA is currently published through `fluxagent` binaries, Helm charts,
+images, metrics, and CRDs. Those names remain compatibility surfaces until the
+dedicated rename release completes.
 ```
 
 ## Release Plan
