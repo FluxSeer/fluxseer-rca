@@ -82,6 +82,8 @@ The default Helm install enables the read-only RCA path, heuristic provider, and
 
 See [docs/capability-maturity.md](docs/capability-maturity.md) for the full maturity matrix.
 
+See [docs/runtime-modes.md](docs/runtime-modes.md) for the supported runtime, provider, evidence, RBAC, and rule-pack switching surfaces.
+
 ## Example RCA Status
 
 The v0.3 status contract makes important RCA claims machine-checkable instead of returning only Markdown prose:
