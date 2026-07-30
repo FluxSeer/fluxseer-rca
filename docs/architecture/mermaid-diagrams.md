@@ -8,7 +8,9 @@ Scope:
 - current optional integrations: Prometheus, Loki, Kubernetes Events, OpenAI API, Claude API, Gemini API, heuristic provider
 - current guarded experimental path: `RemediationPlan` and `AgentAction`
 - current release identity: `v0.3.0-beta.2`
-- frozen API identity: `aiops.platform/v1alpha1`
+- API group/version identity: `aiops.platform/v1alpha1`
+
+The API group and version identity are fixed for the current `v0.3` line. The `v1alpha1` schema remains subject to compatible beta hardening.
 
 The diagrams are intentionally Kubernetes-native. Hosted providers receive bounded evidence bundles; they do not receive cluster credentials or direct Kubernetes API access.
 
@@ -529,6 +531,10 @@ This diagram describes the canonical `InvestigationRequest` path in `v0.3.0-beta
 ```mermaid
 flowchart TD
     Start[Provider-bound evidence bundle]
+    ProviderType{Provider type?}
+    LocalProvider[Local heuristic provider]
+    LocalAudit[Persist local-provider execution metadata]
+    LocalResult[Local provider result]
     Filter[Filter evidence by allowedEvidenceKinds]
     External{allowExternalTransmission?}
     Tags{Denied sensitivity tag present?}
@@ -539,6 +545,10 @@ flowchart TD
     Gateway[Call model gateway]
     ProviderFailure{eligible provider failure?}
     Fallback{Fallback provider configured?}
+    ResolveFallback[Resolve fallback provider]
+    FallbackPolicy[Re-evaluate fallback provider dataPolicy]
+    FallbackAllowed{Fallback egress allowed or local?}
+    FallbackAudit[Persist fallback attempt audit]
     FallbackCall[Call fallback provider]
     ProviderResult[Provider result]
     ProviderIssue[Provider issue propagated]
@@ -546,7 +556,11 @@ flowchart TD
     AllowedAudit[Persist allowed ProviderEgressAudit without raw evidence]
     RejectedAudit[Persist rejected ProviderEgressAudit without raw evidence]
 
-    Start --> Filter
+    Start --> ProviderType
+    ProviderType -- local heuristic --> LocalProvider
+    LocalProvider --> LocalAudit
+    LocalAudit --> LocalResult
+    ProviderType -- hosted provider --> Filter
     Filter --> External
     External -- no --> Rejected
     External -- yes --> Tags
@@ -562,8 +576,13 @@ flowchart TD
     Gateway --> ProviderFailure
     ProviderFailure -- yes --> Fallback
     ProviderFailure -- no --> ProviderResult
-    Fallback -- yes --> FallbackCall
+    Fallback -- yes --> ResolveFallback
     Fallback -- no --> ProviderIssue
+    ResolveFallback --> FallbackPolicy
+    FallbackPolicy --> FallbackAllowed
+    FallbackAllowed -- yes --> FallbackAudit
+    FallbackAllowed -- no --> ProviderIssue
+    FallbackAudit --> FallbackCall
     FallbackCall --> ProviderResult
     Rejected --> RejectedAudit
     RejectedAudit --> Failed
@@ -632,6 +651,8 @@ flowchart TD
 ## Evidence Retention Boundary
 
 `EvidenceRef.query` may be persisted in `InvestigationRequest.status`; users should not place secret-bearing text in query strings. The beta.2 retention boundary avoids storing full raw adapter payloads, large raw logs, and provider prompts in status.
+
+The `local-filesystem` normalized snapshot store is development-oriented in `v0.3.0-beta.2`: it is not encrypted, has no automatic snapshot garbage collection, and should not be treated as durable production evidence storage.
 
 ```mermaid
 flowchart TB
@@ -747,7 +768,7 @@ sequenceDiagram
     participant AAC as AgentActionReconciler
     participant Exec as executor.Router
 
-    Note over RS,AAC: Disabled by default. Requires explicit feature and RBAC profile.
+    Note over RS,AAC: Disabled by default. Requires explicit feature and RBAC profile. Current AgentAction approval and dry-run fields are experimental and tracked for hardening.
     RS-->>RSC: confirmed signal
     RSC->>RP: optional guarded plan creation
     RP-->>RPC: reconcile plan
