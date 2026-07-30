@@ -18,6 +18,10 @@ import (
 
 const (
 	LocalFilesystemStoreName = "local-filesystem"
+	S3StoreName              = "s3"
+	GCSStoreName             = "gcs"
+	AzureBlobStoreName       = "azure-blob"
+	PVCStoreName             = "pvc"
 	normalizedSnapshotClass  = "normalized-snapshot"
 	normalizedSnapshotV1     = "fluxagent-normalized-evidence-snapshot-v1"
 )
@@ -38,8 +42,43 @@ type LocalFilesystemStore struct {
 	Root string
 }
 
+type UnsupportedStore struct {
+	StoreName string
+}
+
+func SupportedStoreNames() []string {
+	return []string{
+		LocalFilesystemStoreName,
+		S3StoreName,
+		GCSStoreName,
+		AzureBlobStoreName,
+		PVCStoreName,
+	}
+}
+
+func DurableStoreNames() []string {
+	return []string{
+		S3StoreName,
+		GCSStoreName,
+		AzureBlobStoreName,
+		PVCStoreName,
+	}
+}
+
 func (s LocalFilesystemStore) Name() string {
 	return LocalFilesystemStoreName
+}
+
+func (s UnsupportedStore) Name() string {
+	return strings.TrimSpace(s.StoreName)
+}
+
+func (s UnsupportedStore) StoreNormalizedSnapshot(context.Context, NormalizedSnapshot) (v1alpha1.PayloadRef, error) {
+	name := strings.TrimSpace(s.StoreName)
+	if name == "" {
+		name = "unknown"
+	}
+	return v1alpha1.PayloadRef{}, fmt.Errorf("evidence snapshot store %q is not implemented in this build", name)
 }
 
 func (s LocalFilesystemStore) StoreNormalizedSnapshot(ctx context.Context, snapshot NormalizedSnapshot) (v1alpha1.PayloadRef, error) {
