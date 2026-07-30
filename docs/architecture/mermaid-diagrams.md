@@ -12,7 +12,7 @@ Scope:
 
 The diagrams are intentionally Kubernetes-native. Hosted providers receive bounded evidence bundles; they do not receive cluster credentials or direct Kubernetes API access.
 
-Important `v0.3.0-beta.2` boundary: the hosted-provider egress policy diagrams apply to the canonical `InvestigationRequest` path. Direct `RiskRule` RCA can still call the model gateway without the same `ModelProvider.dataPolicy` enforcement and should be treated as a compatibility path until that hardening is added.
+Important `v0.3.0-beta.2` boundary: direct `RiskRule` RCA receives gateway-level hosted-provider egress opt-in enforcement, but the canonical `InvestigationRequest` path remains the only path with full `status.execution.egressAudit` visibility.
 
 ## System Context
 
@@ -420,7 +420,7 @@ sequenceDiagram
         RR->>DS: execute bounded configured signals
         DS-->>RR: query results
         RR->>GW: optional direct RCA if ai.rcaEnabled=true
-        Note over RR,GW: v0.3.0-beta.2 direct RiskRule RCA does not apply the canonical ModelProvider.dataPolicy egress gate.
+        Note over RR,GW: v0.3.0-beta.2 direct RiskRule RCA applies gateway-level hosted-provider egress opt-in, but does not own canonical egressAudit status.
         GW->>MP: provider-neutral request
         MP-->>GW: normalized RCA response
         GW-->>RR: RCA result or degraded provider issue

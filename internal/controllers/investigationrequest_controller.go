@@ -92,8 +92,8 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if failure := investigationLoopFailure(&investigation); failure != nil {
 		applyLoopPreventedInvestigationStatus(&investigation, failure, now())
-	} else if invalidMessage := validateInvestigationRequestSpec(investigation.Spec); invalidMessage != "" {
-		applyInvalidInvestigationStatus(&investigation, invalidMessage, now())
+	} else if invalidIssue := validateInvestigationRequestSpecIssue(investigation.Spec); invalidIssue != nil {
+		applyInvalidInvestigationStatus(&investigation, invalidIssue.Reason, invalidIssue.Message, now())
 	} else {
 		preflight, preflightErr := r.preflight(ctx, &investigation)
 		if preflightErr != nil {
@@ -525,7 +525,19 @@ func emptyRCAResult() investigation.RCAResult {
 	return investigation.RCAResult{}
 }
 
+type specValidationIssue struct {
+	Reason  string
+	Message string
+}
+
 func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) string {
+	if issue := validateInvestigationRequestSpecIssue(spec); issue != nil {
+		return issue.Message
+	}
+	return ""
+}
+
+func validateInvestigationRequestSpecIssue(spec v1alpha1.InvestigationRequestSpec) *specValidationIssue {
 	missing := make([]string, 0, 4)
 	if strings.TrimSpace(spec.Target.Namespace) == "" {
 		missing = append(missing, "spec.target.namespace")
@@ -537,32 +549,36 @@ func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) st
 		missing = append(missing, "spec.target.name")
 	}
 	if len(missing) > 0 {
-		return "missing required target fields: " + strings.Join(missing, ", ")
+		return &specValidationIssue{Reason: "TargetInvalid", Message: "missing required target fields: " + strings.Join(missing, ", ")}
 	}
 	if mode := strings.TrimSpace(spec.Mode); mode != "" && mode != v1alpha1.InvestigationModeReadOnly {
-		return "unsupported investigation mode: " + mode
+		return &specValidationIssue{Reason: "UnsupportedInvestigationMode", Message: "unsupported investigation mode: " + mode}
 	}
 	if len(spec.DataSources) == 0 && len(spec.Queries) == 0 {
-		return "spec.dataSources or spec.queries must include at least one datasource reference"
+		return &specValidationIssue{Reason: "InvalidSpec", Message: "spec.dataSources or spec.queries must include at least one datasource reference"}
 	}
 	if len(spec.DataSources) > 0 && len(spec.Queries) > 0 {
-		return "spec.dataSources and spec.queries are mutually exclusive; use dataSources for controller-planned evidence or queries for user-planned evidence"
+		return &specValidationIssue{Reason: "InvalidSpec", Message: "spec.dataSources and spec.queries are mutually exclusive; use dataSources for controller-planned evidence or queries for user-planned evidence"}
 	}
 	if message := validateEvidenceRetention(spec.EvidenceRetention); message != "" {
-		return message
+		reason := "InvalidSpec"
+		if spec.EvidenceRetention.Mode == v1alpha1.EvidenceRetentionModeRawSnapshot {
+			reason = "UnsupportedRetentionMode"
+		}
+		return &specValidationIssue{Reason: reason, Message: message}
 	}
 	if message := validateInvestigationQueryBudget(spec); message != "" {
-		return message
+		return &specValidationIssue{Reason: "InvalidSpec", Message: message}
 	}
 	for _, query := range spec.Queries {
 		if strings.TrimSpace(query.DatasourceRef.Name) == "" {
-			return "investigation queries require spec.queries[].datasourceRef.name"
+			return &specValidationIssue{Reason: "InvalidSpec", Message: "investigation queries require spec.queries[].datasourceRef.name"}
 		}
 		if strings.TrimSpace(query.QueryType) == "" {
-			return "investigation queries require spec.queries[].queryType"
+			return &specValidationIssue{Reason: "InvalidSpec", Message: "investigation queries require spec.queries[].queryType"}
 		}
 	}
-	return ""
+	return nil
 }
 
 func validateEvidenceRetention(policy v1alpha1.EvidenceRetentionPolicy) string {
@@ -665,19 +681,22 @@ func validateInvestigationQueryBudget(spec v1alpha1.InvestigationRequestSpec) st
 	return ""
 }
 
-func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, message string, now time.Time) {
+func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, reason string, message string, now time.Time) {
+	if strings.TrimSpace(reason) == "" {
+		reason = "InvalidSpec"
+	}
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, message, request.Generation, now)
 	applyInvestigationFailure(
 		request,
-		"TargetInvalid",
+		reason,
 		message,
 		v1alpha1.InvestigationStageValidation,
 	)
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
 	request.Status.Provider = ""
-	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, "TargetInvalid", message, request.Generation, now)
-	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionFalse, "TargetInvalid", message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, reason, message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionFalse, reason, message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
