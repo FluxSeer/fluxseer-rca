@@ -109,14 +109,14 @@ RiskSignal status.conditions[]
 Use FluxAgent native metrics for controller and RCA quality signals:
 
 ```text
-fluxagent_investigations_total
+fluxagent_investigation_total
 fluxagent_provider_requests_total
 fluxagent_provider_failures_total
 fluxagent_datasource_query_duration_seconds
 fluxagent_datasource_query_queue_depth
 fluxagent_datasource_queries_in_flight
-fluxagent_evidence_truncations_total
-fluxagent_claim_verifications_total
+fluxagent_evidence_truncated_total
+fluxagent_claim_verification_total
 ```
 
 ## Argo CD Health Example
@@ -174,4 +174,3 @@ Alertmanager / webhook / Argo Events
 External producers should preserve source lineage through labels, annotations, or `status.lineage.source` when a controller owns the object.
 
 FluxAgent remains the RCA control plane. Alert producers should not bypass FluxAgent evidence policy by sending raw logs or arbitrary provider prompts directly to hosted AI.
-
