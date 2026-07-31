@@ -130,6 +130,9 @@ spec:
                       status: {type: string}
                       reason: {type: string}
                       message: {type: string}
+                      observedGeneration:
+                        type: integer
+                        format: int64
                       lastTransitionTime:
                         type: string
                         format: date-time
