@@ -1049,6 +1049,9 @@ func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight
 }
 
 func copyProviderEgressAttempts(in []v1alpha1.ProviderEgressAttempt) []v1alpha1.ProviderEgressAttempt {
+	if len(in) > 8 {
+		in = in[:8]
+	}
 	out := make([]v1alpha1.ProviderEgressAttempt, len(in))
 	copy(out, in)
 	for i := range out {

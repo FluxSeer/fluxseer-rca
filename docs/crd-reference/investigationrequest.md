@@ -352,7 +352,7 @@ When status budget enforcement is required, FluxAgent preserves canonical state 
 - `maximumClassificationSent`: highest classification actually transmitted; empty when rejected
 - `classificationPolicyVersion`: classification policy version
 
-`status.execution.egressAttempts[]` records bounded per-provider transmission decisions. It uses the same compact policy fields as `egressAudit` and adds attempt `ordinal`, `providerRef`, `providerGeneration`, and `result`. The existing `egressAudit` field remains a compatibility summary for the primary canonical provider decision.
+`status.execution.egressAttempts[]` records bounded per-provider transmission decisions, capped at 8 attempts. It uses the same compact policy fields as `egressAudit` and adds attempt `ordinal`, `providerRef`, `providerGeneration`, and `result`. The existing `egressAudit` field remains a compatibility summary for the primary canonical provider decision.
 
 `status.execution.providerResult` is the durable normalized provider checkpoint. It stores the common RCA result, schema version, provider request ID when available, provider result classification, and digest used by FluxAgent after provider response parsing and validation. It does not store raw provider responses, prompts, chain-of-thought, or unclassified provider metadata.
 

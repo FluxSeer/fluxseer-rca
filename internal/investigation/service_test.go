@@ -1473,6 +1473,82 @@ func TestServiceGenerateRCARecordsFallbackProviderEgressAttempts(t *testing.T) {
 	}
 }
 
+func TestServiceGenerateRCAReevaluatesFallbackProviderClassificationPolicy(t *testing.T) {
+	hosted := &capturingModelProvider{name: "openai"}
+	service := &Service{
+		Gateway: &modelgateway.Gateway{
+			Base: knowledge.NewBase(),
+			Providers: model.NewRegistry(
+				failingModelProvider{name: "broken", reason: "ProviderUnavailable"},
+				hosted,
+			),
+			Resolver: serviceResolverStub{
+				providers: map[string]*v1alpha1.ModelProvider{
+					"fluxagent-system/fallback-openai": {
+						ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system", Generation: 9},
+						Spec: v1alpha1.ModelProviderSpec{
+							Provider: "openai",
+							Model:    "gpt-test",
+							DataPolicy: v1alpha1.ModelProviderDataPolicy{
+								AllowExternalTransmission: true,
+								MaximumClassification:     "Internal",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Provider: &v1alpha1.ModelProvider{
+			ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system", Generation: 3},
+			Spec: v1alpha1.ModelProviderSpec{
+				Provider: "broken",
+				Model:    "broken-model",
+				FallbackProviderRef: v1alpha1.LocalObjectReference{
+					Name: "fallback-openai",
+				},
+			},
+		},
+	}, EvidenceCollectionResult{
+		Summary: "collected 1 evidence records from 1 datasource",
+		EvidenceRefs: []v1alpha1.EvidenceRef{
+			{
+				Kind:    "log",
+				Source:  "loki",
+				Summary: "request body included confidential token",
+				Classification: &v1alpha1.DataClassification{
+					Level: "Confidential",
+				},
+			},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("generate RCA failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "ProviderDataPolicyRejected" {
+		t.Fatalf("expected fallback ProviderDataPolicyRejected issue, got %#v", result.Issue)
+	}
+	if hosted.calls != 0 {
+		t.Fatalf("expected fallback hosted provider not to be called, got %d", hosted.calls)
+	}
+	if len(result.EgressAttempts) != 2 {
+		t.Fatalf("expected primary and fallback attempts, got %#v", result.EgressAttempts)
+	}
+	fallbackAttempt := result.EgressAttempts[1]
+	if fallbackAttempt.ProviderRef == nil || fallbackAttempt.ProviderRef.Name != "fallback-openai" {
+		t.Fatalf("expected fallback provider ref, got %#v", fallbackAttempt.ProviderRef)
+	}
+	if fallbackAttempt.Decision != "Rejected" || fallbackAttempt.Result != "ProviderDataPolicyRejected" {
+		t.Fatalf("expected rejected fallback classification attempt, got %#v", fallbackAttempt)
+	}
+	if fallbackAttempt.MaximumClassificationAllowed != "Internal" || fallbackAttempt.MaximumClassificationObserved != "Confidential" || fallbackAttempt.MaximumClassificationSent != "" {
+		t.Fatalf("expected fallback classification audit, got %#v", fallbackAttempt)
+	}
+}
+
 func TestServiceGenerateRCAFiltersHostedProviderEvidenceByDataPolicy(t *testing.T) {
 	hosted := &capturingModelProvider{name: "openai"}
 	service := &Service{
