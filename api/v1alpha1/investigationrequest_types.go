@@ -251,14 +251,15 @@ type RCAExecution struct {
 	ReasoningPolicyVersion  string                     `json:"reasoningPolicyVersion,omitempty"`
 	VerifierVersion         string                     `json:"verifierVersion,omitempty"`
 	EgressAudit             *ProviderEgressAudit       `json:"egressAudit,omitempty"`
-	EgressAttempts          []ProviderEgressAttempt    `json:"egressAttempts,omitempty"`
-	ControllerVersion       string                     `json:"controllerVersion,omitempty"`
-	AttemptCount            int32                      `json:"attemptCount,omitempty"`
-	Attempts                []RCAExecutionAttempt      `json:"attempts,omitempty"`
-	DurationSeconds         int64                      `json:"durationSeconds,omitempty"`
-	InputTokens             int64                      `json:"inputTokens,omitempty"`
-	OutputTokens            int64                      `json:"outputTokens,omitempty"`
-	ProviderResult          *RCAProviderResult         `json:"providerResult,omitempty"`
+	// +kubebuilder:validation:MaxItems=8
+	EgressAttempts    []ProviderEgressAttempt `json:"egressAttempts,omitempty"`
+	ControllerVersion string                  `json:"controllerVersion,omitempty"`
+	AttemptCount      int32                   `json:"attemptCount,omitempty"`
+	Attempts          []RCAExecutionAttempt   `json:"attempts,omitempty"`
+	DurationSeconds   int64                   `json:"durationSeconds,omitempty"`
+	InputTokens       int64                   `json:"inputTokens,omitempty"`
+	OutputTokens      int64                   `json:"outputTokens,omitempty"`
+	ProviderResult    *RCAProviderResult      `json:"providerResult,omitempty"`
 }
 
 type ProviderEgressAudit struct {

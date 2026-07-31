@@ -406,6 +406,7 @@ spec:
                           type: string
                     egressAttempts:
                       type: array
+                      maxItems: 8
                       items:
                         type: object
                         properties:

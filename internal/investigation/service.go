@@ -503,8 +503,21 @@ func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRe
 	}
 
 	providerType := modelProviderType(preflight.Provider)
-	reasoning, trace, err := s.Gateway.AnalyzeIngestionWithTrace(ctx, preflight.Provider, buildInvestigationIngestionOutput(spec, preflight, filteredEvidence, now))
-	result.EgressAttempts = providerEgressAttemptsFromTrace(trace, filteredEvidence)
+	providerEvidence := map[string]EvidenceCollectionResult{}
+	reasoning, trace, err := s.Gateway.AnalyzeIngestionWithProviderInputTrace(ctx, preflight.Provider, func(provider *v1alpha1.ModelProvider) (domain.IngestionOutput, error) {
+		filteredForProvider, providerIssue := applyProviderDataPolicy(provider, evidenceResult)
+		if key := evidenceProviderKey(provider); key != "" {
+			providerEvidence[key] = filteredForProvider
+		}
+		if providerIssue != nil {
+			return domain.IngestionOutput{}, &modelgateway.AnalyzeError{
+				Reason:  providerIssue.Reason,
+				Message: providerIssue.Message,
+			}
+		}
+		return buildInvestigationIngestionOutput(spec, preflight, filteredForProvider, now), nil
+	})
+	result.EgressAttempts = providerEgressAttemptsFromTrace(trace, filteredEvidence, providerEvidence)
 	result.PrimaryEgress = primaryEgressAudit(result.EgressAttempts)
 	if err != nil {
 		resultLabel := "failed"
@@ -527,12 +540,23 @@ func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRe
 	return result, nil
 }
 
-func providerEgressAttemptsFromTrace(trace modelgateway.Trace, evidence EvidenceCollectionResult) []v1alpha1.ProviderEgressAttempt {
+func providerEgressAttemptsFromTrace(trace modelgateway.Trace, evidence EvidenceCollectionResult, evidenceByProvider map[string]EvidenceCollectionResult) []v1alpha1.ProviderEgressAttempt {
 	attempts := make([]v1alpha1.ProviderEgressAttempt, 0, len(trace.Attempts))
 	for i, attempt := range trace.Attempts {
-		attempts = append(attempts, providerEgressAttemptFromTrace(attempt, evidence, int32(i+1)))
+		attemptEvidence := evidence
+		if providerEvidence, ok := evidenceByProvider[evidenceProviderKey(attempt.Provider)]; ok {
+			attemptEvidence = providerEvidence
+		}
+		attempts = append(attempts, providerEgressAttemptFromTrace(attempt, attemptEvidence, int32(i+1)))
 	}
 	return attempts
+}
+
+func evidenceProviderKey(provider *v1alpha1.ModelProvider) string {
+	if provider == nil {
+		return ""
+	}
+	return provider.Namespace + "/" + provider.Name
 }
 
 func issueEgressAttempts(provider *v1alpha1.ModelProvider, issue *Issue) []v1alpha1.ProviderEgressAttempt {
