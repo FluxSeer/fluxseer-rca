@@ -32,7 +32,7 @@ Product philosophy:
 
 ```text
 FluxSeer RCA turns RCA into a governed, evidence-verifiable,
-and replayable Kubernetes-native workflow.
+replay-oriented Kubernetes-native workflow.
 ```
 
 Current release scope:
@@ -143,7 +143,7 @@ The minimum compelling promise is:
 ```text
 Every important RCA claim can be traced to evidence.
 Every hosted provider transmission can be governed and audited.
-Every investigation can become a reusable replay or evaluation input.
+Every terminal investigation can become a reusable replay artifact or evaluation input.
 ```
 
 FluxAgent should become useful first for teams that already have Kubernetes, Prometheus, Loki, Alertmanager, and GitOps, but need AI-assisted RCA to satisfy platform governance instead of bypassing it.
@@ -170,7 +170,7 @@ FluxAgent should make completed investigations reusable for:
 - heuristic regression
 - verifier regression
 - rule-pack evaluation
-- offline reruns without querying production datasources
+- offline comparison of recorded RCA bundles; full runtime replay remains future work
 
 ### Policy Governance
 
@@ -335,8 +335,8 @@ RiskRule Controller
   -> resolve target
   -> validate datasource capability
   -> execute detection query
-  -> create/update RiskSignal
-  -> optionally trigger InvestigationRequest in future
+  -> create/update InvestigationRequest by default
+  -> create/update RiskSignal through the DirectRiskSignal compatibility path
 
 InvestigationRequest Controller
   -> resolve target
@@ -344,7 +344,7 @@ InvestigationRequest Controller
   -> redact and normalize evidence
   -> invoke ModelProvider
   -> update terminal RCA status
-  -> optionally emit discovered RiskSignal in future
+  -> optionally materialize discovered RiskSignal when requested
 
 RiskSignal Controller
   -> manage RiskSignal lifecycle and optional downstream guarded planning

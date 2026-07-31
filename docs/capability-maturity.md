@@ -39,6 +39,7 @@ InvestigationRequest
 | Gemini API provider | Beta / opt-in | Requires `ModelProvider`, Secret, and hosted-provider data egress opt-in. |
 | Normalized snapshot retention | Beta / opt-in | Requires `FLUXAGENT_EVIDENCE_STORE_DIR` and `storageRef.name: local-filesystem`. |
 | Raw snapshot retention | Reserved / unsupported | Contract is present, runtime rejects it in v0.3. |
+| Replay artifacts and comparison | Foundation / library | Terminal CRD export and deterministic bundle comparison exist; no runtime replay runner or controller entrypoint is shipped. |
 | OpenTelemetry adapter | Scaffold | Not part of the supported v0.3 adapter set. |
 | CloudWatch adapter | Scaffold | Not part of the supported v0.3 adapter set. |
 | Remediation | Experimental | Requires explicit controller and RBAC opt-in. |

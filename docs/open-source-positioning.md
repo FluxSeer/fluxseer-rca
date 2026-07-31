@@ -9,7 +9,7 @@ Its open-source value is:
 
 ```text
 turn RCA from an ephemeral AI answer
-into governed, evidence-verifiable, replayable Kubernetes workflow state
+into governed, evidence-verifiable Kubernetes workflow state with replay-oriented artifacts
 ```
 
 FluxSeer RCA favors explicit Kubernetes-native configuration over automatic discovery. It is for teams that want to define investigation scope, datasource boundaries, and model-provider choices themselves, accepting some CRD learning cost in exchange for customizability, low default resource usage, and auditability.
@@ -64,7 +64,7 @@ That means the current early investigation layer is:
 - auditable RCA results
 - evidence-linked claims and verification status
 - policy-governed provider egress
-- replayable investigation artifacts
+- replay artifact and offline comparison foundations
 
 It does not mean:
 

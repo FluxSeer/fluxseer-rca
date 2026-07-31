@@ -418,8 +418,8 @@ flowchart LR
     RSRec -->|owns TTL and optional downstream transition| RSStatus[RiskSignal.status]
     NotifyRec -->|notification side effect only when configured| Notify[Webhook notification]
     RPRec -->|guardrails and approval state| RPStatus[RemediationPlan.status]
-    RPRec -->|creates or updates action and status-first approval state| AA[AgentAction]
-    AARec -->|executes only when approval status is satisfied; spec.approvedBy is legacy compatibility| AAStatus[AgentAction.status]
+    RPRec -->|creates or updates action and approval projection| AA[AgentAction]
+    AARec -->|executes through legacy spec.approvedBy gate; records status.approval projection| AAStatus[AgentAction.status]
 ```
 
 ## Read-only RiskRule Flow
@@ -816,8 +816,8 @@ sequenceDiagram
         AAC-->>AA: keep WaitingApproval
     else auto approved
         RPC->>RP: status.phase=Approved
-        RPC->>AA: status.phase=Approved and status.approval recorded
-        AA-->>AAC: reconcile approved action
+        RPC->>AA: spec.approvedBy populated by approval workflow
+        AA-->>AAC: reconcile action through legacy spec.approvedBy gate
         AAC->>Exec: execute or simulate
         Exec-->>AAC: result
         AAC->>AA: status.execution.phase=Succeeded or Failed

@@ -16,7 +16,7 @@ Historical name:
 
 Short description:
 
-`Kubernetes-native RCA control plane with governed, evidence-verifiable, and replayable investigations.`
+`Kubernetes-native RCA control plane with governed, evidence-verifiable investigations and replay-oriented audit artifacts.`
 
 Alternative shorter version:
 
