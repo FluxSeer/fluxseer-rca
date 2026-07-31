@@ -796,6 +796,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 				audit = rca.PrimaryEgress
 			}
 			request.Status.Execution = buildRejectedRCAExecution(request, preflight, evidence, audit, rca.EgressAttempts, investigationExecutionID(request, preflight, evidence), now)
+			request.Status.Execution.State = rca.Issue.Reason
 		}
 		rcametrics.RecordInvestigation(request.Namespace, providerType(preflight.Provider), "failed", "unknown")
 		request.Status.Summary = evidence.Summary

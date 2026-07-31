@@ -392,6 +392,95 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 	}
 }
 
+func TestInvestigationRequestReconcilerDoesNotPromoteRiskSignalWhenDisabled(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	now := time.Date(2026, 7, 6, 10, 16, 0, 0, time.UTC)
+
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "no-promote-open-api", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace: "prod",
+				Kind:      "Deployment",
+				Name:      "open-api",
+			},
+			Queries: []v1alpha1.InvestigationQuery{
+				{
+					Name:          "unhealthy-events",
+					DatasourceRef: v1alpha1.LocalObjectReference{Name: "kubernetes-events"},
+					QueryType:     "event",
+					Reasons:       []string{"BackOff"},
+				},
+			},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "heuristic-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+			CreateRiskSignal: false,
+		},
+	}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}},
+			},
+		},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "heuristic", Model: "built-in"},
+	}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, deployment, provider).
+		Build()
+
+	reconciler := &InvestigationRequestReconciler{
+		Client: client,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client: client,
+			Registry: datasource.NewRegistry(
+				fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent},
+			),
+			Resolver: modelgateway.KubeResolver{Client: client},
+			Gateway: &modelgateway.Gateway{
+				Base:      knowledge.NewBase(),
+				Providers: model.NewRegistry(heuristic.Provider{}),
+			},
+		},
+		Now: func() time.Time { return now },
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace}}
+	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("first reconcile failed: %v", err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("second reconcile failed: %v", err)
+	}
+
+	var storedRequest v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &storedRequest); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if storedRequest.Status.LinkedRiskSignalRef != nil {
+		t.Fatalf("expected no linked RiskSignal when createRiskSignal=false, got %#v", storedRequest.Status.LinkedRiskSignalRef)
+	}
+	var signals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &signals); err != nil {
+		t.Fatalf("list risk signals: %v", err)
+	}
+	if len(signals.Items) != 0 {
+		t.Fatalf("expected no promoted RiskSignals, got %#v", signals.Items)
+	}
+}
+
 func TestInvestigationRequestReconcilerKeepsUnverifiedUnhealthyEventInconclusive(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
@@ -1051,6 +1140,292 @@ func TestInvestigationRequestReconcilerPersistsFallbackEgressAttempts(t *testing
 	}
 	if fallbackAttempt.Decision != "Rejected" || fallbackAttempt.Result != "ProviderDataPolicyDenied" || fallbackAttempt.EvidenceBundleDigest == "" {
 		t.Fatalf("expected rejected fallback attempt with digest, got %#v", fallbackAttempt)
+	}
+}
+
+func TestInvestigationRequestReconcilerStopsBeforeEvidenceWhenTargetNotFound(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "missing-target", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "missing",
+				Kind:       "Deployment",
+				Name:       "does-not-exist",
+				APIVersion: "apps/v1",
+			},
+			DataSources:      []v1alpha1.LocalObjectReference{{Name: "kubernetes-events"}},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "counting-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+			CreateRiskSignal: true,
+		},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
+	}
+	kubeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, provider).
+		Build()
+	counter := &countingModelProvider{}
+	eventSource := &countingInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent}
+	reconciler := &InvestigationRequestReconciler{
+		Client: kubeClient,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client:   kubeClient,
+			Registry: datasource.NewRegistry(eventSource),
+			Resolver: modelgateway.KubeResolver{Client: kubeClient},
+			Gateway: &modelgateway.Gateway{
+				Base:      knowledge.NewBase(),
+				Providers: model.NewRegistry(counter),
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 7, 6, 12, 45, 0, 0, time.UTC) },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace}}); err != nil {
+		t.Fatal(err)
+	}
+	var stored v1alpha1.InvestigationRequest
+	if err := kubeClient.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseFailed || stored.Status.Outcome != v1alpha1.InvestigationOutcomeUnknown {
+		t.Fatalf("expected failed unknown target status, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if stored.Status.Failure == nil ||
+		stored.Status.Failure.Code != "TargetNotFound" ||
+		stored.Status.Failure.Stage != v1alpha1.InvestigationStageTargetResolution ||
+		stored.Status.Failure.Retryable {
+		t.Fatalf("expected non-retryable TargetNotFound failure, got %#v", stored.Status.Failure)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionTargetResolved); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "TargetNotFound" {
+		t.Fatalf("expected TargetResolved false TargetNotFound, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "TargetNotFound" {
+		t.Fatalf("expected RCAReady false TargetNotFound, got %#v", cond)
+	}
+	if eventSource.calls != 0 {
+		t.Fatalf("expected datasource not to be queried after target preflight failure, got %d calls", eventSource.calls)
+	}
+	if counter.calls != 0 {
+		t.Fatalf("expected provider not to be called after target preflight failure, got %d calls", counter.calls)
+	}
+	var signals v1alpha1.RiskSignalList
+	if err := kubeClient.List(context.Background(), &signals); err != nil {
+		t.Fatalf("list risk signals: %v", err)
+	}
+	if len(signals.Items) != 0 {
+		t.Fatalf("expected no RiskSignal for target preflight failure, got %#v", signals.Items)
+	}
+}
+
+func TestInvestigationRequestReconcilerMarksInvalidProviderResponseDistinctly(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "invalid-provider-response", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "Deployment",
+				Name:       "open-api",
+				APIVersion: "apps/v1",
+			},
+			DataSources:      []v1alpha1.LocalObjectReference{{Name: "kubernetes-events"}},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "counting-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+			CreateRiskSignal: true,
+		},
+	}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
+	}
+	counter := &countingModelProvider{
+		output: map[string]any{
+			"riskTitle":     "Invalid response",
+			"riskSummary":   "provider omitted required confidence",
+			"severity":      "high",
+			"rationale":     "malformed fixture",
+			"rcaHypothesis": "provider omitted confidenceScore",
+			"rcaCauses":     []string{"malformed response"},
+			"actionType":    "notification.sendSlack",
+		},
+	}
+	kubeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, deployment, provider).
+		Build()
+	reconciler := &InvestigationRequestReconciler{
+		Client: kubeClient,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client:   kubeClient,
+			Registry: datasource.NewRegistry(fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent}),
+			Resolver: modelgateway.KubeResolver{Client: kubeClient},
+			Gateway: &modelgateway.Gateway{
+				Base:      knowledge.NewBase(),
+				Providers: model.NewRegistry(counter),
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 7, 6, 13, 0, 0, 0, time.UTC) },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace}}); err != nil {
+		t.Fatal(err)
+	}
+	var stored v1alpha1.InvestigationRequest
+	if err := kubeClient.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if counter.calls != 1 {
+		t.Fatalf("expected provider to be called once, got %d", counter.calls)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseFailed || stored.Status.Outcome != v1alpha1.InvestigationOutcomeUnknown {
+		t.Fatalf("expected failed unknown invalid-provider status, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if stored.Status.Failure == nil ||
+		stored.Status.Failure.Code != "InvalidProviderResponse" ||
+		stored.Status.Failure.Stage != v1alpha1.InvestigationStageReasoning {
+		t.Fatalf("expected InvalidProviderResponse reasoning failure, got %#v", stored.Status.Failure)
+	}
+	if stored.Status.Execution == nil || stored.Status.Execution.State != "InvalidProviderResponse" {
+		t.Fatalf("expected execution state InvalidProviderResponse, got %#v", stored.Status.Execution)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "InvalidProviderResponse" {
+		t.Fatalf("expected RCAReady false InvalidProviderResponse, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionDegraded); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "InvalidProviderResponse" {
+		t.Fatalf("expected Degraded true InvalidProviderResponse, got %#v", cond)
+	}
+	var signals v1alpha1.RiskSignalList
+	if err := kubeClient.List(context.Background(), &signals); err != nil {
+		t.Fatalf("list risk signals: %v", err)
+	}
+	if len(signals.Items) != 0 {
+		t.Fatalf("expected no RiskSignal for invalid provider response, got %#v", signals.Items)
+	}
+}
+
+func TestInvestigationRequestReconcilerMarksProviderFallbackLoopDistinctly(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-loop", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "Deployment",
+				Name:       "open-api",
+				APIVersion: "apps/v1",
+			},
+			DataSources:      []v1alpha1.LocalObjectReference{{Name: "prometheus"}},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "primary-broken"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+			CreateRiskSignal: true,
+		},
+	}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
+	}
+	primary := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system", Generation: 3},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "broken",
+			Model:    "broken-model",
+			FallbackProviderRef: v1alpha1.LocalObjectReference{
+				Name: "fallback-broken",
+			},
+		},
+	}
+	fallback := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-broken", Namespace: "fluxagent-system", Generation: 4},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "broken",
+			Model:    "broken-model",
+			FallbackProviderRef: v1alpha1.LocalObjectReference{
+				Name: "primary-broken",
+			},
+		},
+	}
+	kubeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, deployment, primary, fallback).
+		Build()
+	failing := &countingFailingModelProvider{name: "broken"}
+	reconciler := &InvestigationRequestReconciler{
+		Client: kubeClient,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client:   kubeClient,
+			Registry: datasource.NewRegistry(fakeInvestigationDataSource{name: "prometheus", queryType: domain.QueryTypeMetric}),
+			Resolver: modelgateway.KubeResolver{Client: kubeClient},
+			Gateway: &modelgateway.Gateway{
+				Base:      knowledge.NewBase(),
+				Providers: model.NewRegistry(failing),
+				Resolver:  modelgateway.KubeResolver{Client: kubeClient},
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 7, 6, 13, 15, 0, 0, time.UTC) },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace}}); err != nil {
+		t.Fatal(err)
+	}
+	var stored v1alpha1.InvestigationRequest
+	if err := kubeClient.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if failing.calls != 2 {
+		t.Fatalf("expected one primary and one fallback provider call before loop detection, got %d", failing.calls)
+	}
+	if stored.Status.Failure == nil ||
+		stored.Status.Failure.Code != "ProviderFallbackLoop" ||
+		stored.Status.Failure.Stage != v1alpha1.InvestigationStageReasoning {
+		t.Fatalf("expected ProviderFallbackLoop reasoning failure, got %#v", stored.Status.Failure)
+	}
+	if stored.Status.Execution == nil || stored.Status.Execution.State != "ProviderFallbackLoop" {
+		t.Fatalf("expected execution state ProviderFallbackLoop, got %#v", stored.Status.Execution)
+	}
+	if len(stored.Status.Execution.EgressAttempts) != 2 {
+		t.Fatalf("expected primary and fallback attempts only, got %#v", stored.Status.Execution.EgressAttempts)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "ProviderFallbackLoop" {
+		t.Fatalf("expected RCAReady false ProviderFallbackLoop, got %#v", cond)
+	}
+	var signals v1alpha1.RiskSignalList
+	if err := kubeClient.List(context.Background(), &signals); err != nil {
+		t.Fatalf("list risk signals: %v", err)
+	}
+	if len(signals.Items) != 0 {
+		t.Fatalf("expected no RiskSignal for provider fallback loop, got %#v", signals.Items)
 	}
 }
 
@@ -1923,6 +2298,23 @@ func (f fakeInvestigationDataSource) Query(context.Context, datasource.QueryRequ
 }
 func (f fakeInvestigationDataSource) HealthCheck(context.Context) error { return nil }
 
+type countingInvestigationDataSource struct {
+	name      string
+	queryType domain.QueryType
+	calls     int
+}
+
+func (f *countingInvestigationDataSource) Name() string { return f.name }
+func (f *countingInvestigationDataSource) Type() string { return string(f.queryType) }
+func (f *countingInvestigationDataSource) Capabilities() datasource.Capabilities {
+	return fakeInvestigationDataSource{name: f.name, queryType: f.queryType}.Capabilities()
+}
+func (f *countingInvestigationDataSource) Query(ctx context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {
+	f.calls++
+	return fakeInvestigationDataSource{name: f.name, queryType: f.queryType}.Query(ctx, req)
+}
+func (f *countingInvestigationDataSource) HealthCheck(context.Context) error { return nil }
+
 func loopPolicyTestRequest(name string, annotations map[string]string) *v1alpha1.InvestigationRequest {
 	return &v1alpha1.InvestigationRequest{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2061,6 +2453,23 @@ func (p failingControllerModelProvider) Name() string {
 }
 
 func (p failingControllerModelProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	return domain.ModelResponse{}, &model.ProviderError{
+		Reason:  "ProviderUnavailable",
+		Message: "provider unavailable",
+	}
+}
+
+type countingFailingModelProvider struct {
+	name  string
+	calls int
+}
+
+func (p *countingFailingModelProvider) Name() string {
+	return p.name
+}
+
+func (p *countingFailingModelProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	p.calls++
 	return domain.ModelResponse{}, &model.ProviderError{
 		Reason:  "ProviderUnavailable",
 		Message: "provider unavailable",
