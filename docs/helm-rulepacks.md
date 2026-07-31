@@ -191,7 +191,7 @@ rulePacks:
       matchNames: []
 ```
 
-## Future Profiles
+## Additional Profiles
 
 Rule packs should stay split between portable Kubernetes signals and application profiles.
 

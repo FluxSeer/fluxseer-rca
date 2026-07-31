@@ -12,7 +12,7 @@ Kubernetes-native control plane for evidence-verifiable RCA.
 Sharper positioning:
 
 ```text
-FluxSeer RCA makes Kubernetes RCA governable, verifiable, and replayable.
+FluxSeer RCA makes Kubernetes RCA governable, verifiable, and replay-oriented.
 ```
 
 FluxSeer RCA does not merely generate RCA answers. It provides the control, evidence contract, policy boundary, and execution record required to trust and operationalize RCA at scale.
@@ -35,7 +35,7 @@ FluxAgent should own:
 - compact evidence provenance
 - evidence-linked claims
 - degradation status when evidence or providers fail
-- replayable and auditable RCA results
+- auditable RCA results and replay-oriented artifacts
 
 ## Positioning Map
 
