@@ -169,9 +169,8 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 	for _, record := range result.Records {
 		reason, _ := record["reason"].(string)
 		message, _ := record["message"].(string)
-		lower := strings.ToLower(reason + " " + message)
 		for _, expected := range reasons {
-			if !strings.Contains(lower, expected) {
+			if !eventReasonMatches(reason, message, expected) {
 				continue
 			}
 			matchCount++
@@ -198,6 +197,17 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 		Summary:  fmt.Sprintf("%s detected %d matching events for %s", signal.Name, matchCount, target.Name),
 		Evidence: evidence,
 	}
+}
+
+func eventReasonMatches(reason, message, expected string) bool {
+	expected = normalizeSignalType(expected)
+	if expected == "" {
+		return false
+	}
+	if strings.TrimSpace(reason) != "" {
+		return normalizeSignalType(reason) == expected
+	}
+	return strings.Contains(normalizeSignalType(message), expected)
 }
 
 func evaluateDeploymentConditionSignal(signal v1alpha1.RiskRuleSignal, result *datasource.QueryResult, target domain.ResourceRef, severity string) *Match {
