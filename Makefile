@@ -80,7 +80,7 @@ demo-status:
 	kubectl get deployment,pod,datasource,riskrule,risksignal -n fluxagent-demo
 	kubectl describe datasource prometheus -n fluxagent-demo
 	kubectl describe riskrule fluxagent-sample-latency -n fluxagent-demo
-	kubectl describe risksignal fluxagent-sample-latency-fluxagent-sample-risk -n fluxagent-demo || true
+	signal_name="$$(kubectl get risksignal -n fluxagent-demo -l fluxagent.aiops.platform/risk-rule=fluxagent-sample-latency --sort-by=.metadata.creationTimestamp -o 'jsonpath={range .items[?(@.spec.target.name=="fluxagent-sample")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | tail -n1)"; if [ -n "$$signal_name" ]; then kubectl describe risksignal "$$signal_name" -n fluxagent-demo; fi
 	kubectl run curl-status -n fluxagent-demo --restart=Never --rm -i --image=curlimages/curl:8.8.0 -- curl -s http://fluxagent-observability:8080/demo/state
 
 demo-degrade-missing-datasource:

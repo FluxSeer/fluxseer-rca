@@ -3,7 +3,8 @@ set -euo pipefail
 
 FLUXAGENT_DEMO_NAMESPACE="${FLUXAGENT_DEMO_NAMESPACE:-fluxagent-demo}"
 FLUXAGENT_RULE_NAME="${FLUXAGENT_RULE_NAME:-fluxagent-sample-latency}"
-FLUXAGENT_SIGNAL_NAME="${FLUXAGENT_SIGNAL_NAME:-fluxagent-sample-latency-fluxagent-sample-risk}"
+FLUXAGENT_TARGET_NAME="${FLUXAGENT_TARGET_NAME:-fluxagent-sample}"
+FLUXAGENT_SIGNAL_NAME="${FLUXAGENT_SIGNAL_NAME:-}"
 FLUXAGENT_CLUSTER_NAME="${FLUXAGENT_CLUSTER_NAME:-fluxagent-demo}"
 FLUXAGENT_E2E_TIMEOUT_SECONDS="${FLUXAGENT_E2E_TIMEOUT_SECONDS:-240}"
 FLUXAGENT_E2E_POLL_SECONDS="${FLUXAGENT_E2E_POLL_SECONDS:-5}"
@@ -98,6 +99,41 @@ wait_for_condition_reason() {
 
   wait_for_command "condition ${cond_type} reason ${expected_reason} on ${resource}" \
     bash -c "[[ \"\$(kubectl get ${resource} -n ${namespace} -o jsonpath='{.status.conditions[?(@.type==\"${cond_type}\")].reason}' 2>/dev/null)\" == \"${expected_reason}\" ]]"
+}
+
+resolve_risk_signal_name() {
+  local namespace="$1"
+  local rule_name="$2"
+  local target_name="$3"
+
+  kubectl get risksignal -n "${namespace}" \
+    -l "fluxagent.aiops.platform/risk-rule=${rule_name}" \
+    --sort-by=.metadata.creationTimestamp \
+    -o "jsonpath={range .items[?(@.spec.target.name==\"${target_name}\")]}{.metadata.name}{\"\\n\"}{end}" 2>/dev/null |
+    tail -n1
+}
+
+wait_for_resolved_risk_signal() {
+  local namespace="$1"
+  local rule_name="$2"
+  local target_name="$3"
+  local deadline=$((SECONDS + FLUXAGENT_E2E_TIMEOUT_SECONDS))
+  local resolved=""
+
+  until [[ -n "${resolved}" ]]; do
+    resolved="$(resolve_risk_signal_name "${namespace}" "${rule_name}" "${target_name}")"
+    if [[ -n "${resolved}" ]]; then
+      break
+    fi
+    if (( SECONDS >= deadline )); then
+      echo "timed out waiting for RiskSignal for ${rule_name}/${target_name}" >&2
+      return 1
+    fi
+    sleep "${FLUXAGENT_E2E_POLL_SECONDS}"
+  done
+
+  FLUXAGENT_SIGNAL_NAME="${resolved}"
+  export FLUXAGENT_SIGNAL_NAME
 }
 
 assert_contains() {

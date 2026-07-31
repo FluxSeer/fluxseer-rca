@@ -280,7 +280,7 @@ func (r *RiskRuleReconciler) analyzeRCA(ctx context.Context, riskRule *v1alpha1.
 				CompatibilityPath: true,
 				Message:           "Direct RiskRule RCA was not projected because proposed root-cause claims were not verified; canonical RCA is owned by InvestigationRequest.status.",
 			},
-			Summary: evaluation.Summary,
+			Summary: directRiskSignalUnverifiedRCASummary(target.Resource, matches),
 		}, nil
 	}
 	sanitized := reasoning
@@ -303,9 +303,9 @@ func evidenceCollectionResultFromMatches(matches []rule.Match) investigation.Evi
 
 func (r *RiskRuleReconciler) upsertRiskSignal(ctx context.Context, riskRule *v1alpha1.RiskRule, target rule.Target, matches []rule.Match, rca rcaResult, summary ruleEvaluationSummary, now time.Time) error {
 	riskSignal := &v1alpha1.RiskSignal{}
-	riskSignal.Name = riskSignalName(riskRule.Name, target.Resource.Name)
-	riskSignal.Namespace = target.Resource.Namespace
 	identity := findingIdentity(riskRule, target, matches, normalizedWindowBucket(riskRule.Spec.Window.Duration, now))
+	riskSignal.Name = directRiskSignalName(riskRule.Name, target.Resource.Name, matches, identity)
+	riskSignal.Namespace = target.Resource.Namespace
 
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, riskSignal, func() error {
 		if riskSignal.Labels == nil {
@@ -484,7 +484,7 @@ func applyFindingCondition(status *v1alpha1.RiskSignalStatus, generation int64, 
 func findingConditionReason(match rule.Match) string {
 	if len(match.Evidence) > 0 {
 		kind := sanitizeConditionToken(match.Evidence[0].Kind)
-		reason := sanitizeConditionToken(match.Evidence[0].Reason)
+		reason := conditionReasonToken(match.Evidence[0].Reason)
 		switch {
 		case kind != "" && reason != "":
 			return kind + reason + "Observed"
@@ -499,6 +499,37 @@ func findingConditionReason(match rule.Match) string {
 		return name + "Detected"
 	}
 	return "SignalDetected"
+}
+
+func conditionReasonToken(value string) string {
+	switch normalizeConditionToken(value) {
+	case "backoff":
+		return "BackOff"
+	case "crashloopbackoff":
+		return "CrashLoopBackOff"
+	case "imagepullbackoff":
+		return "ImagePullBackOff"
+	case "errimagepull":
+		return "ErrImagePull"
+	case "invalidimagename":
+		return "InvalidImageName"
+	case "oomkilled":
+		return "OOMKilled"
+	case "oom":
+		return "OOM"
+	case "unhealthy":
+		return "Unhealthy"
+	case "failedscheduling":
+		return "FailedScheduling"
+	default:
+		return sanitizeConditionToken(value)
+	}
+}
+
+func normalizeConditionToken(value string) string {
+	return strings.ToLower(strings.Join(strings.FieldsFunc(value, func(r rune) bool {
+		return r < '0' || r > 'z' || (r > '9' && r < 'A') || (r > 'Z' && r < 'a')
+	}), ""))
 }
 
 func sanitizeConditionToken(value string) string {
@@ -817,6 +848,110 @@ func riskSignalName(ruleName, targetName string) string {
 		return name
 	}
 	return strings.TrimSuffix(name[:63], "-")
+}
+
+func directRiskSignalName(ruleName, targetName string, matches []rule.Match, identity *v1alpha1.FindingIdentity) string {
+	suffix := directRiskSignalNameSuffix(identity)
+	finding := dnsLabelToken(findingNameToken(matches))
+	base := dnsLabelToken(strings.Join(nonEmptyStrings(ruleName, targetName, finding), "-"))
+	if base == "" {
+		base = "risk-signal"
+	}
+	tail := "-" + suffix + "-risk"
+	if len(base)+len(tail) <= 63 {
+		return strings.TrimSuffix(base+tail, "-")
+	}
+	return strings.TrimSuffix(base[:63-len(tail)], "-") + tail
+}
+
+func directRiskSignalNameSuffix(identity *v1alpha1.FindingIdentity) string {
+	source := ""
+	if identity != nil {
+		source = firstNonEmptyString(identity.IncidentOccurrence, identity.LogicalFindingIdentity, identity.ObjectFindingIdentity)
+	}
+	if source == "" {
+		source = "risk-signal"
+	}
+	sum := sha256.Sum256([]byte(source))
+	return hex.EncodeToString(sum[:])[:12]
+}
+
+func findingNameToken(matches []rule.Match) string {
+	if len(matches) == 0 {
+		return ""
+	}
+	if name := strings.TrimSpace(matches[0].Signal.Name); name != "" {
+		return name
+	}
+	if len(matches[0].Evidence) > 0 {
+		if reason := strings.TrimSpace(matches[0].Evidence[0].Reason); reason != "" {
+			return reason
+		}
+	}
+	return findingType(matches)
+}
+
+func dnsLabelToken(value string) string {
+	parts := strings.FieldsFunc(strings.ToLower(strings.TrimSpace(value)), func(r rune) bool {
+		return r < '0' || r > 'z' || (r > '9' && r < 'a')
+	})
+	return strings.Join(parts, "-")
+}
+
+func directRiskSignalUnverifiedRCASummary(target domain.ResourceRef, matches []rule.Match) string {
+	targetRef := target.Namespace + "/" + target.Name
+	if strings.Trim(targetRef, "/") == "" {
+		targetRef = strings.TrimSpace(target.Name)
+	}
+	descriptions := observedFailureDescriptions(matches)
+	if len(descriptions) == 0 {
+		if targetRef != "" {
+			return fmt.Sprintf("Observed a rule-matched finding for %s. Underlying root cause remains unverified by collected evidence.", targetRef)
+		}
+		return "Observed a rule-matched finding. Underlying root cause remains unverified by collected evidence."
+	}
+	if targetRef != "" {
+		return fmt.Sprintf("Observed %s for %s. Underlying root cause remains unverified by collected evidence.", strings.Join(descriptions, "; "), targetRef)
+	}
+	return fmt.Sprintf("Observed %s. Underlying root cause remains unverified by collected evidence.", strings.Join(descriptions, "; "))
+}
+
+func observedFailureDescriptions(matches []rule.Match) []string {
+	descriptions := make([]string, 0, len(matches))
+	for _, match := range matches {
+		description := observedFailureDescription(match)
+		if description != "" {
+			descriptions = appendStringIfMissing(descriptions, description)
+		}
+	}
+	return descriptions
+}
+
+func observedFailureDescription(match rule.Match) string {
+	reason := ""
+	if len(match.Evidence) > 0 {
+		reason = match.Evidence[0].Reason
+	}
+	switch normalizeConditionToken(firstNonEmptyString(reason, match.Signal.Name)) {
+	case "backoff", "crashloopbackoff":
+		return "container restart backoff"
+	case "imagepullbackoff", "errimagepull", "invalidimagename", "imagepullfailure":
+		return "container image pull failure"
+	case "oomkilled", "oom", "oomkilledevent":
+		return "OOM termination"
+	case "unhealthy", "unhealthyprobe":
+		return "readiness or liveness probe failure"
+	case "failedscheduling":
+		return "pod scheduling failure"
+	default:
+		if reason != "" {
+			return strings.TrimSpace(reason) + " event"
+		}
+		if strings.TrimSpace(match.Signal.Name) != "" {
+			return strings.TrimSpace(match.Signal.Name) + " finding"
+		}
+		return ""
+	}
 }
 
 func applyRCAResult(status *v1alpha1.RiskSignalStatus, rca rcaResult) {

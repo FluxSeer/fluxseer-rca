@@ -3,7 +3,7 @@ set -euo pipefail
 
 namespace="${FLUXAGENT_DEMO_NAMESPACE:-fluxagent-demo}"
 rule_name="${FLUXAGENT_RULE_NAME:-fluxagent-sample-latency}"
-signal_name="${FLUXAGENT_SIGNAL_NAME:-fluxagent-sample-latency-fluxagent-sample-risk}"
+target_name="${FLUXAGENT_TARGET_NAME:-fluxagent-sample}"
 mode="${1:-}"
 
 if [[ -z "${mode}" ]]; then
@@ -82,6 +82,14 @@ esac
 echo "waiting for controller reconcile..."
 sleep 20
 
+signal_name="$(kubectl get risksignal -n "${namespace}" \
+  -l "fluxagent.aiops.platform/risk-rule=${rule_name}" \
+  --sort-by=.metadata.creationTimestamp \
+  -o "jsonpath={range .items[?(@.spec.target.name==\"${target_name}\")]}{.metadata.name}{\"\\n\"}{end}" 2>/dev/null |
+  tail -n1)"
+
 kubectl get datasource,riskrule,risksignal -n "${namespace}" || true
 kubectl describe riskrule "${rule_name}" -n "${namespace}"
-kubectl describe risksignal "${signal_name}" -n "${namespace}" || true
+if [[ -n "${signal_name}" ]]; then
+  kubectl describe risksignal "${signal_name}" -n "${namespace}" || true
+fi

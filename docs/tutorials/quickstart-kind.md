@@ -90,7 +90,11 @@ kubectl get datasource,riskrule,modelprovider -n fluxagent-demo
 kubectl get risksignal -n fluxagent-demo
 kubectl describe datasource prometheus -n fluxagent-demo
 kubectl describe riskrule fluxagent-sample-latency -n fluxagent-demo
-kubectl describe risksignal fluxagent-sample-latency-fluxagent-sample-risk -n fluxagent-demo
+SIGNAL_NAME="$(kubectl get risksignal -n fluxagent-demo \
+  -l fluxagent.aiops.platform/risk-rule=fluxagent-sample-latency \
+  --sort-by=.metadata.creationTimestamp \
+  -o 'jsonpath={range .items[?(@.spec.target.name=="fluxagent-sample")]}{.metadata.name}{"\n"}{end}' | tail -n1)"
+kubectl describe risksignal "${SIGNAL_NAME}" -n fluxagent-demo
 make demo-status
 ```
 
@@ -98,14 +102,14 @@ Expected `RiskSignal` listing:
 
 ```bash
 $ kubectl get risksignal -n fluxagent-demo
-NAME                                         AGE
-fluxagent-sample-latency-fluxagent-sample-risk    20s
+NAME                                                        AGE
+fluxagent-sample-latency-elevated-5xx-rate-a1b2c3d4e5f6-risk   20s
 ```
 
 Expected `describe` highlights:
 
 ```text
-Name:         fluxagent-sample-latency-fluxagent-sample-risk
+Name:         fluxagent-sample-latency-elevated-5xx-rate-a1b2c3d4e5f6-risk
 Namespace:    fluxagent-demo
 Kind:         RiskSignal
 Phase:        Notified
@@ -128,7 +132,7 @@ Expected condition checks:
 
 - `DataSource/prometheus`: `Ready=True`, `Unsupported=False`
 - `RiskRule/fluxagent-sample-latency`: `DatasourceResolved=True`, `QueryTypeSupported=True`, `Ready=True`
-- `RiskSignal/fluxagent-sample-latency-fluxagent-sample-risk`: `EvidenceCollectionReady=True`, `RCAReady=True`
+- matching `RiskSignal` for `RiskRule/fluxagent-sample-latency` and target `fluxagent-sample`: `EvidenceCollectionReady=True`, `RCAReady=True`
 
 `RCAReady=True` means an RCA result is available. It does not indicate that the target workload is healthy or remediated.
 
@@ -145,15 +149,15 @@ deployment.apps/fluxagent-sample              0/1     1            0           2
 NAME                                   READY   STATUS             RESTARTS
 pod/fluxagent-sample-xxxx              0/1     CrashLoopBackOff   3
 
-NAME                                                      AGE
-risksignal.aiops.platform/fluxagent-sample-latency-fluxagent-sample-risk   1m
+NAME                                                               AGE
+risksignal.aiops.platform/fluxagent-sample-latency-elevated-5xx-rate-a1b2c3d4e5f6-risk   1m
 ```
 
 `make demo-status` also runs:
 
 - `kubectl describe datasource prometheus -n fluxagent-demo`
 - `kubectl describe riskrule fluxagent-sample-latency -n fluxagent-demo`
-- `kubectl describe risksignal fluxagent-sample-latency-fluxagent-sample-risk -n fluxagent-demo`
+- `kubectl describe risksignal "${SIGNAL_NAME}" -n fluxagent-demo`
 
 ## Force a Degraded Case
 
@@ -168,7 +172,7 @@ make demo-degrade-missing-datasource
 Expected signals:
 
 - `RiskRule/fluxagent-sample-latency`: `DatasourceResolved=False`, `Ready=False`
-- `RiskSignal/fluxagent-sample-latency-fluxagent-sample-risk`: `EvidenceCollectionReady=False`
+- matching `RiskSignal` for `RiskRule/fluxagent-sample-latency` and target `fluxagent-sample`: `EvidenceCollectionReady=False`
 
 Capability mismatch case:
 
@@ -179,7 +183,7 @@ make demo-degrade-capability-mismatch
 Expected signals:
 
 - `RiskRule/fluxagent-sample-latency`: `QueryTypeSupported=False`, `Ready=False`
-- `RiskSignal/fluxagent-sample-latency-fluxagent-sample-risk`: `EvidenceCollectionReady=False`
+- matching `RiskSignal` for `RiskRule/fluxagent-sample-latency` and target `fluxagent-sample`: `EvidenceCollectionReady=False`
 
 Hosted provider auth failure case:
 
@@ -190,7 +194,7 @@ make demo-degrade-provider-auth-failed
 Expected signals:
 
 - `RiskRule/fluxagent-sample-latency`: `Ready=True`
-- `RiskSignal/fluxagent-sample-latency-fluxagent-sample-risk`: `EvidenceCollectionReady=True`, `RCAReady=False` with reason `ProviderAuthFailed`
+- matching `RiskSignal` for `RiskRule/fluxagent-sample-latency` and target `fluxagent-sample`: `EvidenceCollectionReady=True`, `RCAReady=False` with reason `ProviderAuthFailed`
 
 Reset the demo rule:
 
@@ -265,7 +269,7 @@ Expected webhook payload shape:
 If you want screenshots for README or release notes, capture these three states:
 
 1. `kubectl get deployment,pod,riskrule,risksignal -n fluxagent-demo`
-2. `kubectl describe risksignal fluxagent-sample-latency-fluxagent-sample-risk -n fluxagent-demo`
+2. `kubectl describe risksignal "${SIGNAL_NAME}" -n fluxagent-demo`
 3. `curl http://fluxagent-observability:8080/demo/state`
 
 ## Recover the Demo
