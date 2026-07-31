@@ -218,10 +218,12 @@ func domainProfile(statement string) string {
 		return "imagepullbackoff"
 	case containsAny(statement, "crashloopbackoff", "crash loop", "crashloop", "backoff", "restarting", "restart"):
 		return "crashloopbackoff"
-	case containsAny(statement, "oomkilled", "out of memory", "memory limit", "memory pressure"):
-		return "oomkilled"
+	case containsAny(statement, "oomkilled", "out of memory", "memory limit", "memory pressure", "memory usage", "memory threshold", "safe threshold"):
+		return "memorypressure"
 	case containsAny(statement, "latency regression", "high latency", "p95 latency", "p99 latency", "timeout", "slow response"):
 		return "latencyregression"
+	case containsAny(statement, "rollout", "release", "image digest", "pod template", "replicaset", "generation changed", "deployment change"):
+		return "rollout"
 	default:
 		return ""
 	}
@@ -231,10 +233,12 @@ func requiredDomainKinds(profile string) []string {
 	switch profile {
 	case "imagepullbackoff", "crashloopbackoff":
 		return []string{"event"}
-	case "oomkilled":
+	case "memorypressure":
 		return []string{"event", "metric"}
 	case "latencyregression":
 		return []string{"metric"}
+	case "rollout":
+		return []string{"deploymentcondition"}
 	default:
 		return nil
 	}
@@ -248,7 +252,7 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 		return kind == "event" && containsAny(text, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
 	case "crashloopbackoff":
 		return kind == "event" && containsAny(text, "crashloopbackoff", "backoff", "back off", "container crashed", "restarting failed container")
-	case "oomkilled":
+	case "memorypressure":
 		switch kind {
 		case "event":
 			return containsAny(text, "oomkilled", "out of memory", "memory limit")
@@ -259,6 +263,8 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 		}
 	case "latencyregression":
 		return kind == "metric" && containsAny(text, "latency", "duration", "response time", "p95", "p99", "histogram")
+	case "rollout":
+		return kind == "deploymentcondition" && containsAny(text, "generation", "replicaset", "replica set", "pod template", "image digest", "rollout", "progressing")
 	default:
 		return false
 	}

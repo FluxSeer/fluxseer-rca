@@ -129,8 +129,8 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Phase != v1alpha1.PhaseCompleted {
 		t.Fatalf("expected completed phase, got %s", stored.Status.Phase)
 	}
-	if stored.Status.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
-		t.Fatalf("expected confirmed outcome, got %q", stored.Status.Outcome)
+	if stored.Status.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
+		t.Fatalf("expected inconclusive outcome for BackOff-only evidence, got %q", stored.Status.Outcome)
 	}
 	if stored.Status.Failure != nil {
 		t.Fatalf("expected no workflow failure on completed investigation, got %#v", stored.Status.Failure)
@@ -147,8 +147,8 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Summary == "" || stored.Status.Hypothesis == "" {
 		t.Fatalf("expected RCA summary and hypothesis, got summary=%q hypothesis=%q", stored.Status.Summary, stored.Status.Hypothesis)
 	}
-	if stored.Status.Confidence <= 0 {
-		t.Fatalf("expected positive confidence, got %f", stored.Status.Confidence)
+	if stored.Status.Confidence != 0 {
+		t.Fatalf("expected zero canonical confidence for unverified RCA, got %f", stored.Status.Confidence)
 	}
 	if len(stored.Status.EvidenceRefs) != 1 || stored.Status.EvidenceRefs[0].Kind != "event" {
 		t.Fatalf("expected one event evidence ref, got %#v", stored.Status.EvidenceRefs)
@@ -159,23 +159,23 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Verdict == nil {
 		t.Fatal("expected structured RCA verdict")
 	}
-	if stored.Status.Verdict.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
-		t.Fatalf("expected confirmed verdict outcome, got %#v", stored.Status.Verdict)
+	if stored.Status.Verdict.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
+		t.Fatalf("expected inconclusive verdict outcome, got %#v", stored.Status.Verdict)
 	}
 	if stored.Status.Verdict.RootCauseEntity.Name != "open-api" {
 		t.Fatalf("expected root cause entity open-api, got %#v", stored.Status.Verdict.RootCauseEntity)
 	}
-	if stored.Status.Verdict.RootCauseType == "" {
-		t.Fatalf("expected root cause type, got %#v", stored.Status.Verdict)
+	if stored.Status.Verdict.RootCauseType != "" {
+		t.Fatalf("expected no root cause type for unverified RCA, got %#v", stored.Status.Verdict)
 	}
 	if stored.Status.Verdict.ConfidenceDetail == nil {
 		t.Fatal("expected structured confidence detail")
 	}
-	if stored.Status.Verdict.ConfidenceDetail.ProviderScore != stored.Status.Confidence {
-		t.Fatalf("expected provider confidence %f, got %#v", stored.Status.Confidence, stored.Status.Verdict.ConfidenceDetail)
+	if stored.Status.Verdict.ConfidenceDetail.ProviderScore <= 0 {
+		t.Fatalf("expected provider confidence retained, got %#v", stored.Status.Verdict.ConfidenceDetail)
 	}
-	if stored.Status.Verdict.ConfidenceDetail.VerifiedScore <= 0 || stored.Status.Verdict.ConfidenceDetail.VerifiedScore > stored.Status.Confidence {
-		t.Fatalf("expected bounded verified confidence, got %#v", stored.Status.Verdict.ConfidenceDetail)
+	if stored.Status.Verdict.ConfidenceDetail.VerifiedScore != 0 {
+		t.Fatalf("expected zero verified confidence, got %#v", stored.Status.Verdict.ConfidenceDetail)
 	}
 	if stored.Status.Verdict.ConfidenceDetail.Level == "" || stored.Status.Verdict.ConfidenceDetail.Method != verifier.MethodDomainEvidenceCoverageV2 {
 		t.Fatalf("expected confidence level and method, got %#v", stored.Status.Verdict.ConfidenceDetail)
@@ -195,8 +195,11 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 			supportedClaimFound = true
 		}
 	}
-	if !supportedClaimFound {
-		t.Fatalf("expected at least one supported claim citing evidence-001, got %#v", stored.Status.Claims)
+	if supportedClaimFound {
+		t.Fatalf("expected provider root-cause claims unsupported by BackOff-only evidence, got %#v", stored.Status.Claims)
+	}
+	if len(stored.Status.MissingEvidence) == 0 {
+		t.Fatalf("expected missing evidence hints for unverified RCA")
 	}
 	if stored.Status.Execution == nil || stored.Status.Execution.Provider != "heuristic" || stored.Status.Execution.AttemptCount != 1 {
 		t.Fatalf("expected RCA execution metadata, got %#v", stored.Status.Execution)
@@ -260,14 +263,17 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if cond := findCondition(stored.Status.Conditions, conditionQueryTypeSupported); cond == nil || cond.Status != metav1.ConditionTrue {
 		t.Fatalf("expected QueryTypeSupported true condition, got %#v", cond)
 	}
-	if cond := findCondition(stored.Status.Conditions, conditionReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "InvestigationCompleted" {
-		t.Fatalf("expected Ready true InvestigationCompleted, got %#v", cond)
+	if cond := findCondition(stored.Status.Conditions, conditionReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "InvestigationInconclusive" {
+		t.Fatalf("expected Ready true InvestigationInconclusive, got %#v", cond)
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "EvidenceCollected" {
 		t.Fatalf("expected EvidenceCollectionReady true EvidenceCollected, got %#v", cond)
 	}
-	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "ProviderSucceeded" {
-		t.Fatalf("expected RCAReady true ProviderSucceeded, got %#v", cond)
+	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
+		t.Fatalf("expected RCAReady false RCAUnverified, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionVerified); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "NoSupportedRootCauseClaims" {
+		t.Fatalf("expected Verified false NoSupportedRootCauseClaims, got %#v", cond)
 	}
 }
 
@@ -369,8 +375,11 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 		riskSignal.Spec.InvestigationRef.Namespace != storedRequest.Namespace {
 		t.Fatalf("expected promoted risk signal to reference canonical investigation, got %#v", riskSignal.Spec.InvestigationRef)
 	}
-	if riskSignal.Status.RCASummary == "" || riskSignal.Status.RCAHypothesis == "" {
-		t.Fatalf("expected RCA fields on promoted risk signal, got %#v", riskSignal.Status)
+	if riskSignal.Status.Phase != v1alpha1.InvestigationOutcomeInconclusive ||
+		riskSignal.Status.RCASummary == "" ||
+		riskSignal.Status.RCAHypothesis != "" ||
+		len(riskSignal.Status.RCACauses) != 0 {
+		t.Fatalf("expected inconclusive RCA projection on promoted risk signal, got %#v", riskSignal.Status)
 	}
 	if riskSignal.Status.Projection == nil ||
 		riskSignal.Status.Projection.Mode != "InvestigationRequestProjection" ||
@@ -378,8 +387,8 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 		riskSignal.Status.Projection.ProjectedFrom.Name != storedRequest.Name {
 		t.Fatalf("expected investigation projection metadata, got %#v", riskSignal.Status.Projection)
 	}
-	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue {
-		t.Fatalf("expected RCAReady true on promoted risk signal, got %#v", cond)
+	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
+		t.Fatalf("expected RCAReady false on promoted risk signal, got %#v", cond)
 	}
 }
 
@@ -1388,6 +1397,13 @@ func TestInvestigationRequestReconcilerAllowsImagePullBackOffWhenEventEvidencePr
 	}
 	if stored.Status.Phase != v1alpha1.PhaseCompleted || stored.Status.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
 		t.Fatalf("expected completed confirmed status, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if stored.Status.Verdict == nil || stored.Status.Verdict.RootCauseType != "ImagePullFailure" {
+		t.Fatalf("expected image pull root cause type, got %#v", stored.Status.Verdict)
+	}
+	if stored.Status.Summary == "ImagePullBackOff prevented the deployment from starting" ||
+		!strings.Contains(stored.Status.Summary, "Verified root-cause evidence supports") {
+		t.Fatalf("expected canonical summary rebuilt from verified claims, got %q", stored.Status.Summary)
 	}
 	if counter.calls != 1 {
 		t.Fatalf("expected provider to be called once when required evidence is complete, got %d", counter.calls)

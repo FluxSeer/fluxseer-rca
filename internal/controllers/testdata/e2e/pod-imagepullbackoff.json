@@ -34,7 +34,7 @@
   "expected": {
     "phase": "Completed",
     "outcome": "Confirmed",
-    "rootCauseType": "WorkloadDegradation",
+    "rootCauseType": "ImagePullFailure",
     "claimVerification": "Supported",
     "providerCalls": 1
   }

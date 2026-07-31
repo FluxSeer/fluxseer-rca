@@ -923,6 +923,7 @@ type canonicalVerdictEvaluation struct {
 func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult, claims []v1alpha1.RCAClaim, providerConfidence float64) canonicalVerdictEvaluation {
 	causalClaims := rootCauseClaims(rca, claims)
 	supported, contradicted := countVerifiedRootCauseClaims(causalClaims)
+	supportedClaims := supportedRootCauseClaims(causalClaims)
 	verifiedScore := 0.0
 	if len(causalClaims) > 0 {
 		verifiedScore = float64(supported) / float64(len(causalClaims))
@@ -933,8 +934,8 @@ func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigatio
 
 	evaluation := canonicalVerdictEvaluation{
 		Outcome:       v1alpha1.InvestigationOutcomeConfirmed,
-		Summary:       rca.Reasoning.RiskSummary,
-		RootCauseType: inferRootCauseType(rca.Reasoning.RCA.Hypothesis, rca.Reasoning.RCA.Causes),
+		Summary:       verifiedRCASummary(evidence, supportedClaims),
+		RootCauseType: inferRootCauseTypeFromClaims(supportedClaims),
 		Confidence:    verifiedScore,
 		VerifiedScore: verifiedScore,
 	}
@@ -947,6 +948,73 @@ func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigatio
 		evaluation.MissingEvidence = missingEvidenceForClaims(causalClaims)
 	}
 	return evaluation
+}
+
+func supportedRootCauseClaims(claims []v1alpha1.RCAClaim) []v1alpha1.RCAClaim {
+	out := make([]v1alpha1.RCAClaim, 0, len(claims))
+	for _, claim := range claims {
+		if claim.Verification == verifier.VerificationSupported {
+			out = append(out, claim)
+		}
+	}
+	return out
+}
+
+func verifiedRCASummary(evidence investigation.EvidenceCollectionResult, supportedClaims []v1alpha1.RCAClaim) string {
+	statements := make([]string, 0, len(supportedClaims))
+	for _, claim := range supportedClaims {
+		statement := strings.TrimSpace(claim.Statement)
+		if statement != "" {
+			statements = append(statements, statement)
+		}
+	}
+	evidenceSummary := observedEvidenceSummary(evidence)
+	switch {
+	case len(statements) > 0 && evidenceSummary != "":
+		return fmt.Sprintf("Verified root-cause evidence supports: %s. Observed evidence: %s.", strings.Join(statements, "; "), evidenceSummary)
+	case len(statements) > 0:
+		return fmt.Sprintf("Verified root-cause evidence supports: %s.", strings.Join(statements, "; "))
+	case evidenceSummary != "":
+		return fmt.Sprintf("Observed evidence: %s.", evidenceSummary)
+	default:
+		return "Root-cause claims were verified by collected evidence."
+	}
+}
+
+func observedEvidenceSummary(evidence investigation.EvidenceCollectionResult) string {
+	parts := make([]string, 0, len(evidence.EvidenceRefs))
+	for _, ref := range evidence.EvidenceRefs {
+		kind := strings.TrimSpace(ref.Kind)
+		reason := strings.TrimSpace(ref.Reason)
+		source := strings.TrimSpace(ref.Source)
+		detail := strings.TrimSpace(ref.Summary)
+		label := strings.TrimSpace(strings.Join(nonEmptyStrings(kind, reason, source), " "))
+		switch {
+		case label != "" && detail != "":
+			parts = append(parts, fmt.Sprintf("%s: %s", label, detail))
+		case detail != "":
+			parts = append(parts, detail)
+		case label != "":
+			parts = append(parts, label)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	if len(parts) > 3 {
+		parts = parts[:3]
+	}
+	return strings.Join(parts, "; ")
+}
+
+func nonEmptyStrings(values ...string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			out = append(out, strings.TrimSpace(value))
+		}
+	}
+	return out
 }
 
 func rootCauseClaims(rca investigation.RCAResult, claims []v1alpha1.RCAClaim) []v1alpha1.RCAClaim {
@@ -975,6 +1043,28 @@ func countVerifiedRootCauseClaims(claims []v1alpha1.RCAClaim) (int, int) {
 		}
 	}
 	return supported, contradicted
+}
+
+func inferRootCauseTypeFromClaims(claims []v1alpha1.RCAClaim) string {
+	statements := make([]string, 0, len(claims))
+	for _, claim := range claims {
+		statements = append(statements, claim.Statement)
+	}
+	text := strings.ToLower(strings.Join(statements, " "))
+	switch {
+	case containsAny(text, "imagepullbackoff", "errimagepull", "image pull", "pull image", "failed to pull"):
+		return "ImagePullFailure"
+	case containsAny(text, "memory", "oom", "resource pressure", "safe threshold"):
+		return "ResourcePressure"
+	case containsAny(text, "latency", "timeout", "http", "5xx"):
+		return "LatencyRegression"
+	case containsAny(text, "rollout", "release", "pod template", "replicaset", "image digest"):
+		return "DeploymentRegression"
+	case containsAny(text, "crash", "restart", "backoff", "startup"):
+		return "CrashLoop"
+	default:
+		return "WorkloadDegradation"
+	}
 }
 
 func unverifiedRCASummary(evidence investigation.EvidenceCollectionResult, providerSummary string) string {
