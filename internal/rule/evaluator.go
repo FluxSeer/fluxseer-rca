@@ -166,8 +166,6 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 
 	evidence := make([]v1alpha1.EvidenceRef, 0, 3)
 	matchCount := 0
-	firstReason := ""
-	firstMessage := ""
 	for _, record := range result.Records {
 		reason, _ := record["reason"].(string)
 		message, _ := record["message"].(string)
@@ -177,10 +175,6 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 				continue
 			}
 			matchCount++
-			if firstReason == "" {
-				firstReason = reason
-				firstMessage = message
-			}
 			if len(evidence) < 3 {
 				evidence = append(evidence, v1alpha1.EvidenceRef{
 					Kind:    "event",
@@ -202,14 +196,7 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 		Signal:   signal,
 		Severity: severity,
 		Summary:  fmt.Sprintf("%s detected %d matching events for %s", signal.Name, matchCount, target.Name),
-		Evidence: append([]v1alpha1.EvidenceRef{
-			{
-				Kind:    "event",
-				Source:  result.Source,
-				Reason:  firstReason,
-				Summary: fmt.Sprintf("%s (matched %d events)", firstMessage, matchCount),
-			},
-		}, evidence...),
+		Evidence: evidence,
 	}
 }
 
@@ -224,8 +211,6 @@ func evaluateDeploymentConditionSignal(signal v1alpha1.RiskRuleSignal, result *d
 
 	evidence := make([]v1alpha1.EvidenceRef, 0, 3)
 	matchCount := 0
-	firstSummary := ""
-	firstReason := ""
 	for _, record := range result.Records {
 		conditionType, _ := record["type"].(string)
 		status, _ := record["status"].(string)
@@ -237,10 +222,6 @@ func evaluateDeploymentConditionSignal(signal v1alpha1.RiskRuleSignal, result *d
 				continue
 			}
 			matchCount++
-			if firstSummary == "" {
-				firstReason = reason
-				firstSummary = fmt.Sprintf("%s=%s %s", conditionType, status, message)
-			}
 			if len(evidence) < 3 {
 				evidence = append(evidence, v1alpha1.EvidenceRef{
 					Kind:    "deploymentCondition",
@@ -262,14 +243,7 @@ func evaluateDeploymentConditionSignal(signal v1alpha1.RiskRuleSignal, result *d
 		Signal:   signal,
 		Severity: severity,
 		Summary:  fmt.Sprintf("%s detected %d matching deployment conditions for %s", signal.Name, matchCount, target.Name),
-		Evidence: append([]v1alpha1.EvidenceRef{
-			{
-				Kind:    "deploymentCondition",
-				Source:  result.Source,
-				Reason:  firstReason,
-				Summary: fmt.Sprintf("%s (matched %d deployment conditions)", firstSummary, matchCount),
-			},
-		}, evidence...),
+		Evidence: evidence,
 	}
 }
 

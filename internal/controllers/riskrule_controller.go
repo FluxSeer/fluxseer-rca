@@ -347,6 +347,7 @@ func (r *RiskRuleReconciler) upsertRiskSignal(ctx context.Context, riskRule *v1a
 
 	original := riskSignal.DeepCopy()
 	setRiskSignalStatus(&riskSignal.Status, v1alpha1.PhaseConfirmed, combineSummaries(matches), riskSignal.Generation, now)
+	applyFindingCondition(&riskSignal.Status, riskSignal.Generation, matches, now)
 	applyEvidenceConditions(&riskSignal.Status, riskSignal.Generation, summary, now)
 	applyRCAResult(&riskSignal.Status, rca)
 	if statusChangedRiskSignal(original, riskSignal) {
@@ -465,6 +466,54 @@ func applyEvidenceConditions(status *v1alpha1.RiskSignalStatus, generation int64
 		return
 	}
 	setStatusCondition(&status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "AllEvidenceSourcesReady", "all datasource references resolved and supported the requested query types", generation, now)
+}
+
+func applyFindingCondition(status *v1alpha1.RiskSignalStatus, generation int64, matches []rule.Match, now time.Time) {
+	if len(matches) == 0 {
+		setStatusCondition(&status.Conditions, conditionFindingReady, metav1.ConditionFalse, "NoSignalDetected", "no matching risk signal was detected", generation, now)
+		return
+	}
+	reason := findingConditionReason(matches[0])
+	message := combineSummaries(matches)
+	if strings.TrimSpace(message) == "" {
+		message = "risk finding was detected by RiskRule evaluation"
+	}
+	setStatusCondition(&status.Conditions, conditionFindingReady, metav1.ConditionTrue, reason, message, generation, now)
+}
+
+func findingConditionReason(match rule.Match) string {
+	if len(match.Evidence) > 0 {
+		kind := sanitizeConditionToken(match.Evidence[0].Kind)
+		reason := sanitizeConditionToken(match.Evidence[0].Reason)
+		switch {
+		case kind != "" && reason != "":
+			return kind + reason + "Observed"
+		case kind != "":
+			return kind + "Observed"
+		case reason != "":
+			return reason + "Observed"
+		}
+	}
+	name := sanitizeConditionToken(match.Signal.Name)
+	if name != "" {
+		return name + "Detected"
+	}
+	return "SignalDetected"
+}
+
+func sanitizeConditionToken(value string) string {
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r < '0' || r > 'z' || (r > '9' && r < 'A') || (r > 'Z' && r < 'a')
+	})
+	out := ""
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out += strings.ToUpper(part[:1]) + strings.ToLower(part[1:])
+	}
+	return out
 }
 
 func firstNonEmptyIssueMessage(summary ruleEvaluationSummary) string {
