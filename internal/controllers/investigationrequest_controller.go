@@ -364,6 +364,7 @@ func applyEvidenceRequirementInconclusiveStatus(request *v1alpha1.InvestigationR
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "RequiredEvidenceMissing", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "RequiredEvidenceMissing", "RCA is inconclusive because required evidence is incomplete", request.Generation, now)
+	setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because required RCA evidence is incomplete", now)
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationInconclusive", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, "RequiredEvidenceMissing", gate.Message, request.Generation, now)
 }
@@ -403,6 +404,7 @@ func applyEvidenceRequirementNoIssueFoundStatus(request *v1alpha1.InvestigationR
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "RequiredEvidenceComplete", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionTrue, "NoIssueFound", message, request.Generation, now)
+	setInvestigationRemediationBlocked(request, "NoIssueFound", "remediation is not available because no issue was found", now)
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "NoIssueFound", message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "investigation completed without degradation", request.Generation, now)
 }
@@ -417,6 +419,7 @@ func applyLoopPreventedInvestigationStatus(request *v1alpha1.InvestigationReques
 	request.Status.CompletedAt = &completedAt
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, failure.Code, failure.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, failure.Code, failure.Message, request.Generation, now)
+	setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because RCA execution was blocked: "+failure.Code, now)
 }
 
 func investigationLoopFailure(request *v1alpha1.InvestigationRequest) *v1alpha1.InvestigationFailure {
@@ -713,14 +716,12 @@ func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, rea
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
+	setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because the investigation request is not runnable", now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "ValidationFailed", "request failed validation before evidence collection started", request.Generation, now)
 }
 
 func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, message string, now time.Time) {
 	request.Status.Provider = ""
-	if preflight.Provider != nil {
-		request.Status.Provider = preflight.Provider.Name
-	}
 	request.Status.EvidenceRefs = evidence.EvidenceRefs
 
 	if preflight.TargetIssue != nil {
@@ -768,6 +769,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		} else {
 			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, issue.Reason, "request failed without an optional dependency degradation", request.Generation, now)
 		}
+		setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because RCA execution was blocked: "+issue.Reason, now)
 		return
 	}
 	if evidence.Issue != nil {
@@ -785,6 +787,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		} else {
 			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, evidence.Issue.Reason, "request failed during evidence collection without an optional dependency degradation", request.Generation, now)
 		}
+		setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because evidence collection did not complete: "+evidence.Issue.Reason, now)
 		return
 	}
 	if rca.Issue != nil {
@@ -810,6 +813,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		} else {
 			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, rca.Issue.Reason, "request failed during RCA generation without an optional dependency degradation", request.Generation, now)
 		}
+		setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because RCA generation failed: "+rca.Issue.Reason, now)
 		return
 	}
 
@@ -838,12 +842,15 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	case v1alpha1.InvestigationOutcomeConfirmed:
 		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionTrue, "ProviderSucceeded", "RCA generated successfully for investigation request", request.Generation, now)
 		setStatusCondition(&request.Status.Conditions, conditionVerified, metav1.ConditionTrue, "RootCauseClaimsSupported", "root-cause claims are supported by collected evidence", request.Generation, now)
+		setStatusCondition(&request.Status.Conditions, conditionRemediationReady, metav1.ConditionTrue, "RootCauseVerified", "remediation planning is allowed after verified root-cause evidence", request.Generation, now)
 		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
 	case v1alpha1.InvestigationOutcomeInconclusive:
 		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "RCAUnverified", "RCA completed but proposed root-cause claims were not supported by collected evidence", request.Generation, now)
 		setStatusCondition(&request.Status.Conditions, conditionVerified, metav1.ConditionFalse, "NoSupportedRootCauseClaims", "no proposed root-cause claim was supported by collected evidence", request.Generation, now)
+		setInvestigationRemediationBlocked(request, "RCAUnverified", "remediation is not allowed without verified root-cause evidence", now)
 		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationInconclusive", request.Status.Summary, request.Generation, now)
 	default:
+		setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because the investigation outcome is not confirmed", now)
 		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
 	}
 	if evidenceDegradation != nil {
@@ -851,6 +858,10 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	} else {
 		setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request completed successfully without degradation", request.Generation, now)
 	}
+}
+
+func setInvestigationRemediationBlocked(request *v1alpha1.InvestigationRequest, reason string, message string, now time.Time) {
+	setStatusCondition(&request.Status.Conditions, conditionRemediationReady, metav1.ConditionFalse, reason, message, request.Generation, now)
 }
 
 func applyInvestigationFailure(request *v1alpha1.InvestigationRequest, code string, message string, stage string) {

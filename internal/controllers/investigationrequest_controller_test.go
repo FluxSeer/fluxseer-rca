@@ -1208,11 +1208,23 @@ func TestInvestigationRequestReconcilerStopsBeforeEvidenceWhenTargetNotFound(t *
 		stored.Status.Failure.Retryable {
 		t.Fatalf("expected non-retryable TargetNotFound failure, got %#v", stored.Status.Failure)
 	}
+	if stored.Status.Provider != "" {
+		t.Fatalf("expected no executed provider in status, got %q", stored.Status.Provider)
+	}
+	if stored.Status.Execution != nil {
+		t.Fatalf("expected no RCA execution for target preflight failure, got %#v", stored.Status.Execution)
+	}
+	if len(stored.Status.EvidenceRefs) != 0 {
+		t.Fatalf("expected no evidence refs for target preflight failure, got %#v", stored.Status.EvidenceRefs)
+	}
 	if cond := findCondition(stored.Status.Conditions, conditionTargetResolved); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "TargetNotFound" {
 		t.Fatalf("expected TargetResolved false TargetNotFound, got %#v", cond)
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "TargetNotFound" {
 		t.Fatalf("expected RCAReady false TargetNotFound, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionRemediationReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnavailable" {
+		t.Fatalf("expected RemediationReady false RCAUnavailable, got %#v", cond)
 	}
 	if eventSource.calls != 0 {
 		t.Fatalf("expected datasource not to be queried after target preflight failure, got %d calls", eventSource.calls)
@@ -1318,6 +1330,9 @@ func TestInvestigationRequestReconcilerMarksInvalidProviderResponseDistinctly(t 
 	if cond := findCondition(stored.Status.Conditions, conditionDegraded); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "InvalidProviderResponse" {
 		t.Fatalf("expected Degraded true InvalidProviderResponse, got %#v", cond)
 	}
+	if cond := findCondition(stored.Status.Conditions, conditionRemediationReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnavailable" {
+		t.Fatalf("expected RemediationReady false RCAUnavailable, got %#v", cond)
+	}
 	var signals v1alpha1.RiskSignalList
 	if err := kubeClient.List(context.Background(), &signals); err != nil {
 		t.Fatalf("list risk signals: %v", err)
@@ -1419,6 +1434,9 @@ func TestInvestigationRequestReconcilerMarksProviderFallbackLoopDistinctly(t *te
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "ProviderFallbackLoop" {
 		t.Fatalf("expected RCAReady false ProviderFallbackLoop, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionRemediationReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnavailable" {
+		t.Fatalf("expected RemediationReady false RCAUnavailable, got %#v", cond)
 	}
 	var signals v1alpha1.RiskSignalList
 	if err := kubeClient.List(context.Background(), &signals); err != nil {

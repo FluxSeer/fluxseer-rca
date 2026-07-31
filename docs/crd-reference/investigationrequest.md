@@ -394,7 +394,7 @@ When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to t
 
 If `ttlSeconds` is greater than zero, FluxAgent keeps the completed request for that many seconds after `status.completedAt`, then deletes it automatically.
 
-Compatibility note: `status.summary`, `status.hypothesis`, `status.confidence`, and `status.provider` remain available for the v0.2 path. New consumers should prefer `status.verdict`, `status.claims`, `status.degradation`, and `status.execution`.
+Compatibility note: `status.summary`, `status.hypothesis`, `status.confidence`, and `status.provider` remain available for the v0.2 path. `status.provider` is populated only when FluxAgent has persisted provider reasoning or a provider attempt result; it is not the selected provider from preflight resolution. The selected provider remains in `spec.modelProviderRef`. New consumers should prefer `status.verdict`, `status.claims`, `status.degradation`, and `status.execution`.
 
 ## Conditions
 
@@ -406,6 +406,7 @@ Condition types:
 - `QueryTypeSupported`
 - `EvidenceCollectionReady`
 - `RCAReady`
+- `RemediationReady`
 - `Degraded`
 
 Current top-level conditions are the supported external integration surface for common workflow health checks. Consumers should prefer condition type, status, reason, and observedGeneration over provider-specific execution internals whenever possible.
@@ -419,9 +420,11 @@ Common reasons:
 - `ProviderUnavailable`
 - `InvalidProviderResponse`
 
-`Degraded=True` is used when the request failed because an optional dependency or adapter path was unavailable or incompatible.
+`Degraded=True` is used for partial or bounded execution, such as optional dependency or evidence loss, that still produced a consumable result. Hard workflow failures such as `TargetNotFound` are represented by `phase: Failed`, `outcome: Unknown`, and blocking conditions; they are not automatically degraded.
 
 `Ready=True` means the investigation workflow reached a consumable terminal status. `RCAReady=True` means an RCA result is available. It does not indicate that the target workload is healthy or remediated.
+
+`RemediationReady=True` means verified root-cause evidence is available for remediation planning. When `RCAReady=False`, `RemediationReady` is also `False` with a blocking reason such as `RCAUnavailable` or `RCAUnverified`.
 
 ## Execution Semantics
 

@@ -35,6 +35,7 @@ Current `InvestigationRequest` condition types:
 | `QueryTypeSupported` | Query types are compatible with datasource capabilities. |
 | `EvidenceCollectionReady` | Evidence collection succeeded or produced a bounded failure. |
 | `RCAReady` | RCA output is available. |
+| `RemediationReady` | Verified RCA evidence is available for remediation planning. |
 | `Degraded` | The result is partial or degraded due to optional dependency or bounded failure semantics. |
 
 Every condition should be read with:
@@ -49,6 +50,8 @@ lastTransitionTime
 ```
 
 `RCAReady=True` means an RCA result exists. It does not mean the target workload is healthy or remediated.
+
+`Degraded=True` describes a partial or bounded execution, such as optional dependency or evidence loss, that still produced a consumable result. A hard workflow failure such as `TargetNotFound` is represented by `phase: Failed`, `outcome: Unknown`, and blocking conditions; it is not automatically degraded.
 
 For `RiskSignal`, `status.phase` describes the finding lifecycle only. A `Confirmed` phase means the finding was materialized, not that root-cause evidence was verified. Consumers should use:
 
