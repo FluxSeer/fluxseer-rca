@@ -60,6 +60,10 @@ RemediationReady=True -> allow remediation planning or execution workflows
 
 When `RCAReady=False`, `RemediationReady` should also be `False` with the same blocking reason.
 
+`RiskSignal.spec.confidence` describes finding detection confidence. It is not RCA confidence and must not override `RCAReady`, `RemediationReady`, or canonical `InvestigationRequest.status.verdict` fields. A signal can have high detection confidence while its root cause remains unverified.
+
+`RiskSignal.spec.actionType` is notification or planning metadata until a remediation resource is explicitly created. Existing `notification.sendSlack` values are a legacy notification alias and may route to a generic webhook sink depending on installation settings; consumers should not infer a Slack-specific delivery guarantee from that value.
+
 ## Stable Reason Examples
 
 External integrations may use reason strings for routing, but should tolerate new reasons.

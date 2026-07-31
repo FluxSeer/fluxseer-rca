@@ -23,9 +23,9 @@ Capture a detected workload risk with enough context for notification, review, a
 | `spec.target` | object | yes | Target workload or resource reference. |
 | `spec.signalType` | string | yes | Semantic finding type such as event, logs, or metric regression. |
 | `spec.findingIdentity` | object | no | Structured finding and incident occurrence identity used for deduplication, correlation, and lineage. |
-| `spec.actionType` | string | no | Suggested downstream action contract. |
+| `spec.actionType` | string | no | Suggested downstream notification or planning contract. |
 | `spec.severity` | string | yes | Severity string used by guardrails and downstream planning. |
-| `spec.confidence` | integer | yes | Confidence score from `0` to `100` for the merged finding. |
+| `spec.confidence` | integer | yes | Detection confidence score from `0` to `100` for the merged finding. |
 | `spec.dryRun` | boolean | yes | Whether the signal is intended for non-mutating handling. |
 | `spec.ttlSeconds` | integer | no | Lifecycle hint for retention or cleanup. |
 | `spec.evidence` | array | no | List of evidence records attached to the signal. |
@@ -84,7 +84,7 @@ Semantic type of the finding, for example:
 
 ### `spec.actionType`
 
-Suggested follow-up action type. In read-only mode this is contract metadata, not proof that execution happened.
+Suggested follow-up notification or planning action type. In read-only mode this is contract metadata, not proof that execution happened. Existing `notification.sendSlack` values are a legacy notification alias and may be backed by a generic webhook sink; consumers should not treat the value as proof of a Slack-specific provider.
 
 ### `spec.severity`
 
@@ -97,7 +97,7 @@ Current severity strings used by the repo:
 
 ### `spec.confidence`
 
-Integer confidence score from `0` to `100` for the merged finding. This is a heuristic or provider-derived ranking score, not a calibrated probability that the RCA is correct.
+Integer detection confidence score from `0` to `100` for the merged finding. This is a heuristic or provider-derived ranking score, not a calibrated probability that the RCA is correct. It does not represent root-cause confidence; use `RCAReady`, `RemediationReady`, and canonical `InvestigationRequest.status.verdict` fields to decide whether RCA or remediation results are consumable.
 
 ### `spec.dryRun`
 

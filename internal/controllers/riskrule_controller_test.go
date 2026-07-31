@@ -1170,15 +1170,30 @@ func TestRiskRuleReconcilerSeparatesSameTargetDifferentEventFindings(t *testing.
 		t.Fatalf("expected two separate risk signals for distinct findings, got %d", len(signals.Items))
 	}
 	seenReasons := map[string]string{}
-	seenIdentities := map[string]bool{}
+	seenUIDs := map[types.UID]string{}
+	seenObjectFindingIdentities := map[string]string{}
+	seenIncidentOccurrences := map[string]string{}
 	for _, signal := range signals.Items {
+		if signal.Spec.Target.Namespace != "prod" || signal.Spec.Target.Name != "server" {
+			t.Fatalf("expected same target prod/server on %s, got %#v", signal.Name, signal.Spec.Target)
+		}
+		if signal.UID != "" {
+			if owner, ok := seenUIDs[signal.UID]; ok {
+				t.Fatalf("expected unique RiskSignal UIDs, got duplicate %s for %s and %s", signal.UID, owner, signal.Name)
+			}
+			seenUIDs[signal.UID] = signal.Name
+		}
 		if signal.Spec.FindingIdentity == nil {
 			t.Fatalf("expected finding identity on %s", signal.Name)
 		}
-		if seenIdentities[signal.Spec.FindingIdentity.IncidentOccurrence] {
-			t.Fatalf("expected unique incident occurrence, got duplicate %s", signal.Spec.FindingIdentity.IncidentOccurrence)
+		if owner, ok := seenObjectFindingIdentities[signal.Spec.FindingIdentity.ObjectFindingIdentity]; ok {
+			t.Fatalf("expected unique object finding identity, got duplicate %s for %s and %s", signal.Spec.FindingIdentity.ObjectFindingIdentity, owner, signal.Name)
 		}
-		seenIdentities[signal.Spec.FindingIdentity.IncidentOccurrence] = true
+		seenObjectFindingIdentities[signal.Spec.FindingIdentity.ObjectFindingIdentity] = signal.Name
+		if owner, ok := seenIncidentOccurrences[signal.Spec.FindingIdentity.IncidentOccurrence]; ok {
+			t.Fatalf("expected unique incident occurrence, got duplicate %s for %s and %s", signal.Spec.FindingIdentity.IncidentOccurrence, owner, signal.Name)
+		}
+		seenIncidentOccurrences[signal.Spec.FindingIdentity.IncidentOccurrence] = signal.Name
 		if len(signal.Spec.Evidence) != 1 {
 			t.Fatalf("expected one evidence item on %s, got %#v", signal.Name, signal.Spec.Evidence)
 		}
