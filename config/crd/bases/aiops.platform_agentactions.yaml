@@ -51,5 +51,36 @@ spec:
                 message: {type: string}
                 observedGeneration: {type: integer, format: int64}
                 updatedAt: {type: string, format: date-time}
+                approval:
+                  type: object
+                  properties:
+                    approved: {type: boolean}
+                    approvedBy: {type: string}
+                    source: {type: string}
+                    actionDigest: {type: string}
+                    approvedGeneration: {type: integer, format: int64}
+                    approvedAt: {type: string, format: date-time}
+                dryRunResult:
+                  type: object
+                  properties:
+                    result: {type: string}
+                    recordedAt: {type: string, format: date-time}
+                execution:
+                  type: object
+                  properties:
+                    phase: {type: string}
+                    executor: {type: string}
+                    summary: {type: string}
+                    finishedAt: {type: string, format: date-time}
+                effectiveness:
+                  type: object
+                  properties:
+                    phase: {type: string}
+                    message: {type: string}
+                    verificationRef:
+                      type: object
+                      properties:
+                        name: {type: string}
+                        namespace: {type: string}
       subresources:
         status: {}

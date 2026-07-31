@@ -205,7 +205,7 @@ Evidence retention controls what FluxAgent keeps after collection and normalizat
 | --- | --- | --- |
 | `MetadataOnly` | Supported / default | Persist compact metadata, digests, summaries, and references. |
 | `NormalizedSnapshot` | Beta / opt-in | Persist normalized evidence snapshots through the configured evidence store. |
-| `RawSnapshot` | Reserved / unsupported | API contract exists, but v0.3 runtime should fail the request explicitly. |
+| `RawSnapshot` | Reserved / unsupported | API contract exists, but v0.3 runtime fails the request explicitly. |
 
 `NormalizedSnapshot` requires an evidence store, currently configured through:
 
@@ -223,7 +223,7 @@ condition Ready=False
 reason=UnsupportedRetentionMode
 ```
 
-Until this behavior is implemented, `RawSnapshot` must be treated as an unsupported contract value and must not be advertised as a usable capability.
+This behavior is implemented at runtime. `RawSnapshot` remains an unsupported contract value and must not be advertised as a usable capability.
 
 ## Query Security
 
@@ -325,7 +325,13 @@ The preferred future direction is:
 features -> derive RBAC profile
 ```
 
-`rbac.profile` should either become an advanced override or be removed once migration risk is acceptable.
+`rbac.profile` is an advanced override. When it is empty, Helm derives the effective RBAC profile from the enabled feature flags:
+
+```text
+experimentalExecutor -> experimentalExecutor
+remediation          -> remediation
+otherwise            -> readOnlyRCA
+```
 
 ## Controller Runtime Flags
 
@@ -383,8 +389,8 @@ In this beta document, `Supported` means implemented, covered by the current run
 
 ## Priority Follow-ups
 
-1. Derive RBAC from feature flags or clearly demote `rbac.profile` to an advanced override.
+1. Add live-cluster RBAC smoke tests for feature-derived profiles.
 2. Mark `DirectRiskSignal` and `legacyDeploymentRisk` as migration paths in user-facing docs.
-3. Implement the documented `UnsupportedRetentionMode` runtime behavior for `RawSnapshot`.
+3. Add CRD-level CEL admission validation for unsupported `RawSnapshot` if that can be done without breaking existing manifests.
 4. Consider CRD-level CEL validation for the already-enforced `dataSources[]` and `queries[]` runtime mutual exclusion.
 5. Move maintainer-only CI/CD channel details out of runtime-mode guidance.

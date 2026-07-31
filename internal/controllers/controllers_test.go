@@ -110,6 +110,12 @@ func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) 
 	if action.Status.Phase != v1alpha1.PhaseWaitingApproval {
 		t.Fatalf("expected waiting approval, got %s", action.Status.Phase)
 	}
+	if action.Status.DryRunResult == nil || action.Status.DryRunResult.Result == "" {
+		t.Fatalf("expected controller-owned dryRunResult status, got %#v", action.Status.DryRunResult)
+	}
+	if action.Status.Approval == nil || action.Status.Approval.Approved || action.Status.Approval.Source != "ManualApprovalRequired" || action.Status.Approval.ActionDigest == "" {
+		t.Fatalf("expected manual approval status, got %#v", action.Status.Approval)
+	}
 
 	action.Spec.ApprovedBy = "sre-oncall@example.com"
 	if err := fakeClient.Update(context.Background(), &action); err != nil {
@@ -141,6 +147,15 @@ func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) 
 	}
 	if action.Status.Phase != v1alpha1.PhaseSucceeded {
 		t.Fatalf("expected succeeded phase, got %s", action.Status.Phase)
+	}
+	if action.Status.Approval == nil || !action.Status.Approval.Approved || action.Status.Approval.Source != "LegacySpecApprovedBy" || action.Status.Approval.ActionDigest == "" {
+		t.Fatalf("expected legacy spec approval projection, got %#v", action.Status.Approval)
+	}
+	if action.Status.Execution == nil || action.Status.Execution.Phase != "Succeeded" || action.Status.Execution.Executor == "" {
+		t.Fatalf("expected execution status, got %#v", action.Status.Execution)
+	}
+	if action.Status.Effectiveness == nil || action.Status.Effectiveness.Phase != "NotVerified" {
+		t.Fatalf("expected NotVerified effectiveness status, got %#v", action.Status.Effectiveness)
 	}
 }
 

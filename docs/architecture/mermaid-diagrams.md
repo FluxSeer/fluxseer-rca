@@ -8,11 +8,13 @@ Scope:
 - current optional integrations: Prometheus, Loki, Kubernetes Events, OpenAI API, Claude API, Gemini API, heuristic provider
 - current guarded experimental path: `RemediationPlan` and `AgentAction`
 - current release identity: `v0.3.0-beta.2`
-- frozen API identity: `aiops.platform/v1alpha1`
+- API group/version identity: `aiops.platform/v1alpha1`
+
+The API group and version identity are fixed for the current `v0.3` line. The `v1alpha1` schema remains subject to compatible beta hardening.
 
 The diagrams are intentionally Kubernetes-native. Hosted providers receive bounded evidence bundles; they do not receive cluster credentials or direct Kubernetes API access.
 
-Important `v0.3.0-beta.2` boundary: the hosted-provider egress policy diagrams apply to the canonical `InvestigationRequest` path. Direct `RiskRule` RCA can still call the model gateway without the same `ModelProvider.dataPolicy` enforcement and should be treated as a compatibility path until that hardening is added.
+Important `v0.3.0-beta.2` boundary: direct `RiskRule` RCA receives gateway-level hosted-provider egress opt-in enforcement, but the canonical `InvestigationRequest` path remains the only path with full `status.execution.egressAudit` visibility.
 
 ## System Context
 
@@ -40,9 +42,11 @@ flowchart TB
     GitOps -->|applies CRDs and manifests| KubeAPI
     ExternalAlert -->|future producer creates| KubeAPI
 
-    KubeAPI <-->|watch / status update| FluxAgent
-    FluxAgent -->|read-only list/get/watch| Workloads
-    FluxAgent -->|read events| Events
+    KubeAPI -->|watch events delivered through API server| FluxAgent
+    FluxAgent -->|status updates| KubeAPI
+    FluxAgent -->|list/get/watch workloads and events through RBAC| KubeAPI
+    KubeAPI --> Workloads
+    KubeAPI --> Events
     FluxAgent -->|bounded metric queries| Prometheus
     FluxAgent -->|bounded log queries| Loki
     FluxAgent -->|hosted RCA API call| OpenAI
@@ -135,9 +139,9 @@ flowchart TB
     DSRec --> DSRegistry
     RRRec --> DSRegistry
     RRRec --> TargetDiscovery
-    RRRec --> Gateway
-    RRRec --> RS
-    RRRec --> IR
+    RRRec -.legacy direct RCA compatibility.-> Gateway
+    RRRec -.legacy materialized finding compatibility.-> RS
+    RRRec -->|canonical v0.3 path| IR
     IRRec --> InvSvc
     InvSvc --> DSRegistry
     InvSvc --> QueryPolicy
@@ -215,12 +219,14 @@ erDiagram
     RiskSignal {
         object spec_target
         object spec_findingIdentity
+        object spec_investigationRef
         array spec_evidence
         string spec_actionType
         int spec_ttlSeconds
         object spec_parameters
         string status_phase
         string status_rcaSummary
+        object status_projection
     }
 
     RemediationPlan {
@@ -234,8 +240,12 @@ erDiagram
         object spec_target
         string spec_actionType
         object spec_parameters
-        string spec_dryRunResult
-        string spec_approvedBy
+        string spec_approvedBy_legacy
+        string spec_dryRunResult_legacy
+        object status_approval
+        object status_dryRunResult
+        object status_execution
+        object status_effectiveness
         string status_phase
     }
 
@@ -309,6 +319,10 @@ classDiagram
         +string maximumClassification
     }
 
+    class QueryRetentionPolicy {
+        +string mode
+    }
+
     class InvestigationRequestSpec {
         +TargetRef target
         +InvestigationTimeRange timeRange
@@ -319,6 +333,7 @@ classDiagram
         +string mode
         +EvidenceRequirements evidenceRequirements
         +EvidenceRetentionPolicy evidenceRetention
+        +QueryRetentionPolicy queryRetention
         +InvestigationQueryBudget queryBudget
         +InvestigationLoopPolicy loopPolicy
         +bool createRiskSignal
@@ -333,13 +348,16 @@ classDiagram
         +RCAMissingEvidence[] missingEvidence
         +RCADegradation degradation
         +RCAExecution execution
+        +ProviderEgressAttempt[] execution_egressAttempts
         +EvidenceRef[] evidenceRefs
         +InvestigationLineage lineage
+        +Condition[] conditions
     }
 
     class RiskSignalSpec {
         +TargetRef target
         +FindingIdentity findingIdentity
+        +NamespacedObjectReference investigationRef
         +string signalType
         +string severity
         +int confidence
@@ -355,11 +373,20 @@ classDiagram
         +string rcaHypothesis
         +string rcaProvider
         +RCACause[] rcaCauses
+        +RiskSignalRCAProjectionStatus projection
         +Condition[] conditions
+    }
+
+    class AgentActionStatus {
+        +AgentActionApprovalStatus approval
+        +AgentActionDryRunStatus dryRunResult
+        +AgentActionExecutionStatus execution
+        +AgentActionEffectivenessStatus effectiveness
     }
 
     ResourceStatus <|-- InvestigationRequestStatus
     ResourceStatus <|-- RiskSignalStatus
+    ResourceStatus <|-- AgentActionStatus
     EvidenceRef --> DataClassification
     InvestigationRequestSpec --> TargetRef
     InvestigationRequestStatus --> EvidenceRef
@@ -384,15 +411,15 @@ flowchart LR
 
     DSRec -->|owns status only| DSStatus[DataSource.status]
     RRRec -->|owns status and finding materialization| RRStatus[RiskRule.status]
-    RRRec -->|creates / updates| RS[RiskSignal]
-    RRRec -->|optional canonical mode| IR[InvestigationRequest]
+    RRRec -.legacy compatibility creates / updates.-> RS[RiskSignal]
+    RRRec -->|canonical mode creates / updates| IR[InvestigationRequest]
     IRRec -->|owns canonical RCA status| IRStatus[InvestigationRequest.status]
     IRRec -->|optional discovered finding| RS
     RSRec -->|owns TTL and optional downstream transition| RSStatus[RiskSignal.status]
     NotifyRec -->|notification side effect only when configured| Notify[Webhook notification]
     RPRec -->|guardrails and approval state| RPStatus[RemediationPlan.status]
-    RPRec -->|creates or updates action with Approved / WaitingApproval / Rejected state| AA[AgentAction]
-    AARec -->|executes only when spec.approvedBy is set| AAStatus[AgentAction.status]
+    RPRec -->|creates or updates action and status-first approval state| AA[AgentAction]
+    AARec -->|executes only when approval status is satisfied; spec.approvedBy is legacy compatibility| AAStatus[AgentAction.status]
 ```
 
 ## Read-only RiskRule Flow
@@ -420,7 +447,7 @@ sequenceDiagram
         RR->>DS: execute bounded configured signals
         DS-->>RR: query results
         RR->>GW: optional direct RCA if ai.rcaEnabled=true
-        Note over RR,GW: v0.3.0-beta.2 direct RiskRule RCA does not apply the canonical ModelProvider.dataPolicy egress gate.
+        Note over RR,GW: v0.3.0-beta.2 direct RiskRule RCA applies gateway-level hosted-provider egress opt-in, but does not own canonical egressAudit status.
         GW->>MP: provider-neutral request
         MP-->>GW: normalized RCA response
         GW-->>RR: RCA result or degraded provider issue
@@ -529,6 +556,11 @@ This diagram describes the canonical `InvestigationRequest` path in `v0.3.0-beta
 ```mermaid
 flowchart TD
     Start[Provider-bound evidence bundle]
+    ProviderType{Provider type?}
+    LocalProvider[Local heuristic provider]
+    LocalAudit[Persist local-provider execution metadata]
+    LocalResult[Local provider result]
+    CommonRCA[Common RCA result]
     Filter[Filter evidence by allowedEvidenceKinds]
     External{allowExternalTransmission?}
     Tags{Denied sensitivity tag present?}
@@ -539,6 +571,11 @@ flowchart TD
     Gateway[Call model gateway]
     ProviderFailure{eligible provider failure?}
     Fallback{Fallback provider configured?}
+    ResolveFallback[Resolve fallback provider]
+    FallbackPolicy[Re-evaluate fallback provider dataPolicy]
+    FallbackAllowed{Fallback egress allowed or local?}
+    FallbackAllowedAudit[Persist allowed fallback attempt audit]
+    FallbackRejectedAudit[Persist rejected fallback attempt audit]
     FallbackCall[Call fallback provider]
     ProviderResult[Provider result]
     ProviderIssue[Provider issue propagated]
@@ -546,7 +583,13 @@ flowchart TD
     AllowedAudit[Persist allowed ProviderEgressAudit without raw evidence]
     RejectedAudit[Persist rejected ProviderEgressAudit without raw evidence]
 
-    Start --> Filter
+    Start --> ProviderType
+    ProviderType -- local heuristic --> LocalProvider
+    LocalProvider --> LocalAudit
+    LocalAudit --> LocalResult
+    LocalResult --> CommonRCA
+    CommonRCA --> ProviderResult
+    ProviderType -- hosted provider --> Filter
     Filter --> External
     External -- no --> Rejected
     External -- yes --> Tags
@@ -562,8 +605,14 @@ flowchart TD
     Gateway --> ProviderFailure
     ProviderFailure -- yes --> Fallback
     ProviderFailure -- no --> ProviderResult
-    Fallback -- yes --> FallbackCall
+    Fallback -- yes --> ResolveFallback
     Fallback -- no --> ProviderIssue
+    ResolveFallback --> FallbackPolicy
+    FallbackPolicy --> FallbackAllowed
+    FallbackAllowed -- yes --> FallbackAllowedAudit
+    FallbackAllowed -- no --> FallbackRejectedAudit
+    FallbackRejectedAudit --> ProviderIssue
+    FallbackAllowedAudit --> FallbackCall
     FallbackCall --> ProviderResult
     Rejected --> RejectedAudit
     RejectedAudit --> Failed
@@ -632,6 +681,8 @@ flowchart TD
 ## Evidence Retention Boundary
 
 `EvidenceRef.query` may be persisted in `InvestigationRequest.status`; users should not place secret-bearing text in query strings. The beta.2 retention boundary avoids storing full raw adapter payloads, large raw logs, and provider prompts in status.
+
+The `local-filesystem` normalized snapshot store is development-oriented in `v0.3.0-beta.2`: it is not encrypted, has no automatic snapshot garbage collection, and should not be treated as durable production evidence storage.
 
 ```mermaid
 flowchart TB
@@ -747,12 +798,12 @@ sequenceDiagram
     participant AAC as AgentActionReconciler
     participant Exec as executor.Router
 
-    Note over RS,AAC: Disabled by default. Requires explicit feature and RBAC profile.
+    Note over RS,AAC: Disabled by default. Requires explicit feature and RBAC profile. AgentAction status has approval, dry-run, execution, and effectiveness fields; legacy spec.approvedBy/spec.dryRunResult compatibility is tracked for hardening.
     RS-->>RSC: confirmed signal
     RSC->>RP: optional guarded plan creation
     RP-->>RPC: reconcile plan
     RPC->>Guard: evaluate action type, namespace, severity, approval
-    RPC->>AA: create or update AgentAction with dryRunResult
+    RPC->>AA: create or update AgentAction and status.dryRunResult
     alt rejected by guardrail
         RPC->>RP: status.phase=Rejected
         RPC->>AA: status.phase=Rejected
@@ -761,15 +812,16 @@ sequenceDiagram
     else manual approval required
         RPC->>RP: status.phase=WaitingApproval
         RPC->>AA: status.phase=WaitingApproval
-        AA-->>AAC: reconcile action without spec.approvedBy
+        AA-->>AAC: reconcile action without approved status
         AAC-->>AA: keep WaitingApproval
     else auto approved
         RPC->>RP: status.phase=Approved
-        RPC->>AA: status.phase=Approved and spec.approvedBy set
+        RPC->>AA: status.phase=Approved and status.approval recorded
         AA-->>AAC: reconcile approved action
         AAC->>Exec: execute or simulate
         Exec-->>AAC: result
-        AAC->>AA: status.phase=Succeeded or Failed
+        AAC->>AA: status.execution.phase=Succeeded or Failed
+        AAC->>AA: status.effectiveness remains Pending until post-action verification exists
     end
 ```
 
@@ -785,8 +837,9 @@ flowchart TB
     RBAC[ClusterRole / Role / Bindings]
     Secrets[Provider Secret in controller namespace]
     SecretOwner[User / Secret manager]
-    ReadOnly[default read-only profile]
-    Remediate[experimentalExecutor profile]
+    ReadOnly[derived read-only profile]
+    Remediate[derived experimentalExecutor profile]
+    Validation[Helm fail-fast validation]
 
     Values --> Chart
     Chart --> CRDs
@@ -796,8 +849,9 @@ flowchart TB
     SecretOwner --> Secrets
     RBAC -->|namespaced Secret reader| Secrets
 
-    Values --> ReadOnly
-    Values --> Remediate
+    Values --> Validation
+    Validation --> ReadOnly
+    Validation --> Remediate
     ReadOnly -->|default| RBAC
     ReadOnly -->|no workload mutation permissions| SA
     Remediate -->|requires remediation and executor features| RBAC

@@ -83,6 +83,7 @@ Operations and packaging:
 - [Runtime modes](runtime-modes.md)
 - [Helm rule packs](helm-rulepacks.md)
 - [Metrics](metrics.md)
+- [Kubernetes ecosystem integration contract](ecosystem-integration-contract.md)
 - [GitHub repository setup](github-repo.md)
 
 Product positioning:
@@ -91,6 +92,7 @@ Product positioning:
 - [Open source positioning](open-source-positioning.md)
 - [Competitive positioning](competitive-positioning.md)
 - [v0.3 product direction backlog](backlog/v0.3-product-direction.md)
+- [v0.3 architecture hardening backlog](backlog/v0.3-architecture-hardening.md)
 
 ## Tutorials
 
@@ -120,6 +122,7 @@ Current planning:
 
 - [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [v0.3 product direction](backlog/v0.3-product-direction.md)
+- [v0.3 architecture hardening](backlog/v0.3-architecture-hardening.md)
 - [v0.3 beta stabilization](backlog/v0.3-beta-stabilization.md)
 - [v0.3 naming and API review](backlog/v0.3-naming-api-review.md)
 
