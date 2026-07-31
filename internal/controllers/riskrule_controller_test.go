@@ -1026,16 +1026,16 @@ func TestRiskRuleReconcilerUsesReferencedHeuristicModelProvider(t *testing.T) {
 	if riskSignal.Status.RCAProvider != "heuristic-provider" {
 		t.Fatalf("expected referenced model provider name, got %s", riskSignal.Status.RCAProvider)
 	}
-	if riskSignal.Status.RCASummary == "" || riskSignal.Status.RCAHypothesis == "" {
-		t.Fatalf("expected RCA fields to be populated: %#v", riskSignal.Status)
+	if riskSignal.Status.RCASummary == "" || riskSignal.Status.RCAHypothesis != "" || len(riskSignal.Status.RCACauses) != 0 {
+		t.Fatalf("expected unverified RCA to keep summary only: %#v", riskSignal.Status)
 	}
 	if riskSignal.Status.Projection == nil ||
 		riskSignal.Status.Projection.Mode != "DirectRiskSignalCompatibility" ||
 		!riskSignal.Status.Projection.CompatibilityPath {
 		t.Fatalf("expected direct RiskRule RCA compatibility projection, got %#v", riskSignal.Status.Projection)
 	}
-	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue {
-		t.Fatalf("expected RCAReady true condition, got %#v", cond)
+	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
+		t.Fatalf("expected RCAReady false condition, got %#v", cond)
 	}
 }
 
@@ -1298,8 +1298,12 @@ func TestRiskRuleReconcilerUsesReferencedOpenAIModelProvider(t *testing.T) {
 	if riskSignal.Status.RCAProvider != "openai-provider" {
 		t.Fatalf("expected openai provider name, got %s", riskSignal.Status.RCAProvider)
 	}
-	if riskSignal.Status.RCASummary != "OpenAI correlated crash loops with the latest rollout." {
+	if !strings.Contains(riskSignal.Status.RCASummary, "Verified root-cause evidence supports: startup failure") ||
+		strings.Contains(riskSignal.Status.RCASummary, "OpenAI correlated crash loops with the latest rollout.") {
 		t.Fatalf("unexpected RCA summary: %q", riskSignal.Status.RCASummary)
+	}
+	if len(riskSignal.Status.RCACauses) != 1 || riskSignal.Status.RCACauses[0].Cause != "startup failure" {
+		t.Fatalf("expected only verified cause to be projected, got %#v", riskSignal.Status.RCACauses)
 	}
 }
 
