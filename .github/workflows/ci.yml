@@ -82,8 +82,8 @@ jobs:
       - name: Setup Helm
         uses: azure/setup-helm@v4
 
-      - name: Verify v0.3 schema freeze gate
-        run: make verify-v0.3-schema-freeze
+      - name: Verify v0.3 beta hardening gate
+        run: make verify-v0.3-beta-hardening
 
       - name: Verify packaging consistency
         run: |
