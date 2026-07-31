@@ -279,9 +279,13 @@ jobs:
         run: |
           set -euo pipefail
           chart_ref="oci://${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/charts"
-          helm push "${{ steps.chart.outputs.package }}" "$chart_ref" | tee helm-push.txt
-          helm_digest="$(awk '/Digest:/ {print $2; exit}' helm-push.txt)"
-          test -n "$helm_digest"
+          helm push "${{ steps.chart.outputs.package }}" "$chart_ref" 2>&1 | tee helm-push.txt
+          helm_digest="$(sed -nE 's/.*Digest:[[:space:]]*(sha256:[[:xdigit:]]+).*/\1/p' helm-push.txt | tail -n1)"
+          if [ -z "$helm_digest" ]; then
+            echo "failed to parse Helm chart digest from helm push output" >&2
+            cat helm-push.txt >&2
+            exit 1
+          fi
           echo "helm_digest=$helm_digest" >> "$GITHUB_OUTPUT"
           helm show chart "$chart_ref/${CHART_NAME}" --version "${{ steps.release.outputs.chart_version }}"
 

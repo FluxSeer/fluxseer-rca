@@ -269,9 +269,13 @@ jobs:
             --version "${{ steps.meta.outputs.chart_version }}" \
             --app-version "${{ steps.meta.outputs.image_tag }}" \
             --destination "dist/test-${GITHUB_SHA::7}"
-          helm push "dist/test-${GITHUB_SHA::7}/${CHART_NAME}-${{ steps.meta.outputs.chart_version }}.tgz" "$chart_ref" | tee helm-push.txt
-          helm_digest="$(awk '/Digest:/ {print $2; exit}' helm-push.txt)"
-          test -n "$helm_digest"
+          helm push "dist/test-${GITHUB_SHA::7}/${CHART_NAME}-${{ steps.meta.outputs.chart_version }}.tgz" "$chart_ref" 2>&1 | tee helm-push.txt
+          helm_digest="$(sed -nE 's/.*Digest:[[:space:]]*(sha256:[[:xdigit:]]+).*/\1/p' helm-push.txt | tail -n1)"
+          if [ -z "$helm_digest" ]; then
+            echo "failed to parse Helm chart digest from helm push output" >&2
+            cat helm-push.txt >&2
+            exit 1
+          fi
           echo "HELM_DIGEST=$helm_digest" >> "$GITHUB_ENV"
 
       - name: Write test artifact summary
@@ -391,9 +395,13 @@ jobs:
             --version "${{ steps.meta.outputs.chart_version }}" \
             --app-version "${{ steps.meta.outputs.image_tag }}" \
             --destination "dist/main-${GITHUB_SHA::7}"
-          helm push "dist/main-${GITHUB_SHA::7}/${CHART_NAME}-${{ steps.meta.outputs.chart_version }}.tgz" "$chart_ref" | tee helm-push.txt
-          helm_digest="$(awk '/Digest:/ {print $2; exit}' helm-push.txt)"
-          test -n "$helm_digest"
+          helm push "dist/main-${GITHUB_SHA::7}/${CHART_NAME}-${{ steps.meta.outputs.chart_version }}.tgz" "$chart_ref" 2>&1 | tee helm-push.txt
+          helm_digest="$(sed -nE 's/.*Digest:[[:space:]]*(sha256:[[:xdigit:]]+).*/\1/p' helm-push.txt | tail -n1)"
+          if [ -z "$helm_digest" ]; then
+            echo "failed to parse Helm chart digest from helm push output" >&2
+            cat helm-push.txt >&2
+            exit 1
+          fi
           echo "HELM_DIGEST=$helm_digest" >> "$GITHUB_ENV"
 
       - name: Write main artifact summary
