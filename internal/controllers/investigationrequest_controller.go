@@ -1904,7 +1904,7 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 	}
 	setRiskSignalStatus(&riskSignal.Status, phase, message, riskSignal.Generation, now)
 	setStatusCondition(&riskSignal.Status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "EvidenceCollected", evidence.Summary, riskSignal.Generation, now)
-	applyProjectedInvestigationRCAResult(&riskSignal.Status, request, rca, now)
+	applyProjectedInvestigationRCAResult(&riskSignal.Status, request, riskSignal.Generation, rca, now)
 	if statusChangedRiskSignal(original, riskSignal) {
 		if err := r.Status().Update(ctx, riskSignal); err != nil && !recordStatusUpdateConflict("RiskSignal", err) {
 			return nil, err
@@ -1917,7 +1917,7 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 	}, nil
 }
 
-func applyProjectedInvestigationRCAResult(status *v1alpha1.RiskSignalStatus, request *v1alpha1.InvestigationRequest, rca investigation.RCAResult, now time.Time) {
+func applyProjectedInvestigationRCAResult(status *v1alpha1.RiskSignalStatus, request *v1alpha1.InvestigationRequest, generation int64, rca investigation.RCAResult, now time.Time) {
 	if request.Status.Verdict == nil {
 		applyRCAResult(status, rcaResult{
 			Reasoning:    rca.Reasoning,
@@ -1928,7 +1928,7 @@ func applyProjectedInvestigationRCAResult(status *v1alpha1.RiskSignalStatus, req
 				ProjectedFrom: &v1alpha1.NamespacedObjectReference{Name: request.Name, Namespace: request.Namespace},
 				Message:       "RiskSignal contains a compact projection; canonical RCA is owned by InvestigationRequest.status.",
 			},
-		})
+		}, generation, now)
 		return
 	}
 
@@ -1959,7 +1959,7 @@ func applyProjectedInvestigationRCAResult(status *v1alpha1.RiskSignalStatus, req
 			ProjectedFrom: &v1alpha1.NamespacedObjectReference{Name: request.Name, Namespace: request.Namespace},
 			Message:       "RiskSignal contains a compact projection; canonical RCA is owned by InvestigationRequest.status.",
 		},
-	})
+	}, generation, now)
 }
 
 func verifiedCauseStatements(claims []v1alpha1.RCAClaim) []string {

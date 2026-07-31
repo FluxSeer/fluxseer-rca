@@ -194,9 +194,37 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 	return &Match{
 		Signal:   signal,
 		Severity: severity,
-		Summary:  fmt.Sprintf("%s detected %d matching events for %s", signal.Name, matchCount, target.Name),
+		Summary:  kubernetesEventMatchSummary(signal, evidence, matchCount, target),
 		Evidence: evidence,
 	}
+}
+
+func kubernetesEventMatchSummary(signal v1alpha1.RiskRuleSignal, evidence []v1alpha1.EvidenceRef, matchCount int, target domain.ResourceRef) string {
+	description := strings.TrimSpace(signal.Name)
+	if len(evidence) > 0 {
+		switch normalizeSignalType(evidence[0].Reason) {
+		case "backoff":
+			description = "container restart backoff"
+		case "crashloopbackoff":
+			description = "crashloop-backoff"
+		case "imagepullbackoff", "errimagepull", "invalidimagename":
+			description = "image-pull-failure"
+		case "oomkilled", "oom":
+			description = "oom-killed"
+		case "unhealthy":
+			description = "unhealthy-probe"
+		case "failedscheduling":
+			description = "failed-scheduling"
+		}
+	}
+	if description == "" {
+		description = "kubernetes-event"
+	}
+	unit := "events"
+	if matchCount == 1 {
+		unit = "event"
+	}
+	return fmt.Sprintf("%s detected %d matching %s for %s", description, matchCount, unit, target.Name)
 }
 
 func eventReasonMatches(reason, message, expected string) bool {

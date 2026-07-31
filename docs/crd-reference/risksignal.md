@@ -177,10 +177,14 @@ Typical phases:
 
 Current condition types:
 
+- `FindingReady`
 - `EvidenceCollectionReady`
 - `RCAReady`
+- `RemediationReady`
 
 `RCAReady=True` means an RCA result is available. It does not indicate that the target workload is healthy, recovered, or remediated.
+
+`status.phase` describes the finding lifecycle only. For example, `phase: Confirmed` means the `RiskSignal` finding was confirmed or materialized. It does not mean the RCA is verified. Consumers should use `RCAReady` for RCA verification and `RemediationReady` before starting remediation workflows.
 
 ## Sample
 

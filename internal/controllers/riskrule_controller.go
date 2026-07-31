@@ -349,7 +349,7 @@ func (r *RiskRuleReconciler) upsertRiskSignal(ctx context.Context, riskRule *v1a
 	setRiskSignalStatus(&riskSignal.Status, v1alpha1.PhaseConfirmed, combineSummaries(matches), riskSignal.Generation, now)
 	applyFindingCondition(&riskSignal.Status, riskSignal.Generation, matches, now)
 	applyEvidenceConditions(&riskSignal.Status, riskSignal.Generation, summary, now)
-	applyRCAResult(&riskSignal.Status, rca)
+	applyRCAResult(&riskSignal.Status, rca, riskSignal.Generation, now)
 	if statusChangedRiskSignal(original, riskSignal) {
 		if err := r.Status().Update(ctx, riskSignal); err != nil && !recordStatusUpdateConflict("RiskSignal", err) {
 			return err
@@ -853,7 +853,7 @@ func riskSignalName(ruleName, targetName string) string {
 func directRiskSignalName(ruleName, targetName string, matches []rule.Match, identity *v1alpha1.FindingIdentity) string {
 	suffix := directRiskSignalNameSuffix(identity)
 	finding := dnsLabelToken(findingNameToken(matches))
-	base := dnsLabelToken(strings.Join(nonEmptyStrings(ruleName, targetName, finding), "-"))
+	base := dnsLabelToken(strings.Join(nonEmptyStrings(abbreviatedRuleName(ruleName), targetName, finding), "-"))
 	if base == "" {
 		base = "risk-signal"
 	}
@@ -873,12 +873,15 @@ func directRiskSignalNameSuffix(identity *v1alpha1.FindingIdentity) string {
 		source = "risk-signal"
 	}
 	sum := sha256.Sum256([]byte(source))
-	return hex.EncodeToString(sum[:])[:12]
+	return hex.EncodeToString(sum[:])[:8]
 }
 
 func findingNameToken(matches []rule.Match) string {
 	if len(matches) == 0 {
 		return ""
+	}
+	if token := observedFailureNameToken(matches[0]); token != "" {
+		return token
 	}
 	if name := strings.TrimSpace(matches[0].Signal.Name); name != "" {
 		return name
@@ -889,6 +892,32 @@ func findingNameToken(matches []rule.Match) string {
 		}
 	}
 	return findingType(matches)
+}
+
+func observedFailureNameToken(match rule.Match) string {
+	reason := ""
+	if len(match.Evidence) > 0 {
+		reason = match.Evidence[0].Reason
+	}
+	switch normalizeConditionToken(firstNonEmptyString(reason, match.Signal.Name)) {
+	case "backoff", "crashloopbackoff":
+		return "restart-backoff"
+	case "imagepullbackoff", "errimagepull", "invalidimagename", "imagepullfailure":
+		return "image-pull"
+	case "oomkilled", "oom", "oomkilledevent":
+		return "oom-killed"
+	case "unhealthy", "unhealthyprobe":
+		return "probe-failure"
+	case "failedscheduling":
+		return "scheduling"
+	default:
+		return ""
+	}
+}
+
+func abbreviatedRuleName(value string) string {
+	value = strings.ReplaceAll(value, "kubernetes", "k8s")
+	return value
 }
 
 func dnsLabelToken(value string) string {
@@ -954,7 +983,7 @@ func observedFailureDescription(match rule.Match) string {
 	}
 }
 
-func applyRCAResult(status *v1alpha1.RiskSignalStatus, rca rcaResult) {
+func applyRCAResult(status *v1alpha1.RiskSignalStatus, rca rcaResult, generation int64, now time.Time) {
 	status.RCASummary = ""
 	status.RCAHypothesis = ""
 	status.RCAProvider = ""
@@ -995,8 +1024,15 @@ func applyRCAResult(status *v1alpha1.RiskSignalStatus, rca rcaResult) {
 	}
 
 	apimeta.RemoveStatusCondition(&status.Conditions, conditionRCAReady)
+	apimeta.RemoveStatusCondition(&status.Conditions, conditionRemediationReady)
 	if rca.Condition != nil {
+		rca.Condition.ObservedGeneration = generation
 		apimeta.SetStatusCondition(&status.Conditions, *rca.Condition)
+		if rca.Condition.Status == metav1.ConditionTrue {
+			setStatusCondition(&status.Conditions, conditionRemediationReady, metav1.ConditionTrue, "RootCauseVerified", "remediation planning is allowed after verified root-cause evidence", generation, now)
+		} else {
+			setStatusCondition(&status.Conditions, conditionRemediationReady, metav1.ConditionFalse, rca.Condition.Reason, "remediation is not allowed without verified root-cause evidence", generation, now)
+		}
 	}
 }
 

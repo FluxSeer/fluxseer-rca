@@ -50,6 +50,16 @@ lastTransitionTime
 
 `RCAReady=True` means an RCA result exists. It does not mean the target workload is healthy or remediated.
 
+For `RiskSignal`, `status.phase` describes the finding lifecycle only. A `Confirmed` phase means the finding was materialized, not that root-cause evidence was verified. Consumers should use:
+
+```text
+FindingReady=True -> display or notify the finding
+RCAReady=True -> display verified RCA compatibility fields
+RemediationReady=True -> allow remediation planning or execution workflows
+```
+
+When `RCAReady=False`, `RemediationReady` should also be `False` with the same blocking reason.
+
 ## Stable Reason Examples
 
 External integrations may use reason strings for routing, but should tolerate new reasons.

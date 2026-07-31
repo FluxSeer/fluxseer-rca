@@ -1050,9 +1050,18 @@ func TestRiskRuleReconcilerUsesReferencedHeuristicModelProvider(t *testing.T) {
 	}
 	if cond := findCondition(riskSignal.Status.Conditions, conditionFindingReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "EventBackOffObserved" {
 		t.Fatalf("expected FindingReady true condition, got %#v", cond)
+	} else if strings.Contains(cond.Message, "crashloop-backoff") || !strings.Contains(cond.Message, "container restart backoff") {
+		t.Fatalf("expected BackOff finding message to avoid crashloop overstatement, got %q", cond.Message)
 	}
 	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
 		t.Fatalf("expected RCAReady false condition, got %#v", cond)
+	} else if cond.ObservedGeneration != riskSignal.Generation {
+		t.Fatalf("expected RCAReady observedGeneration %d, got %d", riskSignal.Generation, cond.ObservedGeneration)
+	}
+	if cond := findCondition(riskSignal.Status.Conditions, conditionRemediationReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
+		t.Fatalf("expected RemediationReady false RCAUnverified condition, got %#v", cond)
+	} else if cond.ObservedGeneration != riskSignal.Generation {
+		t.Fatalf("expected RemediationReady observedGeneration %d, got %d", riskSignal.Generation, cond.ObservedGeneration)
 	}
 }
 
@@ -1180,6 +1189,12 @@ func TestRiskRuleReconcilerSeparatesSameTargetDifferentEventFindings(t *testing.
 	}
 	if seenReasons["BackOff"] == seenReasons["OOMKilled"] {
 		t.Fatalf("expected distinct RiskSignal names, got %q", seenReasons["BackOff"])
+	}
+	if !strings.Contains(seenReasons["BackOff"], "restart-backoff") || strings.Contains(seenReasons["BackOff"], "crashloo") {
+		t.Fatalf("expected readable BackOff signal name, got %q", seenReasons["BackOff"])
+	}
+	if !strings.Contains(seenReasons["OOMKilled"], "oom-killed") {
+		t.Fatalf("expected readable OOMKilled signal name, got %q", seenReasons["OOMKilled"])
 	}
 }
 
@@ -1474,6 +1489,9 @@ func TestRiskRuleReconcilerUsesReferencedOpenAIModelProvider(t *testing.T) {
 	}
 	if len(riskSignal.Status.RCACauses) != 1 || riskSignal.Status.RCACauses[0].Cause != "startup failure" {
 		t.Fatalf("expected only verified cause to be projected, got %#v", riskSignal.Status.RCACauses)
+	}
+	if cond := findCondition(riskSignal.Status.Conditions, conditionRemediationReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "RootCauseVerified" {
+		t.Fatalf("expected RemediationReady true for verified RCA, got %#v", cond)
 	}
 }
 
