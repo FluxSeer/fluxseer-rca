@@ -40,6 +40,7 @@ const (
 	conditionQueryTypeSupported  = "QueryTypeSupported"
 	conditionEvidenceReady       = "EvidenceCollectionReady"
 	conditionRCAReady            = "RCAReady"
+	conditionVerified            = "Verified"
 	conditionUnsupported         = "Unsupported"
 )
 

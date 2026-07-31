@@ -72,6 +72,33 @@ func TestVerifyClaimsMarksContradictedEvidence(t *testing.T) {
 	}
 }
 
+func TestVerifyClaimsDoesNotTreatUnhealthyAsHealthyContradiction(t *testing.T) {
+	result := VerifyClaims(
+		[]Claim{
+			{ID: "claim-001", Statement: "Recent rollout changed the workload configuration"},
+			{ID: "claim-002", Statement: "Pod memory usage crossed the configured limit"},
+		},
+		[]EvidenceRef{{
+			ID:      "evidence-001",
+			Kind:    "event",
+			Reason:  "Unhealthy",
+			Summary: "Synthetic readiness probe failure for FluxAgent RCA validation",
+		}},
+	)
+
+	if result.CoverageScore != 0 {
+		t.Fatalf("expected no root-cause evidence coverage, got %#v", result)
+	}
+	for _, claim := range result.Claims {
+		if claim.Verification != VerificationUnsupported {
+			t.Fatalf("expected unsupported rather than contradicted for Unhealthy event, got %#v", claim)
+		}
+		if len(claim.EvidenceLinks) != 0 {
+			t.Fatalf("expected no contradictory evidence links, got %#v", claim)
+		}
+	}
+}
+
 func TestVerifyClaimsWithoutEvidenceIsUnverified(t *testing.T) {
 	result := VerifyClaims([]Claim{{ID: "claim-001", Statement: "Pods are restarting"}}, nil)
 

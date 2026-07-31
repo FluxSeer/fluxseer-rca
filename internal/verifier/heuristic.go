@@ -163,11 +163,24 @@ func evidenceContradictsStatement(statement string, ref EvidenceRef) bool {
 	if evidenceText == "" {
 		return false
 	}
-	if !containsAny(evidenceText, "normal", "healthy", "below threshold", "no error", "no errors", "ready", "available") {
+	if !containsContradictionMarker(evidenceText) {
 		return false
 	}
 	for _, token := range evidenceTerms(statement) {
 		if strings.Contains(evidenceText, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsContradictionMarker(text string) bool {
+	if containsAny(text, "below threshold", "no error", "no errors") {
+		return true
+	}
+	tokens := tokenSet(text)
+	for _, marker := range []string{"normal", "healthy", "ready", "available"} {
+		if tokens[marker] {
 			return true
 		}
 	}
@@ -254,13 +267,13 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 func evidenceTerms(statement string) []string {
 	switch {
 	case containsAny(statement, "crash", "restart", "backoff", "oom", "pod", "startup"):
-		return []string{"event", "log", "deploymentcondition", "crash", "restart", "backoff", "oom", "pod", "startup"}
-	case containsAny(statement, "latency", "timeout", "traffic", "http", "5xx", "error"):
-		return []string{"metric", "log", "latency", "timeout", "traffic", "http", "5xx", "error"}
+		return []string{"crash", "restart", "backoff", "oom", "pod", "startup"}
 	case containsAny(statement, "cpu", "memory", "resource", "pressure"):
-		return []string{"metric", "event", "cpu", "memory", "resource", "pressure", "oom"}
+		return []string{"cpu", "memory", "resource", "pressure", "oom"}
+	case containsAny(statement, "latency", "timeout", "traffic", "http", "5xx", "error"):
+		return []string{"latency", "timeout", "traffic", "http", "5xx", "error"}
 	case containsAny(statement, "rollout", "release", "image", "config", "configuration"):
-		return []string{"event", "deploymentcondition", "rollout", "release", "image", "config", "configuration"}
+		return []string{"rollout", "release", "image", "config", "configuration"}
 	default:
 		return importantTokens(statement)
 	}
@@ -288,6 +301,15 @@ func containsAny(text string, needles ...string) bool {
 		}
 	}
 	return false
+}
+
+func tokenSet(text string) map[string]bool {
+	parts := strings.Fields(text)
+	tokens := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		tokens[part] = true
+	}
+	return tokens
 }
 
 func normalizeText(text string) string {

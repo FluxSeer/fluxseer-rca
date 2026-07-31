@@ -383,6 +383,157 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 	}
 }
 
+func TestInvestigationRequestReconcilerKeepsUnverifiedUnhealthyEventInconclusive(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	now := time.Date(2026, 7, 6, 10, 20, 0, 0, time.UTC)
+
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "unhealthy-event-report", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace: "prod",
+				Kind:      "Deployment",
+				Name:      "open-api",
+			},
+			Queries: []v1alpha1.InvestigationQuery{
+				{
+					Name:          "unhealthy-events",
+					DatasourceRef: v1alpha1.LocalObjectReference{Name: "kubernetes-events"},
+					QueryType:     "event",
+					Reasons:       []string{"Unhealthy"},
+				},
+			},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "heuristic-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+			CreateRiskSignal: true,
+		},
+	}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}},
+			},
+		},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "heuristic", Model: "built-in"},
+	}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, deployment, provider).
+		Build()
+	reconciler := &InvestigationRequestReconciler{
+		Client: client,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client: client,
+			Registry: datasource.NewRegistry(
+				fakeInvestigationDataSource{
+					name:      "kubernetes-events",
+					queryType: domain.QueryTypeEvent,
+					records: []map[string]any{
+						{"reason": "Unhealthy", "message": "synthetic readiness probe failure"},
+					},
+				},
+			),
+			Resolver: modelgateway.KubeResolver{Client: client},
+			Gateway: &modelgateway.Gateway{
+				Base: knowledge.NewBase(),
+				Providers: model.NewRegistry(
+					heuristic.Provider{},
+				),
+			},
+		},
+		Now: func() time.Time { return now },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseCompleted || stored.Status.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
+		t.Fatalf("expected completed inconclusive status, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if stored.Status.Verdict == nil {
+		t.Fatal("expected structured RCA verdict")
+	}
+	if stored.Status.Verdict.Outcome != v1alpha1.InvestigationOutcomeInconclusive ||
+		stored.Status.Verdict.RootCauseType != "" ||
+		stored.Status.Verdict.Confidence != 0 {
+		t.Fatalf("expected unverified inconclusive canonical verdict, got %#v", stored.Status.Verdict)
+	}
+	if stored.Status.Verdict.ConfidenceDetail == nil ||
+		stored.Status.Verdict.ConfidenceDetail.ProviderScore <= 0 ||
+		stored.Status.Verdict.ConfidenceDetail.VerifiedScore != 0 {
+		t.Fatalf("expected provider score retained but verified score zeroed, got %#v", stored.Status.Verdict.ConfidenceDetail)
+	}
+	if len(stored.Status.MissingEvidence) == 0 {
+		t.Fatalf("expected missing evidence hints for unverified root-cause claims")
+	}
+	for _, claim := range stored.Status.Claims {
+		if claim.Verification == verifier.VerificationContradicted {
+			t.Fatalf("expected Unhealthy event not to contradict root-cause guesses, got %#v", stored.Status.Claims)
+		}
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionVerified); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "NoSupportedRootCauseClaims" {
+		t.Fatalf("expected Verified false NoSupportedRootCauseClaims, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
+		t.Fatalf("expected RCAReady false RCAUnverified, got %#v", cond)
+	}
+	if stored.Status.LinkedRiskSignalRef == nil {
+		t.Fatal("expected linked risk signal ref")
+	}
+
+	var riskSignal v1alpha1.RiskSignal
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Name:      stored.Status.LinkedRiskSignalRef.Name,
+		Namespace: stored.Status.LinkedRiskSignalRef.Namespace,
+	}, &riskSignal); err != nil {
+		t.Fatalf("get promoted risk signal: %v", err)
+	}
+	if riskSignal.Status.Phase != v1alpha1.InvestigationOutcomeInconclusive ||
+		riskSignal.Status.RCAHypothesis != "" ||
+		len(riskSignal.Status.RCACauses) != 0 {
+		t.Fatalf("expected promoted risk signal to project inconclusive canonical RCA, got %#v", riskSignal.Status)
+	}
+	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
+		t.Fatalf("expected RCAReady false on promoted risk signal, got %#v", cond)
+	}
+
+	riskReconciler := &RiskSignalReconciler{
+		Client:  client,
+		Scheme:  scheme,
+		Enabled: true,
+		Now:     func() time.Time { return now },
+	}
+	if _, err := riskReconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: riskSignal.Name, Namespace: riskSignal.Namespace},
+	}); err != nil {
+		t.Fatalf("risk signal reconcile failed: %v", err)
+	}
+	var plan v1alpha1.RemediationPlan
+	err := client.Get(context.Background(), types.NamespacedName{Name: riskSignal.Name + "-plan", Namespace: riskSignal.Namespace}, &plan)
+	if !apierrors.IsNotFound(err) {
+		t.Fatalf("expected no remediation plan for unverified investigation projection, got plan=%#v err=%v", plan, err)
+	}
+}
+
 func TestLineageForReconcilePrefersStatusLineageWhenAnnotationsMissing(t *testing.T) {
 	existing := &v1alpha1.InvestigationLineage{
 		Source: v1alpha1.InvestigationLineageSource{
@@ -1200,7 +1351,18 @@ func TestInvestigationRequestReconcilerAllowsImagePullBackOffWhenEventEvidencePr
 		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
 	}
-	counter := &countingModelProvider{}
+	counter := &countingModelProvider{
+		output: map[string]any{
+			"riskTitle":       "Image pull failed",
+			"riskSummary":     "ImagePullBackOff prevented the deployment from starting",
+			"severity":        "high",
+			"confidenceScore": 70,
+			"rationale":       "ErrImagePull event evidence is present",
+			"rcaHypothesis":   "The configured image could not be pulled.",
+			"rcaCauses":       []string{"ImagePullBackOff is caused by a failed image pull"},
+			"actionType":      "notification.sendSlack",
+		},
+	}
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
@@ -1840,8 +2002,9 @@ func evidenceRequirementTestReconciler(kubeClient client.Client, scheme *runtime
 }
 
 type countingModelProvider struct {
-	name  string
-	calls int
+	name   string
+	calls  int
+	output map[string]any
 }
 
 func (p *countingModelProvider) Name() string {
@@ -1852,11 +2015,9 @@ func (p *countingModelProvider) Name() string {
 }
 func (p *countingModelProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
 	p.calls++
-	return domain.ModelResponse{
-		Provider:   "counting",
-		Model:      "test-model",
-		Structured: true,
-		Output: map[string]any{
+	output := p.output
+	if output == nil {
+		output = map[string]any{
 			"riskTitle":       "Provider should not be called",
 			"riskSummary":     "Provider should not be called",
 			"severity":        "low",
@@ -1865,7 +2026,13 @@ func (p *countingModelProvider) Complete(context.Context, domain.ModelRequest) (
 			"rcaHypothesis":   "unexpected call",
 			"rcaCauses":       []string{"unexpected"},
 			"actionType":      "notification.sendSlack",
-		},
+		}
+	}
+	return domain.ModelResponse{
+		Provider:   "counting",
+		Model:      "test-model",
+		Structured: true,
+		Output:     output,
 	}, nil
 }
 
