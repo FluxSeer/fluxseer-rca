@@ -29,14 +29,16 @@ import (
 )
 
 const (
-	rcaSchemaVersion                = "fluxagent-rca-result-v1"
-	rcaCanonicalizationVersion      = canonicaldigest.RCAJSONV1
-	reasoningPolicyVersion          = "rca-v2-compat"
-	executionStateProviderCompleted = "ProviderCompleted"
-	executionStateFinalized         = "Finalized"
-	executionAttemptCompleted       = "Completed"
-	defaultExecutionAttemptID       = "attempt-001"
-	defaultMaxInvestigationDepth    = int32(1)
+	rcaSchemaVersion                       = "fluxagent-rca-result-v1"
+	rcaCanonicalizationVersion             = canonicaldigest.RCAJSONV1
+	reasoningPolicyVersion                 = "rca-v2-compat"
+	executionStateProviderCompleted        = "ProviderCompleted"
+	executionStateFinalized                = "Finalized"
+	executionAttemptCompleted              = "Completed"
+	defaultExecutionAttemptID              = "attempt-001"
+	defaultMaxInvestigationDepth           = int32(1)
+	investigationStageDataSourceResolution = "DataSourceResolution"
+	investigationStageQueryValidation      = "QueryValidation"
 )
 
 type InvestigationRequestReconciler struct {
@@ -743,6 +745,8 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	}
 	if preflight.QueryTypeIssue != nil {
 		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionFalse, preflight.QueryTypeIssue.Reason, preflight.QueryTypeIssue.Message, request.Generation, now)
+	} else if preflight.DatasourceIssue != nil {
+		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionUnknown, "DataSourceUnavailable", "query type capability was not evaluated because datasource resolution failed", request.Generation, now)
 	} else {
 		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
 	}
@@ -770,6 +774,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, issue.Reason, "request failed without an optional dependency degradation", request.Generation, now)
 		}
 		setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because RCA execution was blocked: "+issue.Reason, now)
+		setInvestigationVerificationUnknown(request, "RCAUnavailable", "verification was not performed because RCA execution was blocked", now)
 		return
 	}
 	if evidence.Issue != nil {
@@ -862,6 +867,10 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 
 func setInvestigationRemediationBlocked(request *v1alpha1.InvestigationRequest, reason string, message string, now time.Time) {
 	setStatusCondition(&request.Status.Conditions, conditionRemediationReady, metav1.ConditionFalse, reason, message, request.Generation, now)
+}
+
+func setInvestigationVerificationUnknown(request *v1alpha1.InvestigationRequest, reason string, message string, now time.Time) {
+	setStatusCondition(&request.Status.Conditions, conditionVerified, metav1.ConditionUnknown, reason, message, request.Generation, now)
 }
 
 func applyInvestigationFailure(request *v1alpha1.InvestigationRequest, code string, message string, stage string) {
@@ -1774,7 +1783,7 @@ func zeroPad3(index int) string {
 
 func shouldMarkInvestigationDegraded(reason string) bool {
 	switch reason {
-	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound", "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse", "CapabilityMismatch", "ResolverUnavailable", "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
+	case "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse", "ResolverUnavailable", "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
 		return true
 	default:
 		return false
@@ -1785,7 +1794,11 @@ func investigationFailureStage(reason string) string {
 	switch reason {
 	case "TargetNotFound", "UnsupportedTargetKind", "ResolverUnavailable":
 		return v1alpha1.InvestigationStageTargetResolution
-	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound", "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse", "CapabilityMismatch":
+	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound":
+		return investigationStageDataSourceResolution
+	case "CapabilityMismatch":
+		return investigationStageQueryValidation
+	case "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse":
 		return v1alpha1.InvestigationStageEvidenceCollection
 	case "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
 		return v1alpha1.InvestigationStageReasoning

@@ -309,7 +309,7 @@ When status budget enforcement is required, FluxAgent preserves canonical state 
 
 - `code`: stable machine-readable reason
 - `message`: human-readable detail
-- `stage`: workflow stage such as `Validation`, `TargetResolution`, `EvidenceCollection`, or `Reasoning`
+- `stage`: workflow stage such as `Validation`, `TargetResolution`, `DataSourceResolution`, `QueryValidation`, `EvidenceCollection`, `Reasoning`, `Verification`, `Projection`, or `Persistence`
 - `retryable`: whether a later reconcile or recreated request may reasonably succeed without a spec change
 
 `status.alternativeHypotheses[]`, `status.missingEvidence[]`, and `status.degradation` are reserved for partial-failure and claim-hardening semantics. They let FluxAgent report uncertainty explicitly instead of silently presenting an incomplete RCA as fully proven. `status.degradation.reasons[]` uses structured `code`, `stage`, optional `sourceRef`, and `message` fields.
@@ -425,6 +425,10 @@ Common reasons:
 `Ready=True` means the investigation workflow reached a consumable terminal status. `RCAReady=True` means an RCA result is available. It does not indicate that the target workload is healthy or remediated.
 
 `RemediationReady=True` means verified root-cause evidence is available for remediation planning. When `RCAReady=False`, `RemediationReady` is also `False` with a blocking reason such as `RCAUnavailable` or `RCAUnverified`.
+
+`QueryTypeSupported=Unknown` with reason `DataSourceUnavailable` means query capability validation was skipped because datasource resolution failed.
+
+`Verified=Unknown` with reason `RCAUnavailable` means verification was not performed because RCA execution was blocked. `Verified=False` means verification ran and the proposed claims were not supported.
 
 ## Execution Semantics
 

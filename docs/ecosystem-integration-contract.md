@@ -53,6 +53,10 @@ lastTransitionTime
 
 `Degraded=True` describes a partial or bounded execution, such as optional dependency or evidence loss, that still produced a consumable result. A hard workflow failure such as `TargetNotFound` is represented by `phase: Failed`, `outcome: Unknown`, and blocking conditions; it is not automatically degraded.
 
+`QueryTypeSupported=Unknown` with reason `DataSourceUnavailable` means datasource resolution failed before query capability validation could run.
+
+`Verified=Unknown` with reason `RCAUnavailable` means verification did not run because RCA execution was blocked. `Verified=False` means verification ran and did not support the proposed root-cause claims.
+
 For `RiskSignal`, `status.phase` describes the finding lifecycle only. A `Confirmed` phase means the finding was materialized, not that root-cause evidence was verified. Consumers should use:
 
 ```text
@@ -78,6 +82,7 @@ InvestigationCompleted
 TargetNotFound
 DataSourceNotFound
 CapabilityMismatch
+DataSourceUnavailable
 QueryBudgetExceeded
 ProviderDataPolicyDenied
 ProviderDataPolicyRejected
