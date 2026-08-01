@@ -4,7 +4,7 @@ Kubernetes-native SRE RCA control plane for teams that want explicit, auditable,
 
 Current release: `v0.3.0-beta.3`
 
-Status: `v0.3 beta.3 hardening release prepared, canonical RCA runtime semantics verified`
+Status: `v0.3.0-beta.3 published, canonical RCA runtime semantics verified, provenance verified`
 
 FluxSeer RCA is the forward-looking product name for the project currently
 published as FluxAgent. Existing `fluxagent` binaries, Helm artifacts, CRDs,
