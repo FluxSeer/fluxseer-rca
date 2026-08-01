@@ -43,6 +43,11 @@ spec:
                     findingType: {type: string}
                     targetGeneration: {type: integer, format: int64}
                     windowBucket: {type: string}
+                investigationRef:
+                  type: object
+                  properties:
+                    name: {type: string}
+                    namespace: {type: string}
                 actionType: {type: string}
                 severity: {type: string}
                 confidence: {type: integer}
@@ -105,6 +110,17 @@ spec:
                     properties:
                       cause: {type: string}
                       confidence: {type: integer}
+                projection:
+                  type: object
+                  properties:
+                    mode: {type: string}
+                    projectedFrom:
+                      type: object
+                      properties:
+                        name: {type: string}
+                        namespace: {type: string}
+                    compatibilityPath: {type: boolean}
+                    message: {type: string}
                 conditions:
                   type: array
                   items:
@@ -114,6 +130,9 @@ spec:
                       status: {type: string}
                       reason: {type: string}
                       message: {type: string}
+                      observedGeneration:
+                        type: integer
+                        format: int64
                       lastTransitionTime:
                         type: string
                         format: date-time

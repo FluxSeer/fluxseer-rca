@@ -1,6 +1,10 @@
+{{- $profile := include "fluxagent.effectiveRbacProfile" . -}}
+{{- if not (or (eq $profile "readOnlyRCA") (eq $profile "remediation") (eq $profile "experimentalExecutor")) -}}
+{{- fail (printf "rbac.profile must be one of readOnlyRCA, remediation, experimentalExecutor, or empty for feature-derived RBAC; got %q" $profile) -}}
+{{- end -}}
 {{- if and .Values.features.experimentalExecutor.enabled (not (or .Values.controller.enableRemediation .Values.features.remediation.enabled)) -}}
 {{- fail "features.experimentalExecutor.enabled=true requires features.remediation.enabled=true or controller.enableRemediation=true" -}}
 {{- end -}}
-{{- if and (eq .Values.rbac.profile "experimentalExecutor") (not (or .Values.controller.enableRemediation .Values.features.remediation.enabled)) -}}
+{{- if and (eq $profile "experimentalExecutor") (not (or .Values.controller.enableRemediation .Values.features.remediation.enabled)) -}}
 {{- fail "rbac.profile=experimentalExecutor requires features.remediation.enabled=true or controller.enableRemediation=true" -}}
 {{- end -}}

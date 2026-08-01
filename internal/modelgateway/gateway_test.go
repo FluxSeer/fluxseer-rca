@@ -43,6 +43,36 @@ func (p *captureProvider) Complete(_ context.Context, req domain.ModelRequest) (
 	}, nil
 }
 
+type namedCaptureProvider struct {
+	name     string
+	request  domain.ModelRequest
+	requests int
+}
+
+func (p *namedCaptureProvider) Name() string {
+	return p.name
+}
+
+func (p *namedCaptureProvider) Complete(_ context.Context, req domain.ModelRequest) (domain.ModelResponse, error) {
+	p.request = req
+	p.requests++
+	return domain.ModelResponse{
+		Provider:   p.Name(),
+		Model:      p.name + "-test",
+		Structured: true,
+		Output: map[string]any{
+			"riskTitle":       "Captured",
+			"riskSummary":     "Captured fallback reasoning context.",
+			"severity":        "medium",
+			"confidenceScore": 70,
+			"rationale":       "gateway fallback test",
+			"rcaHypothesis":   "Fallback evidence supports reasoning.",
+			"rcaCauses":       []string{"fallback evidence correlation"},
+			"actionType":      "notification.sendSlack",
+		},
+	}, nil
+}
+
 func TestGatewayRedactsEvidenceBeforeProviderCall(t *testing.T) {
 	provider := &captureProvider{}
 	gateway := &Gateway{
@@ -194,6 +224,150 @@ func TestGatewayFallsBackToSecondaryProvider(t *testing.T) {
 	}
 	if result.Provider != "capture" {
 		t.Fatalf("expected fallback provider capture, got %q", result.Provider)
+	}
+	if capture.request.ProviderHint != "capture" {
+		t.Fatalf("expected fallback request to use capture provider, got %q", capture.request.ProviderHint)
+	}
+}
+
+func TestGatewayReevaluatesFallbackProviderExternalTransmissionPolicy(t *testing.T) {
+	primary := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "broken",
+			Model:    "gpt-broken",
+			FallbackProviderRef: v1alpha1.LocalObjectReference{
+				Name: "fallback-openai",
+			},
+		},
+	}
+	fallback := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			Model:    "gpt-5.1",
+		},
+	}
+	openai := &namedCaptureProvider{name: "openai"}
+	gateway := &Gateway{
+		Base:      knowledge.NewBase(),
+		Providers: model.NewRegistry(failingProvider{}, openai),
+		Resolver: resolverStub{
+			providers: map[string]*v1alpha1.ModelProvider{
+				"fluxagent-system/fallback-openai": fallback,
+			},
+		},
+	}
+
+	_, err := gateway.AnalyzeIngestion(context.Background(), primary, domain.IngestionOutput{
+		Context: domain.IncidentContext{
+			Resource: domain.ResourceRef{Namespace: "prod", Name: "payments-api", Kind: "Deployment"},
+			Summary:  "error rate increased after rollout",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected fallback hosted provider data policy denial")
+	}
+	analyzeErr, ok := err.(*AnalyzeError)
+	if !ok {
+		t.Fatalf("expected AnalyzeError, got %T", err)
+	}
+	if analyzeErr.Reason != "ProviderDataPolicyDenied" {
+		t.Fatalf("expected ProviderDataPolicyDenied, got %q", analyzeErr.Reason)
+	}
+	if openai.requests != 0 {
+		t.Fatalf("expected fallback hosted provider call to be blocked, got %d requests", openai.requests)
+	}
+}
+
+func TestGatewayTraceRecordsPrimaryAndFallbackAttempts(t *testing.T) {
+	primary := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "broken",
+			Model:    "gpt-broken",
+			FallbackProviderRef: v1alpha1.LocalObjectReference{
+				Name: "fallback-openai",
+			},
+		},
+	}
+	fallback := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			Model:    "gpt-5.1",
+		},
+	}
+	openai := &namedCaptureProvider{name: "openai"}
+	gateway := &Gateway{
+		Base:      knowledge.NewBase(),
+		Providers: model.NewRegistry(failingProvider{}, openai),
+		Resolver: resolverStub{
+			providers: map[string]*v1alpha1.ModelProvider{
+				"fluxagent-system/fallback-openai": fallback,
+			},
+		},
+	}
+
+	_, trace, err := gateway.AnalyzeIngestionWithTrace(context.Background(), primary, domain.IngestionOutput{
+		Context: domain.IncidentContext{
+			Resource: domain.ResourceRef{Namespace: "prod", Name: "payments-api", Kind: "Deployment"},
+			Summary:  "error rate increased after rollout",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected fallback hosted provider policy denial")
+	}
+	if len(trace.Attempts) != 2 {
+		t.Fatalf("expected primary and fallback attempts, got %#v", trace.Attempts)
+	}
+	if trace.Attempts[0].Provider.Name != "primary-broken" || trace.Attempts[0].Result != "ProviderUnavailable" {
+		t.Fatalf("expected primary unavailable attempt, got %#v", trace.Attempts[0])
+	}
+	if trace.Attempts[1].Provider.Name != "fallback-openai" || trace.Attempts[1].Result != "ProviderDataPolicyDenied" {
+		t.Fatalf("expected fallback policy denied attempt, got %#v", trace.Attempts[1])
+	}
+}
+
+func TestGatewayAllowsLocalFallbackAfterHostedProviderPolicyDenial(t *testing.T) {
+	primary := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-openai", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			Model:    "gpt-5.1",
+			FallbackProviderRef: v1alpha1.LocalObjectReference{
+				Name: "fallback-capture",
+			},
+		},
+	}
+	fallback := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-capture", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "capture",
+		},
+	}
+	capture := &captureProvider{}
+	gateway := &Gateway{
+		Base:      knowledge.NewBase(),
+		Providers: model.NewRegistry(capture),
+		Resolver: resolverStub{
+			providers: map[string]*v1alpha1.ModelProvider{
+				"fluxagent-system/fallback-capture": fallback,
+			},
+		},
+	}
+
+	result, err := gateway.AnalyzeIngestion(context.Background(), primary, domain.IngestionOutput{
+		Context: domain.IncidentContext{
+			Resource: domain.ResourceRef{Namespace: "prod", Name: "payments-api", Kind: "Deployment"},
+			Summary:  "error rate increased after rollout",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected analyze error: %v", err)
+	}
+	if result.Provider != "capture" {
+		t.Fatalf("expected local fallback provider capture, got %q", result.Provider)
 	}
 	if capture.request.ProviderHint != "capture" {
 		t.Fatalf("expected fallback request to use capture provider, got %q", capture.request.ProviderHint)

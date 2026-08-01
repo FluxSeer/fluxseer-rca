@@ -39,6 +39,7 @@ InvestigationRequest
 | Gemini API provider | Beta / opt-in | Requires `ModelProvider`, Secret, and hosted-provider data egress opt-in. |
 | Normalized snapshot retention | Beta / opt-in | Requires `FLUXAGENT_EVIDENCE_STORE_DIR` and `storageRef.name: local-filesystem`. |
 | Raw snapshot retention | Reserved / unsupported | Contract is present, runtime rejects it in v0.3. |
+| Replay artifacts and comparison | Foundation / library | Terminal CRD export and deterministic bundle comparison exist; no runtime replay runner or controller entrypoint is shipped. |
 | OpenTelemetry adapter | Scaffold | Not part of the supported v0.3 adapter set. |
 | CloudWatch adapter | Scaffold | Not part of the supported v0.3 adapter set. |
 | Remediation | Experimental | Requires explicit controller and RBAC opt-in. |
@@ -64,7 +65,7 @@ Default:
 
 ```yaml
 rbac:
-  profile: readOnlyRCA
+  profile: ""
 features:
   remediation:
     enabled: false
@@ -74,7 +75,7 @@ features:
     enabled: false
 ```
 
-`readOnlyRCA` keeps workload access read-only and grants write access only to FluxAgent-owned RCA resources and statuses.
+An empty `rbac.profile` lets Helm derive the profile from feature flags. The default derived profile is `readOnlyRCA`, which keeps workload access read-only and grants write access only to FluxAgent-owned RCA resources and statuses.
 
 Experimental remediation requires explicit opt-in:
 
@@ -82,8 +83,6 @@ Experimental remediation requires explicit opt-in:
 features:
   remediation:
     enabled: true
-rbac:
-  profile: remediation
 ```
 
 Executor-like permissions such as Job or ConfigMap mutation require the broader experimental profile:
@@ -94,8 +93,8 @@ features:
     enabled: true
   experimentalExecutor:
     enabled: true
-rbac:
-  profile: experimentalExecutor
 ```
+
+Set `rbac.profile` explicitly only as an advanced override.
 
 These profiles do not change CRD installation. Helm CRDs remain installed for API compatibility; runtime controllers and mutation permissions are what remain disabled by default.

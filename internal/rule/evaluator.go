@@ -166,21 +166,14 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 
 	evidence := make([]v1alpha1.EvidenceRef, 0, 3)
 	matchCount := 0
-	firstReason := ""
-	firstMessage := ""
 	for _, record := range result.Records {
 		reason, _ := record["reason"].(string)
 		message, _ := record["message"].(string)
-		lower := strings.ToLower(reason + " " + message)
 		for _, expected := range reasons {
-			if !strings.Contains(lower, expected) {
+			if !eventReasonMatches(reason, message, expected) {
 				continue
 			}
 			matchCount++
-			if firstReason == "" {
-				firstReason = reason
-				firstMessage = message
-			}
 			if len(evidence) < 3 {
 				evidence = append(evidence, v1alpha1.EvidenceRef{
 					Kind:    "event",
@@ -201,16 +194,48 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 	return &Match{
 		Signal:   signal,
 		Severity: severity,
-		Summary:  fmt.Sprintf("%s detected %d matching events for %s", signal.Name, matchCount, target.Name),
-		Evidence: append([]v1alpha1.EvidenceRef{
-			{
-				Kind:    "event",
-				Source:  result.Source,
-				Reason:  firstReason,
-				Summary: fmt.Sprintf("%s (matched %d events)", firstMessage, matchCount),
-			},
-		}, evidence...),
+		Summary:  kubernetesEventMatchSummary(signal, evidence, matchCount, target),
+		Evidence: evidence,
 	}
+}
+
+func kubernetesEventMatchSummary(signal v1alpha1.RiskRuleSignal, evidence []v1alpha1.EvidenceRef, matchCount int, target domain.ResourceRef) string {
+	description := strings.TrimSpace(signal.Name)
+	if len(evidence) > 0 {
+		switch normalizeSignalType(evidence[0].Reason) {
+		case "backoff":
+			description = "container restart backoff"
+		case "crashloopbackoff":
+			description = "crashloop-backoff"
+		case "imagepullbackoff", "errimagepull", "invalidimagename":
+			description = "image-pull-failure"
+		case "oomkilled", "oom":
+			description = "oom-killed"
+		case "unhealthy":
+			description = "unhealthy-probe"
+		case "failedscheduling":
+			description = "failed-scheduling"
+		}
+	}
+	if description == "" {
+		description = "kubernetes-event"
+	}
+	unit := "events"
+	if matchCount == 1 {
+		unit = "event"
+	}
+	return fmt.Sprintf("%s detected %d matching %s for %s", description, matchCount, unit, target.Name)
+}
+
+func eventReasonMatches(reason, message, expected string) bool {
+	expected = normalizeSignalType(expected)
+	if expected == "" {
+		return false
+	}
+	if strings.TrimSpace(reason) != "" {
+		return normalizeSignalType(reason) == expected
+	}
+	return strings.Contains(normalizeSignalType(message), expected)
 }
 
 func evaluateDeploymentConditionSignal(signal v1alpha1.RiskRuleSignal, result *datasource.QueryResult, target domain.ResourceRef, severity string) *Match {
@@ -224,8 +249,6 @@ func evaluateDeploymentConditionSignal(signal v1alpha1.RiskRuleSignal, result *d
 
 	evidence := make([]v1alpha1.EvidenceRef, 0, 3)
 	matchCount := 0
-	firstSummary := ""
-	firstReason := ""
 	for _, record := range result.Records {
 		conditionType, _ := record["type"].(string)
 		status, _ := record["status"].(string)
@@ -237,10 +260,6 @@ func evaluateDeploymentConditionSignal(signal v1alpha1.RiskRuleSignal, result *d
 				continue
 			}
 			matchCount++
-			if firstSummary == "" {
-				firstReason = reason
-				firstSummary = fmt.Sprintf("%s=%s %s", conditionType, status, message)
-			}
 			if len(evidence) < 3 {
 				evidence = append(evidence, v1alpha1.EvidenceRef{
 					Kind:    "deploymentCondition",
@@ -262,14 +281,7 @@ func evaluateDeploymentConditionSignal(signal v1alpha1.RiskRuleSignal, result *d
 		Signal:   signal,
 		Severity: severity,
 		Summary:  fmt.Sprintf("%s detected %d matching deployment conditions for %s", signal.Name, matchCount, target.Name),
-		Evidence: append([]v1alpha1.EvidenceRef{
-			{
-				Kind:    "deploymentCondition",
-				Source:  result.Source,
-				Reason:  firstReason,
-				Summary: fmt.Sprintf("%s (matched %d deployment conditions)", firstSummary, matchCount),
-			},
-		}, evidence...),
+		Evidence: evidence,
 	}
 }
 

@@ -90,6 +90,10 @@ When `defaultTargetSelector.namespaceSelector.matchNames` is omitted, the chart 
 | `rulePacks.lokiBaseline.severity` | `warning` | Severity used on generated `RiskSignal` resources. |
 | `rulePacks.lokiBaseline.rcaEnabled` | `true` | Enables RCA enrichment. With no providerRef, FluxAgent uses the built-in heuristic provider. |
 | `rulePacks.lokiBaseline.providerRef.name` | `""` | Optional `ModelProvider` name for RCA. |
+| `rulePacks.applicationProfiles.enabled` | `false` | Creates user-defined application profile `RiskRule` resources. |
+| `rulePacks.applicationProfiles.profiles[]` | `[]` | Application-specific metric profile definitions. |
+
+When application profiles are enabled, each profile must enable at least one signal. This prevents Helm from rendering a `RiskRule` with no useful detector input.
 
 ## Override Examples
 
@@ -187,7 +191,7 @@ rulePacks:
       matchNames: []
 ```
 
-## Future Profiles
+## Additional Profiles
 
 Rule packs should stay split between portable Kubernetes signals and application profiles.
 
@@ -211,24 +215,45 @@ Application profile examples:
 - database connection pool
 - external API rate limiting
 
-Application metric names and labels vary by service. Future profile values should parameterize query expressions instead of hard-coding controller assumptions:
+Application metric names and labels vary by service. Application profiles parameterize query expressions in Helm values instead of hard-coding controller assumptions:
 
 ```yaml
 rulePacks:
-  trafficAnomaly:
+  applicationProfiles:
     enabled: true
-    datasourceRef:
-      name: prometheus
-    queries:
-      requestRate:
-        expression: |
-          sum(rate(http_requests_total{namespace="$namespace",app="$workload"}[5m]))
-      errorRate:
-        expression: |
-          sum(rate(http_requests_total{namespace="$namespace",app="$workload",status=~"5.."}[5m]))
-      latencyP95:
-        expression: |
-          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="$namespace",app="$workload"}[5m])) by (le))
+    profiles:
+      - name: checkout-web
+        datasourceRef:
+          name: prometheus
+        signals:
+          requestRate:
+            enabled: true
+            queryTemplate: |
+              sum(rate(http_requests_total{namespace="{{ .namespace }}",app="{{ .app }}"}[5m]))
+            threshold:
+              operator: ">"
+              value: 100
+          errorRate:
+            enabled: true
+            queryTemplate: |
+              sum(rate(http_requests_total{namespace="{{ .namespace }}",app="{{ .app }}",status=~"5.."}[5m]))
+            threshold:
+              operator: ">"
+              value: 1
+          latencyP95:
+            enabled: true
+            queryTemplate: |
+              histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="{{ .namespace }}",app="{{ .app }}"}[5m])) by (le))
+            threshold:
+              operator: ">"
+              value: 1
+          queueDepth:
+            enabled: true
+            queryTemplate: |
+              max(queue_depth{namespace="{{ .namespace }}",app="{{ .app }}"})
+            threshold:
+              operator: ">"
+              value: 100
 ```
 
 Traffic anomaly detection should compare a current window against a baseline window and include a minimum-volume guard:

@@ -2,16 +2,16 @@
 
 Kubernetes-native SRE RCA control plane for teams that want explicit, auditable, and security-first AI-assisted investigation.
 
-Current release: `v0.3.0-beta.2`
+Current release: `v0.3.0-beta.3`
 
-Status: `v0.3 RCA contract frozen, beta.2 published, provenance verified`
+Status: `v0.3 beta.3 hardening release prepared, canonical RCA runtime semantics verified`
 
 FluxSeer RCA is the forward-looking product name for the project currently
 published as FluxAgent. Existing `fluxagent` binaries, Helm artifacts, CRDs,
 metrics, and documentation remain compatibility surfaces until a dedicated
 rename release completes the migration.
 
-FluxSeer RCA turns production signals and operator questions into governed, evidence-verifiable, and replayable RCA workflows in Kubernetes.
+FluxSeer RCA turns production signals and operator questions into governed, evidence-verifiable RCA workflows with replay-oriented audit artifacts in Kubernetes.
 
 FluxSeer RCA exists for platform teams that need to answer:
 
@@ -38,7 +38,7 @@ temporary RCA answer
 -> evidence-linked claims
 -> policy-aware reasoning
 -> auditable execution record
--> replayable evaluation artifact
+-> replay-oriented evaluation artifact
 ```
 
 FluxAgent is built around four product decisions:
@@ -50,7 +50,7 @@ FluxAgent is built around four product decisions:
 
 This positioning is intentionally narrower than a general AI SRE agent. `RiskRule` is an optional bootstrap signal source, not an attempt to replace Alertmanager or own all Kubernetes detection. Remediation CRDs are optional extensions, not the default product path.
 
-Alert assistants help operators respond faster. FluxAgent helps platform teams standardize and govern how RCA is collected, reasoned about, verified, recorded, and replayed.
+Alert assistants help operators respond faster. FluxAgent helps platform teams standardize and govern how RCA is collected, reasoned about, verified, recorded, and compared later.
 
 ## Minimum Flow
 
@@ -248,7 +248,7 @@ flowchart LR
     Gateway --> Verifier
     Verifier --> Status
     Status -. discovered risk .-> Risk
-    Status --> Notify
+    Risk -. webhook configured .-> Notify
 ```
 
 Current `v0.3` implements bounded evidence collection, provider reasoning, status conditions, compact evidence references, evidence-linked claims, verification status, deterministic identities, provider execution audit, and compatibility status projections.
@@ -354,7 +354,7 @@ See:
 ```bash
 helm install fluxagent \
   oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent \
-  --version 0.3.0-beta.2 \
+  --version 0.3.0-beta.3 \
   --namespace fluxagent-system \
   --create-namespace
 

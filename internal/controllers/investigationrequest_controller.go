@@ -29,14 +29,16 @@ import (
 )
 
 const (
-	rcaSchemaVersion                = "fluxagent-rca-result-v1"
-	rcaCanonicalizationVersion      = canonicaldigest.RCAJSONV1
-	reasoningPolicyVersion          = "rca-v2-compat"
-	executionStateProviderCompleted = "ProviderCompleted"
-	executionStateFinalized         = "Finalized"
-	executionAttemptCompleted       = "Completed"
-	defaultExecutionAttemptID       = "attempt-001"
-	defaultMaxInvestigationDepth    = int32(1)
+	rcaSchemaVersion                       = "fluxagent-rca-result-v1"
+	rcaCanonicalizationVersion             = canonicaldigest.RCAJSONV1
+	reasoningPolicyVersion                 = "rca-v2-compat"
+	executionStateProviderCompleted        = "ProviderCompleted"
+	executionStateFinalized                = "Finalized"
+	executionAttemptCompleted              = "Completed"
+	defaultExecutionAttemptID              = "attempt-001"
+	defaultMaxInvestigationDepth           = int32(1)
+	investigationStageDataSourceResolution = "DataSourceResolution"
+	investigationStageQueryValidation      = "QueryValidation"
 )
 
 type InvestigationRequestReconciler struct {
@@ -92,8 +94,8 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if failure := investigationLoopFailure(&investigation); failure != nil {
 		applyLoopPreventedInvestigationStatus(&investigation, failure, now())
-	} else if invalidMessage := validateInvestigationRequestSpec(investigation.Spec); invalidMessage != "" {
-		applyInvalidInvestigationStatus(&investigation, invalidMessage, now())
+	} else if invalidIssue := validateInvestigationRequestSpecIssue(investigation.Spec); invalidIssue != nil {
+		applyInvalidInvestigationStatus(&investigation, invalidIssue.Reason, invalidIssue.Message, now())
 	} else {
 		preflight, preflightErr := r.preflight(ctx, &investigation)
 		if preflightErr != nil {
@@ -364,6 +366,8 @@ func applyEvidenceRequirementInconclusiveStatus(request *v1alpha1.InvestigationR
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "RequiredEvidenceMissing", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "RequiredEvidenceMissing", "RCA is inconclusive because required evidence is incomplete", request.Generation, now)
+	setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because required RCA evidence is incomplete", now)
+	setInvestigationVerificationUnknown(request, "RCAUnavailable", "verification was not performed because required RCA evidence is incomplete", now)
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationInconclusive", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, "RequiredEvidenceMissing", gate.Message, request.Generation, now)
 }
@@ -403,6 +407,7 @@ func applyEvidenceRequirementNoIssueFoundStatus(request *v1alpha1.InvestigationR
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "RequiredEvidenceComplete", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionTrue, "NoIssueFound", message, request.Generation, now)
+	setInvestigationRemediationBlocked(request, "NoIssueFound", "remediation is not available because no issue was found", now)
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "NoIssueFound", message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "investigation completed without degradation", request.Generation, now)
 }
@@ -417,6 +422,7 @@ func applyLoopPreventedInvestigationStatus(request *v1alpha1.InvestigationReques
 	request.Status.CompletedAt = &completedAt
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, failure.Code, failure.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, failure.Code, failure.Message, request.Generation, now)
+	setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because RCA execution was blocked: "+failure.Code, now)
 }
 
 func investigationLoopFailure(request *v1alpha1.InvestigationRequest) *v1alpha1.InvestigationFailure {
@@ -525,7 +531,19 @@ func emptyRCAResult() investigation.RCAResult {
 	return investigation.RCAResult{}
 }
 
+type specValidationIssue struct {
+	Reason  string
+	Message string
+}
+
 func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) string {
+	if issue := validateInvestigationRequestSpecIssue(spec); issue != nil {
+		return issue.Message
+	}
+	return ""
+}
+
+func validateInvestigationRequestSpecIssue(spec v1alpha1.InvestigationRequestSpec) *specValidationIssue {
 	missing := make([]string, 0, 4)
 	if strings.TrimSpace(spec.Target.Namespace) == "" {
 		missing = append(missing, "spec.target.namespace")
@@ -537,32 +555,39 @@ func validateInvestigationRequestSpec(spec v1alpha1.InvestigationRequestSpec) st
 		missing = append(missing, "spec.target.name")
 	}
 	if len(missing) > 0 {
-		return "missing required target fields: " + strings.Join(missing, ", ")
+		return &specValidationIssue{Reason: "TargetInvalid", Message: "missing required target fields: " + strings.Join(missing, ", ")}
 	}
 	if mode := strings.TrimSpace(spec.Mode); mode != "" && mode != v1alpha1.InvestigationModeReadOnly {
-		return "unsupported investigation mode: " + mode
+		return &specValidationIssue{Reason: "UnsupportedInvestigationMode", Message: "unsupported investigation mode: " + mode}
 	}
 	if len(spec.DataSources) == 0 && len(spec.Queries) == 0 {
-		return "spec.dataSources or spec.queries must include at least one datasource reference"
+		return &specValidationIssue{Reason: "InvalidSpec", Message: "spec.dataSources or spec.queries must include at least one datasource reference"}
 	}
 	if len(spec.DataSources) > 0 && len(spec.Queries) > 0 {
-		return "spec.dataSources and spec.queries are mutually exclusive; use dataSources for controller-planned evidence or queries for user-planned evidence"
+		return &specValidationIssue{Reason: "InvalidSpec", Message: "spec.dataSources and spec.queries are mutually exclusive; use dataSources for controller-planned evidence or queries for user-planned evidence"}
 	}
 	if message := validateEvidenceRetention(spec.EvidenceRetention); message != "" {
-		return message
+		reason := "InvalidSpec"
+		if spec.EvidenceRetention.Mode == v1alpha1.EvidenceRetentionModeRawSnapshot {
+			reason = "UnsupportedRetentionMode"
+		}
+		return &specValidationIssue{Reason: reason, Message: message}
+	}
+	if message := validateQueryRetention(spec.QueryRetention); message != "" {
+		return &specValidationIssue{Reason: "InvalidSpec", Message: message}
 	}
 	if message := validateInvestigationQueryBudget(spec); message != "" {
-		return message
+		return &specValidationIssue{Reason: "InvalidSpec", Message: message}
 	}
 	for _, query := range spec.Queries {
 		if strings.TrimSpace(query.DatasourceRef.Name) == "" {
-			return "investigation queries require spec.queries[].datasourceRef.name"
+			return &specValidationIssue{Reason: "InvalidSpec", Message: "investigation queries require spec.queries[].datasourceRef.name"}
 		}
 		if strings.TrimSpace(query.QueryType) == "" {
-			return "investigation queries require spec.queries[].queryType"
+			return &specValidationIssue{Reason: "InvalidSpec", Message: "investigation queries require spec.queries[].queryType"}
 		}
 	}
-	return ""
+	return nil
 }
 
 func validateEvidenceRetention(policy v1alpha1.EvidenceRetentionPolicy) string {
@@ -588,6 +613,15 @@ func validateEvidenceRetention(policy v1alpha1.EvidenceRetentionPolicy) string {
 		return "spec.evidenceRetention.mode=RawSnapshot requires explicit raw evidence retention support and is not supported in this release"
 	default:
 		return "unsupported evidence retention mode: " + mode
+	}
+}
+
+func validateQueryRetention(policy v1alpha1.QueryRetentionPolicy) string {
+	switch mode := strings.TrimSpace(policy.Mode); mode {
+	case "", v1alpha1.QueryRetentionModeDigestOnly, v1alpha1.QueryRetentionModeRedacted, v1alpha1.QueryRetentionModeFull:
+		return ""
+	default:
+		return "unsupported queryRetention mode: " + mode
 	}
 }
 
@@ -665,31 +699,32 @@ func validateInvestigationQueryBudget(spec v1alpha1.InvestigationRequestSpec) st
 	return ""
 }
 
-func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, message string, now time.Time) {
+func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, reason string, message string, now time.Time) {
+	if strings.TrimSpace(reason) == "" {
+		reason = "InvalidSpec"
+	}
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, message, request.Generation, now)
 	applyInvestigationFailure(
 		request,
-		"TargetInvalid",
+		reason,
 		message,
 		v1alpha1.InvestigationStageValidation,
 	)
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
 	request.Status.Provider = ""
-	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, "TargetInvalid", message, request.Generation, now)
-	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionFalse, "TargetInvalid", message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, reason, message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionFalse, reason, message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
+	setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because the investigation request is not runnable", now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "ValidationFailed", "request failed validation before evidence collection started", request.Generation, now)
 }
 
 func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, message string, now time.Time) {
 	request.Status.Provider = ""
-	if preflight.Provider != nil {
-		request.Status.Provider = preflight.Provider.Name
-	}
 	request.Status.EvidenceRefs = evidence.EvidenceRefs
 
 	if preflight.TargetIssue != nil {
@@ -711,6 +746,8 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	}
 	if preflight.QueryTypeIssue != nil {
 		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionFalse, preflight.QueryTypeIssue.Reason, preflight.QueryTypeIssue.Message, request.Generation, now)
+	} else if preflight.DatasourceIssue != nil {
+		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionUnknown, "DataSourceUnavailable", "query type capability was not evaluated because datasource resolution failed", request.Generation, now)
 	} else {
 		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
 	}
@@ -737,6 +774,8 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		} else {
 			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, issue.Reason, "request failed without an optional dependency degradation", request.Generation, now)
 		}
+		setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because RCA execution was blocked: "+issue.Reason, now)
+		setInvestigationVerificationUnknown(request, "RCAUnavailable", "verification was not performed because RCA execution was blocked", now)
 		return
 	}
 	if evidence.Issue != nil {
@@ -754,13 +793,19 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		} else {
 			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, evidence.Issue.Reason, "request failed during evidence collection without an optional dependency degradation", request.Generation, now)
 		}
+		setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because evidence collection did not complete: "+evidence.Issue.Reason, now)
 		return
 	}
 	if rca.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, rca.Issue.Message, request.Generation, now)
 		applyInvestigationFailure(request, rca.Issue.Reason, rca.Issue.Message, v1alpha1.InvestigationStageReasoning)
-		if rca.Issue.EgressAudit != nil {
-			request.Status.Execution = buildRejectedRCAExecution(request, preflight, evidence, rca.Issue.EgressAudit, investigationExecutionID(request, preflight, evidence), now)
+		if rca.Issue.EgressAudit != nil || len(rca.EgressAttempts) > 0 {
+			audit := rca.Issue.EgressAudit
+			if audit == nil {
+				audit = rca.PrimaryEgress
+			}
+			request.Status.Execution = buildRejectedRCAExecution(request, preflight, evidence, audit, rca.EgressAttempts, investigationExecutionID(request, preflight, evidence), now)
+			request.Status.Execution.State = rca.Issue.Reason
 		}
 		rcametrics.RecordInvestigation(request.Namespace, providerType(preflight.Provider), "failed", "unknown")
 		request.Status.Summary = evidence.Summary
@@ -774,6 +819,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		} else {
 			setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, rca.Issue.Reason, "request failed during RCA generation without an optional dependency degradation", request.Generation, now)
 		}
+		setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because RCA generation failed: "+rca.Issue.Reason, now)
 		return
 	}
 
@@ -792,16 +838,40 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	}
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
-	request.Status.Outcome = v1alpha1.InvestigationOutcomeConfirmed
+	if request.Status.Outcome == "" {
+		request.Status.Outcome = v1alpha1.InvestigationOutcomeUnknown
+	}
 	request.Status.Failure = nil
 	setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseCompleted, request.Status.Summary, request.Generation, now)
 	rcametrics.RecordInvestigation(request.Namespace, providerType(preflight.Provider), request.Status.Outcome, rootCauseTypeForMetrics(request))
-	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
+	switch request.Status.Outcome {
+	case v1alpha1.InvestigationOutcomeConfirmed:
+		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionTrue, "ProviderSucceeded", "RCA generated successfully for investigation request", request.Generation, now)
+		setStatusCondition(&request.Status.Conditions, conditionVerified, metav1.ConditionTrue, "RootCauseClaimsSupported", "root-cause claims are supported by collected evidence", request.Generation, now)
+		setStatusCondition(&request.Status.Conditions, conditionRemediationReady, metav1.ConditionTrue, "RootCauseVerified", "remediation planning is allowed after verified root-cause evidence", request.Generation, now)
+		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
+	case v1alpha1.InvestigationOutcomeInconclusive:
+		setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "RCAUnverified", "RCA completed but proposed root-cause claims were not supported by collected evidence", request.Generation, now)
+		setStatusCondition(&request.Status.Conditions, conditionVerified, metav1.ConditionFalse, "NoSupportedRootCauseClaims", "no proposed root-cause claim was supported by collected evidence", request.Generation, now)
+		setInvestigationRemediationBlocked(request, "RCAUnverified", "remediation is not allowed without verified root-cause evidence", now)
+		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationInconclusive", request.Status.Summary, request.Generation, now)
+	default:
+		setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because the investigation outcome is not confirmed", now)
+		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
+	}
 	if evidenceDegradation != nil {
 		setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, "NativeResultLimitExceeded", "evidence collection completed with bounded datasource result truncation", request.Generation, now)
 	} else {
 		setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request completed successfully without degradation", request.Generation, now)
 	}
+}
+
+func setInvestigationRemediationBlocked(request *v1alpha1.InvestigationRequest, reason string, message string, now time.Time) {
+	setStatusCondition(&request.Status.Conditions, conditionRemediationReady, metav1.ConditionFalse, reason, message, request.Generation, now)
+}
+
+func setInvestigationVerificationUnknown(request *v1alpha1.InvestigationRequest, reason string, message string, now time.Time) {
+	setStatusCondition(&request.Status.Conditions, conditionVerified, metav1.ConditionUnknown, reason, message, request.Generation, now)
 }
 
 func applyInvestigationFailure(request *v1alpha1.InvestigationRequest, code string, message string, stage string) {
@@ -838,29 +908,233 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	for _, claim := range claims {
 		rcametrics.RecordClaimVerification(claim.Verification)
 	}
-	verifiedScore := confidence
-	if verifiedScore > verification.CoverageScore {
-		verifiedScore = verification.CoverageScore
-	}
+	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, confidence)
 	request.Status.Verdict = &v1alpha1.RCAVerdict{
-		Outcome:         v1alpha1.InvestigationOutcomeConfirmed,
-		Summary:         rca.Reasoning.RiskSummary,
+		Outcome:         evaluation.Outcome,
+		Summary:         evaluation.Summary,
 		RootCauseEntity: resourceToTargetRef(preflight.Target),
-		RootCauseType:   inferRootCauseType(rca.Reasoning.RCA.Hypothesis, rca.Reasoning.RCA.Causes),
-		Confidence:      confidence,
+		RootCauseType:   evaluation.RootCauseType,
+		Confidence:      evaluation.Confidence,
 		ConfidenceDetail: &v1alpha1.RCAConfidence{
 			ProviderScore: confidence,
-			VerifiedScore: verifiedScore,
-			Level:         confidenceLevel(verifiedScore),
+			VerifiedScore: evaluation.VerifiedScore,
+			Level:         confidenceLevel(evaluation.VerifiedScore),
 			Method:        verification.Method,
 		},
 	}
+	request.Status.Summary = evaluation.Summary
+	request.Status.Confidence = evaluation.Confidence
+	request.Status.Outcome = evaluation.Outcome
 	request.Status.Claims = claims
 	request.Status.AlternativeHypotheses = nil
-	request.Status.MissingEvidence = nil
+	request.Status.MissingEvidence = evaluation.MissingEvidence
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
 	request.Status.Execution = buildRCAExecution(request, preflight, evidence, rca, investigationExecutionID(request, preflight, evidence), executionStateFinalized, now)
 	request.Status.Execution.VerifierVersion = verification.Method
+}
+
+type canonicalVerdictEvaluation struct {
+	Outcome         string
+	Summary         string
+	RootCauseType   string
+	Confidence      float64
+	VerifiedScore   float64
+	MissingEvidence []v1alpha1.RCAMissingEvidence
+}
+
+func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult, claims []v1alpha1.RCAClaim, providerConfidence float64) canonicalVerdictEvaluation {
+	causalClaims := rootCauseClaims(rca, claims)
+	supported, contradicted := countVerifiedRootCauseClaims(causalClaims)
+	supportedClaims := supportedRootCauseClaims(causalClaims)
+	verifiedScore := 0.0
+	if len(causalClaims) > 0 {
+		verifiedScore = float64(supported) / float64(len(causalClaims))
+	}
+	if verifiedScore > providerConfidence {
+		verifiedScore = providerConfidence
+	}
+
+	evaluation := canonicalVerdictEvaluation{
+		Outcome:       v1alpha1.InvestigationOutcomeConfirmed,
+		Summary:       verifiedRCASummary(evidence, supportedClaims),
+		RootCauseType: inferRootCauseTypeFromClaims(supportedClaims),
+		Confidence:    verifiedScore,
+		VerifiedScore: verifiedScore,
+	}
+	if len(causalClaims) == 0 || supported == 0 || contradicted > 0 {
+		evaluation.Outcome = v1alpha1.InvestigationOutcomeInconclusive
+		evaluation.Summary = unverifiedRCASummary(evidence, rca.Reasoning.RiskSummary)
+		evaluation.RootCauseType = ""
+		evaluation.Confidence = 0
+		evaluation.VerifiedScore = 0
+		evaluation.MissingEvidence = missingEvidenceForClaims(causalClaims)
+	}
+	return evaluation
+}
+
+func supportedRootCauseClaims(claims []v1alpha1.RCAClaim) []v1alpha1.RCAClaim {
+	out := make([]v1alpha1.RCAClaim, 0, len(claims))
+	for _, claim := range claims {
+		if claim.Verification == verifier.VerificationSupported {
+			out = append(out, claim)
+		}
+	}
+	return out
+}
+
+func verifiedRCASummary(evidence investigation.EvidenceCollectionResult, supportedClaims []v1alpha1.RCAClaim) string {
+	statements := make([]string, 0, len(supportedClaims))
+	for _, claim := range supportedClaims {
+		statement := strings.TrimSpace(claim.Statement)
+		if statement != "" {
+			statements = append(statements, statement)
+		}
+	}
+	evidenceSummary := observedEvidenceSummary(evidence)
+	switch {
+	case len(statements) > 0 && evidenceSummary != "":
+		return fmt.Sprintf("Verified root-cause evidence supports: %s. Observed evidence: %s.", strings.Join(statements, "; "), evidenceSummary)
+	case len(statements) > 0:
+		return fmt.Sprintf("Verified root-cause evidence supports: %s.", strings.Join(statements, "; "))
+	case evidenceSummary != "":
+		return fmt.Sprintf("Observed evidence: %s.", evidenceSummary)
+	default:
+		return "Root-cause claims were verified by collected evidence."
+	}
+}
+
+func observedEvidenceSummary(evidence investigation.EvidenceCollectionResult) string {
+	parts := make([]string, 0, len(evidence.EvidenceRefs))
+	for _, ref := range evidence.EvidenceRefs {
+		kind := strings.TrimSpace(ref.Kind)
+		reason := strings.TrimSpace(ref.Reason)
+		source := strings.TrimSpace(ref.Source)
+		detail := strings.TrimSpace(ref.Summary)
+		label := strings.TrimSpace(strings.Join(nonEmptyStrings(kind, reason, source), " "))
+		switch {
+		case label != "" && detail != "":
+			parts = append(parts, fmt.Sprintf("%s: %s", label, detail))
+		case detail != "":
+			parts = append(parts, detail)
+		case label != "":
+			parts = append(parts, label)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	if len(parts) > 3 {
+		parts = parts[:3]
+	}
+	return strings.Join(parts, "; ")
+}
+
+func nonEmptyStrings(values ...string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			out = append(out, strings.TrimSpace(value))
+		}
+	}
+	return out
+}
+
+func rootCauseClaims(rca investigation.RCAResult, claims []v1alpha1.RCAClaim) []v1alpha1.RCAClaim {
+	if len(claims) == 0 {
+		return nil
+	}
+	start := 0
+	if strings.TrimSpace(rca.Reasoning.RiskSummary) != "" {
+		start = 1
+	}
+	if start >= len(claims) {
+		return nil
+	}
+	return claims[start:]
+}
+
+func countVerifiedRootCauseClaims(claims []v1alpha1.RCAClaim) (int, int) {
+	supported := 0
+	contradicted := 0
+	for _, claim := range claims {
+		switch claim.Verification {
+		case verifier.VerificationSupported:
+			supported++
+		case verifier.VerificationContradicted:
+			contradicted++
+		}
+	}
+	return supported, contradicted
+}
+
+func inferRootCauseTypeFromClaims(claims []v1alpha1.RCAClaim) string {
+	statements := make([]string, 0, len(claims))
+	for _, claim := range claims {
+		statements = append(statements, claim.Statement)
+	}
+	text := strings.ToLower(strings.Join(statements, " "))
+	switch {
+	case containsAny(text, "imagepullbackoff", "errimagepull", "image pull", "pull image", "failed to pull"):
+		return "ImagePullFailure"
+	case containsAny(text, "memory", "oom", "resource pressure", "safe threshold"):
+		return "ResourcePressure"
+	case containsAny(text, "latency", "timeout", "http", "5xx"):
+		return "LatencyRegression"
+	case containsAny(text, "rollout", "release", "pod template", "replicaset", "image digest"):
+		return "DeploymentRegression"
+	case containsAny(text, "crash", "restart", "backoff", "startup"):
+		return "CrashLoop"
+	default:
+		return "WorkloadDegradation"
+	}
+}
+
+func unverifiedRCASummary(evidence investigation.EvidenceCollectionResult, providerSummary string) string {
+	for _, ref := range evidence.EvidenceRefs {
+		detail := firstNonEmptyString(strings.TrimSpace(ref.Summary), strings.TrimSpace(ref.Reason), strings.TrimSpace(ref.Source))
+		if detail != "" {
+			return fmt.Sprintf("Observed %s, but collected evidence is insufficient to confirm the proposed root cause.", detail)
+		}
+	}
+	if strings.TrimSpace(providerSummary) != "" {
+		return fmt.Sprintf("Collected evidence is insufficient to confirm the proposed root cause: %s", strings.TrimSpace(providerSummary))
+	}
+	return "Collected evidence is insufficient to confirm the proposed root cause."
+}
+
+func missingEvidenceForClaims(claims []v1alpha1.RCAClaim) []v1alpha1.RCAMissingEvidence {
+	missing := make([]v1alpha1.RCAMissingEvidence, 0)
+	seen := map[string]bool{}
+	for _, claim := range claims {
+		if claim.Verification == verifier.VerificationSupported {
+			continue
+		}
+		for _, item := range missingEvidenceForClaim(claim.Statement) {
+			key := item.Source + "/" + item.Reason
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			missing = append(missing, item)
+		}
+	}
+	return missing
+}
+
+func missingEvidenceForClaim(statement string) []v1alpha1.RCAMissingEvidence {
+	text := strings.ToLower(statement)
+	switch {
+	case containsAny(text, "rollout", "release", "image", "config", "configuration"):
+		return []v1alpha1.RCAMissingEvidence{{Source: "deployment-history", Reason: "RolloutEvidenceRequired"}}
+	case containsAny(text, "memory", "oom", "resource pressure"):
+		return []v1alpha1.RCAMissingEvidence{{Source: "prometheus", Reason: "MemoryMetricsRequired"}, {Source: "kubernetes-events", Reason: "OOMEventRequired"}}
+	case containsAny(text, "crash", "restart", "backoff"):
+		return []v1alpha1.RCAMissingEvidence{{Source: "kubernetes-events", Reason: "CrashLoopEventRequired"}}
+	case containsAny(text, "latency", "timeout", "http", "5xx"):
+		return []v1alpha1.RCAMissingEvidence{{Source: "prometheus", Reason: "LatencyMetricsRequired"}, {Source: "loki", Reason: "ErrorLogEvidenceRequired"}}
+	default:
+		return []v1alpha1.RCAMissingEvidence{{Source: "evidence", Reason: "SupportingEvidenceRequired"}}
+	}
 }
 
 func evidenceNativeLimitDegradation(evidence investigation.EvidenceCollectionResult) *v1alpha1.RCADegradation {
@@ -952,6 +1226,14 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 		classification := dataclassification.BundleClassification(egressEvidenceRefsForAudit(evidence.EvidenceRefs, preflight.Provider.Spec.DataPolicy))
 		providerResult.Classification = &classification
 	}
+	egressAudit := providerEgressAudit(preflight.Provider, evidence)
+	if rca.PrimaryEgress != nil {
+		egressAudit = rca.PrimaryEgress
+	}
+	egressAttempts := providerEgressAttempts(preflight.Provider, egressAudit, "Allowed")
+	if len(rca.EgressAttempts) > 0 {
+		egressAttempts = copyProviderEgressAttempts(rca.EgressAttempts)
+	}
 	return &v1alpha1.RCAExecution{
 		ID:                      executionID,
 		State:                   state,
@@ -963,7 +1245,8 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 		RCASchemaVersion:        rcaSchemaVersion,
 		CanonicalizationVersion: rcaCanonicalizationVersion,
 		ReasoningPolicyVersion:  reasoningPolicyVersion,
-		EgressAudit:             providerEgressAudit(preflight.Provider, evidence),
+		EgressAudit:             egressAudit,
+		EgressAttempts:          egressAttempts,
 		ControllerVersion:       version.Current().Version,
 		AttemptCount:            1,
 		Attempts: []v1alpha1.RCAExecutionAttempt{
@@ -981,7 +1264,11 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 	}
 }
 
-func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, audit *v1alpha1.ProviderEgressAudit, executionID string, now time.Time) *v1alpha1.RCAExecution {
+func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, audit *v1alpha1.ProviderEgressAudit, attempts []v1alpha1.ProviderEgressAttempt, executionID string, now time.Time) *v1alpha1.RCAExecution {
+	egressAttempts := providerEgressAttempts(preflight.Provider, audit, "Rejected")
+	if len(attempts) > 0 {
+		egressAttempts = copyProviderEgressAttempts(attempts)
+	}
 	return &v1alpha1.RCAExecution{
 		ID:                      executionID,
 		State:                   "ProviderDataPolicyRejected",
@@ -994,9 +1281,27 @@ func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight
 		CanonicalizationVersion: rcaCanonicalizationVersion,
 		ReasoningPolicyVersion:  reasoningPolicyVersion,
 		EgressAudit:             audit,
+		EgressAttempts:          egressAttempts,
 		ControllerVersion:       version.Current().Version,
 		DurationSeconds:         investigationDurationSeconds(request, now),
 	}
+}
+
+func copyProviderEgressAttempts(in []v1alpha1.ProviderEgressAttempt) []v1alpha1.ProviderEgressAttempt {
+	if len(in) > 8 {
+		in = in[:8]
+	}
+	out := make([]v1alpha1.ProviderEgressAttempt, len(in))
+	copy(out, in)
+	for i := range out {
+		if in[i].ProviderRef != nil {
+			ref := *in[i].ProviderRef
+			out[i].ProviderRef = &ref
+		}
+		out[i].EvidenceKinds = append([]string(nil), in[i].EvidenceKinds...)
+		out[i].SensitivityTagsSent = append([]string(nil), in[i].SensitivityTagsSent...)
+	}
+	return out
 }
 
 func providerRequestIDFromRCA(rca investigation.RCAResult) string {
@@ -1025,6 +1330,37 @@ func providerEgressAudit(provider *v1alpha1.ModelProvider, evidence investigatio
 		MaximumClassificationSent:     decision.MaximumSent,
 		ClassificationPolicyVersion:   decision.ClassificationVersion,
 	}
+}
+
+func providerEgressAttempts(provider *v1alpha1.ModelProvider, audit *v1alpha1.ProviderEgressAudit, result string) []v1alpha1.ProviderEgressAttempt {
+	if audit == nil {
+		return nil
+	}
+	return []v1alpha1.ProviderEgressAttempt{providerEgressAttempt(provider, audit, 1, result)}
+}
+
+func providerEgressAttempt(provider *v1alpha1.ModelProvider, audit *v1alpha1.ProviderEgressAudit, ordinal int32, result string) v1alpha1.ProviderEgressAttempt {
+	attempt := v1alpha1.ProviderEgressAttempt{
+		Ordinal:                       ordinal,
+		ProviderRef:                   providerRef(provider),
+		ProviderGeneration:            providerGeneration(provider),
+		ProviderType:                  audit.ProviderType,
+		Decision:                      audit.Decision,
+		Result:                        result,
+		Reason:                        audit.Reason,
+		EvidenceBundleDigest:          audit.EvidenceBundleDigest,
+		EvidenceKinds:                 append([]string(nil), audit.EvidenceKinds...),
+		SensitivityTagsSent:           append([]string(nil), audit.SensitivityTagsSent...),
+		LogSamplesIncluded:            audit.LogSamplesIncluded,
+		MaximumClassificationObserved: audit.MaximumClassificationObserved,
+		MaximumClassificationAllowed:  audit.MaximumClassificationAllowed,
+		MaximumClassificationSent:     audit.MaximumClassificationSent,
+		ClassificationPolicyVersion:   audit.ClassificationPolicyVersion,
+	}
+	if attempt.ProviderType == "" {
+		attempt.ProviderType = providerType(provider)
+	}
+	return attempt
 }
 
 func egressEvidenceRefsForAudit(refs []v1alpha1.EvidenceRef, policy v1alpha1.ModelProviderDataPolicy) []v1alpha1.EvidenceRef {
@@ -1448,7 +1784,7 @@ func zeroPad3(index int) string {
 
 func shouldMarkInvestigationDegraded(reason string) bool {
 	switch reason {
-	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound", "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse", "CapabilityMismatch", "ResolverUnavailable", "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
+	case "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse", "ResolverUnavailable", "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
 		return true
 	default:
 		return false
@@ -1459,7 +1795,11 @@ func investigationFailureStage(reason string) string {
 	switch reason {
 	case "TargetNotFound", "UnsupportedTargetKind", "ResolverUnavailable":
 		return v1alpha1.InvestigationStageTargetResolution
-	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound", "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse", "CapabilityMismatch":
+	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound":
+		return investigationStageDataSourceResolution
+	case "CapabilityMismatch":
+		return investigationStageQueryValidation
+	case "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse":
 		return v1alpha1.InvestigationStageEvidenceCollection
 	case "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
 		return v1alpha1.InvestigationStageReasoning
@@ -1550,6 +1890,7 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 
 		riskSignal.Spec.Target = resourceToTargetRef(preflight.Target)
 		riskSignal.Spec.SignalType = investigationSignalType(preflight)
+		riskSignal.Spec.InvestigationRef = &v1alpha1.NamespacedObjectReference{Name: request.Name, Namespace: request.Namespace}
 		if request.Status.Lineage != nil && request.Status.Lineage.FindingIdentity != nil {
 			identity := *request.Status.Lineage.FindingIdentity
 			riskSignal.Spec.FindingIdentity = &identity
@@ -1579,13 +1920,17 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 	}
 
 	original := riskSignal.DeepCopy()
-	setRiskSignalStatus(&riskSignal.Status, v1alpha1.PhaseConfirmed, rca.Reasoning.RiskSummary, riskSignal.Generation, now)
+	phase := request.Status.Outcome
+	if phase == "" {
+		phase = v1alpha1.InvestigationOutcomeUnknown
+	}
+	message := request.Status.Summary
+	if strings.TrimSpace(message) == "" {
+		message = rca.Reasoning.RiskSummary
+	}
+	setRiskSignalStatus(&riskSignal.Status, phase, message, riskSignal.Generation, now)
 	setStatusCondition(&riskSignal.Status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "EvidenceCollected", evidence.Summary, riskSignal.Generation, now)
-	applyRCAResult(&riskSignal.Status, rcaResult{
-		Reasoning:    rca.Reasoning,
-		ProviderName: request.Status.Provider,
-		Condition:    rcaCondition(metav1.ConditionTrue, "ProviderSucceeded", "RCA promoted from investigation request", now),
-	})
+	applyProjectedInvestigationRCAResult(&riskSignal.Status, request, riskSignal.Generation, rca, now)
 	if statusChangedRiskSignal(original, riskSignal) {
 		if err := r.Status().Update(ctx, riskSignal); err != nil && !recordStatusUpdateConflict("RiskSignal", err) {
 			return nil, err
@@ -1596,6 +1941,61 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 		Name:      riskSignal.Name,
 		Namespace: riskSignal.Namespace,
 	}, nil
+}
+
+func applyProjectedInvestigationRCAResult(status *v1alpha1.RiskSignalStatus, request *v1alpha1.InvestigationRequest, generation int64, rca investigation.RCAResult, now time.Time) {
+	if request.Status.Verdict == nil {
+		applyRCAResult(status, rcaResult{
+			Reasoning:    rca.Reasoning,
+			ProviderName: request.Status.Provider,
+			Condition:    rcaCondition(metav1.ConditionFalse, "RCAUnverified", "RCA projection is unavailable because canonical verdict is missing", now),
+			Projection: &v1alpha1.RiskSignalRCAProjectionStatus{
+				Mode:          "InvestigationRequestProjection",
+				ProjectedFrom: &v1alpha1.NamespacedObjectReference{Name: request.Name, Namespace: request.Namespace},
+				Message:       "RiskSignal contains a compact projection; canonical RCA is owned by InvestigationRequest.status.",
+			},
+		}, generation, now)
+		return
+	}
+
+	reasoning := *rca.Reasoning
+	reasoning.RiskSummary = request.Status.Verdict.Summary
+	reasoning.RCA.Hypothesis = request.Status.Hypothesis
+	reasoning.RCA.Causes = verifiedCauseStatements(rootCauseClaims(rca, request.Status.Claims))
+	if request.Status.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
+		reasoning.RCA.Hypothesis = ""
+	}
+	if request.Status.Verdict.ConfidenceDetail != nil {
+		reasoning.Confidence.Score = int(request.Status.Verdict.Confidence * 100)
+	}
+	conditionStatus := metav1.ConditionTrue
+	conditionReason := "RootCauseVerified"
+	conditionMessage := "RCA promoted from verified investigation request"
+	if request.Status.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
+		conditionStatus = metav1.ConditionFalse
+		conditionReason = "RCAUnverified"
+		conditionMessage = "canonical investigation verdict is inconclusive"
+	}
+	applyRCAResult(status, rcaResult{
+		Reasoning:    &reasoning,
+		ProviderName: request.Status.Provider,
+		Condition:    rcaCondition(conditionStatus, conditionReason, conditionMessage, now),
+		Projection: &v1alpha1.RiskSignalRCAProjectionStatus{
+			Mode:          "InvestigationRequestProjection",
+			ProjectedFrom: &v1alpha1.NamespacedObjectReference{Name: request.Name, Namespace: request.Namespace},
+			Message:       "RiskSignal contains a compact projection; canonical RCA is owned by InvestigationRequest.status.",
+		},
+	}, generation, now)
+}
+
+func verifiedCauseStatements(claims []v1alpha1.RCAClaim) []string {
+	out := make([]string, 0, len(claims))
+	for _, claim := range claims {
+		if claim.Verification == verifier.VerificationSupported {
+			out = append(out, claim.Statement)
+		}
+	}
+	return out
 }
 
 func investigationRiskSignalName(requestName, targetName string) string {

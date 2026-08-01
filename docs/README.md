@@ -4,7 +4,7 @@ FluxSeer RCA is the forward-looking product name for the Kubernetes-native RCA
 control plane currently published as FluxAgent. The current beta artifacts still
 use `fluxagent` names for compatibility.
 
-Current published release: `v0.3.0-beta.2`
+Current published release: `v0.3.0-beta.3`
 
 Current API identity: `aiops.platform/v1alpha1`
 
@@ -14,8 +14,8 @@ not mean all future v1alpha1 schema fields are GA-stable.
 ## Current Product Truth
 
 - Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
-- Current release scope: `v0.3.0-beta.2` is a published prerelease with frozen RCA contract, runtime default hardening, least-privilege RBAC defaults, published GHCR images, published Helm OCI chart, and verified provenance.
-- Current v0.3 engineering state: post-`v0.3.0-beta.2` stabilization and experimental optimization.
+- Current release scope: `v0.3.0-beta.3` is a beta hardening prerelease with canonical RCA preflight, evidence gating, direct RiskRule compatibility, runtime default hardening, least-privilege RBAC defaults, GHCR images, Helm OCI packaging, and verified provenance.
+- Current v0.3 engineering state: post-`v0.3.0-beta.3` stabilization and broader runtime validation.
 - `InvestigationRequest` is the primary operator-first entrypoint for ad-hoc or externally triggered RCA.
 - `RiskRule` is a valid bootstrap detection and rule-pack entrypoint, not the canonical RCA ownership surface.
 - `RiskSignal` is a materialized finding, notification target, and compatibility projection.
@@ -83,6 +83,7 @@ Operations and packaging:
 - [Runtime modes](runtime-modes.md)
 - [Helm rule packs](helm-rulepacks.md)
 - [Metrics](metrics.md)
+- [Kubernetes ecosystem integration contract](ecosystem-integration-contract.md)
 - [GitHub repository setup](github-repo.md)
 
 Product positioning:
@@ -91,6 +92,7 @@ Product positioning:
 - [Open source positioning](open-source-positioning.md)
 - [Competitive positioning](competitive-positioning.md)
 - [v0.3 product direction backlog](backlog/v0.3-product-direction.md)
+- [v0.3 architecture hardening backlog](backlog/v0.3-architecture-hardening.md)
 
 ## Tutorials
 
@@ -105,10 +107,11 @@ Product positioning:
 
 Current release:
 
-- [v0.3.0-beta.2](releases/v0.3.0-beta.2.md)
+- [v0.3.0-beta.3](releases/v0.3.0-beta.3.md)
 
 Historical releases:
 
+- [v0.3.0-beta.2](releases/v0.3.0-beta.2.md)
 - [v0.3.0-beta.1](releases/v0.3.0-beta.1.md)
 - [v0.2.0-beta.1](releases/v0.2.0-beta.1.md)
 - [v0.2.0-beta.1 freeze report](releases/v0.2.0-beta.1-freeze.md)
@@ -120,6 +123,7 @@ Current planning:
 
 - [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [v0.3 product direction](backlog/v0.3-product-direction.md)
+- [v0.3 architecture hardening](backlog/v0.3-architecture-hardening.md)
 - [v0.3 beta stabilization](backlog/v0.3-beta-stabilization.md)
 - [v0.3 naming and API review](backlog/v0.3-naming-api-review.md)
 

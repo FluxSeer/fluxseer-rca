@@ -19,7 +19,11 @@ make inject-fault
 kubectl get risksignal -n fluxagent-demo
 kubectl describe datasource prometheus -n fluxagent-demo
 kubectl describe riskrule fluxagent-sample-latency -n fluxagent-demo
-kubectl describe risksignal fluxagent-sample-latency-fluxagent-sample-risk -n fluxagent-demo
+SIGNAL_NAME="$(kubectl get risksignal -n fluxagent-demo \
+  -l fluxagent.aiops.platform/risk-rule=fluxagent-sample-latency \
+  --sort-by=.metadata.creationTimestamp \
+  -o 'jsonpath={range .items[?(@.spec.target.name=="fluxagent-sample")]}{.metadata.name}{"\n"}{end}' | tail -n1)"
+kubectl describe risksignal "${SIGNAL_NAME}" -n fluxagent-demo
 make demo-degrade-missing-datasource
 make demo-degrade-capability-mismatch
 make demo-degrade-provider-auth-failed

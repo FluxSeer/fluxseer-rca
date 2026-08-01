@@ -163,11 +163,24 @@ func evidenceContradictsStatement(statement string, ref EvidenceRef) bool {
 	if evidenceText == "" {
 		return false
 	}
-	if !containsAny(evidenceText, "normal", "healthy", "below threshold", "no error", "no errors", "ready", "available") {
+	if !containsContradictionMarker(evidenceText) {
 		return false
 	}
 	for _, token := range evidenceTerms(statement) {
 		if strings.Contains(evidenceText, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsContradictionMarker(text string) bool {
+	if containsAny(text, "below threshold", "no error", "no errors") {
+		return true
+	}
+	tokens := tokenSet(text)
+	for _, marker := range []string{"normal", "healthy", "ready", "available"} {
+		if tokens[marker] {
 			return true
 		}
 	}
@@ -205,10 +218,12 @@ func domainProfile(statement string) string {
 		return "imagepullbackoff"
 	case containsAny(statement, "crashloopbackoff", "crash loop", "crashloop", "backoff", "restarting", "restart"):
 		return "crashloopbackoff"
-	case containsAny(statement, "oomkilled", "out of memory", "memory limit", "memory pressure"):
-		return "oomkilled"
+	case containsAny(statement, "oomkilled", "out of memory", "memory limit", "memory pressure", "memory usage", "memory threshold", "safe threshold"):
+		return "memorypressure"
 	case containsAny(statement, "latency regression", "high latency", "p95 latency", "p99 latency", "timeout", "slow response"):
 		return "latencyregression"
+	case containsAny(statement, "rollout", "release", "image digest", "pod template", "replicaset", "generation changed", "deployment change"):
+		return "rollout"
 	default:
 		return ""
 	}
@@ -218,10 +233,12 @@ func requiredDomainKinds(profile string) []string {
 	switch profile {
 	case "imagepullbackoff", "crashloopbackoff":
 		return []string{"event"}
-	case "oomkilled":
+	case "memorypressure":
 		return []string{"event", "metric"}
 	case "latencyregression":
 		return []string{"metric"}
+	case "rollout":
+		return []string{"deploymentcondition"}
 	default:
 		return nil
 	}
@@ -235,7 +252,7 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 		return kind == "event" && containsAny(text, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
 	case "crashloopbackoff":
 		return kind == "event" && containsAny(text, "crashloopbackoff", "backoff", "back off", "container crashed", "restarting failed container")
-	case "oomkilled":
+	case "memorypressure":
 		switch kind {
 		case "event":
 			return containsAny(text, "oomkilled", "out of memory", "memory limit")
@@ -246,6 +263,8 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 		}
 	case "latencyregression":
 		return kind == "metric" && containsAny(text, "latency", "duration", "response time", "p95", "p99", "histogram")
+	case "rollout":
+		return kind == "deploymentcondition" && containsAny(text, "generation", "replicaset", "replica set", "pod template", "image digest", "rollout", "progressing")
 	default:
 		return false
 	}
@@ -254,13 +273,13 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 func evidenceTerms(statement string) []string {
 	switch {
 	case containsAny(statement, "crash", "restart", "backoff", "oom", "pod", "startup"):
-		return []string{"event", "log", "deploymentcondition", "crash", "restart", "backoff", "oom", "pod", "startup"}
-	case containsAny(statement, "latency", "timeout", "traffic", "http", "5xx", "error"):
-		return []string{"metric", "log", "latency", "timeout", "traffic", "http", "5xx", "error"}
+		return []string{"crash", "restart", "backoff", "oom", "pod", "startup"}
 	case containsAny(statement, "cpu", "memory", "resource", "pressure"):
-		return []string{"metric", "event", "cpu", "memory", "resource", "pressure", "oom"}
+		return []string{"cpu", "memory", "resource", "pressure", "oom"}
+	case containsAny(statement, "latency", "timeout", "traffic", "http", "5xx", "error"):
+		return []string{"latency", "timeout", "traffic", "http", "5xx", "error"}
 	case containsAny(statement, "rollout", "release", "image", "config", "configuration"):
-		return []string{"event", "deploymentcondition", "rollout", "release", "image", "config", "configuration"}
+		return []string{"rollout", "release", "image", "config", "configuration"}
 	default:
 		return importantTokens(statement)
 	}
@@ -288,6 +307,15 @@ func containsAny(text string, needles ...string) bool {
 		}
 	}
 	return false
+}
+
+func tokenSet(text string) map[string]bool {
+	parts := strings.Fields(text)
+	tokens := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		tokens[part] = true
+	}
+	return tokens
 }
 
 func normalizeText(text string) string {

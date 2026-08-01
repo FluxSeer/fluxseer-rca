@@ -3,8 +3,8 @@ GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
 VERSION ?= dev
 RELEASE_VERSION ?= $(if $(filter dev,$(VERSION)),v0.2.0-beta.1,$(VERSION))
-V0_3_RELEASE_VERSION ?= v0.3.0-beta.2
-V0_3_PREVIOUS_RELEASE_VERSION ?= v0.3.0-beta.1
+V0_3_RELEASE_VERSION ?= v0.3.0-beta.3
+V0_3_PREVIOUS_RELEASE_VERSION ?= v0.3.0-beta.2
 V0_3_PUBLISHED_CHART_OCI ?= oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent
 V0_3_PUBLISHED_IMAGE_REPOSITORY ?= ghcr.io/fluxseer/fluxagent/operator
 GIT_COMMIT := $(shell git rev-parse HEAD)
@@ -24,7 +24,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
+.PHONY: fmt test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -80,7 +80,7 @@ demo-status:
 	kubectl get deployment,pod,datasource,riskrule,risksignal -n fluxagent-demo
 	kubectl describe datasource prometheus -n fluxagent-demo
 	kubectl describe riskrule fluxagent-sample-latency -n fluxagent-demo
-	kubectl describe risksignal fluxagent-sample-latency-fluxagent-sample-risk -n fluxagent-demo || true
+	signal_name="$$(kubectl get risksignal -n fluxagent-demo -l fluxagent.aiops.platform/risk-rule=fluxagent-sample-latency --sort-by=.metadata.creationTimestamp -o 'jsonpath={range .items[?(@.spec.target.name=="fluxagent-sample")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | tail -n1)"; if [ -n "$$signal_name" ]; then kubectl describe risksignal "$$signal_name" -n fluxagent-demo; fi
 	kubectl run curl-status -n fluxagent-demo --restart=Never --rm -i --image=curlimages/curl:8.8.0 -- curl -s http://fluxagent-observability:8080/demo/state
 
 demo-degrade-missing-datasource:
@@ -150,6 +150,9 @@ verify-v0.2-alpha: verify-v0.2-beta
 
 verify-v0.3-schema-freeze:
 	bash hack/verify-v0.3-schema-freeze.sh
+
+verify-v0.3-beta-hardening:
+	bash hack/verify-v0.3-beta-hardening.sh
 
 verify-rbac-profiles:
 	bash hack/verify-rbac-profiles.sh

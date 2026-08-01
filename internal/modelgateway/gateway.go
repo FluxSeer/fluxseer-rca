@@ -32,15 +32,42 @@ type Gateway struct {
 	Resolver  ProviderResolver
 }
 
+type Trace struct {
+	Attempts []Attempt
+}
+
+type Attempt struct {
+	Provider *v1alpha1.ModelProvider
+	Result   string
+	Reason   string
+}
+
+type ProviderInputFunc func(*v1alpha1.ModelProvider) (domain.IngestionOutput, error)
+
+const maxTraceAttempts = 8
+
 func (g *Gateway) Analyze(ctx context.Context, provider *v1alpha1.ModelProvider, target domain.ResourceRef, matches []rule.Match, now time.Time) (domain.ReasoningOutput, error) {
 	return g.AnalyzeIngestion(ctx, provider, buildIngestionOutput(target, matches, now))
 }
 
 func (g *Gateway) AnalyzeIngestion(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput) (domain.ReasoningOutput, error) {
-	return g.analyzeIngestionWithFallback(ctx, provider, input, map[string]struct{}{})
+	result, _, err := g.AnalyzeIngestionWithTrace(ctx, provider, input)
+	return result, err
 }
 
-func (g *Gateway) analyzeIngestionWithFallback(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput, visited map[string]struct{}) (domain.ReasoningOutput, error) {
+func (g *Gateway) AnalyzeIngestionWithTrace(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput) (domain.ReasoningOutput, Trace, error) {
+	return g.AnalyzeIngestionWithProviderInputTrace(ctx, provider, func(*v1alpha1.ModelProvider) (domain.IngestionOutput, error) {
+		return input, nil
+	})
+}
+
+func (g *Gateway) AnalyzeIngestionWithProviderInputTrace(ctx context.Context, provider *v1alpha1.ModelProvider, inputForProvider ProviderInputFunc) (domain.ReasoningOutput, Trace, error) {
+	trace := Trace{}
+	result, err := g.analyzeIngestionWithFallback(ctx, provider, inputForProvider, map[string]struct{}{}, &trace)
+	return result, trace, err
+}
+
+func (g *Gateway) analyzeIngestionWithFallback(ctx context.Context, provider *v1alpha1.ModelProvider, inputForProvider ProviderInputFunc, visited map[string]struct{}, trace *Trace) (domain.ReasoningOutput, error) {
 	if provider == nil {
 		return domain.ReasoningOutput{}, &AnalyzeError{
 			Reason:  "ProviderUnavailable",
@@ -58,8 +85,9 @@ func (g *Gateway) analyzeIngestionWithFallback(ctx context.Context, provider *v1
 		visited[key] = struct{}{}
 	}
 
-	result, err := g.analyzeSingleProvider(ctx, provider, input)
+	input, err := inputForProvider(provider)
 	if err != nil {
+		recordTraceAttempt(trace, provider, err)
 		analyzeErr, ok := err.(*AnalyzeError)
 		if !ok || !shouldAttemptProviderFallback(provider, analyzeErr.Reason) {
 			return domain.ReasoningOutput{}, err
@@ -68,13 +96,53 @@ func (g *Gateway) analyzeIngestionWithFallback(ctx context.Context, provider *v1
 		if fallbackErr != nil {
 			return domain.ReasoningOutput{}, fallbackErr
 		}
-		return g.analyzeIngestionWithFallback(ctx, fallbackProvider, input, visited)
+		return g.analyzeIngestionWithFallback(ctx, fallbackProvider, inputForProvider, visited, trace)
 	}
+
+	result, err := g.analyzeSingleProvider(ctx, provider, input)
+	if err != nil {
+		recordTraceAttempt(trace, provider, err)
+		analyzeErr, ok := err.(*AnalyzeError)
+		if !ok || !shouldAttemptProviderFallback(provider, analyzeErr.Reason) {
+			return domain.ReasoningOutput{}, err
+		}
+		fallbackProvider, fallbackErr := g.resolveFallbackProvider(ctx, provider, analyzeErr, visited)
+		if fallbackErr != nil {
+			return domain.ReasoningOutput{}, fallbackErr
+		}
+		return g.analyzeIngestionWithFallback(ctx, fallbackProvider, inputForProvider, visited, trace)
+	}
+	recordTraceAttempt(trace, provider, nil)
 	return result, nil
+}
+
+func recordTraceAttempt(trace *Trace, provider *v1alpha1.ModelProvider, err error) {
+	if trace == nil || provider == nil {
+		return
+	}
+	if len(trace.Attempts) >= maxTraceAttempts {
+		return
+	}
+	attempt := Attempt{Provider: provider, Result: "Succeeded", Reason: "Completed"}
+	if err != nil {
+		attempt.Result = "Failed"
+		attempt.Reason = "ProviderRequestFailed"
+		if analyzeErr, ok := err.(*AnalyzeError); ok {
+			attempt.Result = analyzeErr.Reason
+			attempt.Reason = analyzeErr.Reason
+		}
+	}
+	trace.Attempts = append(trace.Attempts, attempt)
 }
 
 func (g *Gateway) analyzeSingleProvider(ctx context.Context, provider *v1alpha1.ModelProvider, input domain.IngestionOutput) (domain.ReasoningOutput, error) {
 	providerType := strings.ToLower(strings.TrimSpace(provider.Spec.Provider))
+	if requiresAPIKey(providerType) && !provider.Spec.DataPolicy.AllowExternalTransmission {
+		return domain.ReasoningOutput{}, &AnalyzeError{
+			Reason:  "ProviderDataPolicyDenied",
+			Message: fmt.Sprintf("ModelProvider %q requires spec.dataPolicy.allowExternalTransmission=true before evidence can be sent to hosted provider %q", provider.Name, provider.Spec.Provider),
+		}
+	}
 	modelProvider, ok := g.Providers.Get(providerType)
 	if !ok {
 		return domain.ReasoningOutput{}, &AnalyzeError{
@@ -115,7 +183,7 @@ func shouldAttemptProviderFallback(provider *v1alpha1.ModelProvider, reason stri
 		return false
 	}
 	switch reason {
-	case "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "InvalidProviderResponse", "APIKeyMissing", "SecretRefMissing", "SecretReaderUnavailable", "SecretReadFailed", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty":
+	case "ProviderUnavailable", "ProviderUnsupported", "ProviderDataPolicyDenied", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "InvalidProviderResponse", "APIKeyMissing", "SecretRefMissing", "SecretReaderUnavailable", "SecretReadFailed", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty":
 		return true
 	default:
 		return false

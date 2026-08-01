@@ -86,4 +86,7 @@ spec:
     providerRef:
       name: {{ .Values.rulePacks.lokiBaseline.providerRef.name | quote }}
     {{- end }}
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true
 {{- end }}

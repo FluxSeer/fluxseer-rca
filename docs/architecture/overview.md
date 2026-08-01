@@ -8,7 +8,7 @@ Product positioning:
 Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
 ```
 
-Current release scope is narrower than a general AI SRE platform: `v0.3.0-beta.2` is a published prerelease focused on read-only RCA workflows, a frozen RCA status contract, runtime default hardening, and least-privilege RBAC defaults.
+Current release scope is narrower than a general AI SRE platform: `v0.3.0-beta.3` is a beta hardening prerelease focused on read-only RCA workflows, canonical preflight semantics, evidence gating, runtime default hardening, and least-privilege RBAC defaults.
 
 The current runnable default path is read-only RCA: evaluate explicit `RiskRule` or `InvestigationRequest` resources, collect bounded evidence, write canonical RCA status, and optionally materialize a `RiskSignal` without mutating the target workload.
 
@@ -267,7 +267,7 @@ The long-term contract for live executors should include:
 
 ### 9. Notification and Audit Layer
 
-Notification is part of the default read-only story, and status persistence is part of every workflow stage.
+Notification is an optional `RiskSignal` side effect in the read-only story, and status persistence is part of every workflow stage.
 
 This layer makes sure risk detection and guarded execution both leave an observable trail through:
 
@@ -352,7 +352,7 @@ In runtime terms:
 1. `RiskSignalReconciler` derives a `RemediationPlan`.
 2. `RemediationPlanReconciler` evaluates the plan through the guardrails engine.
 3. Guardrails decide `Approved`, `WaitingApproval`, or `Rejected`.
-4. `AgentActionReconciler` executes only approved actions through the executor router.
+4. `AgentActionReconciler` currently executes through the legacy `spec.approvedBy` gate and records `status.approval` as the controller-observed projection.
 5. Result status is persisted for auditability.
 
 This separation is intentional: risk detection and side-effect execution are not a single direct pipeline.
@@ -361,7 +361,7 @@ This separation is intentional: risk detection and side-effect execution are not
 
 ### `RiskSignal`
 
-Represents a detected risk with severity, confidence, target, and evidence. In `v0.1`, this is the core product output.
+Represents a materialized finding with severity, confidence, target, evidence, lineage, notification state, and compatibility RCA projection fields.
 
 ### `InvestigationRequest`
 
@@ -384,12 +384,13 @@ Together these CRDs form the workflow contract for the operator:
 
 ## Current Implementation Status
 
-Current `v0.1` implementation is intentionally uneven by design.
+Current `v0.3` implementation is intentionally uneven by design.
 
 Implemented and runnable:
 
-- read-only detection
-- `RiskSignal` generation
+- read-only RCA through `InvestigationRequest`
+- `RiskRule` to `InvestigationRequest` generation
+- optional `RiskSignal` materialization and compatibility projection
 - webhook notification
 - Prometheus, Loki, and Kubernetes Events demo path
 
@@ -400,7 +401,7 @@ Established as contracts or scaffolds:
 - guarded remediation controller chain
 - multi-backend executor routing
 
-Early `v0.3` investigation layer:
+Current `v0.3` investigation layer:
 
 - `InvestigationRequest`
 - reusable investigation service orchestration
@@ -413,7 +414,7 @@ Simulation-oriented today:
 - most `gitops.*` executor behavior
 - most `runbook.*` executor behavior
 
-This means FluxAgent should be described today as a read-only `RiskSignal` operator with guarded remediation expansion seams, not as a fully autonomous production remediation system.
+This means FluxAgent should be described today as a read-only RCA control plane with optional `RiskSignal` projection and guarded remediation expansion seams, not as a fully autonomous production remediation system.
 
 ## Safety Model
 
@@ -485,11 +486,10 @@ flowchart LR
     DS --> DET
     DS --> INV
     R1 --> DET
-    RR --> INV
+    RR --> IQ
     IQ --> IR
     IR --> INV
     DET --> RS
-    INV --> IQ
     INV -. optional .-> RS
     RS --> N
     RS -. optional .-> RP
@@ -512,4 +512,4 @@ It should not yet be described as:
 
 That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.
 
-The conservative release label is `v0.3.0-beta.2 RCA contract beta`.
+The conservative release label is `v0.3.0-beta.3 RCA beta hardening`.

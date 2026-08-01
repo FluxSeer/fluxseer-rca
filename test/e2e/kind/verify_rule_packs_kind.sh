@@ -15,11 +15,8 @@ RELEASE_NAME="${FLUXAGENT_RULE_PACK_RELEASE_NAME:-fluxagent}"
 RELEASE_NAMESPACE="${FLUXAGENT_RULE_PACK_NAMESPACE:-fluxagent-rule-packs}"
 TARGET_NAME="${FLUXAGENT_RULE_PACK_TARGET_NAME:-fluxagent-baseline-crash}"
 RISK_RULE_NAME="fluxagent-kubernetes-baseline"
-RISK_SIGNAL_NAME="${RISK_RULE_NAME}-${TARGET_NAME}-risk"
 PROMETHEUS_RISK_RULE_NAME="fluxagent-prometheus-baseline"
-PROMETHEUS_RISK_SIGNAL_NAME="${PROMETHEUS_RISK_RULE_NAME}-${TARGET_NAME}-risk"
 LOKI_RISK_RULE_NAME="fluxagent-loki-baseline"
-LOKI_RISK_SIGNAL_NAME="${LOKI_RISK_RULE_NAME}-${TARGET_NAME}-risk"
 OPERATOR_IMAGE_REF="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 DEMO_IMAGE_REF="${DEMO_IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
@@ -202,12 +199,13 @@ inject_observability_fault() {
 
 verify_risk_signal() {
   local rule_name="$1"
-  local signal_name="$2"
-  local expected_evidence_kind="$3"
+  local expected_evidence_kind="$2"
+  local signal_name
 
   log_section "Verify ${rule_name} RiskSignal And RCA"
-  wait_for_command "RiskSignal ${signal_name} exists" \
-    kubectl get "risksignal/${signal_name}" -n "${RELEASE_NAMESPACE}"
+  wait_for_resolved_risk_signal "${RELEASE_NAMESPACE}" "${rule_name}" "${TARGET_NAME}"
+  signal_name="${FLUXAGENT_SIGNAL_NAME}"
+  kubectl get "risksignal/${signal_name}" -n "${RELEASE_NAMESPACE}"
   wait_for_jsonpath_equals "risksignal/${signal_name}" "${RELEASE_NAMESPACE}" '{.status.phase}' 'Confirmed'
   wait_for_condition "risksignal/${signal_name}" "${RELEASE_NAMESPACE}" "EvidenceCollectionReady" "True"
   wait_for_condition "risksignal/${signal_name}" "${RELEASE_NAMESPACE}" "RCAReady" "True"
@@ -259,9 +257,9 @@ log_section "Apply CrashLoop Fixture"
 apply_crashloop_fixture
 inject_observability_fault
 wait_for_crashloop_event
-verify_risk_signal "${RISK_RULE_NAME}" "${RISK_SIGNAL_NAME}" "event"
-verify_risk_signal "${PROMETHEUS_RISK_RULE_NAME}" "${PROMETHEUS_RISK_SIGNAL_NAME}" "metric"
-verify_risk_signal "${LOKI_RISK_RULE_NAME}" "${LOKI_RISK_SIGNAL_NAME}" "log"
+verify_risk_signal "${RISK_RULE_NAME}" "event"
+verify_risk_signal "${PROMETHEUS_RISK_RULE_NAME}" "metric"
+verify_risk_signal "${LOKI_RISK_RULE_NAME}" "log"
 
 log_section "Rule Pack Kind Verification Complete"
 echo "verify-rule-packs-kind passed"

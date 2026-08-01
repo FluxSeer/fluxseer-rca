@@ -84,8 +84,10 @@ type CollectionStep struct {
 }
 
 type RCAResult struct {
-	Reasoning *domain.ReasoningOutput
-	Issue     *Issue
+	Reasoning      *domain.ReasoningOutput
+	Issue          *Issue
+	EgressAttempts []v1alpha1.ProviderEgressAttempt
+	PrimaryEgress  *v1alpha1.ProviderEgressAudit
 }
 
 type Service struct {
@@ -161,7 +163,7 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 			}
 		}
 		observations = append(observations, normalized...)
-		evidenceRefs = append(evidenceRefs, evidenceRefsFromObservations(normalized, collected.request)...)
+		evidenceRefs = append(evidenceRefs, evidenceRefsFromObservations(normalized, collected.request, spec.QueryRetention)...)
 		totalRecords += len(filtered.Records)
 	}
 
@@ -495,11 +497,28 @@ func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRe
 	filteredEvidence, policyIssue := applyProviderDataPolicy(preflight.Provider, evidenceResult)
 	if policyIssue != nil {
 		result.Issue = policyIssue
+		result.PrimaryEgress = policyIssue.EgressAudit
+		result.EgressAttempts = issueEgressAttempts(preflight.Provider, policyIssue)
 		return result, nil
 	}
 
 	providerType := modelProviderType(preflight.Provider)
-	reasoning, err := s.Gateway.AnalyzeIngestion(ctx, preflight.Provider, buildInvestigationIngestionOutput(spec, preflight, filteredEvidence, now))
+	providerEvidence := map[string]EvidenceCollectionResult{}
+	reasoning, trace, err := s.Gateway.AnalyzeIngestionWithProviderInputTrace(ctx, preflight.Provider, func(provider *v1alpha1.ModelProvider) (domain.IngestionOutput, error) {
+		filteredForProvider, providerIssue := applyProviderDataPolicy(provider, evidenceResult)
+		if key := evidenceProviderKey(provider); key != "" {
+			providerEvidence[key] = filteredForProvider
+		}
+		if providerIssue != nil {
+			return domain.IngestionOutput{}, &modelgateway.AnalyzeError{
+				Reason:  providerIssue.Reason,
+				Message: providerIssue.Message,
+			}
+		}
+		return buildInvestigationIngestionOutput(spec, preflight, filteredForProvider, now), nil
+	})
+	result.EgressAttempts = providerEgressAttemptsFromTrace(trace, filteredEvidence, providerEvidence)
+	result.PrimaryEgress = primaryEgressAudit(result.EgressAttempts)
 	if err != nil {
 		resultLabel := "failed"
 		if analyzeErr, ok := err.(*modelgateway.AnalyzeError); ok {
@@ -519,6 +538,128 @@ func (s *Service) GenerateRCA(ctx context.Context, spec v1alpha1.InvestigationRe
 	rcametrics.RecordProviderRequest(providerType, "success")
 	result.Reasoning = &reasoning
 	return result, nil
+}
+
+func providerEgressAttemptsFromTrace(trace modelgateway.Trace, evidence EvidenceCollectionResult, evidenceByProvider map[string]EvidenceCollectionResult) []v1alpha1.ProviderEgressAttempt {
+	attempts := make([]v1alpha1.ProviderEgressAttempt, 0, len(trace.Attempts))
+	for i, attempt := range trace.Attempts {
+		attemptEvidence := evidence
+		if providerEvidence, ok := evidenceByProvider[evidenceProviderKey(attempt.Provider)]; ok {
+			attemptEvidence = providerEvidence
+		}
+		attempts = append(attempts, providerEgressAttemptFromTrace(attempt, attemptEvidence, int32(i+1)))
+	}
+	return attempts
+}
+
+func evidenceProviderKey(provider *v1alpha1.ModelProvider) string {
+	if provider == nil {
+		return ""
+	}
+	return provider.Namespace + "/" + provider.Name
+}
+
+func issueEgressAttempts(provider *v1alpha1.ModelProvider, issue *Issue) []v1alpha1.ProviderEgressAttempt {
+	if issue == nil || issue.EgressAudit == nil {
+		return nil
+	}
+	return []v1alpha1.ProviderEgressAttempt{{
+		Ordinal:                       1,
+		ProviderRef:                   namespacedProviderRef(provider),
+		ProviderGeneration:            providerGeneration(provider),
+		ProviderType:                  issue.EgressAudit.ProviderType,
+		Decision:                      issue.EgressAudit.Decision,
+		Result:                        "Rejected",
+		Reason:                        issue.EgressAudit.Reason,
+		EvidenceBundleDigest:          issue.EgressAudit.EvidenceBundleDigest,
+		EvidenceKinds:                 append([]string(nil), issue.EgressAudit.EvidenceKinds...),
+		SensitivityTagsSent:           append([]string(nil), issue.EgressAudit.SensitivityTagsSent...),
+		LogSamplesIncluded:            issue.EgressAudit.LogSamplesIncluded,
+		MaximumClassificationObserved: issue.EgressAudit.MaximumClassificationObserved,
+		MaximumClassificationAllowed:  issue.EgressAudit.MaximumClassificationAllowed,
+		MaximumClassificationSent:     issue.EgressAudit.MaximumClassificationSent,
+		ClassificationPolicyVersion:   issue.EgressAudit.ClassificationPolicyVersion,
+	}}
+}
+
+func providerEgressAttemptFromTrace(attempt modelgateway.Attempt, evidence EvidenceCollectionResult, ordinal int32) v1alpha1.ProviderEgressAttempt {
+	provider := attempt.Provider
+	out := v1alpha1.ProviderEgressAttempt{
+		Ordinal:            ordinal,
+		ProviderRef:        namespacedProviderRef(provider),
+		ProviderType:       modelProviderType(provider),
+		Result:             attempt.Result,
+		Reason:             attempt.Reason,
+		Decision:           "NotApplicable",
+		ProviderGeneration: providerGeneration(provider),
+	}
+	if provider == nil || !isHostedProvider(provider.Spec.Provider) {
+		if out.Reason == "" {
+			out.Reason = "LocalProvider"
+		}
+		return out
+	}
+	filteredRefs := filterEvidenceRefsForProviderPolicy(evidence.EvidenceRefs, provider.Spec.DataPolicy)
+	decision := dataclassification.EvaluateProviderPolicy(provider.Spec.DataPolicy, filteredRefs)
+	if !provider.Spec.DataPolicy.AllowExternalTransmission {
+		decision.Decision = dataclassification.DecisionRejected
+		decision.Reason = dataclassification.ReasonExternalTransmissionDeny
+		decision.MaximumSent = ""
+		decision.SensitivityTagsSent = nil
+	}
+	audit := providerDataPolicyAudit(provider, filteredRefs, decision, provider.Spec.DataPolicy)
+	if audit == nil {
+		return out
+	}
+	out.Decision = audit.Decision
+	out.EvidenceBundleDigest = audit.EvidenceBundleDigest
+	out.EvidenceKinds = append([]string(nil), audit.EvidenceKinds...)
+	out.SensitivityTagsSent = append([]string(nil), audit.SensitivityTagsSent...)
+	out.LogSamplesIncluded = audit.LogSamplesIncluded
+	out.MaximumClassificationObserved = audit.MaximumClassificationObserved
+	out.MaximumClassificationAllowed = audit.MaximumClassificationAllowed
+	out.MaximumClassificationSent = audit.MaximumClassificationSent
+	out.ClassificationPolicyVersion = audit.ClassificationPolicyVersion
+	if out.Reason == "" || out.Reason == "Completed" {
+		out.Reason = audit.Reason
+	}
+	return out
+}
+
+func primaryEgressAudit(attempts []v1alpha1.ProviderEgressAttempt) *v1alpha1.ProviderEgressAudit {
+	for _, attempt := range attempts {
+		if attempt.EvidenceBundleDigest == "" {
+			continue
+		}
+		return &v1alpha1.ProviderEgressAudit{
+			Decision:                      attempt.Decision,
+			Reason:                        attempt.Reason,
+			ProviderType:                  attempt.ProviderType,
+			EvidenceBundleDigest:          attempt.EvidenceBundleDigest,
+			EvidenceKinds:                 append([]string(nil), attempt.EvidenceKinds...),
+			SensitivityTagsSent:           append([]string(nil), attempt.SensitivityTagsSent...),
+			LogSamplesIncluded:            attempt.LogSamplesIncluded,
+			MaximumClassificationObserved: attempt.MaximumClassificationObserved,
+			MaximumClassificationAllowed:  attempt.MaximumClassificationAllowed,
+			MaximumClassificationSent:     attempt.MaximumClassificationSent,
+			ClassificationPolicyVersion:   attempt.ClassificationPolicyVersion,
+		}
+	}
+	return nil
+}
+
+func namespacedProviderRef(provider *v1alpha1.ModelProvider) *v1alpha1.NamespacedObjectReference {
+	if provider == nil {
+		return nil
+	}
+	return &v1alpha1.NamespacedObjectReference{Name: provider.Name, Namespace: provider.Namespace}
+}
+
+func providerGeneration(provider *v1alpha1.ModelProvider) int64 {
+	if provider == nil {
+		return 0
+	}
+	return provider.Generation
 }
 
 func modelProviderType(provider *v1alpha1.ModelProvider) string {
@@ -1155,7 +1296,7 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 	return obs
 }
 
-func evidenceRefsFromObservations(observations []domain.Observation, req datasource.QueryRequest) []v1alpha1.EvidenceRef {
+func evidenceRefsFromObservations(observations []domain.Observation, req datasource.QueryRequest, retention v1alpha1.QueryRetentionPolicy) []v1alpha1.EvidenceRef {
 	refs := make([]v1alpha1.EvidenceRef, 0, len(observations))
 	for _, observation := range observations {
 		collectedAt := metav1Time(observation.CollectedAt)
@@ -1164,7 +1305,7 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 			Kind:                   string(observation.Type),
 			Source:                 observation.DataSourceRef,
 			Summary:                observation.Summary,
-			Query:                  req.Query,
+			Query:                  retainedQuery(req.Query, retention),
 			QueryDigest:            observation.QueryDigest,
 			ContentDigest:          observation.ContentDigest,
 			DigestAlgorithm:        observation.DigestAlgorithm,
@@ -1190,6 +1331,17 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 		refs = append(refs, ref)
 	}
 	return refs
+}
+
+func retainedQuery(query string, retention v1alpha1.QueryRetentionPolicy) string {
+	switch strings.TrimSpace(retention.Mode) {
+	case v1alpha1.QueryRetentionModeFull:
+		return query
+	case v1alpha1.QueryRetentionModeRedacted:
+		return evidencepkg.NewPatternRedactor().RedactText(query)
+	default:
+		return ""
+	}
 }
 
 func metav1Time(value time.Time) metav1.Time {

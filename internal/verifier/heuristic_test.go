@@ -5,7 +5,7 @@ import "testing"
 func TestVerifyClaimsMarksRelevantEvidenceSupported(t *testing.T) {
 	result := VerifyClaims(
 		[]Claim{
-			{ID: "claim-001", Statement: "Pods are restarting and entering backoff after rollout"},
+			{ID: "claim-001", Statement: "Pods are restarting and entering backoff"},
 			{ID: "claim-002", Statement: "CPU saturation is the likely cause"},
 		},
 		[]EvidenceRef{
@@ -29,6 +29,38 @@ func TestVerifyClaimsMarksRelevantEvidenceSupported(t *testing.T) {
 		}
 		if len(claim.EvidenceLinks) == 0 || claim.EvidenceLinks[0].Role != EvidenceRoleSupports || claim.EvidenceLinks[0].Strength != EvidenceStrengthDirect {
 			t.Fatalf("expected direct supporting evidence link, got %#v", claim)
+		}
+	}
+}
+
+func TestVerifyClaimsDoesNotPromoteBackOffEventTextToCausalEvidence(t *testing.T) {
+	result := VerifyClaims(
+		[]Claim{
+			{ID: "claim-001", Statement: "Pods are restarting and entering backoff"},
+			{ID: "claim-002", Statement: "Recent rollout changed workload behavior"},
+			{ID: "claim-003", Statement: "Pod memory usage crossed safe threshold"},
+		},
+		[]EvidenceRef{{
+			ID:      "evidence-001",
+			Kind:    "event",
+			Reason:  "BackOff",
+			Summary: "Back-off restarting failed container after recent rollout changed workload behavior and pod memory usage crossed safe threshold",
+		}},
+	)
+
+	if result.CoverageScore != 1.0/3.0 {
+		t.Fatalf("expected only the BackOff symptom claim to be covered, got %#v", result)
+	}
+	for _, claim := range result.Claims {
+		switch claim.ID {
+		case "claim-001":
+			if claim.Verification != VerificationSupported || len(claim.EvidenceRefs) != 1 {
+				t.Fatalf("expected BackOff symptom supported, got %#v", claim)
+			}
+		case "claim-002", "claim-003":
+			if claim.Verification != VerificationUnsupported || len(claim.EvidenceRefs) != 0 {
+				t.Fatalf("expected causal claim unsupported without typed evidence, got %#v", claim)
+			}
 		}
 	}
 }
@@ -72,6 +104,33 @@ func TestVerifyClaimsMarksContradictedEvidence(t *testing.T) {
 	}
 }
 
+func TestVerifyClaimsDoesNotTreatUnhealthyAsHealthyContradiction(t *testing.T) {
+	result := VerifyClaims(
+		[]Claim{
+			{ID: "claim-001", Statement: "Recent rollout changed the workload configuration"},
+			{ID: "claim-002", Statement: "Pod memory usage crossed the configured limit"},
+		},
+		[]EvidenceRef{{
+			ID:      "evidence-001",
+			Kind:    "event",
+			Reason:  "Unhealthy",
+			Summary: "Synthetic readiness probe failure for FluxAgent RCA validation",
+		}},
+	)
+
+	if result.CoverageScore != 0 {
+		t.Fatalf("expected no root-cause evidence coverage, got %#v", result)
+	}
+	for _, claim := range result.Claims {
+		if claim.Verification != VerificationUnsupported {
+			t.Fatalf("expected unsupported rather than contradicted for Unhealthy event, got %#v", claim)
+		}
+		if len(claim.EvidenceLinks) != 0 {
+			t.Fatalf("expected no contradictory evidence links, got %#v", claim)
+		}
+	}
+}
+
 func TestVerifyClaimsWithoutEvidenceIsUnverified(t *testing.T) {
 	result := VerifyClaims([]Claim{{ID: "claim-001", Statement: "Pods are restarting"}}, nil)
 
@@ -110,7 +169,7 @@ func TestVerifyClaimsAppliesDomainSpecificSupportRequirements(t *testing.T) {
 			wantRefs:   1,
 		},
 		{
-			name:  "oomkilled requires event and memory metric",
+			name:  "memory pressure requires event and memory metric",
 			claim: "OOMKilled is caused by memory pressure",
 			evidence: []EvidenceRef{
 				{ID: "evidence-001", Kind: "event", Reason: "OOMKilled", Summary: "container was killed after exceeding memory limit"},
@@ -129,10 +188,28 @@ func TestVerifyClaimsAppliesDomainSpecificSupportRequirements(t *testing.T) {
 			wantRefs:   1,
 		},
 		{
-			name:  "oomkilled event alone is insufficient",
+			name:  "memory event alone is insufficient",
 			claim: "OOMKilled is caused by memory pressure",
 			evidence: []EvidenceRef{
 				{ID: "evidence-001", Kind: "event", Reason: "OOMKilled", Summary: "container was killed after exceeding memory limit"},
+			},
+			wantStatus: VerificationUnsupported,
+			wantRefs:   0,
+		},
+		{
+			name:  "rollout requires deployment condition evidence",
+			claim: "Recent rollout changed workload behavior",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "deploymentcondition", Source: "kubernetes", Summary: "deployment generation changed and new ReplicaSet became Progressing"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   1,
+		},
+		{
+			name:  "event text alone does not prove rollout",
+			claim: "Recent rollout changed workload behavior",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "BackOff", Summary: "BackOff after recent rollout changed workload behavior"},
 			},
 			wantStatus: VerificationUnsupported,
 			wantRefs:   0,

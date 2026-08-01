@@ -4,8 +4,11 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/common.sh"
 
+wait_for_resolved_risk_signal "${FLUXAGENT_DEMO_NAMESPACE}" "${FLUXAGENT_RULE_NAME}" "${FLUXAGENT_TARGET_NAME}"
+
 log_section "Verify Missing DataSource Degradation"
 bash examples/kind/degraded-demo.sh missing-datasource
+wait_for_resolved_risk_signal "${FLUXAGENT_DEMO_NAMESPACE}" "${FLUXAGENT_RULE_NAME}" "${FLUXAGENT_TARGET_NAME}"
 
 wait_for_condition \
   "riskrule/${FLUXAGENT_RULE_NAME}" \
@@ -42,6 +45,7 @@ wait_for_condition \
 
 log_section "Verify Capability Mismatch Degradation"
 bash examples/kind/degraded-demo.sh capability-mismatch
+wait_for_resolved_risk_signal "${FLUXAGENT_DEMO_NAMESPACE}" "${FLUXAGENT_RULE_NAME}" "${FLUXAGENT_TARGET_NAME}"
 
 wait_for_condition \
   "riskrule/${FLUXAGENT_RULE_NAME}" \
@@ -78,6 +82,7 @@ wait_for_condition \
 
 log_section "Verify Hosted Provider Degradation"
 bash examples/kind/degraded-demo.sh provider-auth-failed
+wait_for_resolved_risk_signal "${FLUXAGENT_DEMO_NAMESPACE}" "${FLUXAGENT_RULE_NAME}" "${FLUXAGENT_TARGET_NAME}"
 
 wait_for_condition \
   "riskrule/${FLUXAGENT_RULE_NAME}" \
@@ -105,6 +110,7 @@ wait_for_condition_reason \
 
 log_section "Restore Baseline Rule After Hosted Provider Degradation"
 bash examples/kind/degraded-demo.sh reset
+wait_for_resolved_risk_signal "${FLUXAGENT_DEMO_NAMESPACE}" "${FLUXAGENT_RULE_NAME}" "${FLUXAGENT_TARGET_NAME}"
 
 wait_for_condition \
   "riskrule/${FLUXAGENT_RULE_NAME}" \

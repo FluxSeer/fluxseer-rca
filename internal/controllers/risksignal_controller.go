@@ -40,6 +40,9 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if !r.Enabled {
 		return ttlResult, nil
 	}
+	if hasUnverifiedInvestigationProjection(&riskSignal) {
+		return ttlResult, nil
+	}
 
 	plan := &v1alpha1.RemediationPlan{}
 	plan.Name = riskSignal.Name + "-plan"
@@ -87,6 +90,26 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	return ttlResult, nil
+}
+
+func hasUnverifiedInvestigationProjection(riskSignal *v1alpha1.RiskSignal) bool {
+	if riskSignal.Spec.InvestigationRef == nil {
+		return false
+	}
+	for _, condition := range riskSignal.Status.Conditions {
+		if condition.Type == conditionRCAReady && condition.Status == "False" {
+			return true
+		}
+		if condition.Type == conditionRCAReady && condition.Status == "True" {
+			return false
+		}
+	}
+	switch riskSignal.Status.Phase {
+	case "", v1alpha1.InvestigationOutcomeInconclusive, v1alpha1.InvestigationOutcomeNoIssueFound, v1alpha1.InvestigationOutcomeUnknown:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *RiskSignalReconciler) SetupWithManager(mgr ctrl.Manager) error {
