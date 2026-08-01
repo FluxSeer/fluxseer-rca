@@ -367,6 +367,7 @@ func applyEvidenceRequirementInconclusiveStatus(request *v1alpha1.InvestigationR
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "RequiredEvidenceMissing", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "RequiredEvidenceMissing", "RCA is inconclusive because required evidence is incomplete", request.Generation, now)
 	setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because required RCA evidence is incomplete", now)
+	setInvestigationVerificationUnknown(request, "RCAUnavailable", "verification was not performed because required RCA evidence is incomplete", now)
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationInconclusive", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, "RequiredEvidenceMissing", gate.Message, request.Generation, now)
 }

@@ -1586,6 +1586,9 @@ func TestInvestigationRequestReconcilerMarksInconclusiveWhenRequiredEvidenceMiss
 	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RequiredEvidenceMissing" {
 		t.Fatalf("expected EvidenceCollectionReady false RequiredEvidenceMissing, got %#v", cond)
 	}
+	if cond := findCondition(stored.Status.Conditions, conditionVerified); cond == nil || cond.Status != metav1.ConditionUnknown || cond.Reason != "RCAUnavailable" {
+		t.Fatalf("expected Verified unknown RCAUnavailable, got %#v", cond)
+	}
 	if counter.calls != 0 {
 		t.Fatalf("expected provider not to be called when required evidence is missing, got %d", counter.calls)
 	}
