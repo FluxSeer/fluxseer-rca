@@ -15,6 +15,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"fluxagent/api/v1alpha1"
@@ -61,6 +62,7 @@ func Run(args []string, out io.Writer) error {
 	}
 	info := version.Current()
 	_, _ = fmt.Fprintf(out, "fluxagent starting version=%s gitCommit=%s gitDirty=%s buildDate=%s\n", info.Version, info.GitCommit, info.GitDirty, info.BuildDate)
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zap.Options{Development: false})))
 
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
