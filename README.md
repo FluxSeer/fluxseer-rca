@@ -2,9 +2,9 @@
 
 Kubernetes-native SRE RCA control plane for teams that want explicit, auditable, and security-first AI-assisted investigation.
 
-Current release: `v0.3.0-beta.2`
+Current release: `v0.3.0-beta.3`
 
-Status: `v0.3 RCA contract frozen, beta.2 published, provenance verified`
+Status: `v0.3 beta.3 hardening release prepared, canonical RCA runtime semantics verified`
 
 FluxSeer RCA is the forward-looking product name for the project currently
 published as FluxAgent. Existing `fluxagent` binaries, Helm artifacts, CRDs,
@@ -354,7 +354,7 @@ See:
 ```bash
 helm install fluxagent \
   oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent \
-  --version 0.3.0-beta.2 \
+  --version 0.3.0-beta.3 \
   --namespace fluxagent-system \
   --create-namespace
 

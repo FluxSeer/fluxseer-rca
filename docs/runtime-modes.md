@@ -2,7 +2,7 @@
 
 This document defines the supported mode switches in FluxAgent and separates user-facing runtime configuration from maintainer-only deployment and release flows.
 
-Current release baseline: `v0.3.0-beta.2`
+Current release baseline: `v0.3.0-beta.3`
 
 Current API identity: `aiops.platform/v1alpha1`
 
@@ -133,7 +133,7 @@ spec:
 
 `readOnly` means FluxAgent may read declared evidence sources and write FluxAgent-owned status or optional result resources. It does not grant workload mutation.
 
-Other execution modes are not implemented in `v0.3.0-beta.2`. The field exists as a compatibility and future-extension point, not as a hidden remediation switch.
+Other execution modes are not implemented in `v0.3.0-beta.3`. The field exists as a compatibility and future-extension point, not as a hidden remediation switch.
 
 ## RCA Provider
 
@@ -368,7 +368,7 @@ Do not document these as user-facing runtime modes. They belong in release engin
 
 ## Support Matrix
 
-In this beta document, `Supported` means implemented, covered by the current runtime path, and intended for use in `v0.3.0-beta.2`. It does not imply general availability or compatibility guarantees beyond the documented API group/version identity.
+In this beta document, `Supported` means implemented, covered by the current runtime path, and intended for use in `v0.3.0-beta.3`. It does not imply general availability or compatibility guarantees beyond the documented API group/version identity.
 
 | Capability | Support level |
 | --- | --- |

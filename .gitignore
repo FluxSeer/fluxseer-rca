@@ -19,3 +19,6 @@ coverage.out
 # Environment overrides
 .env
 .env.*
+
+# Reports
+reports/runtime/

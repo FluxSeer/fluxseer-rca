@@ -38,7 +38,7 @@ replay-oriented Kubernetes-native workflow.
 Current release scope:
 
 ```text
-v0.3.0-beta.2 is a published prerelease with the frozen v0.3 RCA status contract, hardened read-only defaults, least-privilege default RBAC, GHCR images, Helm OCI packaging, and verified provenance.
+v0.3.0-beta.3 is a beta hardening prerelease with canonical RCA preflight semantics, evidence gating, direct RiskRule compatibility, hardened read-only defaults, least-privilege default RBAC, GHCR images, Helm OCI packaging, and verified provenance.
 ```
 
 The long-term product positioning is intentionally narrower than a general AI SRE agent. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it. The product rename must not be used as a shortcut for breaking the current v1alpha1 API, metric, annotation, or release-artifact compatibility surfaces.

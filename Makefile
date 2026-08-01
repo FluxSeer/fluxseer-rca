@@ -3,8 +3,8 @@ GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
 VERSION ?= dev
 RELEASE_VERSION ?= $(if $(filter dev,$(VERSION)),v0.2.0-beta.1,$(VERSION))
-V0_3_RELEASE_VERSION ?= v0.3.0-beta.2
-V0_3_PREVIOUS_RELEASE_VERSION ?= v0.3.0-beta.1
+V0_3_RELEASE_VERSION ?= v0.3.0-beta.3
+V0_3_PREVIOUS_RELEASE_VERSION ?= v0.3.0-beta.2
 V0_3_PUBLISHED_CHART_OCI ?= oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent
 V0_3_PUBLISHED_IMAGE_REPOSITORY ?= ghcr.io/fluxseer/fluxagent/operator
 GIT_COMMIT := $(shell git rev-parse HEAD)
