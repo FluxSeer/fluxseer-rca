@@ -2283,10 +2283,100 @@ func TestInvestigationRequestReconcilerMarksQueryTypeMismatch(t *testing.T) {
 	}
 }
 
+func TestInvestigationRequestReconcilerMarksQueryPolicyRejectedStage(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "blocked-query", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace: "prod",
+				Kind:      "Deployment",
+				Name:      "open-api",
+			},
+			Queries: []v1alpha1.InvestigationQuery{
+				{
+					Name:          "blocked-template",
+					DatasourceRef: v1alpha1.LocalObjectReference{Name: "kubernetes-events"},
+					QueryType:     string(domain.QueryTypeEvent),
+					QueryTemplate: "events for {{ .name }}",
+				},
+			},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "heuristic-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+		},
+	}
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod"}}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "heuristic", Model: "built-in"},
+	}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithObjects(request, deployment, provider).
+		Build()
+	modelProvider := &countingModelProvider{}
+	reconciler := &InvestigationRequestReconciler{
+		Client: client,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client: client,
+			Registry: datasource.NewRegistry(
+				fakeInvestigationDataSource{
+					name:      "kubernetes-events",
+					queryType: domain.QueryTypeEvent,
+					queryPolicy: v1alpha1.DataSourceQueryPolicy{
+						Mode:             v1alpha1.DataSourceQueryPolicyModeTemplatesOnly,
+						AllowedTemplates: []string{"allowed-template"},
+					},
+				},
+			),
+			Resolver: modelgateway.KubeResolver{Client: client},
+			Gateway: &modelgateway.Gateway{
+				Base:      knowledge.NewBase(),
+				Providers: model.NewRegistry(modelProvider),
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 8, 1, 12, 45, 0, 0, time.UTC) },
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if modelProvider.calls != 0 {
+		t.Fatalf("expected provider not to be called after query policy rejection, got %d calls", modelProvider.calls)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseFailed || stored.Status.Outcome != v1alpha1.InvestigationOutcomeUnknown {
+		t.Fatalf("expected failed unknown workflow, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if stored.Status.Failure == nil ||
+		stored.Status.Failure.Code != "QueryPolicyRejected" ||
+		stored.Status.Failure.Stage != investigationStageQueryValidation {
+		t.Fatalf("expected query policy rejection at query validation, got %#v", stored.Status.Failure)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionQueryTypeSupported); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "QueryPolicyRejected" {
+		t.Fatalf("expected QueryTypeSupported false QueryPolicyRejected, got %#v", cond)
+	}
+}
+
 type fakeInvestigationDataSource struct {
-	name      string
-	queryType domain.QueryType
-	records   []map[string]any
+	name        string
+	queryType   domain.QueryType
+	records     []map[string]any
+	queryPolicy v1alpha1.DataSourceQueryPolicy
 }
 
 func (f fakeInvestigationDataSource) Name() string { return f.name }
@@ -2326,6 +2416,9 @@ func (f fakeInvestigationDataSource) Query(context.Context, datasource.QueryRequ
 	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: records}, nil
 }
 func (f fakeInvestigationDataSource) HealthCheck(context.Context) error { return nil }
+func (f fakeInvestigationDataSource) QueryPolicy() v1alpha1.DataSourceQueryPolicy {
+	return f.queryPolicy
+}
 
 type countingInvestigationDataSource struct {
 	name      string

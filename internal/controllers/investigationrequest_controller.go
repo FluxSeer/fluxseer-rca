@@ -1797,7 +1797,7 @@ func investigationFailureStage(reason string) string {
 		return v1alpha1.InvestigationStageTargetResolution
 	case "DataSourceNotSpecified", "DatasourceRegistryUnavailable", "DataSourceNotFound":
 		return investigationStageDataSourceResolution
-	case "CapabilityMismatch":
+	case "CapabilityMismatch", "QueryPolicyRejected", "QueryTemplateInvalid":
 		return investigationStageQueryValidation
 	case "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse":
 		return v1alpha1.InvestigationStageEvidenceCollection
