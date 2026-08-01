@@ -85,6 +85,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 	investigation.Status.Confidence = 0
 	investigation.Status.Provider = ""
 	investigation.Status.Verdict = nil
+	investigation.Status.EvidenceCoverage = nil
 	investigation.Status.Claims = nil
 	investigation.Status.AlternativeHypotheses = nil
 	investigation.Status.MissingEvidence = nil
@@ -188,6 +189,7 @@ type evidenceRequirementGate struct {
 	Complete     bool
 	NoIssueFound bool
 	Missing      []v1alpha1.RCAMissingEvidence
+	Coverage     *v1alpha1.RCAEvidenceCoverage
 	Message      string
 }
 
@@ -224,11 +226,13 @@ func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, eviden
 		}
 	}
 	missing = append(missing, missingSemanticEvidenceCoverage(profile, spec, evidence)...)
+	coverage := evidenceCoverageAudit(profile, spec, evidence, missing)
 	if len(missing) == 0 {
 		return &evidenceRequirementGate{
 			Profile:      profile,
 			Complete:     true,
 			NoIssueFound: evidenceProfileHasNoIssue(profile, spec, evidence),
+			Coverage:     coverage,
 			Message:      fmt.Sprintf("required evidence profile %q is complete", profile),
 		}
 	}
@@ -236,8 +240,116 @@ func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, eviden
 		Profile:  profile,
 		Complete: false,
 		Missing:  missing,
+		Coverage: coverage,
 		Message:  fmt.Sprintf("required evidence profile %q is incomplete", profile),
 	}
+}
+
+func evidenceCoverageAudit(profile string, spec v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult, missing []v1alpha1.RCAMissingEvidence) *v1alpha1.RCAEvidenceCoverage {
+	checks := requiredEvidenceChecksForProfile(profile)
+	if len(checks) == 0 {
+		return nil
+	}
+	completed := make([]string, 0, len(checks))
+	incomplete := make([]string, 0, len(checks))
+	for _, check := range checks {
+		if evidenceCoverageCheckComplete(check, spec, evidence, missing) {
+			completed = append(completed, check)
+			continue
+		}
+		incomplete = append(incomplete, check)
+	}
+	return &v1alpha1.RCAEvidenceCoverage{
+		Profile:          strings.TrimSpace(profile),
+		RequiredChecks:   append([]string(nil), checks...),
+		CompletedChecks:  completed,
+		IncompleteChecks: incomplete,
+		IssueMatches:     int32(evidenceProfileIssueMatchCount(profile, evidence)),
+	}
+}
+
+func requiredEvidenceChecksForProfile(profile string) []string {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "crashloopbackoff":
+		return []string{"event:CrashLoopBackOff"}
+	case "imagepullbackoff":
+		return []string{"event:ImagePullBackOff"}
+	case "oomkilled":
+		return []string{"event:OOMKilled", "metric:Memory"}
+	case "latencyregression":
+		return []string{"metric:Latency"}
+	case "rolloutlatencyregression":
+		return []string{"metric:Latency", "deploymentCondition:Rollout"}
+	default:
+		return nil
+	}
+}
+
+func evidenceCoverageCheckComplete(check string, spec v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult, missing []v1alpha1.RCAMissingEvidence) bool {
+	switch check {
+	case "event:CrashLoopBackOff":
+		return !missingReasonPresent(missing, "CrashLoopEvidenceCoverageMissing") &&
+			eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed")
+	case "event:ImagePullBackOff":
+		return !missingReasonPresent(missing, "ImagePullEvidenceCoverageMissing") &&
+			eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
+	case "event:OOMKilled":
+		return !missingReasonPresent(missing, "OOMEventEvidenceCoverageMissing") &&
+			eventCoveragePresent(spec, evidence, "oomkilled", "out of memory", "memory pressure", "memory limit")
+	case "metric:Memory":
+		return evidenceKindPresent(spec, evidence, string(domain.QueryTypeMetric), "memory", "oom", "container_memory")
+	case "metric:Latency":
+		return evidenceKindPresent(spec, evidence, string(domain.QueryTypeMetric), "latency", "duration", "http_request")
+	case "deploymentCondition:Rollout":
+		return evidenceKindPresent(spec, evidence, "deploymentCondition", "rollout", "deployment", "progressing", "available")
+	default:
+		return false
+	}
+}
+
+func missingReasonPresent(missing []v1alpha1.RCAMissingEvidence, reason string) bool {
+	for _, item := range missing {
+		if item.Reason == reason {
+			return true
+		}
+	}
+	return false
+}
+
+func evidenceKindPresent(spec v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult, kind string, needles ...string) bool {
+	normalizedKind := strings.ToLower(strings.TrimSpace(kind))
+	for _, ref := range evidence.EvidenceRefs {
+		if strings.ToLower(strings.TrimSpace(ref.Kind)) != normalizedKind {
+			continue
+		}
+		if len(needles) == 0 || containsAny(strings.ToLower(strings.Join([]string{ref.Source, ref.Reason, ref.Summary, ref.Query}, " ")), needles...) {
+			return true
+		}
+	}
+	for _, query := range spec.Queries {
+		if strings.ToLower(strings.TrimSpace(query.QueryType)) != normalizedKind {
+			continue
+		}
+		values := append([]string{query.Name, query.Query, query.QueryTemplate}, query.Reasons...)
+		if len(needles) == 0 || containsAny(strings.ToLower(strings.Join(values, " ")), needles...) {
+			return true
+		}
+	}
+	return false
+}
+
+func evidenceProfileIssueMatchCount(profile string, evidence investigation.EvidenceCollectionResult) int {
+	profileKey := strings.ToLower(strings.TrimSpace(profile))
+	if profileKey == "" {
+		return 0
+	}
+	matches := 0
+	for _, ref := range evidence.EvidenceRefs {
+		if evidenceRefRelevantForProfile(profileKey, ref) && evidenceRefMatchesProfileIssue(profileKey, ref) {
+			matches++
+		}
+	}
+	return matches
 }
 
 func missingSemanticEvidenceCoverage(profile string, spec v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult) []v1alpha1.RCAMissingEvidence {
@@ -419,6 +531,7 @@ func applyEvidenceRequirementInconclusiveStatus(request *v1alpha1.InvestigationR
 			Method:        "RequiredEvidenceProfileV1",
 		},
 	}
+	request.Status.EvidenceCoverage = gate.Coverage
 	request.Status.Claims = nil
 	request.Status.AlternativeHypotheses = nil
 	request.Status.Execution = nil
@@ -429,6 +542,7 @@ func applyEvidenceRequirementInconclusiveStatus(request *v1alpha1.InvestigationR
 	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionTrue, "TargetResolved", "target resource was resolved successfully", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionTrue, "AllDatasourcesResolved", "all referenced datasources were resolved", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionQueryPolicyReady, metav1.ConditionTrue, "AllQueriesAllowed", "all investigation queries were allowed by datasource policy", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "RequiredEvidenceMissing", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "RequiredEvidenceMissing", "RCA is inconclusive because required evidence is incomplete", request.Generation, now)
 	setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because required RCA evidence is incomplete", now)
@@ -459,6 +573,7 @@ func applyEvidenceRequirementNoIssueFoundStatus(request *v1alpha1.InvestigationR
 			Method:        "RequiredEvidenceProfileV1",
 		},
 	}
+	request.Status.EvidenceCoverage = gate.Coverage
 	request.Status.Claims = nil
 	request.Status.AlternativeHypotheses = nil
 	request.Status.Execution = nil
@@ -469,6 +584,7 @@ func applyEvidenceRequirementNoIssueFoundStatus(request *v1alpha1.InvestigationR
 	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionTrue, "TargetResolved", "target resource was resolved successfully", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionTrue, "AllDatasourcesResolved", "all referenced datasources were resolved", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionQueryPolicyReady, metav1.ConditionTrue, "AllQueriesAllowed", "all investigation queries were allowed by datasource policy", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "RequiredEvidenceComplete", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionTrue, "NoIssueFound", message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionVerified, metav1.ConditionTrue, "NoIssueFindingSupported", "required evidence coverage supports the absence of a matching issue", request.Generation, now)

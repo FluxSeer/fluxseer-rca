@@ -173,6 +173,14 @@ Current required evidence profiles:
 
 If required evidence is complete and profile-specific checks find no matching abnormal signal, FluxAgent completes the request with `phase: Completed`, `outcome: NoIssueFound`, and does not call the model provider. `NoIssueFound` is only valid after required evidence is complete; inability to collect required evidence remains `Inconclusive`.
 
+When a profile gate runs, `status.evidenceCoverage` records the deterministic audit surface for the gate:
+
+- `profile`: evaluated evidence profile
+- `requiredChecks[]`: profile-specific checks that must be covered
+- `completedChecks[]`: checks covered by collected evidence or explicit query coverage
+- `incompleteChecks[]`: checks that prevented a complete profile
+- `issueMatches`: number of matching abnormal evidence refs; `0` is required for `NoIssueFound`
+
 External evidence storage is disabled by default. `MetadataOnly` remains the default. `NormalizedSnapshot` is supported only with `storageRef.name: local-filesystem` and a controller runtime evidence store directory configured through `FLUXAGENT_EVIDENCE_STORE_DIR`. Snapshot payload references store only `scheme`, digest, expiry, encryption flag, and retention class; they do not expose local file paths or access credentials. `RawSnapshot` remains rejected because raw evidence retention requires a separate opt-in storage and security review.
 
 `queryRetention.mode` controls whether rendered datasource query text is persisted in `status.evidenceRefs[]`:
@@ -227,6 +235,7 @@ These fields are the compatibility RCA surface for humans and existing scripts.
 Target structured status fields:
 
 - `verdict`
+- `evidenceCoverage`
 - `claims[]`
 - `alternativeHypotheses[]`
 - `missingEvidence[]`
@@ -245,6 +254,8 @@ These fields are the v0.3 target contract. New integrations should check the gen
 - `rootCauseType`: coarse category such as `CrashLoop`, `LatencyRegression`, `ResourcePressure`, `ConfigurationMismatch`, or `WorkloadDegradation`
 - `confidence`: compatibility normalized score from `0.0` to `1.0`; this is a ranking score, not a calibrated probability
 - `confidenceDetail`: provider, verifier, confidence band, and scoring-method metadata
+
+`status.evidenceCoverage` is written for required-evidence profile gates. It lets external reviewers distinguish a complete negative result from missing or irrelevant evidence without reading raw datasource payloads.
 
 `status.claims[]` stores machine-addressable RCA claims:
 

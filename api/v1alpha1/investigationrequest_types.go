@@ -150,6 +150,14 @@ type RCAConfidence struct {
 	Method        string  `json:"method,omitempty"`
 }
 
+type RCAEvidenceCoverage struct {
+	Profile          string   `json:"profile,omitempty"`
+	RequiredChecks   []string `json:"requiredChecks,omitempty"`
+	CompletedChecks  []string `json:"completedChecks,omitempty"`
+	IncompleteChecks []string `json:"incompleteChecks,omitempty"`
+	IssueMatches     int32    `json:"issueMatches"`
+}
+
 type RCAClaim struct {
 	ID            string            `json:"id,omitempty"`
 	Statement     string            `json:"statement,omitempty"`
@@ -320,6 +328,7 @@ type InvestigationRequestStatus struct {
 	Confidence            float64                    `json:"confidence,omitempty"`
 	Provider              string                     `json:"provider,omitempty"`
 	Verdict               *RCAVerdict                `json:"verdict,omitempty"`
+	EvidenceCoverage      *RCAEvidenceCoverage       `json:"evidenceCoverage,omitempty"`
 	Claims                []RCAClaim                 `json:"claims,omitempty"`
 	AlternativeHypotheses []RCAAlternativeHypothesis `json:"alternativeHypotheses,omitempty"`
 	MissingEvidence       []RCAMissingEvidence       `json:"missingEvidence,omitempty"`
@@ -381,6 +390,19 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 			verdict.ConfidenceDetail = &confidence
 		}
 		out.Status.Verdict = &verdict
+	}
+	if in.Status.EvidenceCoverage != nil {
+		coverage := *in.Status.EvidenceCoverage
+		if in.Status.EvidenceCoverage.RequiredChecks != nil {
+			coverage.RequiredChecks = append([]string(nil), in.Status.EvidenceCoverage.RequiredChecks...)
+		}
+		if in.Status.EvidenceCoverage.CompletedChecks != nil {
+			coverage.CompletedChecks = append([]string(nil), in.Status.EvidenceCoverage.CompletedChecks...)
+		}
+		if in.Status.EvidenceCoverage.IncompleteChecks != nil {
+			coverage.IncompleteChecks = append([]string(nil), in.Status.EvidenceCoverage.IncompleteChecks...)
+		}
+		out.Status.EvidenceCoverage = &coverage
 	}
 	if in.Status.Claims != nil {
 		out.Status.Claims = make([]RCAClaim, len(in.Status.Claims))

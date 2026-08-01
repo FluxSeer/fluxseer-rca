@@ -3,6 +3,8 @@ package modelgateway
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"fluxagent/internal/domain"
 	"fluxagent/internal/knowledge"
 	"fluxagent/internal/model"
+	"fluxagent/internal/model/openai"
 	"fluxagent/internal/rule"
 )
 
@@ -71,6 +74,59 @@ func (p *namedCaptureProvider) Complete(_ context.Context, req domain.ModelReque
 			"actionType":      "notification.sendSlack",
 		},
 	}, nil
+}
+
+type staticSecretResolver struct {
+	apiKey string
+}
+
+func (r staticSecretResolver) ResolveAPIKey(context.Context, *v1alpha1.ModelProvider) (string, error) {
+	return r.apiKey, nil
+}
+
+func TestGatewayBlocksHostedProviderBeforeHTTPRequestWhenExternalTransmissionDenied(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_ = r.Body.Close()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"should-not-be-created","choices":[{"message":{"content":"{\"riskTitle\":\"unexpected\",\"riskSummary\":\"unexpected\",\"severity\":\"low\",\"confidenceScore\":1,\"rationale\":\"unexpected\",\"rcaHypothesis\":\"unexpected\",\"rcaCauses\":[\"unexpected\"],\"actionType\":\"notification.sendSlack\"}"}}]}`))
+	}))
+	defer server.Close()
+
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-denied", Namespace: "fluxagent-system"},
+		Spec: v1alpha1.ModelProviderSpec{
+			Provider: "openai",
+			Model:    "gpt-test",
+			Endpoint: server.URL,
+			DataPolicy: v1alpha1.ModelProviderDataPolicy{
+				AllowExternalTransmission: false,
+			},
+		},
+	}
+	gateway := &Gateway{
+		Base:      knowledge.NewBase(),
+		Providers: model.NewRegistry(openai.Provider{Client: server.Client()}),
+		Secrets:   staticSecretResolver{apiKey: "test-token"},
+	}
+
+	_, err := gateway.AnalyzeIngestion(context.Background(), provider, domain.IngestionOutput{
+		Context: domain.IncidentContext{
+			Resource: domain.ResourceRef{Namespace: "prod", Name: "payments-api", Kind: "Deployment"},
+			Summary:  "sensitive evidence must not leave the cluster",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected hosted provider data policy denial")
+	}
+	analyzeErr, ok := err.(*AnalyzeError)
+	if !ok || analyzeErr.Reason != "ProviderDataPolicyDenied" {
+		t.Fatalf("expected ProviderDataPolicyDenied, got err=%T %#v", err, err)
+	}
+	if requests != 0 {
+		t.Fatalf("expected providerRequestCount=0 when external transmission is denied, got %d", requests)
+	}
 }
 
 func TestGatewayRedactsEvidenceBeforeProviderCall(t *testing.T) {

@@ -269,6 +269,26 @@ spec:
                           type: string
                         method:
                           type: string
+                evidenceCoverage:
+                  type: object
+                  properties:
+                    profile:
+                      type: string
+                    requiredChecks:
+                      type: array
+                      items:
+                        type: string
+                    completedChecks:
+                      type: array
+                      items:
+                        type: string
+                    incompleteChecks:
+                      type: array
+                      items:
+                        type: string
+                    issueMatches:
+                      type: integer
+                      format: int32
                 claims:
                   type: array
                   items:

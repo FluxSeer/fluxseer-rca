@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +28,7 @@ import (
 	"fluxagent/internal/knowledge"
 	"fluxagent/internal/model"
 	"fluxagent/internal/model/heuristic"
+	"fluxagent/internal/model/openai"
 	"fluxagent/internal/modelgateway"
 	"fluxagent/internal/rcametrics"
 	"fluxagent/internal/verifier"
@@ -1025,9 +1028,20 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 	if err := appsv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
+	providerRequests := 0
+	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		providerRequests++
+		_ = r.Body.Close()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"should-not-be-created","choices":[{"message":{"content":"{\"riskTitle\":\"unexpected\",\"riskSummary\":\"unexpected\",\"severity\":\"low\",\"confidenceScore\":1,\"rationale\":\"unexpected\",\"rcaHypothesis\":\"unexpected\",\"rcaCauses\":[\"unexpected\"],\"actionType\":\"notification.sendSlack\"}"}}]}`))
+	}))
+	defer providerServer.Close()
 	request := &v1alpha1.InvestigationRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: "policy-rejected", Namespace: "fluxagent-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
@@ -1051,18 +1065,26 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-test",
+			Endpoint: providerServer.URL,
+			APIKeySecretRef: &v1alpha1.SecretKeyRef{
+				Name: "openai-secret",
+				Key:  "api-key",
+			},
 			DataPolicy: v1alpha1.ModelProviderDataPolicy{
 				AllowExternalTransmission: true,
 				MaximumClassification:     v1alpha1.DataClassificationLevelInternal,
 			},
 		},
 	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxagent-system"},
+		Data:       map[string][]byte{"api-key": []byte("test-token")},
+	}
 	kubeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
-		WithObjects(request, deployment, modelProvider).
+		WithObjects(request, deployment, modelProvider, secret).
 		Build()
-	provider := &countingModelProvider{name: "openai"}
 	reconciler := &InvestigationRequestReconciler{
 		Client: kubeClient,
 		Scheme: scheme,
@@ -1072,7 +1094,8 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 			Resolver: modelgateway.KubeResolver{Client: kubeClient},
 			Gateway: &modelgateway.Gateway{
 				Base:      knowledge.NewBase(),
-				Providers: model.NewRegistry(provider),
+				Providers: model.NewRegistry(openai.Provider{Client: providerServer.Client()}),
+				Secrets:   modelgateway.KubeSecretResolver{Client: kubeClient},
 			},
 		},
 		Now: func() time.Time { return time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC) },
@@ -1085,8 +1108,8 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 	if err := kubeClient.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
 		t.Fatal(err)
 	}
-	if provider.calls != 0 {
-		t.Fatalf("expected provider not to be called after policy rejection, got %d calls", provider.calls)
+	if providerRequests != 0 {
+		t.Fatalf("expected providerRequestCount=0 after policy rejection, got %d", providerRequests)
 	}
 	if stored.Status.Failure == nil ||
 		stored.Status.Failure.Code != "ProviderDataPolicyRejected" ||
@@ -1807,6 +1830,14 @@ func TestInvestigationRequestReconcilerMarksNoIssueFoundWhenRequiredEvidenceNorm
 	if stored.Status.Verdict == nil || stored.Status.Verdict.RootCauseType != "" {
 		t.Fatalf("expected NoIssueFound verdict without rootCauseType, got %#v", stored.Status.Verdict)
 	}
+	if stored.Status.EvidenceCoverage == nil ||
+		stored.Status.EvidenceCoverage.Profile != "LatencyRegression" ||
+		!stringSlicesEqual(stored.Status.EvidenceCoverage.RequiredChecks, []string{"metric:Latency"}) ||
+		!stringSlicesEqual(stored.Status.EvidenceCoverage.CompletedChecks, []string{"metric:Latency"}) ||
+		len(stored.Status.EvidenceCoverage.IncompleteChecks) != 0 ||
+		stored.Status.EvidenceCoverage.IssueMatches != 0 {
+		t.Fatalf("expected complete NoIssueFound evidence coverage audit, got %#v", stored.Status.EvidenceCoverage)
+	}
 	if len(stored.Status.MissingEvidence) != 0 {
 		t.Fatalf("expected no missing evidence, got %#v", stored.Status.MissingEvidence)
 	}
@@ -1819,6 +1850,7 @@ func TestInvestigationRequestReconcilerMarksNoIssueFoundWhenRequiredEvidenceNorm
 	if cond := findCondition(stored.Status.Conditions, conditionVerified); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "NoIssueFindingSupported" {
 		t.Fatalf("expected Verified true NoIssueFindingSupported, got %#v", cond)
 	}
+	assertInvestigationTerminalConditionContract(t, stored)
 	if counter.calls != 0 {
 		t.Fatalf("expected provider not to be called when profile evidence is normal, got %d", counter.calls)
 	}
@@ -1867,12 +1899,21 @@ func TestInvestigationRequestReconcilerDoesNotMarkCrashLoopNoIssueFromScheduledO
 	if len(stored.Status.MissingEvidence) != 1 || stored.Status.MissingEvidence[0].Reason != "CrashLoopEvidenceCoverageMissing" {
 		t.Fatalf("expected missing CrashLoop semantic coverage, got %#v", stored.Status.MissingEvidence)
 	}
+	if stored.Status.EvidenceCoverage == nil ||
+		stored.Status.EvidenceCoverage.Profile != "CrashLoopBackOff" ||
+		!stringSlicesEqual(stored.Status.EvidenceCoverage.RequiredChecks, []string{"event:CrashLoopBackOff"}) ||
+		len(stored.Status.EvidenceCoverage.CompletedChecks) != 0 ||
+		!stringSlicesEqual(stored.Status.EvidenceCoverage.IncompleteChecks, []string{"event:CrashLoopBackOff"}) ||
+		stored.Status.EvidenceCoverage.IssueMatches != 0 {
+		t.Fatalf("expected incomplete CrashLoop evidence coverage audit, got %#v", stored.Status.EvidenceCoverage)
+	}
 	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RequiredEvidenceMissing" {
 		t.Fatalf("expected EvidenceCollectionReady false RequiredEvidenceMissing, got %#v", cond)
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RequiredEvidenceMissing" {
 		t.Fatalf("expected RCAReady false RequiredEvidenceMissing, got %#v", cond)
 	}
+	assertInvestigationTerminalConditionContract(t, stored)
 	if counter.calls != 0 {
 		t.Fatalf("expected provider not to be called when CrashLoop semantic coverage is missing, got %d", counter.calls)
 	}
@@ -2870,4 +2911,40 @@ func checkpointReasoningOutput() domain.ReasoningOutput {
 
 func hasPrefix(value string, prefix string) bool {
 	return len(value) >= len(prefix) && value[:len(prefix)] == prefix
+}
+
+func stringSlicesEqual(got []string, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func assertInvestigationTerminalConditionContract(t *testing.T, request v1alpha1.InvestigationRequest) {
+	t.Helper()
+	for _, conditionType := range []string{
+		conditionReady,
+		conditionDegraded,
+		conditionTargetResolved,
+		conditionDatasourceResolved,
+		conditionQueryTypeSupported,
+		conditionQueryPolicyReady,
+		conditionEvidenceReady,
+		conditionRCAReady,
+		conditionRemediationReady,
+		conditionVerified,
+	} {
+		cond := findCondition(request.Status.Conditions, conditionType)
+		if cond == nil {
+			t.Fatalf("expected terminal condition %s to be present in %#v", conditionType, request.Status.Conditions)
+		}
+		if cond.ObservedGeneration != request.Generation {
+			t.Fatalf("expected terminal condition %s observedGeneration %d, got %d", conditionType, request.Generation, cond.ObservedGeneration)
+		}
+	}
 }
