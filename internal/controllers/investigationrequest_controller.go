@@ -39,6 +39,8 @@ const (
 	defaultMaxInvestigationDepth           = int32(1)
 	investigationStageDataSourceResolution = "DataSourceResolution"
 	investigationStageQueryValidation      = "QueryValidation"
+	investigationStageProviderResolution   = "ProviderResolution"
+	investigationStageProviderEgressPolicy = "ProviderEgressPolicy"
 )
 
 type InvestigationRequestReconciler struct {
@@ -200,6 +202,12 @@ func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, eviden
 	}
 
 	present := map[string]bool{}
+	for _, query := range spec.Queries {
+		kind := strings.TrimSpace(query.QueryType)
+		if kind != "" {
+			present[kind] = true
+		}
+	}
 	for _, ref := range evidence.EvidenceRefs {
 		kind := strings.TrimSpace(ref.Kind)
 		if kind != "" {
@@ -215,11 +223,12 @@ func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, eviden
 			})
 		}
 	}
+	missing = append(missing, missingSemanticEvidenceCoverage(profile, spec, evidence)...)
 	if len(missing) == 0 {
 		return &evidenceRequirementGate{
 			Profile:      profile,
 			Complete:     true,
-			NoIssueFound: evidenceProfileHasNoIssue(profile, evidence),
+			NoIssueFound: evidenceProfileHasNoIssue(profile, spec, evidence),
 			Message:      fmt.Sprintf("required evidence profile %q is complete", profile),
 		}
 	}
@@ -229,6 +238,50 @@ func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, eviden
 		Missing:  missing,
 		Message:  fmt.Sprintf("required evidence profile %q is incomplete", profile),
 	}
+}
+
+func missingSemanticEvidenceCoverage(profile string, spec v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult) []v1alpha1.RCAMissingEvidence {
+	profileKey := strings.ToLower(strings.TrimSpace(profile))
+	switch profileKey {
+	case "crashloopbackoff":
+		if eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") {
+			return nil
+		}
+		return []v1alpha1.RCAMissingEvidence{{Source: string(domain.QueryTypeEvent), Reason: "CrashLoopEvidenceCoverageMissing"}}
+	case "imagepullbackoff":
+		if eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied") {
+			return nil
+		}
+		return []v1alpha1.RCAMissingEvidence{{Source: string(domain.QueryTypeEvent), Reason: "ImagePullEvidenceCoverageMissing"}}
+	case "oomkilled":
+		if eventCoveragePresent(spec, evidence, "oomkilled", "out of memory", "memory pressure", "memory limit") {
+			return nil
+		}
+		return []v1alpha1.RCAMissingEvidence{{Source: string(domain.QueryTypeEvent), Reason: "OOMEventEvidenceCoverageMissing"}}
+	default:
+		return nil
+	}
+}
+
+func eventCoveragePresent(spec v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult, needles ...string) bool {
+	for _, ref := range evidence.EvidenceRefs {
+		if strings.ToLower(strings.TrimSpace(ref.Kind)) != string(domain.QueryTypeEvent) {
+			continue
+		}
+		if containsAny(strings.ToLower(strings.Join([]string{ref.Reason, ref.Summary, ref.Query}, " ")), needles...) {
+			return true
+		}
+	}
+	for _, query := range spec.Queries {
+		if strings.ToLower(strings.TrimSpace(query.QueryType)) != string(domain.QueryTypeEvent) {
+			continue
+		}
+		values := append([]string{query.Name, query.Query, query.QueryTemplate}, query.Reasons...)
+		if containsAny(strings.ToLower(strings.Join(values, " ")), needles...) {
+			return true
+		}
+	}
+	return false
 }
 
 func requiredEvidenceKindsForProfile(profile string) []string {
@@ -246,7 +299,7 @@ func requiredEvidenceKindsForProfile(profile string) []string {
 	}
 }
 
-func evidenceProfileHasNoIssue(profile string, evidence investigation.EvidenceCollectionResult) bool {
+func evidenceProfileHasNoIssue(profile string, spec v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult) bool {
 	profileKey := strings.ToLower(strings.TrimSpace(profile))
 	if profileKey == "" {
 		return false
@@ -261,7 +314,19 @@ func evidenceProfileHasNoIssue(profile string, evidence investigation.EvidenceCo
 			return false
 		}
 	}
-	return relevant > 0
+	if relevant > 0 {
+		return true
+	}
+	switch profileKey {
+	case "crashloopbackoff":
+		return eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed")
+	case "imagepullbackoff":
+		return eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
+	case "oomkilled":
+		return eventCoveragePresent(spec, evidence, "oomkilled", "out of memory", "memory pressure", "memory limit")
+	default:
+		return false
+	}
 }
 
 func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) bool {
@@ -384,10 +449,9 @@ func applyEvidenceRequirementNoIssueFoundStatus(request *v1alpha1.InvestigationR
 	request.Status.MissingEvidence = nil
 	request.Status.Degradation = nil
 	request.Status.Verdict = &v1alpha1.RCAVerdict{
-		Outcome:       v1alpha1.InvestigationOutcomeNoIssueFound,
-		Summary:       message,
-		RootCauseType: "NoIssueFound",
-		Confidence:    0,
+		Outcome:    v1alpha1.InvestigationOutcomeNoIssueFound,
+		Summary:    message,
+		Confidence: 0,
 		ConfidenceDetail: &v1alpha1.RCAConfidence{
 			ProviderScore: 0,
 			VerifiedScore: 0,
@@ -407,6 +471,7 @@ func applyEvidenceRequirementNoIssueFoundStatus(request *v1alpha1.InvestigationR
 	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "RequiredEvidenceComplete", gate.Message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionTrue, "NoIssueFound", message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionVerified, metav1.ConditionTrue, "NoIssueFindingSupported", "required evidence coverage supports the absence of a matching issue", request.Generation, now)
 	setInvestigationRemediationBlocked(request, "NoIssueFound", "remediation is not available because no issue was found", now)
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "NoIssueFound", message, request.Generation, now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "investigation completed without degradation", request.Generation, now)
@@ -421,8 +486,12 @@ func applyLoopPreventedInvestigationStatus(request *v1alpha1.InvestigationReques
 	completedAt := metav1.NewTime(now)
 	request.Status.CompletedAt = &completedAt
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, failure.Code, failure.Message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionUnknown, "InvestigationNotRunnable", "target resolution was not evaluated because loop prevention blocked execution", request.Generation, now)
+	setInvestigationNotRunnableConditions(request, "InvestigationNotRunnable", "investigation request was blocked before target, datasource, query, or evidence execution", now)
 	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, failure.Code, failure.Message, request.Generation, now)
 	setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because RCA execution was blocked: "+failure.Code, now)
+	setInvestigationVerificationUnknown(request, "RCAUnavailable", "verification was not performed because RCA execution was blocked", now)
+	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "ValidationFailed", "request failed validation before evidence collection started", request.Generation, now)
 }
 
 func investigationLoopFailure(request *v1alpha1.InvestigationRequest) *v1alpha1.InvestigationFailure {
@@ -714,13 +783,32 @@ func applyInvalidInvestigationStatus(request *v1alpha1.InvestigationRequest, rea
 	request.Status.CompletedAt = &completedAt
 	request.Status.Provider = ""
 	setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionFalse, reason, message, request.Generation, now)
-	setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionFalse, reason, message, request.Generation, now)
-	setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
-	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
-	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
-	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "InvestigationNotRunnable", "investigation request did not pass basic validation", request.Generation, now)
+	if validationFailureIsTargetResolution(reason) {
+		setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionFalse, reason, message, request.Generation, now)
+	} else {
+		setStatusCondition(&request.Status.Conditions, conditionTargetResolved, metav1.ConditionUnknown, "InvestigationNotRunnable", "target resolution was not evaluated because request validation failed", request.Generation, now)
+	}
+	setInvestigationNotRunnableConditions(request, "InvestigationNotRunnable", "investigation request did not pass basic validation", now)
+	setStatusCondition(&request.Status.Conditions, conditionRCAReady, metav1.ConditionFalse, "InvestigationNotRunnable", "RCA execution is blocked because request validation failed", request.Generation, now)
 	setInvestigationRemediationBlocked(request, "RCAUnavailable", "remediation is unavailable because the investigation request is not runnable", now)
+	setInvestigationVerificationUnknown(request, "RCAUnavailable", "verification was not performed because the investigation request is not runnable", now)
 	setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "ValidationFailed", "request failed validation before evidence collection started", request.Generation, now)
+}
+
+func validationFailureIsTargetResolution(reason string) bool {
+	switch reason {
+	case "TargetInvalid", "UnsupportedTargetKind":
+		return true
+	default:
+		return false
+	}
+}
+
+func setInvestigationNotRunnableConditions(request *v1alpha1.InvestigationRequest, reason string, message string, now time.Time) {
+	setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionUnknown, reason, message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionUnknown, reason, message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionQueryPolicyReady, metav1.ConditionUnknown, reason, message, request.Generation, now)
+	setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionUnknown, reason, message, request.Generation, now)
 }
 
 func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, message string, now time.Time) {
@@ -738,18 +826,30 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, preflight.DatasourceIssue.Reason, preflight.DatasourceIssue.Message, request.Generation, now)
 	} else {
 		setStatusCondition(&request.Status.Conditions, conditionDatasourceResolved, metav1.ConditionTrue, "AllDatasourcesResolved", "all referenced datasources were resolved", request.Generation, now)
-		if evidence.Issue != nil {
+		if preflight.ModelProviderIssue != nil {
+			setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionUnknown, "ProviderUnavailableBeforeCollection", "evidence collection was not evaluated because provider resolution failed", request.Generation, now)
+		} else if preflight.QueryTypeIssue != nil {
+			setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionUnknown, "QueryValidationFailed", "evidence collection was not evaluated because query validation failed", request.Generation, now)
+		} else if evidence.Issue != nil {
 			setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionFalse, evidence.Issue.Reason, evidence.Issue.Message, request.Generation, now)
 		} else {
 			setStatusCondition(&request.Status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "EvidenceCollected", evidence.Summary, request.Generation, now)
 		}
 	}
 	if preflight.QueryTypeIssue != nil {
-		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionFalse, preflight.QueryTypeIssue.Reason, preflight.QueryTypeIssue.Message, request.Generation, now)
+		if preflight.QueryTypeIssue.Reason == "QueryPolicyRejected" {
+			setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
+			setStatusCondition(&request.Status.Conditions, conditionQueryPolicyReady, metav1.ConditionFalse, preflight.QueryTypeIssue.Reason, preflight.QueryTypeIssue.Message, request.Generation, now)
+		} else {
+			setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionFalse, preflight.QueryTypeIssue.Reason, preflight.QueryTypeIssue.Message, request.Generation, now)
+			setStatusCondition(&request.Status.Conditions, conditionQueryPolicyReady, metav1.ConditionUnknown, "QueryTypeUnsupported", "query policy was not evaluated because query type validation failed", request.Generation, now)
+		}
 	} else if preflight.DatasourceIssue != nil {
 		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionUnknown, "DataSourceUnavailable", "query type capability was not evaluated because datasource resolution failed", request.Generation, now)
+		setStatusCondition(&request.Status.Conditions, conditionQueryPolicyReady, metav1.ConditionUnknown, "DataSourceUnavailable", "query policy was not evaluated because datasource resolution failed", request.Generation, now)
 	} else {
 		setStatusCondition(&request.Status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all investigation query types were supported", request.Generation, now)
+		setStatusCondition(&request.Status.Conditions, conditionQueryPolicyReady, metav1.ConditionTrue, "AllQueriesAllowed", "all investigation queries were allowed by datasource policy", request.Generation, now)
 	}
 
 	if preflight.ModelProviderIssue != nil {
@@ -798,7 +898,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 	}
 	if rca.Issue != nil {
 		setInvestigationRequestStatus(&request.Status, v1alpha1.PhaseFailed, rca.Issue.Message, request.Generation, now)
-		applyInvestigationFailure(request, rca.Issue.Reason, rca.Issue.Message, v1alpha1.InvestigationStageReasoning)
+		applyInvestigationFailure(request, rca.Issue.Reason, rca.Issue.Message, investigationFailureStage(rca.Issue.Reason))
 		if rca.Issue.EgressAudit != nil || len(rca.EgressAttempts) > 0 {
 			audit := rca.Issue.EgressAudit
 			if audit == nil {
@@ -1784,7 +1884,7 @@ func zeroPad3(index int) string {
 
 func shouldMarkInvestigationDegraded(reason string) bool {
 	switch reason {
-	case "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse", "ResolverUnavailable", "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
+	case "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse", "ResolverUnavailable", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
 		return true
 	default:
 		return false
@@ -1801,7 +1901,11 @@ func investigationFailureStage(reason string) string {
 		return investigationStageQueryValidation
 	case "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse":
 		return v1alpha1.InvestigationStageEvidenceCollection
-	case "ProviderNotFound", "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
+	case "ProviderNotFound":
+		return investigationStageProviderResolution
+	case "ProviderDataPolicyDenied", "ProviderDataPolicyRejected":
+		return investigationStageProviderEgressPolicy
+	case "GatewayUnavailable", "ProviderUnavailable", "ProviderUnsupported", "ProviderAuthFailed", "ProviderRateLimited", "ProviderRequestInvalid", "ProviderFallbackLoop", "SecretReaderUnavailable", "SecretReadFailed", "SecretRefMissing", "SecretNotFound", "SecretKeyMissing", "SecretValueEmpty", "APIKeyMissing", "InvalidProviderResponse":
 		return v1alpha1.InvestigationStageReasoning
 	default:
 		return v1alpha1.InvestigationStageReasoning

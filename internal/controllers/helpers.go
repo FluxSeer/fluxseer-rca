@@ -38,6 +38,7 @@ const (
 	conditionTargetResolved      = "TargetResolved"
 	conditionDatasourceResolved  = "DatasourceResolved"
 	conditionQueryTypeSupported  = "QueryTypeSupported"
+	conditionQueryPolicyReady    = "QueryPolicyReady"
 	conditionEvidenceReady       = "EvidenceCollectionReady"
 	conditionFindingReady        = "FindingReady"
 	conditionRCAReady            = "RCAReady"

@@ -28,7 +28,7 @@
   "expected": {
     "phase": "Completed",
     "outcome": "NoIssueFound",
-    "rootCauseType": "NoIssueFound",
+    "rootCauseType": "",
     "claimVerification": "",
     "providerCalls": 0
   }

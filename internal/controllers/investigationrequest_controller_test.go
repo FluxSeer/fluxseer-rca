@@ -891,6 +891,83 @@ func TestValidateInvestigationRequestSpecUsesUnsupportedRetentionModeReason(t *t
 	}
 }
 
+func TestInvestigationRequestReconcilerMarksUnsupportedRetentionModeNotRunnable(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "raw-retention", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace: "prod",
+				Kind:      "Deployment",
+				Name:      "open-api",
+			},
+			DataSources: []v1alpha1.LocalObjectReference{{Name: "kubernetes-events"}},
+			EvidenceRetention: v1alpha1.EvidenceRetentionPolicy{
+				Mode: v1alpha1.EvidenceRetentionModeRawSnapshot,
+			},
+			Mode: v1alpha1.InvestigationModeReadOnly,
+		},
+	}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithObjects(request).
+		Build()
+	reconciler := &InvestigationRequestReconciler{
+		Client: client,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client:   client,
+			Registry: datasource.NewRegistry(fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent}),
+			Resolver: modelgateway.KubeResolver{Client: client},
+			Gateway: &modelgateway.Gateway{
+				Base: knowledge.NewBase(),
+				Providers: model.NewRegistry(
+					heuristic.Provider{},
+				),
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 8, 1, 13, 0, 0, 0, time.UTC) },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Failure == nil ||
+		stored.Status.Failure.Code != "UnsupportedRetentionMode" ||
+		stored.Status.Failure.Stage != v1alpha1.InvestigationStageValidation {
+		t.Fatalf("expected UnsupportedRetentionMode validation failure, got %#v", stored.Status.Failure)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionTargetResolved); cond == nil || cond.Status != metav1.ConditionUnknown || cond.Reason != "InvestigationNotRunnable" {
+		t.Fatalf("expected TargetResolved unknown InvestigationNotRunnable, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionDatasourceResolved); cond == nil || cond.Status != metav1.ConditionUnknown || cond.Reason != "InvestigationNotRunnable" {
+		t.Fatalf("expected DatasourceResolved unknown InvestigationNotRunnable, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionQueryTypeSupported); cond == nil || cond.Status != metav1.ConditionUnknown || cond.Reason != "InvestigationNotRunnable" {
+		t.Fatalf("expected QueryTypeSupported unknown InvestigationNotRunnable, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionUnknown || cond.Reason != "InvestigationNotRunnable" {
+		t.Fatalf("expected EvidenceCollectionReady unknown InvestigationNotRunnable, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionVerified); cond == nil || cond.Status != metav1.ConditionUnknown || cond.Reason != "RCAUnavailable" {
+		t.Fatalf("expected Verified unknown RCAUnavailable, got %#v", cond)
+	}
+}
+
 func TestValidateInvestigationRequestSpecRejectsUnknownQueryRetentionMode(t *testing.T) {
 	issue := validateInvestigationRequestSpecIssue(v1alpha1.InvestigationRequestSpec{
 		Target: v1alpha1.TargetRef{
@@ -1011,7 +1088,9 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 	if provider.calls != 0 {
 		t.Fatalf("expected provider not to be called after policy rejection, got %d calls", provider.calls)
 	}
-	if stored.Status.Failure == nil || stored.Status.Failure.Code != "ProviderDataPolicyRejected" {
+	if stored.Status.Failure == nil ||
+		stored.Status.Failure.Code != "ProviderDataPolicyRejected" ||
+		stored.Status.Failure.Stage != investigationStageProviderEgressPolicy {
 		t.Fatalf("expected ProviderDataPolicyRejected failure, got %#v", stored.Status.Failure)
 	}
 	if stored.Status.Execution == nil || stored.Status.Execution.EgressAudit == nil {
@@ -1241,6 +1320,94 @@ func TestInvestigationRequestReconcilerStopsBeforeEvidenceWhenTargetNotFound(t *
 	}
 	if len(signals.Items) != 0 {
 		t.Fatalf("expected no RiskSignal for target preflight failure, got %#v", signals.Items)
+	}
+}
+
+func TestInvestigationRequestReconcilerMarksProviderNotFoundAsHardProviderResolutionFailure(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "missing-provider", Namespace: "fluxagent-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "Deployment",
+				Name:       "open-api",
+				APIVersion: "apps/v1",
+			},
+			DataSources:      []v1alpha1.LocalObjectReference{{Name: "kubernetes-events"}},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "missing-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+			CreateRiskSignal: true,
+		},
+	}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
+	}
+	eventSource := &countingInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent}
+	provider := &countingModelProvider{}
+	kubeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, deployment).
+		Build()
+	reconciler := &InvestigationRequestReconciler{
+		Client: kubeClient,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client:   kubeClient,
+			Registry: datasource.NewRegistry(eventSource),
+			Resolver: modelgateway.KubeResolver{Client: kubeClient},
+			Gateway: &modelgateway.Gateway{
+				Base:      knowledge.NewBase(),
+				Providers: model.NewRegistry(provider),
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 8, 1, 13, 10, 0, 0, time.UTC) },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := kubeClient.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status.Failure == nil ||
+		stored.Status.Failure.Code != "ProviderNotFound" ||
+		stored.Status.Failure.Stage != investigationStageProviderResolution {
+		t.Fatalf("expected ProviderNotFound provider-resolution failure, got %#v", stored.Status.Failure)
+	}
+	if stored.Status.Degradation != nil {
+		t.Fatalf("expected no degradation for hard provider resolution failure, got %#v", stored.Status.Degradation)
+	}
+	if eventSource.calls != 0 {
+		t.Fatalf("expected datasource not to be queried after provider resolution failure, got %d calls", eventSource.calls)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("expected provider not to be called after provider resolution failure, got %d calls", provider.calls)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionUnknown || cond.Reason != "ProviderUnavailableBeforeCollection" {
+		t.Fatalf("expected EvidenceCollectionReady unknown ProviderUnavailableBeforeCollection, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionDegraded); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "ProviderNotFound" {
+		t.Fatalf("expected Degraded false ProviderNotFound, got %#v", cond)
+	}
+	var signals v1alpha1.RiskSignalList
+	if err := kubeClient.List(context.Background(), &signals); err != nil {
+		t.Fatalf("list risk signals: %v", err)
+	}
+	if len(signals.Items) != 0 {
+		t.Fatalf("expected no RiskSignal for provider preflight failure, got %#v", signals.Items)
 	}
 }
 
@@ -1637,6 +1804,9 @@ func TestInvestigationRequestReconcilerMarksNoIssueFoundWhenRequiredEvidenceNorm
 	if stored.Status.Failure != nil {
 		t.Fatalf("expected no workflow failure for NoIssueFound status, got %#v", stored.Status.Failure)
 	}
+	if stored.Status.Verdict == nil || stored.Status.Verdict.RootCauseType != "" {
+		t.Fatalf("expected NoIssueFound verdict without rootCauseType, got %#v", stored.Status.Verdict)
+	}
 	if len(stored.Status.MissingEvidence) != 0 {
 		t.Fatalf("expected no missing evidence, got %#v", stored.Status.MissingEvidence)
 	}
@@ -1646,8 +1816,65 @@ func TestInvestigationRequestReconcilerMarksNoIssueFoundWhenRequiredEvidenceNorm
 	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "NoIssueFound" {
 		t.Fatalf("expected RCAReady true NoIssueFound, got %#v", cond)
 	}
+	if cond := findCondition(stored.Status.Conditions, conditionVerified); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "NoIssueFindingSupported" {
+		t.Fatalf("expected Verified true NoIssueFindingSupported, got %#v", cond)
+	}
 	if counter.calls != 0 {
 		t.Fatalf("expected provider not to be called when profile evidence is normal, got %d", counter.calls)
+	}
+}
+
+func TestInvestigationRequestReconcilerDoesNotMarkCrashLoopNoIssueFromScheduledOnlyEvent(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	request := evidenceRequirementTestRequest("crashloop-scheduled-only", "CrashLoopBackOff", "kubernetes-events")
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
+	}
+	counter := &countingModelProvider{}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
+		WithObjects(request, evidenceRequirementDeployment(), provider).
+		Build()
+	reconciler := evidenceRequirementTestReconciler(client, scheme, counter, fakeInvestigationDataSource{
+		name:      "kubernetes-events",
+		queryType: domain.QueryTypeEvent,
+		records: []map[string]any{
+			{"reason": "Scheduled", "message": "Successfully assigned prod/open-api to node-a"},
+		},
+	})
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.InvestigationRequest
+	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseCompleted || stored.Status.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
+		t.Fatalf("expected inconclusive status for scheduled-only CrashLoop profile evidence, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if len(stored.Status.MissingEvidence) != 1 || stored.Status.MissingEvidence[0].Reason != "CrashLoopEvidenceCoverageMissing" {
+		t.Fatalf("expected missing CrashLoop semantic coverage, got %#v", stored.Status.MissingEvidence)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionEvidenceReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RequiredEvidenceMissing" {
+		t.Fatalf("expected EvidenceCollectionReady false RequiredEvidenceMissing, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RequiredEvidenceMissing" {
+		t.Fatalf("expected RCAReady false RequiredEvidenceMissing, got %#v", cond)
+	}
+	if counter.calls != 0 {
+		t.Fatalf("expected provider not to be called when CrashLoop semantic coverage is missing, got %d", counter.calls)
 	}
 }
 
@@ -1678,6 +1905,7 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 	tests := []struct {
 		name         string
 		profile      string
+		queries      []v1alpha1.InvestigationQuery
 		refs         []v1alpha1.EvidenceRef
 		wantComplete bool
 		wantNoIssue  bool
@@ -1690,7 +1918,7 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 				{Kind: string(domain.QueryTypeEvent), Reason: "Normal", Summary: "pod completed without restart"},
 			},
 			wantComplete: false,
-			wantMissing:  []string{string(domain.QueryTypeMetric)},
+			wantMissing:  []string{string(domain.QueryTypeMetric), string(domain.QueryTypeEvent)},
 		},
 		{
 			name:    "rollout latency requires metric and deployment condition",
@@ -1719,11 +1947,25 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 			wantComplete: true,
 			wantNoIssue:  true,
 		},
+		{
+			name:    "crashloop explicit backoff query complete with no matching records",
+			profile: "CrashLoopBackOff",
+			queries: []v1alpha1.InvestigationQuery{
+				{
+					Name:      "backoff-events",
+					QueryType: string(domain.QueryTypeEvent),
+					Reasons:   []string{"BackOff"},
+				},
+			},
+			wantComplete: true,
+			wantNoIssue:  true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gate := evaluateEvidenceRequirements(v1alpha1.InvestigationRequestSpec{
 				EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: tt.profile},
+				Queries:              tt.queries,
 			}, investigation.EvidenceCollectionResult{EvidenceRefs: tt.refs})
 			if gate == nil {
 				t.Fatalf("expected evidence requirement gate")
@@ -2367,8 +2609,11 @@ func TestInvestigationRequestReconcilerMarksQueryPolicyRejectedStage(t *testing.
 		stored.Status.Failure.Stage != investigationStageQueryValidation {
 		t.Fatalf("expected query policy rejection at query validation, got %#v", stored.Status.Failure)
 	}
-	if cond := findCondition(stored.Status.Conditions, conditionQueryTypeSupported); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "QueryPolicyRejected" {
-		t.Fatalf("expected QueryTypeSupported false QueryPolicyRejected, got %#v", cond)
+	if cond := findCondition(stored.Status.Conditions, conditionQueryTypeSupported); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "AllQueryTypesSupported" {
+		t.Fatalf("expected QueryTypeSupported true AllQueryTypesSupported, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionQueryPolicyReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "QueryPolicyRejected" {
+		t.Fatalf("expected QueryPolicyReady false QueryPolicyRejected, got %#v", cond)
 	}
 }
 
