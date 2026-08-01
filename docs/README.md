@@ -133,6 +133,7 @@ Frozen-contract and production-readiness records:
 - [v0.3 foundation issues](backlog/v0.3-foundation-issues.md)
 - [v0.3 production readiness](backlog/v0.3-production-readiness.md)
 - [v0.3 schema freeze audit](backlog/v0.3-schema-freeze-audit.md)
+- [v0.3 runtime error matrix](backlog/v0.3-runtime-error-matrix.md)
 
 Historical records:
 
