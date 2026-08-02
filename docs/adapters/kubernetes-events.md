@@ -16,6 +16,7 @@ Current event behavior:
 
 - list `Event` objects in the target namespace
 - match by involved object name or kind
+- when `reasons[]` is set on an event query, retain only events whose Kubernetes `reason` exactly matches one of the requested reasons, case-insensitively
 - return `reason`, `message`, `type`, and `object`
 
 Deployment condition behavior:
@@ -28,7 +29,7 @@ The Kubernetes adapter stays read-only and does not require a separate in-cluste
 
 ## Event Keywords
 
-The supported path is to set event reasons on `RiskRule` or `InvestigationRequest` queries.
+The supported path is to set event reasons on `RiskRule` or `InvestigationRequest` queries. These reasons are treated as Kubernetes event `reason` filters, not free-text message keywords.
 
 The legacy Deployment annotation path also accepts this per-workload override when `--enable-legacy-deployment-risk=true` is explicitly enabled:
 

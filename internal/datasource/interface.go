@@ -16,6 +16,7 @@ type QueryRequest struct {
 	Labels         map[string]string
 	Target         domain.ResourceRef
 	QueryType      domain.QueryType
+	Reasons        []string
 	ResultLimits   v1alpha1.QueryResultLimits
 	Classification v1alpha1.DataClassification
 }

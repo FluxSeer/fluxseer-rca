@@ -1306,7 +1306,7 @@ func inferRootCauseTypeFromClaims(claims []v1alpha1.RCAClaim) string {
 }
 
 func unverifiedRCASummary(evidence investigation.EvidenceCollectionResult, providerSummary string) string {
-	for _, ref := range evidence.EvidenceRefs {
+	for _, ref := range rankedEvidenceRefsForSummary(evidence.EvidenceRefs) {
 		detail := firstNonEmptyString(strings.TrimSpace(ref.Summary), strings.TrimSpace(ref.Reason), strings.TrimSpace(ref.Source))
 		if detail != "" {
 			return fmt.Sprintf("Observed %s, but collected evidence is insufficient to confirm the proposed root cause.", detail)
@@ -1316,6 +1316,27 @@ func unverifiedRCASummary(evidence investigation.EvidenceCollectionResult, provi
 		return fmt.Sprintf("Collected evidence is insufficient to confirm the proposed root cause: %s", strings.TrimSpace(providerSummary))
 	}
 	return "Collected evidence is insufficient to confirm the proposed root cause."
+}
+
+func rankedEvidenceRefsForSummary(refs []v1alpha1.EvidenceRef) []v1alpha1.EvidenceRef {
+	ranked := append([]v1alpha1.EvidenceRef(nil), refs...)
+	sort.SliceStable(ranked, func(i, j int) bool {
+		return evidenceSummaryRank(ranked[i]) > evidenceSummaryRank(ranked[j])
+	})
+	return ranked
+}
+
+func evidenceSummaryRank(ref v1alpha1.EvidenceRef) int {
+	reason := strings.ToLower(strings.TrimSpace(ref.Reason))
+	text := strings.ToLower(strings.TrimSpace(ref.Summary + " " + ref.Kind))
+	switch {
+	case containsAny(reason, "crashloopbackoff", "backoff", "imagepullbackoff", "errimagepull", "invalidimagename", "failedscheduling", "oomkilled", "oom", "unhealthy", "failedcreate", "failedreplicacreate", "progressdeadlineexceeded", "minimumreplicasunavailable"):
+		return 2
+	case containsAny(text, "crashloopbackoff", "backoff", "imagepullbackoff", "errimagepull", "invalidimagename", "failedscheduling", "oomkilled", "oom", "unhealthy", "failedcreate", "failedreplicacreate", "progressdeadlineexceeded", "minimumreplicasunavailable"):
+		return 1
+	default:
+		return 0
+	}
 }
 
 func missingEvidenceForClaims(claims []v1alpha1.RCAClaim) []v1alpha1.RCAMissingEvidence {

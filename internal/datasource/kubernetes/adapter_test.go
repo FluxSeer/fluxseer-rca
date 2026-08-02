@@ -49,6 +49,58 @@ func TestAdapterQueryFiltersEventsByTarget(t *testing.T) {
 	}
 }
 
+func TestAdapterQueryFiltersEventsByRequestedReasonsBeforeNativeLimit(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add scheme: %v", err)
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{Name: "event-1", Namespace: "demo"},
+			InvolvedObject: corev1.ObjectReference{
+				Kind: "Pod",
+				Name: "demo-app-1",
+			},
+			Reason:        "Scheduled",
+			Message:       "Successfully assigned demo/demo-app-1 to worker; later Unhealthy event exists",
+			LastTimestamp: metav1.Unix(10, 0),
+		},
+		&corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{Name: "event-2", Namespace: "demo"},
+			InvolvedObject: corev1.ObjectReference{
+				Kind: "Pod",
+				Name: "demo-app-1",
+			},
+			Reason:        "Unhealthy",
+			Message:       "Readiness probe failed",
+			LastTimestamp: metav1.Unix(20, 0),
+		},
+	).Build()
+
+	adapter := Adapter{Client: client}
+	result, err := adapter.Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "demo-app"},
+		QueryType: domain.QueryTypeEvent,
+		Reasons:   []string{"Unhealthy"},
+		ResultLimits: v1alpha1.QueryResultLimits{
+			Events: v1alpha1.EventResultLimits{MaxRecords: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.NativeCounts.Records != 1 {
+		t.Fatalf("expected native count after reason filtering, got %#v", result.NativeCounts)
+	}
+	if len(result.Records) != 1 || result.Records[0]["reason"] != "Unhealthy" {
+		t.Fatalf("expected only Unhealthy event, got %#v", result.Records)
+	}
+	if result.Truncated {
+		t.Fatalf("expected reason filtering before native limit to avoid truncation, got %#v", result)
+	}
+}
+
 func TestAdapterQueryEnforcesKubernetesNativeEventRecordLimit(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {

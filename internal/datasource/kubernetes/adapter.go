@@ -53,6 +53,9 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 		if !eventMatchesTarget(event, req.Target) {
 			continue
 		}
+		if !eventReasonAllowed(event.Reason, req.Reasons) {
+			continue
+		}
 		matched = append(matched, event)
 	}
 	sort.SliceStable(matched, func(i, j int) bool {
@@ -160,6 +163,22 @@ func eventMatchesTarget(event corev1.Event, target domain.ResourceRef) bool {
 	kind := strings.ToLower(event.InvolvedObject.Kind)
 
 	return strings.Contains(involved, name) || kind == strings.ToLower(target.Kind)
+}
+
+func eventReasonAllowed(reason string, allowed []string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	normalizedReason := strings.TrimSpace(reason)
+	if normalizedReason == "" {
+		return false
+	}
+	for _, expected := range allowed {
+		if strings.EqualFold(normalizedReason, strings.TrimSpace(expected)) {
+			return true
+		}
+	}
+	return false
 }
 
 func eventSortKey(event corev1.Event) string {

@@ -338,6 +338,7 @@ func (s *Service) collectDatasourceQuery(ctx context.Context, budget v1alpha1.In
 			Labels:       preflight.Labels,
 			Target:       preflight.Target,
 			QueryType:    step.QueryType,
+			Reasons:      append([]string(nil), step.Reasons...),
 			ResultLimits: budget.ResultLimits,
 		},
 	}
@@ -1359,13 +1360,8 @@ func filterQueryResult(result *datasource.QueryResult, step CollectionStep) *dat
 	records := make([]map[string]any, 0, len(result.Records))
 	for _, record := range result.Records {
 		reason, _ := record["reason"].(string)
-		message, _ := record["message"].(string)
-		lower := strings.ToLower(reason + " " + message)
-		for _, expected := range step.Reasons {
-			if strings.Contains(lower, strings.ToLower(strings.TrimSpace(expected))) {
-				records = append(records, record)
-				break
-			}
+		if eventReasonAllowed(reason, step.Reasons) {
+			records = append(records, record)
 		}
 	}
 
@@ -1373,6 +1369,22 @@ func filterQueryResult(result *datasource.QueryResult, step CollectionStep) *dat
 	filtered.Records = records
 	filtered.Summary = fmt.Sprintf("%s filtered to %d matching records", firstNonEmpty(step.Name, result.Source), len(records))
 	return &filtered
+}
+
+func eventReasonAllowed(reason string, allowed []string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	normalizedReason := strings.TrimSpace(reason)
+	if normalizedReason == "" {
+		return false
+	}
+	for _, expected := range allowed {
+		if strings.EqualFold(normalizedReason, strings.TrimSpace(expected)) {
+			return true
+		}
+	}
+	return false
 }
 
 func labelApp(labels map[string]string, target domain.ResourceRef) string {

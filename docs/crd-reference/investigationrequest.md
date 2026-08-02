@@ -133,7 +133,7 @@ Query field behavior:
 - `queryType`: required and must match datasource capability
 - `query`: literal query text
 - `queryTemplate`: templated query rendered against target metadata
-- `reasons[]`: optional event reason filter for `queryType: event`
+- `reasons[]`: optional exact Kubernetes event `reason` filter for `queryType: event`; matching is case-insensitive and does not search event messages
 - `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
 - `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `OOMKilled`, `LatencyRegression`, and `RolloutLatencyRegression`.
 - `evidenceRetention.mode`: external evidence retention mode. Current supported runtime behavior is `MetadataOnly` or `NormalizedSnapshot` with the built-in `local-filesystem` store.

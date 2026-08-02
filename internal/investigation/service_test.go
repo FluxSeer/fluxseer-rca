@@ -1186,6 +1186,53 @@ func TestServiceCollectEvidenceUsesConfiguredQueryPlan(t *testing.T) {
 	}
 }
 
+func TestServiceCollectEvidencePassesAndEnforcesEventReasons(t *testing.T) {
+	events := &capturingDataSource{
+		name:      "kubernetes-events",
+		queryType: domain.QueryTypeEvent,
+		records: []map[string]any{
+			{
+				"reason":  "Scheduled",
+				"message": "Successfully assigned pod; message mentions Unhealthy but reason is benign",
+			},
+			{
+				"reason":  "Unhealthy",
+				"message": "Readiness probe failed",
+			},
+		},
+	}
+	service := &Service{
+		Registry: datasource.NewRegistry(events),
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target: domain.ResourceRef{
+			Namespace: "prod",
+			Name:      "open-api",
+			Kind:      "Deployment",
+			Service:   "open-api",
+		},
+		CollectionPlan: []CollectionStep{
+			{
+				Name:           "unhealthy-events",
+				DatasourceName: "kubernetes-events",
+				QueryType:      domain.QueryTypeEvent,
+				Query:          "recent-events",
+				Reasons:        []string{"Unhealthy"},
+			},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if events.lastQuery == nil || len(events.lastQuery.Reasons) != 1 || events.lastQuery.Reasons[0] != "Unhealthy" {
+		t.Fatalf("expected datasource request to carry reasons, got %#v", events.lastQuery)
+	}
+	if len(result.EvidenceRefs) != 1 || result.EvidenceRefs[0].Reason != "Unhealthy" {
+		t.Fatalf("expected post-query exact reason filter to retain only Unhealthy, got %#v", result.EvidenceRefs)
+	}
+}
+
 func TestServiceCollectEvidenceHonorsQueryRetentionPolicy(t *testing.T) {
 	const secretQuery = `sum(rate(custom_metric_total{namespace="prod",token=super-secret}[2m]))`
 	tests := []struct {

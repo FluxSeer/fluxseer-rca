@@ -1942,6 +1942,27 @@ func TestEvidenceNativeLimitDegradation(t *testing.T) {
 	}
 }
 
+func TestUnverifiedRCASummaryPrefersIssueMatchingEvidence(t *testing.T) {
+	summary := unverifiedRCASummary(investigation.EvidenceCollectionResult{
+		EvidenceRefs: []v1alpha1.EvidenceRef{
+			{
+				Kind:    string(domain.QueryTypeEvent),
+				Reason:  "Scheduled",
+				Summary: "Successfully assigned prod/open-api to worker; later Unhealthy event exists",
+			},
+			{
+				Kind:    string(domain.QueryTypeEvent),
+				Reason:  "Unhealthy",
+				Summary: "Readiness probe failed",
+			},
+		},
+	}, "")
+
+	if !strings.Contains(summary, "Readiness probe failed") || strings.Contains(summary, "Successfully assigned") {
+		t.Fatalf("expected summary to prefer issue-matching evidence, got %q", summary)
+	}
+}
+
 func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 	tests := []struct {
 		name         string
