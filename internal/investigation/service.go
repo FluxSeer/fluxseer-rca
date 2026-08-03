@@ -11,6 +11,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -871,10 +872,22 @@ func (s *Service) resolveTarget(ctx context.Context, targetRef v1alpha1.TargetRe
 			return targetNotFoundOrError("Pod", key, err)
 		}
 		return workloadToResource("Pod", "v1", pod.Name, pod.Namespace, pod.Labels, nil), workloadLabels(pod.Labels, nil), nil, nil
+	case "job":
+		var job batchv1.Job
+		if err := s.Client.Get(ctx, key, &job); err != nil {
+			return targetNotFoundOrError("Job", key, err)
+		}
+		return workloadToResource("Job", "batch/v1", job.Name, job.Namespace, job.Labels, job.Spec.Template.Labels), workloadLabels(job.Labels, job.Spec.Template.Labels), nil, nil
+	case "cronjob":
+		var cronJob batchv1.CronJob
+		if err := s.Client.Get(ctx, key, &cronJob); err != nil {
+			return targetNotFoundOrError("CronJob", key, err)
+		}
+		return workloadToResource("CronJob", "batch/v1", cronJob.Name, cronJob.Namespace, cronJob.Labels, cronJob.Spec.JobTemplate.Spec.Template.Labels), workloadLabels(cronJob.Labels, cronJob.Spec.JobTemplate.Spec.Template.Labels), nil, nil
 	default:
 		return domain.ResourceRef{}, nil, &Issue{
 			Reason:  "UnsupportedTargetKind",
-			Message: fmt.Sprintf("target kind %q is not supported; supported kinds are Deployment, StatefulSet, DaemonSet, ReplicaSet, and Pod", targetRef.Kind),
+			Message: fmt.Sprintf("target kind %q is not supported; supported kinds are Deployment, StatefulSet, DaemonSet, ReplicaSet, Pod, Job, and CronJob", targetRef.Kind),
 		}, nil
 	}
 }

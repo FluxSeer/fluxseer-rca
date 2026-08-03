@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -186,6 +187,46 @@ func TestServicePreflightResolvesNonDeploymentTargets(t *testing.T) {
 			wantService:        "checkout",
 			wantGeneratedLabel: `app="checkout"`,
 		},
+		{
+			name: "job",
+			target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "Job",
+				Name:       "backup",
+				APIVersion: "batch/v1",
+			},
+			object: &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{Name: "backup", Namespace: "prod"},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "backup"}}},
+				},
+			},
+			wantKind:           "Job",
+			wantAPIVersion:     "batch/v1",
+			wantService:        "backup",
+			wantGeneratedLabel: `app="backup"`,
+		},
+		{
+			name: "cronjob",
+			target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "CronJob",
+				Name:       "nightly",
+				APIVersion: "batch/v1",
+			},
+			object: &batchv1.CronJob{
+				ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "prod"},
+				Spec: batchv1.CronJobSpec{
+					JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "nightly"}}},
+					}},
+				},
+			},
+			wantKind:           "CronJob",
+			wantAPIVersion:     "batch/v1",
+			wantService:        "nightly",
+			wantGeneratedLabel: `app="nightly"`,
+		},
 	}
 
 	for _, tc := range cases {
@@ -193,6 +234,9 @@ func TestServicePreflightResolvesNonDeploymentTargets(t *testing.T) {
 			scheme := runtime.NewScheme()
 			if err := appsv1.AddToScheme(scheme); err != nil {
 				t.Fatalf("add apps scheme: %v", err)
+			}
+			if err := batchv1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add batch scheme: %v", err)
 			}
 			if err := corev1.AddToScheme(scheme); err != nil {
 				t.Fatalf("add core scheme: %v", err)
