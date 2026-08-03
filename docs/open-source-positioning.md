@@ -8,8 +8,10 @@ as a general-purpose agent shell first.
 Its open-source value is:
 
 ```text
-turn RCA from an ephemeral AI answer
-into governed, evidence-verifiable Kubernetes workflow state with replay-oriented artifacts
+turn every Kubernetes incident investigation into verifiable, auditable,
+replayable, and reusable organizational knowledge instead of letting it
+disappear into Slack threads, dashboard screenshots, terminal history,
+or individual responder memory
 ```
 
 FluxSeer RCA favors explicit Kubernetes-native configuration over automatic discovery. It is for teams that want to define investigation scope, datasource boundaries, and model-provider choices themselves, accepting some CRD learning cost in exchange for customizability, low default resource usage, and auditability.

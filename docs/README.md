@@ -11,9 +11,16 @@ Current API identity: `aiops.platform/v1alpha1`
 The API group/version identity is fixed for the current v0.3 line. This does
 not mean all future v1alpha1 schema fields are GA-stable.
 
+FluxSeer RCA's highest-value promise is turning every Kubernetes incident
+investigation into verifiable, auditable, replayable, and reusable
+organizational knowledge instead of letting it disappear into Slack threads,
+dashboard screenshots, terminal history, or individual responder memory.
+
 ## Current Product Truth
 
 - Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
+- Highest-value promise: make Kubernetes incident investigations durable,
+  evidence-linked organizational knowledge.
 - Current release scope: `v0.3.0-beta.3` is a beta hardening prerelease with canonical RCA preflight, evidence gating, direct RiskRule compatibility, runtime default hardening, least-privilege RBAC defaults, GHCR images, Helm OCI packaging, and verified provenance.
 - Current v0.3 engineering state: post-`v0.3.0-beta.3` stabilization and broader runtime validation.
 - `InvestigationRequest` is the primary operator-first entrypoint for ad-hoc or externally triggered RCA.

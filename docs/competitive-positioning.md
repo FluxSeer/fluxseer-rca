@@ -15,6 +15,15 @@ Sharper positioning:
 FluxSeer RCA makes Kubernetes RCA governable, verifiable, and replay-oriented.
 ```
 
+Highest-value promise:
+
+```text
+FluxSeer RCA turns every Kubernetes incident investigation into verifiable,
+auditable, replayable, and reusable organizational knowledge instead of
+letting it disappear into Slack threads, dashboard screenshots, terminal
+history, or individual responder memory.
+```
+
 FluxSeer RCA does not merely generate RCA answers. It provides the control, evidence contract, policy boundary, and execution record required to trust and operationalize RCA at scale.
 
 ## Strategic Boundary
@@ -102,6 +111,7 @@ Concrete promise:
 - every important RCA claim traces to evidence
 - every hosted AI transmission has policy and audit context
 - every investigation can become a replay or evaluation input
+- every completed investigation can become reusable organizational knowledge
 
 The minimum valuable scenario is:
 

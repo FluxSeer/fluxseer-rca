@@ -22,6 +22,10 @@ Alternative shorter version:
 
 `CRD-first RCA workflow, evidence, and audit contract for Kubernetes platforms.`
 
+Highest-value promise:
+
+`Turns Kubernetes incident investigations into verifiable, auditable, replayable, and reusable organizational knowledge.`
+
 ## Suggested Topics
 
 - `kubernetes`
@@ -45,6 +49,11 @@ Alternative shorter version:
 # FluxSeer RCA
 
 Kubernetes-native control plane for evidence-verifiable RCA.
+
+FluxSeer RCA turns Kubernetes incident investigations into verifiable,
+auditable, replayable, and reusable organizational knowledge instead of
+letting them disappear into Slack threads, dashboard screenshots, terminal
+history, or individual responder memory.
 ```
 
 Compatibility note:

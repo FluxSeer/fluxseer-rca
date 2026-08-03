@@ -35,6 +35,15 @@ FluxSeer RCA turns RCA into a governed, evidence-verifiable,
 replay-oriented Kubernetes-native workflow.
 ```
 
+Highest-value promise:
+
+```text
+FluxSeer RCA turns every Kubernetes incident investigation into verifiable,
+auditable, replayable, and reusable organizational knowledge instead of
+letting it disappear into Slack threads, dashboard screenshots, terminal
+history, or individual responder memory.
+```
+
 Current release scope:
 
 ```text
@@ -114,7 +123,7 @@ Remediation must remain downstream from RCA and must not grant reasoning provide
 
 FluxAgent exists to give Kubernetes platform teams an auditable RCA workflow substrate without requiring them to adopt a black-box AI monitoring agent, a full replacement observability stack, or a specific model vendor.
 
-The core advantage is not that FluxAgent can also use AI to look at Kubernetes problems. The core advantage is that it turns temporary, opaque, and hard-to-repeat RCA into governed workflow state.
+The core advantage is not that FluxAgent can also use AI to look at Kubernetes problems. The core advantage is that it turns temporary, opaque, and hard-to-repeat RCA into durable organizational knowledge with governed workflow state.
 
 FluxAgent should solve operational problems platform teams actually feel:
 
@@ -134,6 +143,7 @@ The intended value is:
 - hosted OpenAI, Claude, and Gemini providers are opt-in through workload-scoped credentials
 - RCA output is stored in CRD status for GitOps, dashboards, alerting, and automation
 - important RCA claims should become linked to compact evidence references and explicit verification status
+- completed investigations can become reusable incident knowledge instead of staying in Slack, screenshots, terminal history, or responder memory
 - optional remediation remains guarded and secondary
 
 This project intentionally accepts some YAML and CRD learning cost in exchange for high customizability, provider neutrality, lower default resource usage, and security-first data boundaries.

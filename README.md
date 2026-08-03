@@ -13,6 +13,11 @@ rename release completes the migration.
 
 FluxSeer RCA turns production signals and operator questions into governed, evidence-verifiable RCA workflows with replay-oriented audit artifacts in Kubernetes.
 
+Its highest-value promise is turning every Kubernetes incident investigation
+into verifiable, auditable, replayable, and reusable organizational knowledge
+instead of letting it disappear into Slack threads, dashboard screenshots,
+terminal history, or individual responder memory.
+
 FluxSeer RCA exists for platform teams that need to answer:
 
 ```text
@@ -28,7 +33,7 @@ FluxSeer RCA does not grant reasoning providers unrestricted cluster access. It 
 
 ## Why FluxAgent
 
-RCA often starts as an urgent, one-off investigation and ends as an ephemeral answer in Slack, a dashboard, or a terminal. After the incident, teams may not know which evidence was checked, which model produced the answer, which claims were supported, which data left the cluster, or whether a later model version would produce a worse conclusion.
+RCA often starts as an urgent, one-off investigation and ends as an ephemeral answer in Slack, a dashboard screenshot, a terminal command history, or one responder's memory. After the incident, teams may not know which evidence was checked, which model produced the answer, which claims were supported, which data left the cluster, or whether a later model version would produce a worse conclusion.
 
 FluxAgent exists to turn that workflow into durable Kubernetes API state:
 
