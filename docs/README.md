@@ -128,6 +128,7 @@ Historical releases:
 
 Current planning:
 
+- [v0.4 workload target coverage gate](backlog/v0.4-workload-target-coverage.md)
 - [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [v0.3 product direction](backlog/v0.3-product-direction.md)
 - [v0.3 architecture hardening](backlog/v0.3-architecture-hardening.md)

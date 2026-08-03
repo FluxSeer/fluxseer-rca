@@ -79,7 +79,8 @@ The current `v0.3` beta supports the operator-first RCA path:
 
 ```text
 InvestigationRequest
--> Kubernetes Events / Prometheus / Loki evidence
+-> Kubernetes workload target
+-> Kubernetes Events / workload status / Prometheus / Loki evidence
 -> heuristic, OpenAI, Claude, or Gemini RCA
 -> structured status with compact evidence references
 ```
@@ -97,13 +98,13 @@ Claim
 FluxAgent does not treat every CRD, adapter, and controller as equally mature:
 
 - Canonical core: `InvestigationRequest`, `DataSource`, `ModelProvider`.
-- Bootstrap detection: `RiskRule`.
+- Bootstrap detection: `RiskRule` for Kubernetes workload targets.
 - Materialized findings and compatibility output: `RiskSignal`.
 - Guarded experimental path: `RemediationPlan`, `AgentAction`.
 - Legacy opt-in path: annotation-driven Deployment risk detection.
 - Scaffold adapters: OpenTelemetry and CloudWatch.
 
-The default Helm install enables the read-only RCA path, heuristic provider, and Kubernetes baseline rule pack. It does not enable hosted providers, remediation controllers, legacy Deployment watching, or experimental executor permissions.
+The default Helm install enables the read-only RCA path, heuristic provider, and Kubernetes baseline rule pack. It supports explicit workload selectors for `Deployment`, `StatefulSet`, `DaemonSet`, `Job`, `CronJob`, and Pod owner-chain canonicalization. It does not enable hosted providers, remediation controllers, legacy Deployment watching, or experimental executor permissions, and it should not be described as complete cluster-wide RCA coverage.
 
 See [docs/capability-maturity.md](docs/capability-maturity.md) for the full maturity matrix.
 

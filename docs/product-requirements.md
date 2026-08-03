@@ -252,6 +252,7 @@ Required security posture:
 The current published beta release includes:
 
 - canonical `InvestigationRequest` ad-hoc read-only investigation
+- Kubernetes workload RCA target coverage for `Deployment`, `StatefulSet`, `DaemonSet`, `Job`, `CronJob`, and Pod owner-chain canonicalization
 - structured `InvestigationRequest.status` with verdict, claims, alternative hypotheses, missing evidence, degradation, execution, lineage, identity, and compatibility projections
 - `RiskRule`-driven recurring detection and baseline rule packs as bootstrap entrypoints
 - `DataSource`-backed evidence collection for Kubernetes Events, Prometheus, and Loki
@@ -277,6 +278,7 @@ Rule pack principles:
 
 - provide immediate value after install without taking over the user's observability stack
 - keep Kubernetes Events baseline enabled by default with a narrow namespace scope
+- support explicit workload selectors for `Deployment`, `StatefulSet`, `DaemonSet`, `Job`, and `CronJob`
 - keep Prometheus and Loki baselines disabled by default
 - never install external datasource backends as a side effect of enabling a rule pack
 - never install hosted `ModelProvider` resources or provider secrets as a side effect of enabling a rule pack
@@ -313,7 +315,7 @@ Portable baseline
 - CrashLoopBackOff
 - ImagePullBackOff
 - readiness failure
-- Deployment unavailable
+- workload unavailable or degraded
 - CPU throttling
 - memory near limit
 - restart increase

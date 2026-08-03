@@ -39,8 +39,10 @@ Supported `spec.target.kind` values for direct `InvestigationRequest` resolution
 - `DaemonSet` (`apps/v1`)
 - `ReplicaSet` (`apps/v1`)
 - `Pod` (`v1`)
+- `Job` (`batch/v1`)
+- `CronJob` (`batch/v1`)
 
-For workload controllers, FluxAgent merges object labels and pod-template labels when generating default metric and log queries. Template labels win when the same key appears in both places. `RiskRule` background target discovery remains a separate path and may support a narrower selector set.
+For workload controllers, FluxAgent merges object labels and pod-template labels when generating default metric and log queries. Template labels win when the same key appears in both places. `RiskRule` background target discovery supports the primary workload controllers and canonicalizes Pod owner chains where possible.
 
 ### Simple Mode: `dataSources[]`
 

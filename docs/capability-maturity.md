@@ -30,7 +30,8 @@ InvestigationRequest
 | Capability | Maturity | Default |
 | --- | --- | --- |
 | Kubernetes Events evidence | Supported | Enabled through the built-in adapter and default Kubernetes baseline rule pack. |
-| Kubernetes Deployment conditions | Supported | Available through explicit investigation queries and rule packs. |
+| Kubernetes workload status | Supported | `deploymentCondition` remains a compatibility query type and returns workload status for supported workload targets. |
+| Workload target discovery | Supported | `RiskRule` supports `Deployment`, `StatefulSet`, `DaemonSet`, `Job`, `CronJob`, and Pod owner-chain canonicalization. |
 | Prometheus datasource | Supported | Opt-in `DataSource` or environment configuration. |
 | Loki datasource | Supported | Opt-in `DataSource` or environment configuration. |
 | Heuristic provider | Supported | Default no-secret reasoning provider. |

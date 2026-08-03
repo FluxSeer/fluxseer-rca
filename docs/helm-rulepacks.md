@@ -278,3 +278,9 @@ make verify-rule-packs-kind
 ```
 
 `verify-rule-packs` checks rendered Helm output. `verify-rule-packs-kind` verifies Kubernetes Events, Prometheus, and Loki baselines in a real kind cluster with fake observability.
+
+`rulePacks.defaultTargetSelector.workloadSelector.kinds` can include
+`Deployment`, `StatefulSet`, `DaemonSet`, `Job`, and `CronJob`. Pod-level
+events are attributed to the owning workload when FluxSeer RCA can resolve the
+owner chain. This is Kubernetes workload RCA coverage, not complete
+cluster-wide RCA coverage for every Kubernetes resource kind.
