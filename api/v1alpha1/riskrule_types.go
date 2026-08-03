@@ -77,6 +77,13 @@ type RiskRuleSpec struct {
 type RiskRuleStatus struct {
 	ResourceStatus `json:",inline"`
 	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	Coverage       *RiskRuleCoverage  `json:"coverage,omitempty"`
+}
+
+type RiskRuleCoverage struct {
+	SupportedTargetKinds       []string         `json:"supportedTargetKinds,omitempty"`
+	UnsupportedDiscoveredKinds map[string]int32 `json:"unsupportedDiscoveredKinds,omitempty"`
+	Partial                    bool             `json:"partial,omitempty"`
 }
 
 type RiskRule struct {
@@ -125,6 +132,19 @@ func (in *RiskRule) DeepCopyInto(out *RiskRule) {
 	if in.Status.Conditions != nil {
 		out.Status.Conditions = make([]metav1.Condition, len(in.Status.Conditions))
 		copy(out.Status.Conditions, in.Status.Conditions)
+	}
+	if in.Status.Coverage != nil {
+		coverage := *in.Status.Coverage
+		if in.Status.Coverage.SupportedTargetKinds != nil {
+			coverage.SupportedTargetKinds = append([]string(nil), in.Status.Coverage.SupportedTargetKinds...)
+		}
+		if in.Status.Coverage.UnsupportedDiscoveredKinds != nil {
+			coverage.UnsupportedDiscoveredKinds = make(map[string]int32, len(in.Status.Coverage.UnsupportedDiscoveredKinds))
+			for key, value := range in.Status.Coverage.UnsupportedDiscoveredKinds {
+				coverage.UnsupportedDiscoveredKinds[key] = value
+			}
+		}
+		out.Status.Coverage = &coverage
 	}
 }
 

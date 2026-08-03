@@ -10,6 +10,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -434,6 +435,278 @@ func TestRiskRuleReconcilerRoutesMatchesToInvestigationRequest(t *testing.T) {
 	if storedRule.Status.Message != "processed 1 targets; 1 produced InvestigationRequest" {
 		t.Fatalf("unexpected rule status message: %s", storedRule.Status.Message)
 	}
+}
+
+func TestRiskRuleReconcilerRoutesStatefulSetMatchToInvestigationRequest(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add core scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "postgres",
+			Namespace: "prod",
+			UID:       types.UID("statefulset-postgres-uid"),
+			Labels:    map[string]string{"app": "postgres"},
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "postgres"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "postgres"}},
+			},
+		},
+	}
+	ruleObj := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "stateful-workload",
+			Namespace:  "fluxagent-test",
+			UID:        types.UID("riskrule-stateful-uid"),
+			Generation: 1,
+		},
+		Spec: v1alpha1.RiskRuleSpec{
+			Window: metav1.Duration{Duration: 10 * time.Minute},
+			TargetSelector: v1alpha1.TargetSelector{
+				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
+				WorkloadSelector: v1alpha1.WorkloadSelector{
+					MatchLabels: map[string]string{"app": "postgres"},
+					Kinds:       []string{"StatefulSet"},
+				},
+			},
+			Signals: []v1alpha1.RiskRuleSignal{{
+				Name:          "memory-pressure",
+				DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus-main"},
+				QueryType:     "metric",
+				QueryTemplate: `container_memory_working_set_bytes{namespace="{{ .namespace }}",app="{{ .app }}"}`,
+				Threshold:     v1alpha1.RiskThreshold{Operator: ">", Value: 1},
+			}},
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeCreateRequest},
+		},
+	}
+	promSource := &fakeRuleDataSource{
+		name:      "prometheus-main",
+		queryType: domain.QueryTypeMetric,
+		result: &datasource.QueryResult{
+			Source:    "prometheus-main",
+			QueryType: domain.QueryTypeMetric,
+			Records:   []map[string]any{{"value": "2"}},
+		},
+	}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskRule{}, &v1alpha1.RiskSignal{}, &v1alpha1.InvestigationRequest{}).
+		WithObjects(ruleObj, statefulSet).
+		Build()
+	reconciler := &RiskRuleReconciler{
+		Client:   client,
+		Scheme:   scheme,
+		Registry: datasource.NewRegistry(promSource),
+		Now:      func() time.Time { return now },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace}}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var requests v1alpha1.InvestigationRequestList
+	if err := client.List(context.Background(), &requests); err != nil {
+		t.Fatalf("list investigation requests: %v", err)
+	}
+	if len(requests.Items) != 1 {
+		t.Fatalf("expected one investigation request, got %d", len(requests.Items))
+	}
+	if requests.Items[0].Spec.Target.Kind != "StatefulSet" || requests.Items[0].Spec.Target.Name != "postgres" {
+		t.Fatalf("expected StatefulSet/postgres target, got %#v", requests.Items[0].Spec.Target)
+	}
+	if requests.Items[0].Annotations[annotationTargetUID] != "statefulset-postgres-uid" {
+		t.Fatalf("expected statefulset UID lineage, got %#v", requests.Items[0].Annotations)
+	}
+}
+
+func TestRiskRuleReconcilerRoutesAdditionalWorkloadKindsToInvestigationRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		kind     string
+		object   crclient.Object
+		wantName string
+		wantUID  string
+	}{
+		{
+			name: "daemonset",
+			kind: "DaemonSet",
+			object: &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "node-agent", Namespace: "prod", UID: types.UID("daemonset-node-agent-uid"), Labels: map[string]string{"app": "node-agent"}},
+				Spec: appsv1.DaemonSetSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "node-agent"}},
+					Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "node-agent"}}},
+				},
+			},
+			wantName: "node-agent",
+			wantUID:  "daemonset-node-agent-uid",
+		},
+		{
+			name: "job",
+			kind: "Job",
+			object: &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{Name: "backup", Namespace: "prod", UID: types.UID("job-backup-uid"), Labels: map[string]string{"app": "backup"}},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "backup"}}},
+				},
+			},
+			wantName: "backup",
+			wantUID:  "job-backup-uid",
+		},
+		{
+			name: "cronjob",
+			kind: "CronJob",
+			object: &batchv1.CronJob{
+				ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "prod", UID: types.UID("cronjob-nightly-uid"), Labels: map[string]string{"app": "nightly"}},
+				Spec: batchv1.CronJobSpec{
+					JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "nightly"}}},
+					}},
+				},
+			},
+			wantName: "nightly",
+			wantUID:  "cronjob-nightly-uid",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := appsv1.AddToScheme(scheme); err != nil {
+				t.Fatalf("failed to add apps scheme: %v", err)
+			}
+			if err := batchv1.AddToScheme(scheme); err != nil {
+				t.Fatalf("failed to add batch scheme: %v", err)
+			}
+			if err := corev1.AddToScheme(scheme); err != nil {
+				t.Fatalf("failed to add core scheme: %v", err)
+			}
+			if err := v1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatalf("failed to add scheme: %v", err)
+			}
+			ruleObj := &v1alpha1.RiskRule{
+				ObjectMeta: metav1.ObjectMeta{Name: tc.name + "-rule", Namespace: "fluxagent-test", UID: types.UID("riskrule-" + tc.name), Generation: 1},
+				Spec: v1alpha1.RiskRuleSpec{
+					Window: metav1.Duration{Duration: 10 * time.Minute},
+					TargetSelector: v1alpha1.TargetSelector{
+						NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
+						WorkloadSelector: v1alpha1.WorkloadSelector{
+							MatchLabels: map[string]string{"app": tc.wantName},
+							Kinds:       []string{tc.kind},
+						},
+					},
+					Signals: []v1alpha1.RiskRuleSignal{{
+						Name:          "unhealthy-events",
+						DatasourceRef: v1alpha1.LocalObjectReference{Name: "kubernetes-events"},
+						QueryType:     "event",
+						Reasons:       []string{"BackOff"},
+						Threshold:     v1alpha1.RiskThreshold{Operator: "count_gt", Value: 0},
+					}},
+					InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeCreateRequest},
+				},
+			}
+			eventSource := &fakeRuleDataSource{
+				name:      "kubernetes-events",
+				queryType: domain.QueryTypeEvent,
+				result: &datasource.QueryResult{
+					Source:    "kubernetes-events",
+					QueryType: domain.QueryTypeEvent,
+					Records:   []map[string]any{{"reason": "BackOff", "message": "workload pod is restarting"}},
+				},
+			}
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(&v1alpha1.RiskRule{}, &v1alpha1.RiskSignal{}, &v1alpha1.InvestigationRequest{}).
+				WithObjects(ruleObj, tc.object).
+				Build()
+			reconciler := &RiskRuleReconciler{
+				Client:   client,
+				Scheme:   scheme,
+				Registry: datasource.NewRegistry(eventSource),
+				Now:      func() time.Time { return time.Date(2026, 8, 3, 10, 0, 0, 0, time.UTC) },
+			}
+
+			if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace}}); err != nil {
+				t.Fatalf("reconcile failed: %v", err)
+			}
+			var requests v1alpha1.InvestigationRequestList
+			if err := client.List(context.Background(), &requests); err != nil {
+				t.Fatalf("list investigation requests: %v", err)
+			}
+			if len(requests.Items) != 1 {
+				t.Fatalf("expected one investigation request, got %d", len(requests.Items))
+			}
+			if requests.Items[0].Spec.Target.Kind != tc.kind || requests.Items[0].Spec.Target.Name != tc.wantName {
+				t.Fatalf("expected %s/%s target, got %#v", tc.kind, tc.wantName, requests.Items[0].Spec.Target)
+			}
+			if requests.Items[0].Annotations[annotationTargetUID] != tc.wantUID {
+				t.Fatalf("expected target UID %s, got %#v", tc.wantUID, requests.Items[0].Annotations)
+			}
+		})
+	}
+}
+
+func TestRiskRuleReconcilerReportsUnsupportedSelectedKindCoverage(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add core scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+	ruleObj := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-coverage", Namespace: "fluxagent-test", Generation: 1},
+		Spec: v1alpha1.RiskRuleSpec{
+			TargetSelector: v1alpha1.TargetSelector{
+				WorkloadSelector: v1alpha1.WorkloadSelector{Kinds: []string{"Deployment", "Node"}},
+			},
+		},
+	}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskRule{}).
+		WithObjects(ruleObj, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}).
+		Build()
+	reconciler := &RiskRuleReconciler{Client: client, Scheme: scheme}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace}}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var stored v1alpha1.RiskRule
+	if err := client.Get(context.Background(), types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace}, &stored); err != nil {
+		t.Fatalf("get risk rule: %v", err)
+	}
+	if stored.Status.Coverage == nil || !stored.Status.Coverage.Partial {
+		t.Fatalf("expected partial coverage, got %#v", stored.Status.Coverage)
+	}
+	if stored.Status.Coverage.UnsupportedDiscoveredKinds["Node"] != 1 {
+		t.Fatalf("expected one unsupported node, got %#v", stored.Status.Coverage.UnsupportedDiscoveredKinds)
+	}
+	ready := conditionByType(stored.Status.Conditions, conditionReady)
+	if ready == nil || ready.Status != metav1.ConditionFalse || ready.Reason != "PartialCoverage" {
+		t.Fatalf("expected Ready=False PartialCoverage, got %#v", ready)
+	}
+}
+
+func conditionByType(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+	return nil
 }
 
 func TestFindingIdentitySeparatesSameWorkloadNameDifferentUID(t *testing.T) {

@@ -47,6 +47,7 @@ type ruleEvaluationSummary struct {
 	MissingDatasource  *evaluationIssue
 	CapabilityMismatch *evaluationIssue
 	QueryFailure       *evaluationIssue
+	CoveragePartial    *evaluationIssue
 }
 
 const findingIdentitySchemaVersion = "fluxagent-finding-identity-v1"
@@ -66,6 +67,16 @@ func (r *RiskRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	coverage, err := rulepkgCoverage(ctx, r.Client, rule.Spec.TargetSelector)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if coverage.Partial {
+		summary.CoveragePartial = &evaluationIssue{
+			Reason:  "PartialCoverage",
+			Message: "risk rule target selector includes unsupported Kubernetes resource kinds; see status.coverage",
+		}
+	}
 
 	original := rule.DeepCopy()
 	statusMessage := fmt.Sprintf("processed %d targets; %d produced %s", targets, riskCount, producedObjectKind(rule.Spec.InvestigationPolicy.Mode))
@@ -79,6 +90,7 @@ func (r *RiskRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		rule.Generation,
 		now(),
 	)
+	rule.Status.Coverage = coverage
 	applyRiskRuleConditions(&rule.Status, rule.Generation, summary, now())
 	if statusChangedRiskRule(original, &rule) {
 		if err := r.Status().Update(ctx, &rule); err != nil && !recordStatusUpdateConflict("RiskRule", err) {
@@ -423,6 +435,10 @@ func mergeRuleEvaluationSummary(current, next ruleEvaluationSummary) ruleEvaluat
 		copy := *next.QueryFailure
 		current.QueryFailure = &copy
 	}
+	if current.CoveragePartial == nil && next.CoveragePartial != nil {
+		copy := *next.CoveragePartial
+		current.CoveragePartial = &copy
+	}
 	return current
 }
 
@@ -439,7 +455,7 @@ func applyRiskRuleConditions(status *v1alpha1.RiskRuleStatus, generation int64, 
 		setStatusCondition(&status.Conditions, conditionQueryTypeSupported, metav1.ConditionTrue, "AllQueryTypesSupported", "all datasource query types were supported", generation, now)
 	}
 
-	if summary.MissingDatasource != nil || summary.CapabilityMismatch != nil || summary.QueryFailure != nil {
+	if summary.MissingDatasource != nil || summary.CapabilityMismatch != nil || summary.QueryFailure != nil || summary.CoveragePartial != nil {
 		message := firstNonEmptyIssueMessage(summary)
 		reason := firstNonEmptyIssueReason(summary)
 		setStatusCondition(&status.Conditions, conditionReady, metav1.ConditionFalse, reason, message, generation, now)
@@ -466,6 +482,25 @@ func applyEvidenceConditions(status *v1alpha1.RiskSignalStatus, generation int64
 		return
 	}
 	setStatusCondition(&status.Conditions, conditionEvidenceReady, metav1.ConditionTrue, "AllEvidenceSourcesReady", "all datasource references resolved and supported the requested query types", generation, now)
+}
+
+func rulepkgCoverage(ctx context.Context, kubeClient client.Client, selector v1alpha1.TargetSelector) (*v1alpha1.RiskRuleCoverage, error) {
+	report, err := rule.DiscoverCoverage(ctx, kubeClient, selector)
+	if err != nil {
+		return nil, err
+	}
+	coverage := &v1alpha1.RiskRuleCoverage{
+		SupportedTargetKinds:       append([]string(nil), report.SupportedTargetKinds...),
+		UnsupportedDiscoveredKinds: map[string]int32{},
+		Partial:                    report.Partial,
+	}
+	for key, value := range report.UnsupportedDiscoveredKinds {
+		coverage.UnsupportedDiscoveredKinds[key] = value
+	}
+	if len(coverage.UnsupportedDiscoveredKinds) == 0 {
+		coverage.UnsupportedDiscoveredKinds = nil
+	}
+	return coverage, nil
 }
 
 func applyFindingCondition(status *v1alpha1.RiskSignalStatus, generation int64, matches []rule.Match, now time.Time) {
@@ -557,6 +592,9 @@ func firstNonEmptyIssueMessage(summary ruleEvaluationSummary) string {
 	if summary.QueryFailure != nil && strings.TrimSpace(summary.QueryFailure.Message) != "" {
 		return summary.QueryFailure.Message
 	}
+	if summary.CoveragePartial != nil && strings.TrimSpace(summary.CoveragePartial.Message) != "" {
+		return summary.CoveragePartial.Message
+	}
 	return "no evaluation issues recorded"
 }
 
@@ -569,6 +607,9 @@ func firstNonEmptyIssueReason(summary ruleEvaluationSummary) string {
 	}
 	if summary.QueryFailure != nil && strings.TrimSpace(summary.QueryFailure.Reason) != "" {
 		return summary.QueryFailure.Reason
+	}
+	if summary.CoveragePartial != nil && strings.TrimSpace(summary.CoveragePartial.Reason) != "" {
+		return summary.CoveragePartial.Reason
 	}
 	return "EvaluationDegraded"
 }
