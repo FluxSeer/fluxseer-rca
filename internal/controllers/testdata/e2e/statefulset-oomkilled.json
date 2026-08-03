@@ -1,0 +1,51 @@
+{
+  "name": "statefulset-oomkilled",
+  "profile": "OOMKilled",
+  "target": {
+    "apiVersion": "apps/v1",
+    "kind": "StatefulSet",
+    "namespace": "prod",
+    "name": "postgres"
+  },
+  "datasources": [
+    {
+      "name": "kubernetes-events",
+      "queryType": "event",
+      "records": [
+        {
+          "reason": "OOMKilled",
+          "message": "postgres-0 container was killed after exceeding memory limit"
+        }
+      ]
+    },
+    {
+      "name": "prometheus",
+      "queryType": "metric",
+      "records": [
+        {
+          "metric": "container_memory_working_set_bytes",
+          "value": 2147483648
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Postgres StatefulSet OOMKilled",
+    "riskSummary": "The postgres StatefulSet is failing because pods exceed memory limits.",
+    "severity": "high",
+    "confidenceScore": 86,
+    "rationale": "OOMKilled event and memory metric evidence are present.",
+    "rcaHypothesis": "The StatefulSet is degraded because postgres pods are under memory pressure and were OOMKilled.",
+    "rcaCauses": [
+      "OOMKilled events and memory metrics indicate memory pressure"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "ResourcePressure",
+    "claimVerification": "Supported",
+    "providerCalls": 1
+  }
+}

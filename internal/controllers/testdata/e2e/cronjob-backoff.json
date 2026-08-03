@@ -1,0 +1,41 @@
+{
+  "name": "cronjob-backoff",
+  "profile": "CrashLoopBackOff",
+  "target": {
+    "apiVersion": "batch/v1",
+    "kind": "CronJob",
+    "namespace": "prod",
+    "name": "nightly-backup"
+  },
+  "datasources": [
+    {
+      "name": "kubernetes-events",
+      "queryType": "event",
+      "records": [
+        {
+          "reason": "BackOff",
+          "message": "Back-off restarting failed container from nightly-backup Job"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Nightly CronJob restart backoff",
+    "riskSummary": "The CronJob-created Job is failing because its pod is in BackOff.",
+    "severity": "medium",
+    "confidenceScore": 80,
+    "rationale": "BackOff event evidence is present.",
+    "rcaHypothesis": "The CronJob run failed because the created Job pod entered a BackOff restart loop.",
+    "rcaCauses": [
+      "BackOff events show the CronJob-created pod is repeatedly restarting"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "CrashLoop",
+    "claimVerification": "Supported",
+    "providerCalls": 1
+  }
+}

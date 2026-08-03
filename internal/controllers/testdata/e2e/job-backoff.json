@@ -1,0 +1,41 @@
+{
+  "name": "job-backoff",
+  "profile": "CrashLoopBackOff",
+  "target": {
+    "apiVersion": "batch/v1",
+    "kind": "Job",
+    "namespace": "prod",
+    "name": "backup"
+  },
+  "datasources": [
+    {
+      "name": "kubernetes-events",
+      "queryType": "event",
+      "records": [
+        {
+          "reason": "BackOff",
+          "message": "Back-off restarting failed backup container"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Backup Job restart backoff",
+    "riskSummary": "The backup Job is failing because its pod is in BackOff.",
+    "severity": "medium",
+    "confidenceScore": 80,
+    "rationale": "BackOff event evidence is present.",
+    "rcaHypothesis": "The Job failed because the backup pod entered a BackOff restart loop.",
+    "rcaCauses": [
+      "BackOff events show the Job pod is repeatedly restarting"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "CrashLoop",
+    "claimVerification": "Supported",
+    "providerCalls": 1
+  }
+}

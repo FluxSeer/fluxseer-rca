@@ -1,0 +1,41 @@
+{
+  "name": "daemonset-backoff",
+  "profile": "CrashLoopBackOff",
+  "target": {
+    "apiVersion": "apps/v1",
+    "kind": "DaemonSet",
+    "namespace": "prod",
+    "name": "node-agent"
+  },
+  "datasources": [
+    {
+      "name": "kubernetes-events",
+      "queryType": "event",
+      "records": [
+        {
+          "reason": "BackOff",
+          "message": "Back-off restarting failed container node-agent"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "DaemonSet pods restarting",
+    "riskSummary": "The node-agent DaemonSet has pods in restart backoff.",
+    "severity": "high",
+    "confidenceScore": 82,
+    "rationale": "BackOff event evidence is present.",
+    "rcaHypothesis": "The DaemonSet is degraded because node-agent pods are in BackOff restart loops.",
+    "rcaCauses": [
+      "BackOff events show repeated pod restarts"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "CrashLoop",
+    "claimVerification": "Supported",
+    "providerCalls": 1
+  }
+}

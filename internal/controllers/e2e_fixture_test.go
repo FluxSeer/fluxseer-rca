@@ -9,6 +9,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -126,6 +127,9 @@ func fixtureReconciler(t *testing.T, fixture rawToFinalFixture) (*InvestigationR
 	if err := appsv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("add apps scheme: %v", err)
 	}
+	if err := batchv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add batch scheme: %v", err)
+	}
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatalf("add core scheme: %v", err)
 	}
@@ -185,6 +189,44 @@ func fixtureTargetOrDefault(target fixtureTarget) fixtureTarget {
 
 func fixtureTargetObjects(target fixtureTarget) []client.Object {
 	switch target.Kind {
+	case "StatefulSet":
+		return []client.Object{
+			&appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{Name: target.Name, Namespace: target.Namespace, Labels: map[string]string{"app": target.Name}},
+				Spec: appsv1.StatefulSetSpec{
+					Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": target.Name}}},
+				},
+			},
+		}
+	case "DaemonSet":
+		return []client.Object{
+			&appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Name: target.Name, Namespace: target.Namespace, Labels: map[string]string{"app": target.Name}},
+				Spec: appsv1.DaemonSetSpec{
+					Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": target.Name}}},
+				},
+			},
+		}
+	case "Job":
+		return []client.Object{
+			&batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{Name: target.Name, Namespace: target.Namespace, Labels: map[string]string{"app": target.Name}},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": target.Name}}},
+				},
+			},
+		}
+	case "CronJob":
+		return []client.Object{
+			&batchv1.CronJob{
+				ObjectMeta: metav1.ObjectMeta{Name: target.Name, Namespace: target.Namespace, Labels: map[string]string{"app": target.Name}},
+				Spec: batchv1.CronJobSpec{
+					JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": target.Name}}},
+					}},
+				},
+			},
+		}
 	case "Pod":
 		return []client.Object{
 			&corev1.Pod{
