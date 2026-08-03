@@ -8,8 +8,10 @@ default_render="$(mktemp)"
 all_render="$(mktemp)"
 scoped_render="$(mktemp)"
 scoped_values="$(mktemp)"
+multikind_render="$(mktemp)"
+multikind_values="$(mktemp)"
 cleanup() {
-  rm -f "$default_render" "$all_render" "$scoped_render" "$scoped_values"
+  rm -f "$default_render" "$all_render" "$scoped_render" "$scoped_values" "$multikind_render" "$multikind_values"
 }
 trap cleanup EXIT
 
@@ -24,6 +26,21 @@ rulePacks:
       matchNames: []
 VALUES
 helm template fluxagent "$chart" --namespace fluxagent-system -f "$scoped_values" >"$scoped_render"
+cat >"$multikind_values" <<'VALUES'
+rulePacks:
+  defaultTargetSelector:
+    namespaceSelector:
+      matchNames:
+        - prod
+    workloadSelector:
+      kinds:
+        - Deployment
+        - StatefulSet
+        - DaemonSet
+        - Job
+        - CronJob
+VALUES
+helm template fluxagent "$chart" --namespace fluxagent-system -f "$multikind_values" >"$multikind_render"
 
 require_contains() {
   file="$1"
@@ -86,5 +103,12 @@ fi
 require_contains "$scoped_render" "matchNames:"
 require_contains "$scoped_render" "matchNames: []"
 require_not_contains "$scoped_render" '- "fluxagent-system"'
+
+require_contains "$multikind_render" "- prod"
+require_contains "$multikind_render" "- Deployment"
+require_contains "$multikind_render" "- StatefulSet"
+require_contains "$multikind_render" "- DaemonSet"
+require_contains "$multikind_render" "- Job"
+require_contains "$multikind_render" "- CronJob"
 
 echo "rule pack rendering verified"
