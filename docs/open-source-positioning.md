@@ -16,6 +16,8 @@ or individual responder memory
 
 FluxSeer RCA favors explicit Kubernetes-native configuration over automatic discovery. It is for teams that want to define investigation scope, datasource boundaries, and model-provider choices themselves, accepting some CRD learning cost in exchange for customizability, low default resource usage, and auditability.
 
+Its primary audience is platform teams and security/compliance-governance stakeholders who need to justify AI-assisted RCA to an internal or external auditor — not individual on-call responders looking for the fastest incident chat tool. The CRD learning cost and explicit-configuration model are deliberate tradeoffs for that audience: they buy auditability and control at the cost of first-run speed. Teams without an audit or governance requirement may find a lighter-weight, chat-first tool a better fit for the incident-response moment itself.
+
 Security is part of the product positioning. FluxSeer RCA is read-only by default, secret-minimizing by design, and usable in heuristic-only mode without sending evidence to an external model provider.
 
 ## What Is Open Source Here

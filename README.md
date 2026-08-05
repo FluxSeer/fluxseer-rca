@@ -1,6 +1,6 @@
 # FluxSeer RCA
 
-Kubernetes-native SRE RCA control plane for teams that want explicit, auditable, and security-first AI-assisted investigation.
+Kubernetes-native RCA control plane for platform and security/compliance-governance teams that need explicit, auditable, and security-first AI-assisted investigation — not a general-purpose on-call chat assistant.
 
 Current release: `v0.3.0-beta.3`
 
