@@ -193,7 +193,7 @@ Canonical v0.3 status fields:
 - `execution`
 - richer evidence provenance and claim verification semantics
 
-`confidence` is a provider- or verifier-derived ranking score, not a calibrated probability of correctness. `RiskSignal.spec.confidence`, `RiskSignal.status.rcaCauses[].confidence`, and `RemediationPlan.spec.confidence` use integer scores from `0` to `100`; the v0.3 `InvestigationRequest.status.verdict.confidence` contract uses a normalized score from `0.0` to `1.0`.
+> **Note — `confidence` is not one scale.** It is always a provider- or verifier-derived ranking score, never a calibrated probability of correctness, but the numeric range differs by CRD: `RiskSignal.spec.confidence`, `RiskSignal.status.rcaCauses[].confidence`, and `RemediationPlan.spec.confidence` use integers from `0` to `100`; the canonical `InvestigationRequest.status.verdict.confidence` contract uses a normalized score from `0.0` to `1.0`. Do not compare or threshold these fields against each other without converting scales first.
 
 ## Security Posture
 

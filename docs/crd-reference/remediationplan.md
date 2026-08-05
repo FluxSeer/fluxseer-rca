@@ -78,6 +78,8 @@ Severity inherited from the originating `RiskSignal`.
 
 Confidence score from `0` to `100`, inherited from the upstream risk analysis. This is a heuristic or provider-derived ranking score, not a calibrated probability that the remediation is correct.
 
+> **Scale note:** this `0`-`100` integer scale is not the same as the canonical `InvestigationRequest.status.verdict.confidence` score, which is normalized `0.0`-`1.0`. Do not compare the raw values across CRDs without converting scales first.
+
 ### `spec.dryRun`
 
 Whether the plan should still be handled in guarded or simulation-first mode.

@@ -257,6 +257,8 @@ These fields are the v0.3 target contract. New integrations should check the gen
 - `confidence`: compatibility normalized score from `0.0` to `1.0`; this is a ranking score, not a calibrated probability
 - `confidenceDetail`: provider, verifier, confidence band, and scoring-method metadata
 
+> **Scale note:** this `0.0`-`1.0` score is not the same scale as `RiskSignal.spec.confidence`, `RiskSignal.status.rcaCauses[].confidence`, or `RemediationPlan.spec.confidence`, which are integers from `0` to `100`. Converting between them requires an explicit `score * 100` (or `/ 100`) conversion; do not compare the raw values.
+
 `status.evidenceCoverage` is written for required-evidence profile gates. It lets external reviewers distinguish a complete negative result from missing or irrelevant evidence without reading raw datasource payloads.
 
 `status.claims[]` stores machine-addressable RCA claims:

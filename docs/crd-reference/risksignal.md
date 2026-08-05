@@ -99,6 +99,8 @@ Current severity strings used by the repo:
 
 Integer detection confidence score from `0` to `100` for the merged finding. This is a heuristic or provider-derived ranking score, not a calibrated probability that the RCA is correct. It does not represent root-cause confidence; use `RCAReady`, `RemediationReady`, and canonical `InvestigationRequest.status.verdict` fields to decide whether RCA or remediation results are consumable.
 
+> **Scale note:** this `0`-`100` integer scale is not the same as the canonical `InvestigationRequest.status.verdict.confidence` score, which is normalized `0.0`-`1.0`. Do not compare the raw values across CRDs without converting scales first.
+
 ### `spec.dryRun`
 
 Whether the generated signal is intended for non-mutating or review-first handling. `v0.1` generated signals use `true`.
