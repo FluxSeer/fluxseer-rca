@@ -71,10 +71,24 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 	}
 	for _, event := range matched[:retain] {
 		records = append(records, map[string]any{
-			"reason":  event.Reason,
-			"message": event.Message,
-			"type":    event.Type,
-			"object":  event.InvolvedObject.Name,
+			"reason":             event.Reason,
+			"message":            event.Message,
+			"type":               event.Type,
+			"object":             event.InvolvedObject.Name,
+			"eventUID":           string(event.UID),
+			"eventName":          event.Name,
+			"eventNamespace":     event.Namespace,
+			"involvedObjectKind": event.InvolvedObject.Kind,
+			"involvedObjectName": event.InvolvedObject.Name,
+			"involvedObjectUID":  string(event.InvolvedObject.UID),
+			"firstTimestamp":     event.FirstTimestamp.Time.UTC().Format(time.RFC3339),
+			"lastTimestamp":      event.LastTimestamp.Time.UTC().Format(time.RFC3339),
+			"count":              event.Count,
+			"reportingComponent": event.ReportingController,
+			"reportingInstance":  event.ReportingInstance,
+			"sourceComponent":    event.Source.Component,
+			"sourceHost":         event.Source.Host,
+			"resourceVersion":    event.ResourceVersion,
 		})
 	}
 

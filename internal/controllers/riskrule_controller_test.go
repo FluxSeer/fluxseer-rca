@@ -279,6 +279,117 @@ func TestRiskRuleReconcilerCreatesIdempotentRiskSignalFromMatchingDeployment(t *
 	}
 }
 
+func TestRiskRuleReconcilerDeduplicatesSameEventAcrossWindowBuckets(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 8, 3, 2, 28, 24, 0, time.UTC)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "codex-wq-deploy-102521",
+			Namespace:  "database-test",
+			UID:        types.UID("deployment-uid"),
+			Generation: 1,
+			Labels:     map[string]string{"app": "codex-wq-deploy-102521"},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "codex-wq-deploy-102521"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "codex-wq-deploy-102521"}},
+			},
+		},
+	}
+	ruleObj := &v1alpha1.RiskRule{
+		TypeMeta: metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "RiskRule"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "fluxagent-kubernetes-baseline",
+			Namespace:  "fluxagent-test",
+			UID:        types.UID("riskrule-uid"),
+			Generation: 1,
+		},
+		Spec: v1alpha1.RiskRuleSpec{
+			Interval: metav1.Duration{Duration: 2 * time.Minute},
+			Window:   metav1.Duration{Duration: 10 * time.Minute},
+			Severity: "warning",
+			TargetSelector: v1alpha1.TargetSelector{
+				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"database-test"}},
+				WorkloadSelector:  v1alpha1.WorkloadSelector{Kinds: []string{"Deployment"}},
+			},
+			Signals: []v1alpha1.RiskRuleSignal{
+				{
+					Name:          "restart-backoff",
+					DatasourceRef: v1alpha1.LocalObjectReference{Name: "events-main"},
+					QueryType:     "event",
+					Reasons:       []string{"BackOff"},
+					Threshold:     v1alpha1.RiskThreshold{Operator: "count_gt", Value: 0},
+				},
+			},
+		},
+	}
+	eventSource := &fakeRuleDataSource{
+		name:      "events-main",
+		queryType: domain.QueryTypeEvent,
+		result: &datasource.QueryResult{
+			Source:    "events-main",
+			QueryType: domain.QueryTypeEvent,
+			Records: []map[string]any{{
+				"eventUID":           "event-uid-1",
+				"involvedObjectUID":  "pod-uid-1",
+				"involvedObjectKind": "Pod",
+				"involvedObjectName": "codex-wq-deploy-102521-66695bbbdd-9c8x6",
+				"reason":             "BackOff",
+				"message":            "codex workload qualification clean: Deployment pod BackOff event",
+				"firstTimestamp":     "2026-08-03T02:27:00Z",
+				"reportingComponent": "codex-workload-qualification",
+			}},
+		},
+	}
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskRule{}, &v1alpha1.RiskSignal{}).
+		WithObjects(ruleObj, deployment).
+		Build()
+	registry := datasource.NewRegistry()
+	registry.RegisterNamed("events-main", eventSource)
+	reconciler := &RiskRuleReconciler{
+		Client:   client,
+		Scheme:   scheme,
+		Registry: registry,
+		Now:      func() time.Time { return now },
+	}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace}}
+	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("first reconcile failed: %v", err)
+	}
+	now = time.Date(2026, 8, 3, 2, 30, 24, 0, time.UTC)
+	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("second reconcile failed: %v", err)
+	}
+
+	var signals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &signals, crclient.InNamespace("database-test")); err != nil {
+		t.Fatalf("list risk signals: %v", err)
+	}
+	if len(signals.Items) != 1 {
+		t.Fatalf("expected same event across buckets to update one RiskSignal, got %d", len(signals.Items))
+	}
+	identity := signals.Items[0].Spec.FindingIdentity
+	if identity == nil {
+		t.Fatal("expected finding identity")
+	}
+	if identity.WindowBucket != "1785724200" {
+		t.Fatalf("expected latest evaluation window bucket to be recorded as metadata, got %s", identity.WindowBucket)
+	}
+	if signals.Items[0].Annotations[annotationWindowBucket] != "" {
+		t.Fatalf("direct RiskSignal should not use window bucket annotation")
+	}
+}
+
 func TestRiskRuleReconcilerRoutesMatchesToInvestigationRequest(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
@@ -737,7 +848,7 @@ func TestFindingIdentitySeparatesSameWorkloadNameDifferentUID(t *testing.T) {
 	}
 }
 
-func TestFindingIdentitySeparatesOccurrenceByGenerationAndWindow(t *testing.T) {
+func TestFindingIdentityKeepsOccurrenceStableAcrossWindowAndSeparatesGeneration(t *testing.T) {
 	riskRule := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "latency-regression",
@@ -760,8 +871,68 @@ func TestFindingIdentitySeparatesOccurrenceByGenerationAndWindow(t *testing.T) {
 	if first.ObjectFindingIdentity != second.ObjectFindingIdentity || first.ObjectFindingIdentity != third.ObjectFindingIdentity {
 		t.Fatalf("expected object identity to remain stable across occurrences")
 	}
-	if first.IncidentOccurrence == second.IncidentOccurrence || first.IncidentOccurrence == third.IncidentOccurrence {
-		t.Fatalf("expected occurrence identity to change by window or generation, got first=%s second=%s third=%s", first.IncidentOccurrence, second.IncidentOccurrence, third.IncidentOccurrence)
+	if first.IncidentOccurrence != second.IncidentOccurrence {
+		t.Fatalf("expected occurrence identity to remain stable across evaluation windows, got first=%s second=%s", first.IncidentOccurrence, second.IncidentOccurrence)
+	}
+	if first.IncidentOccurrence == third.IncidentOccurrence {
+		t.Fatalf("expected occurrence identity to change by target generation, got first=%s third=%s", first.IncidentOccurrence, third.IncidentOccurrence)
+	}
+}
+
+func TestInvestigationRequestNamePreservesHashSuffixWhenTruncated(t *testing.T) {
+	ruleName := "fluxagent-canonical-kubernetes-baseline"
+	firstTarget := "codex-wq-cron-102521-29762066"
+	secondTarget := "codex-wq-cron-102521-29762067"
+	firstOccurrence := "sha256:92060d515fee253fa0654d9804e1616b04377acd0e76a7eedba7fd95cf6f7f12"
+	secondOccurrence := "sha256:412701eea437c332591b0e125e371ba91bb75c54eece75fb701b4bf07cbea50c"
+
+	first := investigationRequestName(ruleName, firstTarget, firstOccurrence)
+	second := investigationRequestName(ruleName, secondTarget, secondOccurrence)
+
+	if len(first) > 63 || len(second) > 63 {
+		t.Fatalf("expected DNS label names, got first=%q len=%d second=%q len=%d", first, len(first), second, len(second))
+	}
+	if first == second {
+		t.Fatalf("expected distinct names for long CronJob Job targets, both got %q", first)
+	}
+	firstSuffix := first[len(first)-12:]
+	secondSuffix := second[len(second)-12:]
+	if !isLowerHex(firstSuffix) {
+		t.Fatalf("expected first name to preserve 12-char hash suffix, got %q", first)
+	}
+	if !isLowerHex(secondSuffix) {
+		t.Fatalf("expected second name to preserve 12-char hash suffix, got %q", second)
+	}
+	if firstSuffix == secondSuffix {
+		t.Fatalf("expected distinct hash suffixes, got first=%q second=%q", first, second)
+	}
+}
+
+func TestDirectRiskSignalNameStableForSameEventAcrossWindow(t *testing.T) {
+	riskRule := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "fluxagent-kubernetes-baseline",
+			Namespace:  "fluxagent-test",
+			UID:        types.UID("riskrule-uid"),
+			Generation: 1,
+		},
+	}
+	target := rule.Target{
+		Resource:   domain.ResourceRef{APIVersion: "batch/v1", Kind: "Job", Namespace: "database-test", Name: "codex-wq-cron-102521-29762066"},
+		UID:        "job-uid",
+		Generation: 1,
+	}
+	matches := []rule.Match{testEventFindingMatch("BackOff", "sha256:event-uid-digest")}
+	first := findingIdentity(riskRule, target, matches, "1785723600")
+	second := findingIdentity(riskRule, target, matches, "1785724200")
+
+	if first.IncidentOccurrence != second.IncidentOccurrence {
+		t.Fatalf("expected same event occurrence across buckets, got first=%s second=%s", first.IncidentOccurrence, second.IncidentOccurrence)
+	}
+	firstName := directRiskSignalName(riskRule.Name, target.Resource.Name, matches, first)
+	secondName := directRiskSignalName(riskRule.Name, target.Resource.Name, matches, second)
+	if firstName != secondName {
+		t.Fatalf("expected direct RiskSignal name to be stable across buckets, got first=%s second=%s", firstName, secondName)
 	}
 }
 
@@ -2323,4 +2494,39 @@ func testFindingMatch(signalName string, evidenceDigest string) rule.Match {
 			},
 		},
 	}
+}
+
+func testEventFindingMatch(reason string, evidenceDigest string) rule.Match {
+	return rule.Match{
+		Signal: v1alpha1.RiskRuleSignal{
+			Name:      "restart-backoff",
+			QueryType: "event",
+			Reasons:   []string{reason},
+		},
+		Summary:  reason + " matched",
+		Severity: "medium",
+		Evidence: []v1alpha1.EvidenceRef{
+			{
+				Kind:                   "event",
+				Source:                 "kubernetes-events",
+				Reason:                 reason,
+				Summary:                "pod event matched",
+				ContentDigest:          evidenceDigest,
+				DigestAlgorithm:        "sha256",
+				DigestCanonicalization: "fluxagent-kubernetes-event-identity-v1",
+			},
+		},
+	}
+}
+
+func isLowerHex(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f')) {
+			return false
+		}
+	}
+	return true
 }

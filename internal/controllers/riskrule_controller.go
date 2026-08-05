@@ -697,13 +697,15 @@ func investigationRequestName(ruleName, targetName, incidentOccurrence string) s
 	suffixSource := incidentOccurrence
 	sum := sha256.Sum256([]byte(suffixSource))
 	suffix := hex.EncodeToString(sum[:])[:12]
-	name := strings.ToLower(ruleName + "-" + targetName + "-" + suffix)
-	name = strings.ReplaceAll(name, "_", "-")
-	name = strings.ReplaceAll(name, ".", "-")
-	if len(name) <= 63 {
-		return strings.TrimSuffix(name, "-")
+	base := dnsLabelToken(ruleName + "-" + targetName)
+	if base == "" {
+		base = "investigation"
 	}
-	return strings.TrimSuffix(name[:63], "-")
+	tail := "-" + suffix
+	if len(base)+len(tail) <= 63 {
+		return strings.TrimSuffix(base+tail, "-")
+	}
+	return strings.TrimSuffix(base[:63-len(tail)], "-") + tail
 }
 
 func findingIdentity(riskRule *v1alpha1.RiskRule, target rule.Target, matches []rule.Match, windowBucket string) *v1alpha1.FindingIdentity {
@@ -738,7 +740,6 @@ func findingIdentity(riskRule *v1alpha1.RiskRule, target rule.Target, matches []
 		"objectFindingIdentity": object,
 		"sourceGeneration":      riskRule.Generation,
 		"targetGeneration":      target.Generation,
-		"windowBucket":          windowBucket,
 	})
 	return &v1alpha1.FindingIdentity{
 		SchemaVersion:          findingIdentitySchemaVersion,

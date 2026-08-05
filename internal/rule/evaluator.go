@@ -1,6 +1,9 @@
 package rule
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -176,10 +179,13 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 			matchCount++
 			if len(evidence) < 3 {
 				evidence = append(evidence, v1alpha1.EvidenceRef{
-					Kind:    "event",
-					Source:  result.Source,
-					Reason:  reason,
-					Summary: message,
+					Kind:                   "event",
+					Source:                 result.Source,
+					Reason:                 reason,
+					Summary:                message,
+					ContentDigest:          kubernetesEventEvidenceDigest(record),
+					DigestAlgorithm:        "sha256",
+					DigestCanonicalization: "fluxagent-kubernetes-event-identity-v1",
 				})
 			}
 			break
@@ -197,6 +203,49 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 		Summary:  kubernetesEventMatchSummary(signal, evidence, matchCount, target),
 		Evidence: evidence,
 	}
+}
+
+func kubernetesEventEvidenceDigest(record map[string]any) string {
+	eventUID := recordString(record, "eventUID")
+	payload := map[string]any{
+		"eventUID":           eventUID,
+		"eventName":          recordString(record, "eventName"),
+		"eventNamespace":     recordString(record, "eventNamespace"),
+		"involvedObjectKind": recordString(record, "involvedObjectKind"),
+		"involvedObjectName": recordString(record, "involvedObjectName"),
+		"involvedObjectUID":  recordString(record, "involvedObjectUID"),
+		"reason":             recordString(record, "reason"),
+		"firstTimestamp":     recordString(record, "firstTimestamp"),
+		"reportingComponent": recordString(record, "reportingComponent"),
+		"sourceComponent":    recordString(record, "sourceComponent"),
+		"messageDigest":      digestString(recordString(record, "message")),
+	}
+	if eventUID == "" {
+		payload["lastTimestamp"] = recordString(record, "lastTimestamp")
+		payload["count"] = recordString(record, "count")
+	}
+	return "sha256:" + digestPayload(payload)
+}
+
+func recordString(record map[string]any, key string) string {
+	value, ok := record[key]
+	if !ok || value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func digestString(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func digestPayload(payload map[string]any) string {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return digestString(fmt.Sprint(payload))
+	}
+	return digestString(string(data))
 }
 
 func kubernetesEventMatchSummary(signal v1alpha1.RiskRuleSignal, evidence []v1alpha1.EvidenceRef, matchCount int, target domain.ResourceRef) string {
