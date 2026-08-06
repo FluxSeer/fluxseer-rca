@@ -14,17 +14,17 @@
 apiVersion: aiops.platform/v1alpha1
 kind: RiskRule
 metadata:
-  name: {{ printf "fluxagent-app-%s" $profile.name | trunc 63 | trimSuffix "-" }}
+  name: {{ printf "fluxseer-rca-app-%s" $profile.name | trunc 63 | trimSuffix "-" }}
   namespace: {{ $.Release.Namespace }}
   labels:
-    {{- include "fluxagent.labels" $ | nindent 4 }}
+    {{- include "fluxseer-rca.labels" $ | nindent 4 }}
     app.kubernetes.io/component: rule-pack
     aiops.platform/rule-pack: application-profile
     aiops.platform/application-profile: {{ $profile.name | quote }}
   annotations:
     aiops.platform/rule-pack.description: "Application-specific signal profile"
 spec:
-  {{- include "fluxagent.rulePackTargetSelector" (dict "root" $ "selector" $.Values.rulePacks.defaultTargetSelector) | nindent 2 }}
+  {{- include "fluxseer-rca.rulePackTargetSelector" (dict "root" $ "selector" $.Values.rulePacks.defaultTargetSelector) | nindent 2 }}
   interval: {{ $interval | quote }}
   window: {{ $window | quote }}
   severity: {{ $severity | quote }}

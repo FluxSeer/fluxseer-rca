@@ -2,17 +2,17 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "fluxagent.fullname" . }}-dashboard
+  name: {{ include "fluxseer-rca.fullname" . }}-dashboard
   namespace: {{ default .Release.Namespace .Values.metrics.grafanaDashboard.namespace }}
   labels:
-    {{- include "fluxagent.labels" . | nindent 4 }}
+    {{- include "fluxseer-rca.labels" . | nindent 4 }}
     {{- with .Values.metrics.grafanaDashboard.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 data:
-  fluxagent-dashboard.json: |
+  fluxseer-rca-dashboard.json: |
     {
-      "title": "FluxAgent RCA Control Plane",
+      "title": "FluxSeer RCA Control Plane",
       "schemaVersion": 39,
       "version": 1,
       "refresh": "30s",
@@ -26,8 +26,8 @@ data:
               "legendFormat": "{{`{{name}}`}}"
             },
             {
-              "expr": "fluxagent_queue_depth",
-              "legendFormat": "fluxagent_queue_depth {{`{{name}}`}}"
+              "expr": "fluxseer_rca_queue_depth",
+              "legendFormat": "fluxseer_rca_queue_depth {{`{{name}}`}}"
             }
           ]
         },
@@ -36,11 +36,11 @@ data:
           "title": "Datasource Scheduler",
           "targets": [
             {
-              "expr": "fluxagent_datasource_query_queue_depth",
+              "expr": "fluxseer_rca_datasource_query_queue_depth",
               "legendFormat": "queued {{`{{scheduler}}`}}"
             },
             {
-              "expr": "fluxagent_datasource_queries_in_flight",
+              "expr": "fluxseer_rca_datasource_queries_in_flight",
               "legendFormat": "in flight {{`{{scheduler}}`}}"
             }
           ]
@@ -64,7 +64,7 @@ data:
           "title": "RCA Results",
           "targets": [
             {
-              "expr": "sum by (outcome) (rate(fluxagent_investigation_total[5m]))",
+              "expr": "sum by (outcome) (rate(fluxseer_rca_investigation_total[5m]))",
               "legendFormat": "{{`{{outcome}}`}}"
             }
           ]

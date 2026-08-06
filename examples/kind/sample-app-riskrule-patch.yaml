@@ -1,8 +1,8 @@
 - op: remove
-  path: /metadata/annotations/fluxagent.aiops.platform~1enabled
+  path: /metadata/annotations/fluxseer-rca.aiops.platform~1enabled
 - op: remove
-  path: /metadata/annotations/fluxagent.aiops.platform~1prometheus-query
+  path: /metadata/annotations/fluxseer-rca.aiops.platform~1prometheus-query
 - op: remove
-  path: /metadata/annotations/fluxagent.aiops.platform~1prometheus-threshold
+  path: /metadata/annotations/fluxseer-rca.aiops.platform~1prometheus-threshold
 - op: remove
-  path: /metadata/annotations/fluxagent.aiops.platform~1loki-query
+  path: /metadata/annotations/fluxseer-rca.aiops.platform~1loki-query

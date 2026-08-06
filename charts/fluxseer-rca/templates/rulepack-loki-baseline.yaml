@@ -2,17 +2,17 @@
 apiVersion: aiops.platform/v1alpha1
 kind: RiskRule
 metadata:
-  name: fluxagent-loki-baseline
+  name: fluxseer-rca-loki-baseline
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "fluxagent.labels" . | nindent 4 }}
+    {{- include "fluxseer-rca.labels" . | nindent 4 }}
     app.kubernetes.io/component: rule-pack
     aiops.platform/rule-pack: loki-baseline
   annotations:
     aiops.platform/rule-pack.description: "Loki baseline for common error log patterns"
     aiops.platform/rule-pack.sensitive-data: "logs may contain sensitive data; hosted RCA uses provider-bound redaction"
 spec:
-  {{- include "fluxagent.rulePackTargetSelector" (dict "root" . "selector" .Values.rulePacks.defaultTargetSelector) | nindent 2 }}
+  {{- include "fluxseer-rca.rulePackTargetSelector" (dict "root" . "selector" .Values.rulePacks.defaultTargetSelector) | nindent 2 }}
   interval: {{ .Values.rulePacks.lokiBaseline.interval | quote }}
   window: {{ .Values.rulePacks.lokiBaseline.window | quote }}
   severity: {{ .Values.rulePacks.lokiBaseline.severity | quote }}

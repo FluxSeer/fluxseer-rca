@@ -8,12 +8,12 @@ source "${script_dir}/common.sh"
 VERSION="${VERSION:?VERSION is required}"
 IMAGE_TAG="${IMAGE_TAG:-lifecycle-release-test}"
 TARGET_PLATFORM="${TARGET_PLATFORM:-linux/amd64}"
-IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-fluxagent/operator}"
-DEMO_IMAGE_REPOSITORY="${DEMO_IMAGE_REPOSITORY:-fluxagent/demo-observability}"
-CLUSTER_NAME="${FLUXAGENT_LIFECYCLE_CLUSTER_NAME:-fluxagent-lifecycle}"
-RELEASE_NAME="${FLUXAGENT_LIFECYCLE_RELEASE_NAME:-fluxagent}"
-RELEASE_NAMESPACE="${FLUXAGENT_LIFECYCLE_RELEASE_NAMESPACE:-fluxagent-system}"
-DEMO_NAMESPACE="${FLUXAGENT_DEMO_NAMESPACE:-fluxagent-demo}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/operator}"
+DEMO_IMAGE_REPOSITORY="${DEMO_IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/demo-observability}"
+CLUSTER_NAME="${FLUXSEER_RCA_LIFECYCLE_CLUSTER_NAME:-fluxseer-rca-lifecycle}"
+RELEASE_NAME="${FLUXSEER_RCA_LIFECYCLE_RELEASE_NAME:-fluxseer-rca}"
+RELEASE_NAMESPACE="${FLUXSEER_RCA_LIFECYCLE_RELEASE_NAMESPACE:-fluxseer-rca-system}"
+DEMO_NAMESPACE="${FLUXSEER_RCA_DEMO_NAMESPACE:-fluxseer-rca-demo}"
 
 OPERATOR_IMAGE_REF="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 DEMO_IMAGE_REF="${DEMO_IMAGE_REPOSITORY}:${IMAGE_TAG}"
@@ -66,7 +66,7 @@ wait_for_crds() {
 install_chart() {
   local phase="$1"
 
-  helm upgrade --install "${RELEASE_NAME}" "${repo_root}/charts/fluxagent" \
+  helm upgrade --install "${RELEASE_NAME}" "${repo_root}/charts/fluxseer-rca" \
     --namespace "${RELEASE_NAMESPACE}" \
     --create-namespace \
     --wait \
@@ -74,11 +74,11 @@ install_chart() {
     --set image.repository="${IMAGE_REPOSITORY}" \
     --set image.tag="${IMAGE_TAG}" \
     --set image.pullPolicy=IfNotPresent \
-    --set controller.extraEnv[0].name=FLUXAGENT_WEBHOOK_URL \
-    --set controller.extraEnv[0].value=http://fluxagent-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080/demo/webhook \
-    --set controller.extraEnv[1].name=FLUXAGENT_SCAN_INTERVAL \
+    --set controller.extraEnv[0].name=FLUXSEER_RCA_WEBHOOK_URL \
+    --set controller.extraEnv[0].value=http://fluxseer-rca-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080/demo/webhook \
+    --set controller.extraEnv[1].name=FLUXSEER_RCA_SCAN_INTERVAL \
     --set controller.extraEnv[1].value=15s \
-    --set controller.extraEnv[2].name=FLUXAGENT_LIFECYCLE_PHASE \
+    --set controller.extraEnv[2].name=FLUXSEER_RCA_LIFECYCLE_PHASE \
     --set controller.extraEnv[2].value="${phase}"
 }
 
@@ -91,14 +91,14 @@ apply_demo_fixtures() {
   kubectl apply -k "${repo_root}/examples/modelproviders" -n "${DEMO_NAMESPACE}"
   kubectl apply -k "${repo_root}/examples/riskrules" -n "${DEMO_NAMESPACE}"
   kubectl patch datasource prometheus -n "${DEMO_NAMESPACE}" --type merge \
-    -p "{\"spec\":{\"endpoint\":\"http://fluxagent-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080\"}}"
+    -p "{\"spec\":{\"endpoint\":\"http://fluxseer-rca-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080\"}}"
   kubectl patch datasource loki -n "${DEMO_NAMESPACE}" --type merge \
-    -p "{\"spec\":{\"endpoint\":\"http://fluxagent-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080\"}}"
+    -p "{\"spec\":{\"endpoint\":\"http://fluxseer-rca-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080\"}}"
 }
 
 verify_controller_version() {
   local version_json
-  version_json="$(kubectl exec -n "${RELEASE_NAMESPACE}" deployment/fluxagent-controller-manager -- /fluxagent-operator version --output=json)"
+  version_json="$(kubectl exec -n "${RELEASE_NAMESPACE}" deployment/fluxseer-rca-controller-manager -- /fluxseer-rca-operator version --output=json)"
   if [[ "$(jq -r .version <<<"${version_json}")" != "${VERSION}" ]]; then
     echo "controller binary version mismatch: ${version_json}" >&2
     exit 1
@@ -114,7 +114,7 @@ verify_investigation_smoke() {
 
   (
     cd "${repo_root}"
-    GOWORK=off go run ./cmd/fluxagent investigate deployment fluxagent-sample \
+    GOWORK=off go run ./cmd/fluxseer investigate deployment fluxseer-rca-sample \
       --namespace "${DEMO_NAMESPACE}" \
       --request-namespace "${DEMO_NAMESPACE}" \
       --request-name "${request_name}" \
@@ -133,13 +133,13 @@ verify_investigation_smoke() {
 verify_install() {
   log_section "Verify Helm Install"
   wait_for_crds
-  kubectl rollout status deployment/fluxagent-controller-manager -n "${RELEASE_NAMESPACE}" --timeout=180s
-  kubectl rollout status deployment/fluxagent-observability -n "${DEMO_NAMESPACE}" --timeout=180s
-  kubectl rollout status deployment/fluxagent-sample -n "${DEMO_NAMESPACE}" --timeout=180s
-  kubectl wait deployment/fluxagent-controller-manager -n "${RELEASE_NAMESPACE}" --for=condition=Available=True --timeout=180s
-  kubectl get serviceaccount fluxagent-controller-manager -n "${RELEASE_NAMESPACE}"
-  kubectl get clusterrole fluxagent-manager-role
-  kubectl get clusterrolebinding fluxagent-manager-rolebinding
+  kubectl rollout status deployment/fluxseer-rca-controller-manager -n "${RELEASE_NAMESPACE}" --timeout=180s
+  kubectl rollout status deployment/fluxseer-rca-observability -n "${DEMO_NAMESPACE}" --timeout=180s
+  kubectl rollout status deployment/fluxseer-rca-sample -n "${DEMO_NAMESPACE}" --timeout=180s
+  kubectl wait deployment/fluxseer-rca-controller-manager -n "${RELEASE_NAMESPACE}" --for=condition=Available=True --timeout=180s
+  kubectl get serviceaccount fluxseer-rca-controller-manager -n "${RELEASE_NAMESPACE}"
+  kubectl get clusterrole fluxseer-rca-manager-role
+  kubectl get clusterrolebinding fluxseer-rca-manager-rolebinding
   verify_controller_version
   verify_investigation_smoke lifecycle-install-success
 }
@@ -147,7 +147,7 @@ verify_install() {
 verify_upgrade() {
   log_section "Verify Helm Upgrade"
   local generation_before
-  generation_before="$(kubectl get deployment fluxagent-controller-manager -n "${RELEASE_NAMESPACE}" -o jsonpath='{.metadata.generation}')"
+  generation_before="$(kubectl get deployment fluxseer-rca-controller-manager -n "${RELEASE_NAMESPACE}" -o jsonpath='{.metadata.generation}')"
 
   install_chart upgrade
 
@@ -159,10 +159,10 @@ verify_upgrade() {
   fi
 
   wait_for_command "deployment generation increased after upgrade" \
-    bash -c "[[ \"\$(kubectl get deployment fluxagent-controller-manager -n ${RELEASE_NAMESPACE} -o jsonpath='{.metadata.generation}')\" -gt \"${generation_before}\" ]]"
-  kubectl rollout status deployment/fluxagent-controller-manager -n "${RELEASE_NAMESPACE}" --timeout=180s
+    bash -c "[[ \"\$(kubectl get deployment fluxseer-rca-controller-manager -n ${RELEASE_NAMESPACE} -o jsonpath='{.metadata.generation}')\" -gt \"${generation_before}\" ]]"
+  kubectl rollout status deployment/fluxseer-rca-controller-manager -n "${RELEASE_NAMESPACE}" --timeout=180s
   wait_for_command "deployment observedGeneration catches up" \
-    bash -c "[[ \"\$(kubectl get deployment fluxagent-controller-manager -n ${RELEASE_NAMESPACE} -o jsonpath='{.status.observedGeneration}')\" == \"\$(kubectl get deployment fluxagent-controller-manager -n ${RELEASE_NAMESPACE} -o jsonpath='{.metadata.generation}')\" ]]"
+    bash -c "[[ \"\$(kubectl get deployment fluxseer-rca-controller-manager -n ${RELEASE_NAMESPACE} -o jsonpath='{.status.observedGeneration}')\" == \"\$(kubectl get deployment fluxseer-rca-controller-manager -n ${RELEASE_NAMESPACE} -o jsonpath='{.metadata.generation}')\" ]]"
   kubectl get investigationrequest lifecycle-install-success -n "${DEMO_NAMESPACE}"
   verify_investigation_smoke lifecycle-upgrade-success
 }
@@ -172,13 +172,13 @@ verify_uninstall() {
   helm uninstall "${RELEASE_NAME}" -n "${RELEASE_NAMESPACE}" --wait --timeout 120s
 
   wait_for_command "controller deployment removed" \
-    bash -c "! kubectl get deployment fluxagent-controller-manager -n ${RELEASE_NAMESPACE} >/dev/null 2>&1"
+    bash -c "! kubectl get deployment fluxseer-rca-controller-manager -n ${RELEASE_NAMESPACE} >/dev/null 2>&1"
   wait_for_command "service account removed" \
-    bash -c "! kubectl get serviceaccount fluxagent-controller-manager -n ${RELEASE_NAMESPACE} >/dev/null 2>&1"
+    bash -c "! kubectl get serviceaccount fluxseer-rca-controller-manager -n ${RELEASE_NAMESPACE} >/dev/null 2>&1"
   wait_for_command "cluster role removed" \
-    bash -c "! kubectl get clusterrole fluxagent-manager-role >/dev/null 2>&1"
+    bash -c "! kubectl get clusterrole fluxseer-rca-manager-role >/dev/null 2>&1"
   wait_for_command "cluster role binding removed" \
-    bash -c "! kubectl get clusterrolebinding fluxagent-manager-rolebinding >/dev/null 2>&1"
+    bash -c "! kubectl get clusterrolebinding fluxseer-rca-manager-rolebinding >/dev/null 2>&1"
 
   kubectl get crd investigationrequests.aiops.platform
   kubectl get investigationrequest lifecycle-install-success -n "${DEMO_NAMESPACE}"

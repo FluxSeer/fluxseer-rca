@@ -11,8 +11,8 @@ target="$1"
 target_abs="$(cd "$root/$target" && pwd)"
 target_rel="${target_abs#$root/}"
 
-image_repository="${IMAGE_REPOSITORY:-fluxagent/operator}"
-demo_image_repository="${DEMO_IMAGE_REPOSITORY:-fluxagent/demo-observability}"
+image_repository="${IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/operator}"
+demo_image_repository="${DEMO_IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/demo-observability}"
 image_tag="${IMAGE_TAG:-v0.2.0-beta.1}"
 
 tmp="$(mktemp -d "$root/.tmp-kustomize.XXXXXX")"
@@ -25,10 +25,10 @@ cat >"$tmp/kustomization.yaml" <<EOF
 resources:
   - ../$target_rel
 images:
-  - name: fluxagent/operator
+  - name: fluxseer/fluxseer-rca/operator
     newName: $image_repository
     newTag: $image_tag
-  - name: fluxagent/demo-observability
+  - name: fluxseer/fluxseer-rca/demo-observability
     newName: $demo_image_repository
     newTag: $image_tag
 EOF

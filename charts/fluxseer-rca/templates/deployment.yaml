@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fluxagent-controller-manager
+  name: fluxseer-rca-controller-manager
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "fluxagent.labels" . | nindent 4 }}
+    {{- include "fluxseer-rca.labels" . | nindent 4 }}
     app.kubernetes.io/component: controller-manager
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "fluxagent.selectorLabels" . | nindent 6 }}
+      {{- include "fluxseer-rca.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "fluxagent.selectorLabels" . | nindent 8 }}
+        {{- include "fluxseer-rca.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "fluxagent.serviceAccountName" . }}
+      serviceAccountName: {{ include "fluxseer-rca.serviceAccountName" . }}
       containers:
         - name: manager
-          image: {{ include "fluxagent.image" . | quote }}
+          image: {{ include "fluxseer-rca.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
-            - /fluxagent-operator
+            - /fluxseer-rca-operator
           args:
             - --metrics-bind-address={{ .Values.controller.metricsBindAddress }}
             - --health-probe-bind-address={{ .Values.controller.healthProbeBindAddress }}

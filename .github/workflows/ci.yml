@@ -1,4 +1,4 @@
-name: FluxAgent CI
+name: FluxSeer RCA CI
 
 on:
   push:
@@ -26,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: fluxagent-ci-${{ github.workflow }}-${{ github.ref }}
+  group: fluxseer-rca-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -36,7 +36,7 @@ env:
 jobs:
   verify:
     name: Verify Source And Packaging
-    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON(format('["self-hosted","Linux","X64","{0}"]', github.ref == 'refs/heads/main' && 'fluxagent-prod' || 'fluxagent-test')) }}
+    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON(format('["self-hosted","Linux","X64","{0}"]', github.ref == 'refs/heads/main' && 'fluxseer-rca-prod' || 'fluxseer-rca-test')) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -91,18 +91,18 @@ jobs:
             VERSION="${RELEASE_VERSION}" \
             IMAGE_TAG="ci-${GITHUB_SHA}" \
             TARGET_PLATFORM="${TARGET_PLATFORM}" \
-            IMAGE_REPOSITORY="fluxagent/operator" \
-            DEMO_IMAGE_REPOSITORY="fluxagent/demo-observability"
+            IMAGE_REPOSITORY="fluxseer/fluxseer-rca/operator" \
+            DEMO_IMAGE_REPOSITORY="fluxseer/fluxseer-rca/demo-observability"
 
       - name: Verify rule packs
         run: make verify-rule-packs
 
       - name: Helm lint
-        run: helm lint charts/fluxagent
+        run: helm lint charts/fluxseer-rca
 
   image-identity:
     name: Verify Image Identity
-    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON(format('["self-hosted","Linux","X64","{0}"]', github.ref == 'refs/heads/main' && 'fluxagent-prod' || 'fluxagent-test')) }}
+    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON(format('["self-hosted","Linux","X64","{0}"]', github.ref == 'refs/heads/main' && 'fluxseer-rca-prod' || 'fluxseer-rca-test')) }}
     needs: [verify]
     steps:
       - name: Checkout
@@ -145,13 +145,13 @@ jobs:
             VERSION="${RELEASE_VERSION}" \
             IMAGE_TAG="ci-${GITHUB_SHA}" \
             TARGET_PLATFORM="${TARGET_PLATFORM}" \
-            IMAGE_REPOSITORY="fluxagent/operator" \
-            DEMO_IMAGE_REPOSITORY="fluxagent/demo-observability"
+            IMAGE_REPOSITORY="fluxseer/fluxseer-rca/operator" \
+            DEMO_IMAGE_REPOSITORY="fluxseer/fluxseer-rca/demo-observability"
 
       - name: Write summary
         run: |
           {
-            echo "### FluxAgent CI"
+            echo "### FluxSeer RCA CI"
             echo "- Version input: ${RELEASE_VERSION}"
             echo "- Target platform: ${TARGET_PLATFORM}"
             echo "- Commit: ${GITHUB_SHA}"
@@ -159,13 +159,13 @@ jobs:
 
   publish-test-image:
     name: Publish Test Artifacts
-    runs-on: [self-hosted, Linux, X64, fluxagent-test]
+    runs-on: [self-hosted, Linux, X64, fluxseer-rca-test]
     needs: [verify, image-identity]
     if: github.event_name == 'push' && github.ref == 'refs/heads/test'
     env:
       HARBOR_PROJECT: fluxseer
-      HARBOR_REPOSITORY_PREFIX: fluxagent
-      CHART_NAME: fluxagent
+      HARBOR_REPOSITORY_PREFIX: fluxseer-rca
+      CHART_NAME: fluxseer-rca
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -264,8 +264,8 @@ jobs:
           set -euo pipefail
           chart_ref="oci://${{ steps.meta.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts"
           mkdir -p "dist/test-${GITHUB_SHA::7}"
-          helm lint charts/fluxagent
-          helm package charts/fluxagent \
+          helm lint charts/fluxseer-rca
+          helm package charts/fluxseer-rca \
             --version "${{ steps.meta.outputs.chart_version }}" \
             --app-version "${{ steps.meta.outputs.image_tag }}" \
             --destination "dist/test-${GITHUB_SHA::7}"
@@ -281,7 +281,7 @@ jobs:
       - name: Write test artifact summary
         run: |
           {
-            echo "### FluxAgent test artifacts"
+            echo "### FluxSeer RCA test artifacts"
             echo "- Operator image: ${{ steps.meta.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/operator:${{ steps.meta.outputs.image_tag }}"
             echo "- Helm chart: oci://${{ steps.meta.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts/${CHART_NAME} --version ${{ steps.meta.outputs.chart_version }}"
             echo "- Helm digest: ${HELM_DIGEST}"
@@ -291,7 +291,7 @@ jobs:
 
   publish-main-image:
     name: Publish Main Artifacts
-    runs-on: [self-hosted, Linux, X64, fluxagent-prod]
+    runs-on: [self-hosted, Linux, X64, fluxseer-rca-prod]
     needs: [verify, image-identity]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -299,8 +299,8 @@ jobs:
       packages: write
     env:
       OCI_REGISTRY: ghcr.io
-      OCI_REPOSITORY_NAME: fluxagent
-      CHART_NAME: fluxagent
+      OCI_REPOSITORY_NAME: fluxseer-rca
+      CHART_NAME: fluxseer-rca
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -390,8 +390,8 @@ jobs:
           set -euo pipefail
           chart_ref="oci://${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.repository_prefix }}/charts"
           mkdir -p "dist/main-${GITHUB_SHA::7}"
-          helm lint charts/fluxagent
-          helm package charts/fluxagent \
+          helm lint charts/fluxseer-rca
+          helm package charts/fluxseer-rca \
             --version "${{ steps.meta.outputs.chart_version }}" \
             --app-version "${{ steps.meta.outputs.image_tag }}" \
             --destination "dist/main-${GITHUB_SHA::7}"
@@ -407,7 +407,7 @@ jobs:
       - name: Write main artifact summary
         run: |
           {
-            echo "### FluxAgent main artifacts"
+            echo "### FluxSeer RCA main artifacts"
             echo "- Operator image: ${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.repository_prefix }}/operator:${{ steps.meta.outputs.image_tag }}"
             echo "- Helm chart: oci://${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.repository_prefix }}/charts/${CHART_NAME} --version ${{ steps.meta.outputs.chart_version }}"
             echo "- Helm digest: ${HELM_DIGEST}"

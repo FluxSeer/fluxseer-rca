@@ -2,16 +2,16 @@
 apiVersion: aiops.platform/v1alpha1
 kind: RiskRule
 metadata:
-  name: fluxagent-kubernetes-baseline
+  name: fluxseer-rca-kubernetes-baseline
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "fluxagent.labels" . | nindent 4 }}
+    {{- include "fluxseer-rca.labels" . | nindent 4 }}
     app.kubernetes.io/component: rule-pack
     aiops.platform/rule-pack: kubernetes-baseline
   annotations:
     aiops.platform/rule-pack.description: "Kubernetes Events baseline for common workload failures"
 spec:
-  {{- include "fluxagent.rulePackTargetSelector" (dict "root" . "selector" .Values.rulePacks.defaultTargetSelector) | nindent 2 }}
+  {{- include "fluxseer-rca.rulePackTargetSelector" (dict "root" . "selector" .Values.rulePacks.defaultTargetSelector) | nindent 2 }}
   interval: {{ .Values.rulePacks.kubernetesBaseline.interval | quote }}
   window: {{ .Values.rulePacks.kubernetesBaseline.window | quote }}
   severity: {{ .Values.rulePacks.kubernetesBaseline.severity | quote }}

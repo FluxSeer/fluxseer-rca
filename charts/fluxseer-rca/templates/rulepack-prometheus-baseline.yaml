@@ -2,16 +2,16 @@
 apiVersion: aiops.platform/v1alpha1
 kind: RiskRule
 metadata:
-  name: fluxagent-prometheus-baseline
+  name: fluxseer-rca-prometheus-baseline
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "fluxagent.labels" . | nindent 4 }}
+    {{- include "fluxseer-rca.labels" . | nindent 4 }}
     app.kubernetes.io/component: rule-pack
     aiops.platform/rule-pack: prometheus-baseline
   annotations:
     aiops.platform/rule-pack.description: "Prometheus baseline for common workload metric symptoms"
 spec:
-  {{- include "fluxagent.rulePackTargetSelector" (dict "root" . "selector" .Values.rulePacks.defaultTargetSelector) | nindent 2 }}
+  {{- include "fluxseer-rca.rulePackTargetSelector" (dict "root" . "selector" .Values.rulePacks.defaultTargetSelector) | nindent 2 }}
   interval: {{ .Values.rulePacks.prometheusBaseline.interval | quote }}
   window: {{ .Values.rulePacks.prometheusBaseline.window | quote }}
   severity: {{ .Values.rulePacks.prometheusBaseline.severity | quote }}

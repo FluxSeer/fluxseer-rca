@@ -1,4 +1,4 @@
-name: FluxAgent Release
+name: FluxSeer RCA Release
 
 on:
   push:
@@ -19,19 +19,19 @@ permissions:
   attestations: write
 
 concurrency:
-  group: fluxagent-release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+  group: fluxseer-rca-release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
   cancel-in-progress: false
 
 env:
   TARGET_PLATFORM: linux/amd64
   OCI_REGISTRY: ghcr.io
-  OCI_REPOSITORY_NAME: fluxagent
-  CHART_NAME: fluxagent
+  OCI_REPOSITORY_NAME: fluxseer-rca
+  CHART_NAME: fluxseer-rca
 
 jobs:
   publish:
     name: Publish Release Artifacts
-    runs-on: [self-hosted, Linux, X64, fluxagent-prod]
+    runs-on: [self-hosted, Linux, X64, fluxseer-rca-prod]
     steps:
       - name: Resolve release version
         id: release
@@ -236,8 +236,8 @@ jobs:
             docker buildx imagetools inspect "$ref" | awk '/Digest:/ {print $2; exit}'
           }
 
-          operator_digest="$(verify_image operator /fluxagent-operator FluxAgent)"
-          demo_digest="$(verify_image demo-observability /demo-observability 'FluxAgent Demo Observability')"
+          operator_digest="$(verify_image operator /fluxseer-rca-operator FluxSeer RCA)"
+          demo_digest="$(verify_image demo-observability /demo-observability 'FluxSeer RCA Demo Observability')"
           echo "operator_digest=$operator_digest" >> "$GITHUB_OUTPUT"
           echo "demo_digest=$demo_digest" >> "$GITHUB_OUTPUT"
 
@@ -249,8 +249,8 @@ jobs:
           version="${{ steps.release.outputs.version }}"
           chart_version="${{ steps.release.outputs.chart_version }}"
           mkdir -p "dist/release-$version"
-          helm lint charts/fluxagent
-          helm package charts/fluxagent --destination "dist/release-$version"
+          helm lint charts/fluxseer-rca
+          helm package charts/fluxseer-rca --destination "dist/release-$version"
           package="dist/release-$version/${CHART_NAME}-$chart_version.tgz"
           package_abs="$PWD/$package"
           shasum -a 256 "$package" | sed "s#  dist/release-$version/#  #" > "dist/release-$version/SHA256SUMS"
@@ -298,9 +298,9 @@ jobs:
           chart_version="${{ steps.release.outputs.chart_version }}"
           out_dir="dist/release-$version"
           cat >"$out_dir/RELEASE_NOTES.md" <<EOF
-          # FluxAgent $version
+          # FluxSeer RCA $version
 
-          FluxAgent $version is a read-only RCA beta release.
+          FluxSeer RCA $version is a read-only RCA beta release.
 
           ## Source
 
@@ -366,7 +366,7 @@ jobs:
                 repo,
                 tag_name: tag,
                 target_commitish: target,
-                name: `FluxAgent ${tag}`,
+                name: `FluxSeer RCA ${tag}`,
                 body,
                 draft: false,
                 prerelease: true,
@@ -415,7 +415,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo "### FluxAgent ${{ steps.release.outputs.version }} Published"
+            echo "### FluxSeer RCA ${{ steps.release.outputs.version }} Published"
             echo "- Source commit: ${{ steps.git.outputs.git_commit }}"
             echo "- Operator digest: ${{ steps.published.outputs.operator_digest }}"
             echo "- Demo digest: ${{ steps.published.outputs.demo_digest }}"

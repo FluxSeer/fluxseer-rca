@@ -1,39 +1,39 @@
-{{- define "fluxagent.name" -}}
+{{- define "fluxseer-rca.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "fluxagent.fullname" -}}
-{{- default "fluxagent" .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- define "fluxseer-rca.fullname" -}}
+{{- default "fluxseer-rca" .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "fluxagent.labels" -}}
-app.kubernetes.io/name: {{ include "fluxagent.name" . }}
+{{- define "fluxseer-rca.labels" -}}
+app.kubernetes.io/name: {{ include "fluxseer-rca.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
 {{- end -}}
 
-{{- define "fluxagent.selectorLabels" -}}
-app.kubernetes.io/name: fluxagent
+{{- define "fluxseer-rca.selectorLabels" -}}
+app.kubernetes.io/name: fluxseer-rca
 app.kubernetes.io/component: controller-manager
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
-{{- define "fluxagent.serviceAccountName" -}}
+{{- define "fluxseer-rca.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
-{{- default "fluxagent-controller-manager" .Values.serviceAccount.name -}}
+{{- default "fluxseer-rca-controller-manager" .Values.serviceAccount.name -}}
 {{- else -}}
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}
 {{- end -}}
 
-{{- define "fluxagent.image" -}}
+{{- define "fluxseer-rca.image" -}}
 {{- $tag := default .Chart.AppVersion .Values.image.tag -}}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end -}}
 
-{{- define "fluxagent.effectiveRbacProfile" -}}
+{{- define "fluxseer-rca.effectiveRbacProfile" -}}
 {{- if .Values.rbac.profile -}}
 {{- .Values.rbac.profile -}}
 {{- else if .Values.features.experimentalExecutor.enabled -}}
@@ -45,7 +45,7 @@ readOnlyRCA
 {{- end -}}
 {{- end -}}
 
-{{- define "fluxagent.rulePackTargetSelector" -}}
+{{- define "fluxseer-rca.rulePackTargetSelector" -}}
 {{- $root := .root -}}
 {{- $selector := default dict .selector -}}
 {{- $namespaceSelector := default dict $selector.namespaceSelector -}}

@@ -5,8 +5,8 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 version="${VERSION:?VERSION is required}"
 chart_version="${CHART_VERSION:-${version#v}}"
-image_repository="${IMAGE_REPOSITORY:-fluxagent/operator}"
-demo_image_repository="${DEMO_IMAGE_REPOSITORY:-fluxagent/demo-observability}"
+image_repository="${IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/operator}"
+demo_image_repository="${DEMO_IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/demo-observability}"
 image_tag="${IMAGE_TAG:-$version}"
 
 if [[ -z "$version" || "$version" == "dev" ]]; then
@@ -14,15 +14,15 @@ if [[ -z "$version" || "$version" == "dev" ]]; then
   exit 1
 fi
 
-chart_yaml="$root/charts/fluxagent/Chart.yaml"
-values_yaml="$root/charts/fluxagent/values.yaml"
+chart_yaml="$root/charts/fluxseer-rca/Chart.yaml"
+values_yaml="$root/charts/fluxseer-rca/values.yaml"
 
 actual_chart_name="$(awk -F': *' '$1 == "name" {print $2; exit}' "$chart_yaml" | tr -d '"')"
 actual_chart_version="$(awk -F': *' '$1 == "version" {print $2; exit}' "$chart_yaml" | tr -d '"')"
 actual_app_version="$(awk -F': *' '$1 == "appVersion" {print $2; exit}' "$chart_yaml" | tr -d '"')"
 
-if [[ "$actual_chart_name" != "fluxagent" ]]; then
-  echo "chart name mismatch: expected fluxagent, got $actual_chart_name" >&2
+if [[ "$actual_chart_name" != "fluxseer-rca" ]]; then
+  echo "chart name mismatch: expected fluxseer-rca, got $actual_chart_name" >&2
   exit 1
 fi
 
@@ -50,7 +50,7 @@ fi
 
 release_paths=(
   "$root/Makefile"
-  "$root/charts/fluxagent"
+  "$root/charts/fluxseer-rca"
   "$root/config/manager"
   "$root/config/default"
   "$root/examples/kind"

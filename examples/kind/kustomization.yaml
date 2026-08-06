@@ -1,4 +1,4 @@
-namespace: fluxagent-demo
+namespace: fluxseer-rca-demo
 
 resources:
   - ../../config/default
@@ -14,13 +14,13 @@ patches:
       group: apps
       version: v1
       kind: Deployment
-      name: fluxagent-controller-manager
+      name: fluxseer-rca-controller-manager
   - path: sample-app-riskrule-patch.yaml
     target:
       group: apps
       version: v1
       kind: Deployment
-      name: fluxagent-sample
+      name: fluxseer-rca-sample
 
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization

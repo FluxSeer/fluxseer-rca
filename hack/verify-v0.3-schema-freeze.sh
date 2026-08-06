@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-chart="${root}/charts/fluxagent"
+chart="${root}/charts/fluxseer-rca"
 
 for command_name in go kubectl helm; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
@@ -56,8 +56,8 @@ kubectl kustomize "${root}/examples/kind" >"${tmpdir}/examples-kind.yaml"
 
 echo "==> v0.3 schema freeze audit: Helm lint and render"
 helm lint "${chart}"
-helm template fluxagent "${chart}" --namespace fluxagent-system >"${tmpdir}/helm-default.yaml"
-helm template fluxagent "${chart}" --namespace fluxagent-system \
+helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system >"${tmpdir}/helm-default.yaml"
+helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
   --set rulePacks.prometheusBaseline.enabled=true \
   --set rulePacks.lokiBaseline.enabled=true \
   --set metrics.prometheusRule.enabled=true \
@@ -72,7 +72,7 @@ bash "${root}/hack/verify-rbac-profiles.sh"
 
 echo "==> v0.3 schema freeze audit: schema contract smoke checks"
 grep -q "kind: PrometheusRule" "${tmpdir}/helm-full.yaml"
-grep -q "fluxagent_queue_depth" "${tmpdir}/helm-full.yaml"
+grep -q "fluxseer_rca_queue_depth" "${tmpdir}/helm-full.yaml"
 grep -q "kind: RiskRule" "${tmpdir}/helm-full.yaml"
 grep -q "kind: InvestigationRequest" "${root}/config/crd/bases/aiops.platform_investigationrequests.yaml"
 grep -q "payloadRef:" "${root}/config/crd/bases/aiops.platform_investigationrequests.yaml"

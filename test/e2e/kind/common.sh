@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FLUXAGENT_DEMO_NAMESPACE="${FLUXAGENT_DEMO_NAMESPACE:-fluxagent-demo}"
-FLUXAGENT_RULE_NAME="${FLUXAGENT_RULE_NAME:-fluxagent-sample-latency}"
-FLUXAGENT_TARGET_NAME="${FLUXAGENT_TARGET_NAME:-fluxagent-sample}"
-FLUXAGENT_SIGNAL_NAME="${FLUXAGENT_SIGNAL_NAME:-}"
-FLUXAGENT_CLUSTER_NAME="${FLUXAGENT_CLUSTER_NAME:-fluxagent-demo}"
-FLUXAGENT_E2E_TIMEOUT_SECONDS="${FLUXAGENT_E2E_TIMEOUT_SECONDS:-240}"
-FLUXAGENT_E2E_POLL_SECONDS="${FLUXAGENT_E2E_POLL_SECONDS:-5}"
+FLUXSEER_RCA_DEMO_NAMESPACE="${FLUXSEER_RCA_DEMO_NAMESPACE:-fluxseer-rca-demo}"
+FLUXSEER_RCA_RULE_NAME="${FLUXSEER_RCA_RULE_NAME:-fluxseer-rca-sample-latency}"
+FLUXSEER_RCA_TARGET_NAME="${FLUXSEER_RCA_TARGET_NAME:-fluxseer-rca-sample}"
+FLUXSEER_RCA_SIGNAL_NAME="${FLUXSEER_RCA_SIGNAL_NAME:-}"
+FLUXSEER_RCA_CLUSTER_NAME="${FLUXSEER_RCA_CLUSTER_NAME:-fluxseer-rca-demo}"
+FLUXSEER_RCA_E2E_TIMEOUT_SECONDS="${FLUXSEER_RCA_E2E_TIMEOUT_SECONDS:-240}"
+FLUXSEER_RCA_E2E_POLL_SECONDS="${FLUXSEER_RCA_E2E_POLL_SECONDS:-5}"
 
 log_section() {
   printf '\n%s\n' "============================================================"
@@ -52,13 +52,13 @@ wait_for_command() {
   local description="$1"
   shift
 
-  local deadline=$((SECONDS + FLUXAGENT_E2E_TIMEOUT_SECONDS))
+  local deadline=$((SECONDS + FLUXSEER_RCA_E2E_TIMEOUT_SECONDS))
   until "$@"; do
     if (( SECONDS >= deadline )); then
       echo "timed out waiting for: ${description}" >&2
       return 1
     fi
-    sleep "${FLUXAGENT_E2E_POLL_SECONDS}"
+    sleep "${FLUXSEER_RCA_E2E_POLL_SECONDS}"
   done
 }
 
@@ -107,7 +107,7 @@ resolve_risk_signal_name() {
   local target_name="$3"
 
   kubectl get risksignal -n "${namespace}" \
-    -l "fluxagent.aiops.platform/risk-rule=${rule_name}" \
+    -l "fluxseer-rca.aiops.platform/risk-rule=${rule_name}" \
     --sort-by=.metadata.creationTimestamp \
     -o "jsonpath={range .items[?(@.spec.target.name==\"${target_name}\")]}{.metadata.name}{\"\\n\"}{end}" 2>/dev/null |
     tail -n1
@@ -117,7 +117,7 @@ wait_for_resolved_risk_signal() {
   local namespace="$1"
   local rule_name="$2"
   local target_name="$3"
-  local deadline=$((SECONDS + FLUXAGENT_E2E_TIMEOUT_SECONDS))
+  local deadline=$((SECONDS + FLUXSEER_RCA_E2E_TIMEOUT_SECONDS))
   local resolved=""
 
   until [[ -n "${resolved}" ]]; do
@@ -129,11 +129,11 @@ wait_for_resolved_risk_signal() {
       echo "timed out waiting for RiskSignal for ${rule_name}/${target_name}" >&2
       return 1
     fi
-    sleep "${FLUXAGENT_E2E_POLL_SECONDS}"
+    sleep "${FLUXSEER_RCA_E2E_POLL_SECONDS}"
   done
 
-  FLUXAGENT_SIGNAL_NAME="${resolved}"
-  export FLUXAGENT_SIGNAL_NAME
+  FLUXSEER_RCA_SIGNAL_NAME="${resolved}"
+  export FLUXSEER_RCA_SIGNAL_NAME
 }
 
 assert_contains() {
@@ -149,12 +149,12 @@ assert_contains() {
 }
 
 demo_state() {
-  local port="${FLUXAGENT_DEMO_PORT_FORWARD_PORT:-18080}"
+  local port="${FLUXSEER_RCA_DEMO_PORT_FORWARD_PORT:-18080}"
   local pf_log
   local pf_pid
 
   pf_log="$(mktemp)"
-  kubectl port-forward -n "${FLUXAGENT_DEMO_NAMESPACE}" service/fluxagent-observability "${port}:8080" >"${pf_log}" 2>&1 &
+  kubectl port-forward -n "${FLUXSEER_RCA_DEMO_NAMESPACE}" service/fluxseer-rca-observability "${port}:8080" >"${pf_log}" 2>&1 &
   pf_pid=$!
 
   cleanup_port_forward() {
@@ -202,7 +202,7 @@ demo_state_has_rca_summary() {
 }
 
 kind_cluster_exists() {
-  command -v kind >/dev/null 2>&1 && kind get clusters | grep -qx "${FLUXAGENT_CLUSTER_NAME}"
+  command -v kind >/dev/null 2>&1 && kind get clusters | grep -qx "${FLUXSEER_RCA_CLUSTER_NAME}"
 }
 
 cleanup_demo() {
@@ -211,7 +211,7 @@ cleanup_demo() {
     return 0
   fi
   if ! kind_cluster_exists; then
-    echo "skipping cleanup: cluster ${FLUXAGENT_CLUSTER_NAME} does not exist"
+    echo "skipping cleanup: cluster ${FLUXSEER_RCA_CLUSTER_NAME} does not exist"
     return 0
   fi
   log_section "Cleanup"

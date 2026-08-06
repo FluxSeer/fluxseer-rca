@@ -2,7 +2,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: ModelProvider
 metadata:
   name: gemini-provider
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   provider: gemini
   model: gemini-2.5-pro

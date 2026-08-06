@@ -8,15 +8,15 @@ source "${script_dir}/common.sh"
 VERSION="${VERSION:-dev}"
 IMAGE_TAG="${IMAGE_TAG:-rulepack-kind-test}"
 TARGET_PLATFORM="${TARGET_PLATFORM:-linux/amd64}"
-IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-fluxagent/operator}"
-DEMO_IMAGE_REPOSITORY="${DEMO_IMAGE_REPOSITORY:-fluxagent/demo-observability}"
-CLUSTER_NAME="${FLUXAGENT_RULE_PACK_CLUSTER_NAME:-fluxagent-rule-packs}"
-RELEASE_NAME="${FLUXAGENT_RULE_PACK_RELEASE_NAME:-fluxagent}"
-RELEASE_NAMESPACE="${FLUXAGENT_RULE_PACK_NAMESPACE:-fluxagent-rule-packs}"
-TARGET_NAME="${FLUXAGENT_RULE_PACK_TARGET_NAME:-fluxagent-baseline-crash}"
-RISK_RULE_NAME="fluxagent-kubernetes-baseline"
-PROMETHEUS_RISK_RULE_NAME="fluxagent-prometheus-baseline"
-LOKI_RISK_RULE_NAME="fluxagent-loki-baseline"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/operator}"
+DEMO_IMAGE_REPOSITORY="${DEMO_IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/demo-observability}"
+CLUSTER_NAME="${FLUXSEER_RCA_RULE_PACK_CLUSTER_NAME:-fluxseer-rca-rule-packs}"
+RELEASE_NAME="${FLUXSEER_RCA_RULE_PACK_RELEASE_NAME:-fluxseer-rca}"
+RELEASE_NAMESPACE="${FLUXSEER_RCA_RULE_PACK_NAMESPACE:-fluxseer-rca-rule-packs}"
+TARGET_NAME="${FLUXSEER_RCA_RULE_PACK_TARGET_NAME:-fluxseer-rca-baseline-crash}"
+RISK_RULE_NAME="fluxseer-rca-kubernetes-baseline"
+PROMETHEUS_RISK_RULE_NAME="fluxseer-rca-prometheus-baseline"
+LOKI_RISK_RULE_NAME="fluxseer-rca-loki-baseline"
 OPERATOR_IMAGE_REF="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 DEMO_IMAGE_REF="${DEMO_IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
@@ -64,7 +64,7 @@ wait_for_crds() {
 install_chart() {
   local values_file="$1"
 
-  helm upgrade --install "${RELEASE_NAME}" "${repo_root}/charts/fluxagent" \
+  helm upgrade --install "${RELEASE_NAME}" "${repo_root}/charts/fluxseer-rca" \
     --namespace "${RELEASE_NAMESPACE}" \
     --create-namespace \
     --wait \
@@ -82,7 +82,7 @@ image:
   pullPolicy: IfNotPresent
 controller:
   extraEnv:
-    - name: FLUXAGENT_SCAN_INTERVAL
+    - name: FLUXSEER_RCA_SCAN_INTERVAL
       value: 10s
 rulePacks:
   defaultTargetSelector:
@@ -119,7 +119,7 @@ EOF
 apply_fake_observability() {
   IMAGE_REPOSITORY="${IMAGE_REPOSITORY}" DEMO_IMAGE_REPOSITORY="${DEMO_IMAGE_REPOSITORY}" IMAGE_TAG="${IMAGE_TAG}" \
     bash "${repo_root}/hack/render-release-kustomize.sh" examples/fake-observability | kubectl apply -n "${RELEASE_NAMESPACE}" -f -
-  kubectl rollout status deployment/fluxagent-observability -n "${RELEASE_NAMESPACE}" --timeout=180s
+  kubectl rollout status deployment/fluxseer-rca-observability -n "${RELEASE_NAMESPACE}" --timeout=180s
 }
 
 apply_datasources() {
@@ -130,7 +130,7 @@ metadata:
   name: prometheus
 spec:
   type: prometheus
-  endpoint: http://fluxagent-observability.${RELEASE_NAMESPACE}.svc.cluster.local:8080
+  endpoint: http://fluxseer-rca-observability.${RELEASE_NAMESPACE}.svc.cluster.local:8080
   timeout: 10s
 ---
 apiVersion: aiops.platform/v1alpha1
@@ -139,7 +139,7 @@ metadata:
   name: loki
 spec:
   type: loki
-  endpoint: http://fluxagent-observability.${RELEASE_NAMESPACE}.svc.cluster.local:8080
+  endpoint: http://fluxseer-rca-observability.${RELEASE_NAMESPACE}.svc.cluster.local:8080
   timeout: 10s
 EOF
 }
@@ -193,8 +193,8 @@ wait_for_crashloop_event() {
 }
 
 inject_observability_fault() {
-  kubectl run fluxagent-rulepack-fault -n "${RELEASE_NAMESPACE}" --restart=Never --rm -i --image=curlimages/curl:8.8.0 -- \
-    curl -fsS -XPOST "http://fluxagent-observability:8080/demo/fault/${TARGET_NAME}"
+  kubectl run fluxseer-rca-rulepack-fault -n "${RELEASE_NAMESPACE}" --restart=Never --rm -i --image=curlimages/curl:8.8.0 -- \
+    curl -fsS -XPOST "http://fluxseer-rca-observability:8080/demo/fault/${TARGET_NAME}"
 }
 
 verify_risk_signal() {
@@ -204,7 +204,7 @@ verify_risk_signal() {
 
   log_section "Verify ${rule_name} RiskSignal And RCA"
   wait_for_resolved_risk_signal "${RELEASE_NAMESPACE}" "${rule_name}" "${TARGET_NAME}"
-  signal_name="${FLUXAGENT_SIGNAL_NAME}"
+  signal_name="${FLUXSEER_RCA_SIGNAL_NAME}"
   kubectl get "risksignal/${signal_name}" -n "${RELEASE_NAMESPACE}"
   wait_for_jsonpath_equals "risksignal/${signal_name}" "${RELEASE_NAMESPACE}" '{.status.phase}' 'Confirmed'
   wait_for_condition "risksignal/${signal_name}" "${RELEASE_NAMESPACE}" "EvidenceCollectionReady" "True"
@@ -214,7 +214,7 @@ verify_risk_signal() {
 
   local signal_json
   signal_json="$(kubectl get "risksignal/${signal_name}" -n "${RELEASE_NAMESPACE}" -o json)"
-  if [[ "$(jq -r '.metadata.labels["fluxagent.aiops.platform/risk-rule"]' <<<"${signal_json}")" != "${rule_name}" ]]; then
+  if [[ "$(jq -r '.metadata.labels["fluxseer-rca.aiops.platform/risk-rule"]' <<<"${signal_json}")" != "${rule_name}" ]]; then
     echo "RiskSignal is missing expected RiskRule label" >&2
     exit 1
   fi
@@ -248,7 +248,7 @@ log_section "Install Helm Release With Baseline Rule Pack"
 install_chart "${values_file}"
 rm -f "${values_file}"
 wait_for_crds
-kubectl rollout status deployment/fluxagent-controller-manager -n "${RELEASE_NAMESPACE}" --timeout=180s
+kubectl rollout status deployment/fluxseer-rca-controller-manager -n "${RELEASE_NAMESPACE}" --timeout=180s
 apply_fake_observability
 apply_datasources
 verify_baseline_rule

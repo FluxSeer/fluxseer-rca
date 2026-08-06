@@ -2,7 +2,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: investigate-open-api
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   target:
     namespace: prod

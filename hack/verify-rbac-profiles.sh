@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-chart="${root}/charts/fluxagent"
+chart="${root}/charts/fluxseer-rca"
 
 tmpdir="$(mktemp -d)"
 cleanup() {
@@ -20,18 +20,18 @@ legacy_clusterrole="${tmpdir}/legacy-clusterrole.yaml"
 remediation_clusterrole="${tmpdir}/remediation-clusterrole.yaml"
 experimental_clusterrole="${tmpdir}/experimental-clusterrole.yaml"
 
-helm template fluxagent "${chart}" --namespace fluxagent-system >"${default_render}"
-helm template fluxagent "${chart}" --namespace fluxagent-system \
+helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system >"${default_render}"
+helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
   --set features.legacyDeploymentRisk.enabled=true >"${legacy_render}"
-helm template fluxagent "${chart}" --namespace fluxagent-system \
+helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
   --set features.remediation.enabled=true \
   --set rbac.profile=remediation >"${remediation_render}"
-helm template fluxagent "${chart}" --namespace fluxagent-system \
+helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
   --set features.remediation.enabled=true \
   --set features.experimentalExecutor.enabled=true \
   --set rbac.profile=experimentalExecutor >"${experimental_render}"
 
-if helm template fluxagent "${chart}" --namespace fluxagent-system \
+if helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
   --set features.experimentalExecutor.enabled=true \
   --set rbac.profile=experimentalExecutor >"${invalid_experimental_render}" 2>&1; then
   echo "expected experimentalExecutor profile to fail without remediation enabled" >&2
@@ -83,7 +83,7 @@ assert_not_contains() {
 assert_contains "${default_render}" "--enable-legacy-deployment-risk=false" "legacy deployment watcher disabled by default"
 assert_contains "${default_render}" "--enable-remediation=false" "remediation disabled by default"
 assert_contains "${default_render}" "kind: Role" "namespaced provider Secret reader Role"
-assert_contains "${default_render}" "name: fluxagent-provider-secret-reader" "provider Secret reader RoleBinding"
+assert_contains "${default_render}" "name: fluxseer-rca-provider-secret-reader" "provider Secret reader RoleBinding"
 
 assert_not_contains "${default_clusterrole}" 'resources: ["secrets"]' "cluster-wide Secret read in default ClusterRole"
 assert_not_contains "${default_clusterrole}" 'resources: ["jobs"]' "Job mutation in default ClusterRole"

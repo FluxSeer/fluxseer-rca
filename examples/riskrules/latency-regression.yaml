@@ -1,15 +1,15 @@
 apiVersion: aiops.platform/v1alpha1
 kind: RiskRule
 metadata:
-  name: fluxagent-sample-latency
+  name: fluxseer-rca-sample-latency
 spec:
   targetSelector:
     namespaceSelector:
       matchNames:
-        - fluxagent-demo
+        - fluxseer-rca-demo
     workloadSelector:
       matchLabels:
-        app: fluxagent-sample
+        app: fluxseer-rca-sample
       kinds:
         - Deployment
   interval: 15s

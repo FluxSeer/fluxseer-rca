@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-chart="$root/charts/fluxagent"
+chart="$root/charts/fluxseer-rca"
 
 default_render="$(mktemp)"
 all_render="$(mktemp)"
@@ -15,8 +15,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-helm template fluxagent "$chart" --namespace fluxagent-system >"$default_render"
-helm template fluxagent "$chart" --namespace fluxagent-system \
+helm template fluxseer-rca "$chart" --namespace fluxseer-rca-system >"$default_render"
+helm template fluxseer-rca "$chart" --namespace fluxseer-rca-system \
   --set rulePacks.prometheusBaseline.enabled=true \
   --set rulePacks.lokiBaseline.enabled=true >"$all_render"
 cat >"$scoped_values" <<'VALUES'
@@ -25,7 +25,7 @@ rulePacks:
     namespaceSelector:
       matchNames: []
 VALUES
-helm template fluxagent "$chart" --namespace fluxagent-system -f "$scoped_values" >"$scoped_render"
+helm template fluxseer-rca "$chart" --namespace fluxseer-rca-system -f "$scoped_values" >"$scoped_render"
 cat >"$multikind_values" <<'VALUES'
 rulePacks:
   defaultTargetSelector:
@@ -40,7 +40,7 @@ rulePacks:
         - Job
         - CronJob
 VALUES
-helm template fluxagent "$chart" --namespace fluxagent-system -f "$multikind_values" >"$multikind_render"
+helm template fluxseer-rca "$chart" --namespace fluxseer-rca-system -f "$multikind_values" >"$multikind_render"
 
 require_contains() {
   file="$1"
@@ -60,7 +60,7 @@ require_not_contains() {
   fi
 }
 
-require_contains "$default_render" "name: fluxagent-kubernetes-baseline"
+require_contains "$default_render" "name: fluxseer-rca-kubernetes-baseline"
 require_contains "$default_render" "aiops.platform/rule-pack: kubernetes-baseline"
 require_contains "$default_render" "name: crashloop-backoff"
 require_contains "$default_render" "name: image-pull-failure"
@@ -68,18 +68,18 @@ require_contains "$default_render" "name: failed-scheduling"
 require_contains "$default_render" "name: oom-killed"
 require_contains "$default_render" "name: unhealthy-probe"
 require_contains "$default_render" "name: deployment-unavailable"
-require_contains "$default_render" '- "fluxagent-system"'
-require_not_contains "$default_render" "name: fluxagent-prometheus-baseline"
-require_not_contains "$default_render" "name: fluxagent-loki-baseline"
+require_contains "$default_render" '- "fluxseer-rca-system"'
+require_not_contains "$default_render" "name: fluxseer-rca-prometheus-baseline"
+require_not_contains "$default_render" "name: fluxseer-rca-loki-baseline"
 
-require_contains "$all_render" "name: fluxagent-prometheus-baseline"
+require_contains "$all_render" "name: fluxseer-rca-prometheus-baseline"
 require_contains "$all_render" "aiops.platform/rule-pack: prometheus-baseline"
 require_contains "$all_render" "name: high-error-rate"
 require_contains "$all_render" "name: high-latency"
 require_contains "$all_render" "name: pod-restart-rate"
 require_contains "$all_render" "name: cpu-saturation"
 require_contains "$all_render" "name: memory-saturation"
-require_contains "$all_render" "name: fluxagent-loki-baseline"
+require_contains "$all_render" "name: fluxseer-rca-loki-baseline"
 require_contains "$all_render" "aiops.platform/rule-pack: loki-baseline"
 require_contains "$all_render" "name: panic"
 require_contains "$all_render" "name: fatal"
@@ -102,7 +102,7 @@ fi
 
 require_contains "$scoped_render" "matchNames:"
 require_contains "$scoped_render" "matchNames: []"
-require_not_contains "$scoped_render" '- "fluxagent-system"'
+require_not_contains "$scoped_render" '- "fluxseer-rca-system"'
 
 require_contains "$multikind_render" "- prod"
 require_contains "$multikind_render" "- Deployment"

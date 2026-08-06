@@ -5,8 +5,8 @@ VERSION ?= dev
 RELEASE_VERSION ?= $(if $(filter dev,$(VERSION)),v0.2.0-beta.1,$(VERSION))
 V0_3_RELEASE_VERSION ?= v0.3.0-beta.3
 V0_3_PREVIOUS_RELEASE_VERSION ?= v0.3.0-beta.2
-V0_3_PUBLISHED_CHART_OCI ?= oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent
-V0_3_PUBLISHED_IMAGE_REPOSITORY ?= ghcr.io/fluxseer/fluxagent/operator
+V0_3_PUBLISHED_CHART_OCI ?= oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca
+V0_3_PUBLISHED_IMAGE_REPOSITORY ?= ghcr.io/fluxseer/fluxseer-rca/operator
 GIT_COMMIT := $(shell git rev-parse HEAD)
 GIT_DIRTY := $(shell test -z "$$(git status --porcelain)" && echo false || echo true)
 SOURCE_DATE_EPOCH := $(shell git show -s --format=%ct HEAD)
@@ -14,9 +14,9 @@ BUILD_DATE := $(shell ./hack/source-date.sh "$(SOURCE_DATE_EPOCH)")
 VERSION_PACKAGE := fluxseer/internal/version
 GO_LDFLAGS := -X $(VERSION_PACKAGE).Version=$(VERSION) -X $(VERSION_PACKAGE).GitCommit=$(GIT_COMMIT) -X $(VERSION_PACKAGE).GitDirty=$(GIT_DIRTY) -X $(VERSION_PACKAGE).BuildDate=$(BUILD_DATE)
 GO_BUILD_FLAGS := -trimpath -buildvcs=false
-OPERATOR_IMAGE ?= fluxagent/operator
+OPERATOR_IMAGE ?= fluxseer/fluxseer-rca/operator
 IMAGE_REPOSITORY ?= $(OPERATOR_IMAGE)
-DEMO_IMAGE ?= fluxagent/demo-observability
+DEMO_IMAGE ?= fluxseer/fluxseer-rca/demo-observability
 DEMO_IMAGE_REPOSITORY ?= $(DEMO_IMAGE)
 IMAGE_TAG ?= $(VERSION)
 TARGET_PLATFORM ?= linux/amd64
@@ -42,8 +42,8 @@ run-manager:
 	$(GO) run $(GO_BUILD_FLAGS) -ldflags "$(GO_LDFLAGS)" ./cmd/manager
 
 install-demo:
-	kubectl create namespace fluxagent-system || true
-	kubectl create namespace fluxagent-demo || true
+	kubectl create namespace fluxseer-rca-system || true
+	kubectl create namespace fluxseer-rca-demo || true
 	IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) bash hack/render-release-kustomize.sh config/default | kubectl apply -f -
 	kubectl wait --for=condition=Established --timeout=120s crd/agentactions.aiops.platform
 	kubectl wait --for=condition=Established --timeout=120s crd/datasources.aiops.platform
@@ -55,33 +55,33 @@ install-demo:
 	IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) bash hack/render-release-kustomize.sh examples/kind | kubectl apply -f -
 
 apply-riskrule:
-	kubectl apply -k examples/riskrules -n fluxagent-demo
+	kubectl apply -k examples/riskrules -n fluxseer-rca-demo
 
 demo-up:
-	kind create cluster --name fluxagent-demo --config examples/kind/kind-config.yaml
+	kind create cluster --name fluxseer-rca-demo --config examples/kind/kind-config.yaml
 	$(MAKE) build-images
 	$(MAKE) build-demo-images
-	kind load docker-image $(OPERATOR_IMAGE_REF) --name fluxagent-demo
-	kind load docker-image $(DEMO_IMAGE_REF) --name fluxagent-demo
+	kind load docker-image $(OPERATOR_IMAGE_REF) --name fluxseer-rca-demo
+	kind load docker-image $(DEMO_IMAGE_REF) --name fluxseer-rca-demo
 	$(MAKE) install-demo
 
 demo-down:
-	kind delete cluster --name fluxagent-demo
+	kind delete cluster --name fluxseer-rca-demo
 
 inject-fault:
-	kubectl patch deployment fluxagent-sample -n fluxagent-demo --type merge -p '{"spec":{"template":{"spec":{"containers":[{"name":"app","image":"busybox:1.36","command":["sh","-c","echo crashloop; exit 1"]}]}}}}'
-	kubectl run curl-fault -n fluxagent-demo --restart=Never --rm -i --image=curlimages/curl:8.8.0 -- curl -s -XPOST http://fluxagent-observability:8080/demo/fault/fluxagent-sample
+	kubectl patch deployment fluxseer-rca-sample -n fluxseer-rca-demo --type merge -p '{"spec":{"template":{"spec":{"containers":[{"name":"app","image":"busybox:1.36","command":["sh","-c","echo crashloop; exit 1"]}]}}}}'
+	kubectl run curl-fault -n fluxseer-rca-demo --restart=Never --rm -i --image=curlimages/curl:8.8.0 -- curl -s -XPOST http://fluxseer-rca-observability:8080/demo/fault/fluxseer-rca-sample
 
 recover-demo:
 	kubectl apply -k examples/sample-app
-	kubectl run curl-recover -n fluxagent-demo --restart=Never --rm -i --image=curlimages/curl:8.8.0 -- curl -s -XPOST http://fluxagent-observability:8080/demo/recover/fluxagent-sample
+	kubectl run curl-recover -n fluxseer-rca-demo --restart=Never --rm -i --image=curlimages/curl:8.8.0 -- curl -s -XPOST http://fluxseer-rca-observability:8080/demo/recover/fluxseer-rca-sample
 
 demo-status:
-	kubectl get deployment,pod,datasource,riskrule,risksignal -n fluxagent-demo
-	kubectl describe datasource prometheus -n fluxagent-demo
-	kubectl describe riskrule fluxagent-sample-latency -n fluxagent-demo
-	signal_name="$$(kubectl get risksignal -n fluxagent-demo -l fluxagent.aiops.platform/risk-rule=fluxagent-sample-latency --sort-by=.metadata.creationTimestamp -o 'jsonpath={range .items[?(@.spec.target.name=="fluxagent-sample")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | tail -n1)"; if [ -n "$$signal_name" ]; then kubectl describe risksignal "$$signal_name" -n fluxagent-demo; fi
-	kubectl run curl-status -n fluxagent-demo --restart=Never --rm -i --image=curlimages/curl:8.8.0 -- curl -s http://fluxagent-observability:8080/demo/state
+	kubectl get deployment,pod,datasource,riskrule,risksignal -n fluxseer-rca-demo
+	kubectl describe datasource prometheus -n fluxseer-rca-demo
+	kubectl describe riskrule fluxseer-rca-sample-latency -n fluxseer-rca-demo
+	signal_name="$$(kubectl get risksignal -n fluxseer-rca-demo -l fluxseer-rca.aiops.platform/risk-rule=fluxseer-rca-sample-latency --sort-by=.metadata.creationTimestamp -o 'jsonpath={range .items[?(@.spec.target.name=="fluxseer-rca-sample")]}{.metadata.name}{"\n"}{end}' 2>/dev/null | tail -n1)"; if [ -n "$$signal_name" ]; then kubectl describe risksignal "$$signal_name" -n fluxseer-rca-demo; fi
+	kubectl run curl-status -n fluxseer-rca-demo --restart=Never --rm -i --image=curlimages/curl:8.8.0 -- curl -s http://fluxseer-rca-observability:8080/demo/state
 
 demo-degrade-missing-datasource:
 	$(MAKE) inject-fault
@@ -143,8 +143,8 @@ verify-v0.3-beta-upgrade-kind:
 
 verify-v0.2-beta:
 	$(GO) test ./...
-	kubectl kustomize config/default >/tmp/fluxagent-config-default.yaml
-	kubectl kustomize examples/kind >/tmp/fluxagent-kind-example.yaml
+	kubectl kustomize config/default >/tmp/fluxseer-rca-config-default.yaml
+	kubectl kustomize examples/kind >/tmp/fluxseer-rca-kind-example.yaml
 
 verify-v0.2-alpha: verify-v0.2-beta
 

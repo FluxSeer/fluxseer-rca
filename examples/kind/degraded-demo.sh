@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-namespace="${FLUXAGENT_DEMO_NAMESPACE:-fluxagent-demo}"
-rule_name="${FLUXAGENT_RULE_NAME:-fluxagent-sample-latency}"
-target_name="${FLUXAGENT_TARGET_NAME:-fluxagent-sample}"
+namespace="${FLUXSEER_RCA_DEMO_NAMESPACE:-fluxseer-rca-demo}"
+rule_name="${FLUXSEER_RCA_RULE_NAME:-fluxseer-rca-sample-latency}"
+target_name="${FLUXSEER_RCA_TARGET_NAME:-fluxseer-rca-sample}"
 mode="${1:-}"
 
 if [[ -z "${mode}" ]]; then
@@ -30,7 +30,7 @@ metadata:
 spec:
   provider: openai
   model: gpt-5.1
-  endpoint: http://fluxagent-observability:8080/demo/providers/openai/auth-failed
+  endpoint: http://fluxseer-rca-observability:8080/demo/providers/openai/auth-failed
   timeout: 2s
   maxTokens: 256
   apiKeySecretRef:
@@ -83,7 +83,7 @@ echo "waiting for controller reconcile..."
 sleep 20
 
 signal_name="$(kubectl get risksignal -n "${namespace}" \
-  -l "fluxagent.aiops.platform/risk-rule=${rule_name}" \
+  -l "fluxseer-rca.aiops.platform/risk-rule=${rule_name}" \
   --sort-by=.metadata.creationTimestamp \
   -o "jsonpath={range .items[?(@.spec.target.name==\"${target_name}\")]}{.metadata.name}{\"\\n\"}{end}" 2>/dev/null |
   tail -n1)"

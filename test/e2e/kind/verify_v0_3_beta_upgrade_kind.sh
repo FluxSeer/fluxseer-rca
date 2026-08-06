@@ -7,17 +7,17 @@ source "${script_dir}/common.sh"
 
 VERSION="${VERSION:?VERSION is required}"
 PREVIOUS_VERSION="${PREVIOUS_VERSION:-v0.3.0-beta.1}"
-PUBLISHED_CHART_OCI="${PUBLISHED_CHART_OCI:-oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent}"
-PUBLISHED_IMAGE_REPOSITORY="${PUBLISHED_IMAGE_REPOSITORY:-ghcr.io/fluxseer/fluxagent/operator}"
+PUBLISHED_CHART_OCI="${PUBLISHED_CHART_OCI:-oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca}"
+PUBLISHED_IMAGE_REPOSITORY="${PUBLISHED_IMAGE_REPOSITORY:-ghcr.io/fluxseer/fluxseer-rca/operator}"
 IMAGE_TAG="${IMAGE_TAG:-v0.3-beta-upgrade-test}"
 TARGET_PLATFORM="${TARGET_PLATFORM:-linux/amd64}"
-IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-fluxagent/operator}"
-DEMO_IMAGE_REPOSITORY="${DEMO_IMAGE_REPOSITORY:-fluxagent/demo-observability}"
-CLUSTER_NAME="${FLUXAGENT_BETA_UPGRADE_CLUSTER_NAME:-fluxagent-v03-upgrade}"
-RELEASE_NAME="${FLUXAGENT_BETA_UPGRADE_RELEASE_NAME:-fluxagent}"
-RELEASE_NAMESPACE="${FLUXAGENT_BETA_UPGRADE_RELEASE_NAMESPACE:-fluxagent-system}"
-DEMO_NAMESPACE="${FLUXAGENT_DEMO_NAMESPACE:-fluxagent-demo}"
-SIGNAL_NAME="fluxagent-sample-observed-risk"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/operator}"
+DEMO_IMAGE_REPOSITORY="${DEMO_IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/demo-observability}"
+CLUSTER_NAME="${FLUXSEER_RCA_BETA_UPGRADE_CLUSTER_NAME:-fluxseer-rca-v03-upgrade}"
+RELEASE_NAME="${FLUXSEER_RCA_BETA_UPGRADE_RELEASE_NAME:-fluxseer-rca}"
+RELEASE_NAMESPACE="${FLUXSEER_RCA_BETA_UPGRADE_RELEASE_NAMESPACE:-fluxseer-rca-system}"
+DEMO_NAMESPACE="${FLUXSEER_RCA_DEMO_NAMESPACE:-fluxseer-rca-demo}"
+SIGNAL_NAME="fluxseer-rca-sample-observed-risk"
 
 OPERATOR_IMAGE_REF="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 DEMO_IMAGE_REF="${DEMO_IMAGE_REPOSITORY}:${IMAGE_TAG}"
@@ -81,16 +81,16 @@ install_previous_release() {
     --set image.tag="${PREVIOUS_VERSION}" \
     --set image.pullPolicy=IfNotPresent \
     --set rulePacks.kubernetesBaseline.enabled=false \
-    --set controller.extraEnv[0].name=FLUXAGENT_WEBHOOK_URL \
-    --set controller.extraEnv[0].value=http://fluxagent-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080/demo/webhook \
-    --set controller.extraEnv[1].name=FLUXAGENT_SCAN_INTERVAL \
+    --set controller.extraEnv[0].name=FLUXSEER_RCA_WEBHOOK_URL \
+    --set controller.extraEnv[0].value=http://fluxseer-rca-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080/demo/webhook \
+    --set controller.extraEnv[1].name=FLUXSEER_RCA_SCAN_INTERVAL \
     --set controller.extraEnv[1].value=10s
 }
 
 upgrade_candidate_release() {
   local legacy_enabled="$1"
 
-  helm upgrade "${RELEASE_NAME}" "${repo_root}/charts/fluxagent" \
+  helm upgrade "${RELEASE_NAME}" "${repo_root}/charts/fluxseer-rca" \
     --namespace "${RELEASE_NAMESPACE}" \
     --wait \
     --timeout 180s \
@@ -99,9 +99,9 @@ upgrade_candidate_release() {
     --set image.pullPolicy=IfNotPresent \
     --set rulePacks.kubernetesBaseline.enabled=false \
     --set features.legacyDeploymentRisk.enabled="${legacy_enabled}" \
-    --set controller.extraEnv[0].name=FLUXAGENT_WEBHOOK_URL \
-    --set controller.extraEnv[0].value=http://fluxagent-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080/demo/webhook \
-    --set controller.extraEnv[1].name=FLUXAGENT_SCAN_INTERVAL \
+    --set controller.extraEnv[0].name=FLUXSEER_RCA_WEBHOOK_URL \
+    --set controller.extraEnv[0].value=http://fluxseer-rca-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080/demo/webhook \
+    --set controller.extraEnv[1].name=FLUXSEER_RCA_SCAN_INTERVAL \
     --set controller.extraEnv[1].value=10s
 }
 
@@ -112,21 +112,21 @@ apply_demo_fixtures() {
   kubectl apply -k "${repo_root}/examples/sample-app" -n "${DEMO_NAMESPACE}"
   kubectl apply -k "${repo_root}/examples/datasources" -n "${DEMO_NAMESPACE}"
   kubectl patch datasource prometheus -n "${DEMO_NAMESPACE}" --type merge \
-    -p "{\"spec\":{\"endpoint\":\"http://fluxagent-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080\"}}"
+    -p "{\"spec\":{\"endpoint\":\"http://fluxseer-rca-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080\"}}"
   kubectl patch datasource loki -n "${DEMO_NAMESPACE}" --type merge \
-    -p "{\"spec\":{\"endpoint\":\"http://fluxagent-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080\"}}"
-  kubectl rollout status deployment/fluxagent-observability -n "${DEMO_NAMESPACE}" --timeout=180s
-  kubectl rollout status deployment/fluxagent-sample -n "${DEMO_NAMESPACE}" --timeout=180s
+    -p "{\"spec\":{\"endpoint\":\"http://fluxseer-rca-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080\"}}"
+  kubectl rollout status deployment/fluxseer-rca-observability -n "${DEMO_NAMESPACE}" --timeout=180s
+  kubectl rollout status deployment/fluxseer-rca-sample -n "${DEMO_NAMESPACE}" --timeout=180s
 }
 
 inject_demo_fault() {
   kubectl run lifecycle-fault -n "${DEMO_NAMESPACE}" --restart=Never --rm -i --image=curlimages/curl:8.8.0 \
-    -- curl -fsS -XPOST "http://fluxagent-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080/demo/fault/fluxagent-sample"
+    -- curl -fsS -XPOST "http://fluxseer-rca-observability.${DEMO_NAMESPACE}.svc.cluster.local:8080/demo/fault/fluxseer-rca-sample"
 }
 
 touch_sample_deployment() {
-  kubectl annotate deployment fluxagent-sample -n "${DEMO_NAMESPACE}" \
-    "fluxagent.aiops.platform/upgrade-check=$(date -u +%Y%m%d%H%M%S)" --overwrite
+  kubectl annotate deployment fluxseer-rca-sample -n "${DEMO_NAMESPACE}" \
+    "fluxseer-rca.aiops.platform/upgrade-check=$(date -u +%Y%m%d%H%M%S)" --overwrite
 }
 
 wait_for_signal_confirmed() {
@@ -148,7 +148,7 @@ assert_signal_absent_for_window() {
 
 verify_candidate_version() {
   local version_json
-  version_json="$(kubectl exec -n "${RELEASE_NAMESPACE}" deployment/fluxagent-controller-manager -- /fluxagent-operator version --output=json)"
+  version_json="$(kubectl exec -n "${RELEASE_NAMESPACE}" deployment/fluxseer-rca-controller-manager -- /fluxseer-rca-operator version --output=json)"
   if [[ "$(jq -r .version <<<"${version_json}")" != "${VERSION}" ]]; then
     echo "candidate controller binary version mismatch: ${version_json}" >&2
     exit 1
@@ -178,7 +178,7 @@ wait_for_signal_confirmed
 
 log_section "Upgrade To Candidate With Legacy Watcher Disabled"
 upgrade_candidate_release false
-kubectl rollout status deployment/fluxagent-controller-manager -n "${RELEASE_NAMESPACE}" --timeout=180s
+kubectl rollout status deployment/fluxseer-rca-controller-manager -n "${RELEASE_NAMESPACE}" --timeout=180s
 verify_candidate_version
 kubectl get risksignal "${SIGNAL_NAME}" -n "${DEMO_NAMESPACE}"
 kubectl delete risksignal "${SIGNAL_NAME}" -n "${DEMO_NAMESPACE}"
@@ -187,14 +187,14 @@ assert_signal_absent_for_window
 
 log_section "Enable Legacy Watcher Compatibility"
 upgrade_candidate_release true
-kubectl rollout status deployment/fluxagent-controller-manager -n "${RELEASE_NAMESPACE}" --timeout=180s
+kubectl rollout status deployment/fluxseer-rca-controller-manager -n "${RELEASE_NAMESPACE}" --timeout=180s
 touch_sample_deployment
 wait_for_signal_confirmed
 
 log_section "Verify Uninstall And CRD Retention"
 helm uninstall "${RELEASE_NAME}" -n "${RELEASE_NAMESPACE}" --wait --timeout 120s
 wait_for_command "controller deployment removed" \
-  bash -c "! kubectl get deployment fluxagent-controller-manager -n ${RELEASE_NAMESPACE} >/dev/null 2>&1"
+  bash -c "! kubectl get deployment fluxseer-rca-controller-manager -n ${RELEASE_NAMESPACE} >/dev/null 2>&1"
 kubectl get crd risksignals.aiops.platform
 kubectl get risksignal "${SIGNAL_NAME}" -n "${DEMO_NAMESPACE}"
 

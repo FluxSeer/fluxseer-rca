@@ -1,4 +1,4 @@
-FluxAgent is installed as a Kubernetes-native RCA control plane.
+FluxSeer RCA is installed as a Kubernetes-native RCA control plane.
 
 Next steps:
 

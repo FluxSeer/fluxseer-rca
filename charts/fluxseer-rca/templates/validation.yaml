@@ -1,4 +1,4 @@
-{{- $profile := include "fluxagent.effectiveRbacProfile" . -}}
+{{- $profile := include "fluxseer-rca.effectiveRbacProfile" . -}}
 {{- if not (or (eq $profile "readOnlyRCA") (eq $profile "remediation") (eq $profile "experimentalExecutor")) -}}
 {{- fail (printf "rbac.profile must be one of readOnlyRCA, remediation, experimentalExecutor, or empty for feature-derived RBAC; got %q" $profile) -}}
 {{- end -}}

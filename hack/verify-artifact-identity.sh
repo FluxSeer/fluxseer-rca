@@ -63,10 +63,10 @@ verify_image() {
   assert_equal "${image} OCI version" "${VERSION}" "$(docker image inspect "${image}" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')"
   assert_equal "${image} OCI revision" "${GIT_COMMIT}" "$(docker image inspect "${image}" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
   assert_equal "${image} OCI created" "${BUILD_DATE}" "$(docker image inspect "${image}" --format '{{ index .Config.Labels "org.opencontainers.image.created" }}')"
-  assert_equal "${image} OCI dirty" "${GIT_DIRTY}" "$(docker image inspect "${image}" --format '{{ index .Config.Labels "io.fluxagent.git-dirty" }}')"
+  assert_equal "${image} OCI dirty" "${GIT_DIRTY}" "$(docker image inspect "${image}" --format '{{ index .Config.Labels "io.fluxseer.git-dirty" }}')"
 }
 
-verify_image "${OPERATOR_IMAGE_REF}" "FluxAgent"
-verify_image "${DEMO_IMAGE_REF}" "FluxAgent Demo Observability"
+verify_image "${OPERATOR_IMAGE_REF}" "FluxSeer RCA"
+verify_image "${DEMO_IMAGE_REF}" "FluxSeer RCA Demo Observability"
 
 echo "artifact identity verified"

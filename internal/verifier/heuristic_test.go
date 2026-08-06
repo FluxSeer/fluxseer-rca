@@ -114,7 +114,7 @@ func TestVerifyClaimsDoesNotTreatUnhealthyAsHealthyContradiction(t *testing.T) {
 			ID:      "evidence-001",
 			Kind:    "event",
 			Reason:  "Unhealthy",
-			Summary: "Synthetic readiness probe failure for FluxAgent RCA validation",
+			Summary: "Synthetic readiness probe failure for FluxSeer RCA RCA validation",
 		}},
 	)
 

@@ -2,7 +2,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: ModelProvider
 metadata:
   name: heuristic-provider
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   provider: heuristic
   model: built-in

@@ -1,5 +1,5 @@
 image:
-  repository: fluxagent/operator
+  repository: fluxseer/fluxseer-rca/operator
   tag: ""
   pullPolicy: IfNotPresent
 
@@ -7,7 +7,7 @@ replicaCount: 1
 
 serviceAccount:
   create: true
-  name: fluxagent-controller-manager
+  name: fluxseer-rca-controller-manager
 
 controller:
   metricsBindAddress: ":8080"

@@ -5,16 +5,16 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../../.." && pwd)"
 source "${script_dir}/common.sh"
 
-request_namespace="${FLUXAGENT_DEMO_NAMESPACE}"
-target_namespace="${FLUXAGENT_DEMO_NAMESPACE}"
-target_name="fluxagent-sample"
+request_namespace="${FLUXSEER_RCA_DEMO_NAMESPACE}"
+target_namespace="${FLUXSEER_RCA_DEMO_NAMESPACE}"
+target_name="fluxseer-rca-sample"
 success_request="investigate-sample-success"
 missing_ds_request="investigate-sample-missing-ds"
 capability_request="investigate-sample-capability-mismatch"
 provider_request="investigate-sample-missing-provider"
 provider_auth_request="investigate-sample-provider-auth-failed"
 provider_rate_request="investigate-sample-provider-rate-limited"
-reuse_cluster="${FLUXAGENT_E2E_REUSE_CLUSTER:-false}"
+reuse_cluster="${FLUXSEER_RCA_E2E_REUSE_CLUSTER:-false}"
 
 if [[ "${reuse_cluster}" != "true" ]]; then
   preflight_verify_e2e_kind
@@ -54,12 +54,12 @@ verify_successful_investigation() {
   log_section "Create InvestigationRequest Through CLI"
   (
     cd "${repo_root}"
-    GOWORK=off go run ./cmd/fluxagent investigate deployment "${target_name}" \
+    GOWORK=off go run ./cmd/fluxseer investigate deployment "${target_name}" \
       --namespace "${target_namespace}" \
       --request-namespace "${request_namespace}" \
       --request-name "${success_request}" \
       --query-file config/samples/investigation-queries.yaml \
-      --question "Why is fluxagent-sample failing after fault injection?" \
+      --question "Why is fluxseer-rca-sample failing after fault injection?" \
       --provider heuristic-provider \
       --create-risk-signal \
       --wait
@@ -103,7 +103,7 @@ verify_successful_investigation() {
   wait_for_jsonpath_equals \
     "risksignal/${linked_signal_name}" \
     "${linked_signal_namespace}" \
-    '{.metadata.annotations.fluxagent\.aiops\.platform/investigation-request}' \
+    '{.metadata.annotations.fluxseer-rca\.aiops\.platform/investigation-request}' \
     "${investigation_ref}"
 
   echo "verified InvestigationRequest ${success_request} completed and promoted RiskSignal ${linked_signal_namespace}/${linked_signal_name}"
@@ -125,7 +125,7 @@ verify_missing_datasource_degradation() {
   log_section "Verify Investigation Degradation: Missing DataSource"
   (
     cd "${repo_root}"
-    GOWORK=off go run ./cmd/fluxagent investigate deployment "${target_name}" \
+    GOWORK=off go run ./cmd/fluxseer investigate deployment "${target_name}" \
       --namespace "${target_namespace}" \
       --request-namespace "${request_namespace}" \
       --request-name "${missing_ds_request}" \
@@ -178,7 +178,7 @@ verify_capability_mismatch_degradation() {
   log_section "Verify Investigation Degradation: Capability Mismatch"
   (
     cd "${repo_root}"
-    GOWORK=off go run ./cmd/fluxagent investigate deployment "${target_name}" \
+    GOWORK=off go run ./cmd/fluxseer investigate deployment "${target_name}" \
       --namespace "${target_namespace}" \
       --request-namespace "${request_namespace}" \
       --request-name "${capability_request}" \
@@ -219,7 +219,7 @@ verify_missing_provider_degradation() {
   log_section "Verify Investigation Degradation: Provider Missing"
   (
     cd "${repo_root}"
-    GOWORK=off go run ./cmd/fluxagent investigate deployment "${target_name}" \
+    GOWORK=off go run ./cmd/fluxseer investigate deployment "${target_name}" \
       --namespace "${target_namespace}" \
       --request-namespace "${request_namespace}" \
       --request-name "${provider_request}" \
@@ -274,7 +274,7 @@ metadata:
 spec:
   provider: openai
   model: gpt-5.1
-  endpoint: http://fluxagent-observability:8080/demo/providers/openai/auth-failed
+  endpoint: http://fluxseer-rca-observability:8080/demo/providers/openai/auth-failed
   timeout: 2s
   maxTokens: 256
   dataPolicy:
@@ -293,7 +293,7 @@ metadata:
 spec:
   provider: openai
   model: gpt-5.1
-  endpoint: http://fluxagent-observability:8080/demo/providers/openai/rate-limited
+  endpoint: http://fluxseer-rca-observability:8080/demo/providers/openai/rate-limited
   timeout: 2s
   maxTokens: 256
   dataPolicy:
@@ -310,7 +310,7 @@ verify_provider_auth_failed_degradation() {
   log_section "Verify Investigation Degradation: Provider Auth Failed"
   (
     cd "${repo_root}"
-    GOWORK=off go run ./cmd/fluxagent investigate deployment "${target_name}" \
+    GOWORK=off go run ./cmd/fluxseer investigate deployment "${target_name}" \
       --namespace "${target_namespace}" \
       --request-namespace "${request_namespace}" \
       --request-name "${provider_auth_request}" \
@@ -349,7 +349,7 @@ verify_provider_rate_limited_degradation() {
   log_section "Verify Investigation Degradation: Provider Rate Limited"
   (
     cd "${repo_root}"
-    GOWORK=off go run ./cmd/fluxagent investigate deployment "${target_name}" \
+    GOWORK=off go run ./cmd/fluxseer investigate deployment "${target_name}" \
       --namespace "${target_namespace}" \
       --request-namespace "${request_namespace}" \
       --request-name "${provider_rate_request}" \
@@ -390,9 +390,9 @@ if [[ "${reuse_cluster}" != "true" ]]; then
   make demo-up
 
   log_section "Wait For Deployments"
-  kubectl rollout status deployment/fluxagent-controller-manager -n "${FLUXAGENT_DEMO_NAMESPACE}" --timeout=180s
-  kubectl rollout status deployment/fluxagent-observability -n "${FLUXAGENT_DEMO_NAMESPACE}" --timeout=180s
-  kubectl rollout status deployment/fluxagent-sample -n "${FLUXAGENT_DEMO_NAMESPACE}" --timeout=180s
+  kubectl rollout status deployment/fluxseer-rca-controller-manager -n "${FLUXSEER_RCA_DEMO_NAMESPACE}" --timeout=180s
+  kubectl rollout status deployment/fluxseer-rca-observability -n "${FLUXSEER_RCA_DEMO_NAMESPACE}" --timeout=180s
+  kubectl rollout status deployment/fluxseer-rca-sample -n "${FLUXSEER_RCA_DEMO_NAMESPACE}" --timeout=180s
 
   log_section "Inject Fault"
   make inject-fault

@@ -2,7 +2,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: RiskRule
 metadata:
   name: open-api-latency-regression
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   targetSelector:
     namespaceSelector:
@@ -42,7 +42,7 @@ spec:
         - Failed
   notification:
     webhookRef:
-      name: fluxagent-webhook
+      name: fluxseer-rca-webhook
       key: url
   ai:
     rcaEnabled: true

@@ -14,8 +14,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN GOWORK=off CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -buildvcs=false -ldflags "-X fluxseer/internal/version.Version=${VERSION} -X fluxseer/internal/version.GitCommit=${GIT_COMMIT} -X fluxseer/internal/version.GitDirty=${GIT_DIRTY} -X fluxseer/internal/version.BuildDate=${BUILD_DATE}" -o /out/fluxagent-operator ./cmd/operator \
-    && touch -d "@${SOURCE_DATE_EPOCH}" /out/fluxagent-operator
+RUN GOWORK=off CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -buildvcs=false -ldflags "-X fluxseer/internal/version.Version=${VERSION} -X fluxseer/internal/version.GitCommit=${GIT_COMMIT} -X fluxseer/internal/version.GitDirty=${GIT_DIRTY} -X fluxseer/internal/version.BuildDate=${BUILD_DATE}" -o /out/fluxseer-rca-operator ./cmd/operator \
+    && touch -d "@${SOURCE_DATE_EPOCH}" /out/fluxseer-rca-operator
 
 FROM gcr.io/distroless/static:nonroot@sha256:f7f8f729987ad0fdf6b05eeeae94b26e6a0f613bdf46feea7fc40f7bd72953e6
 
@@ -25,14 +25,14 @@ ARG GIT_DIRTY=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_DATE_EPOCH=0
 
-LABEL org.opencontainers.image.title="FluxAgent" \
+LABEL org.opencontainers.image.title="FluxSeer RCA" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
-      io.fluxagent.git-dirty="${GIT_DIRTY}"
+      io.fluxseer.git-dirty="${GIT_DIRTY}"
 
 WORKDIR /
-COPY --from=builder /out/fluxagent-operator /fluxagent-operator
+COPY --from=builder /out/fluxseer-rca-operator /fluxseer-rca-operator
 
 USER nonroot:nonroot
-ENTRYPOINT ["/fluxagent-operator"]
+ENTRYPOINT ["/fluxseer-rca-operator"]

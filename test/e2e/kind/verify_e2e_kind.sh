@@ -28,9 +28,9 @@ make demo-down >/dev/null 2>&1 || true
 make demo-up
 
 log_section "Wait For Deployments"
-kubectl rollout status deployment/fluxagent-controller-manager -n "${FLUXAGENT_DEMO_NAMESPACE}" --timeout=180s
-kubectl rollout status deployment/fluxagent-observability -n "${FLUXAGENT_DEMO_NAMESPACE}" --timeout=180s
-kubectl rollout status deployment/fluxagent-sample -n "${FLUXAGENT_DEMO_NAMESPACE}" --timeout=180s
+kubectl rollout status deployment/fluxseer-rca-controller-manager -n "${FLUXSEER_RCA_DEMO_NAMESPACE}" --timeout=180s
+kubectl rollout status deployment/fluxseer-rca-observability -n "${FLUXSEER_RCA_DEMO_NAMESPACE}" --timeout=180s
+kubectl rollout status deployment/fluxseer-rca-sample -n "${FLUXSEER_RCA_DEMO_NAMESPACE}" --timeout=180s
 
 log_section "Inject Fault"
 make inject-fault
@@ -38,7 +38,7 @@ make inject-fault
 bash "${script_dir}/verify_risksignal.sh"
 bash "${script_dir}/verify_notification.sh"
 bash "${script_dir}/verify_degraded_conditions.sh"
-FLUXAGENT_E2E_REUSE_CLUSTER=true bash "${script_dir}/verify_investigation_kind.sh"
+FLUXSEER_RCA_E2E_REUSE_CLUSTER=true bash "${script_dir}/verify_investigation_kind.sh"
 
 log_section "E2E Verification Complete"
 echo "verify-e2e-kind passed"

@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fluxagent-controller-manager
+  name: fluxseer-rca-controller-manager
 spec:
   template:
     spec:
       containers:
         - name: manager
-          image: fluxagent/operator:v0.2.0-beta.1
+          image: fluxseer/fluxseer-rca/operator:v0.2.0-beta.1
           env:
-            - name: FLUXAGENT_WEBHOOK_URL
-              value: http://fluxagent-observability:8080/demo/webhook
+            - name: FLUXSEER_RCA_WEBHOOK_URL
+              value: http://fluxseer-rca-observability:8080/demo/webhook
           args:
             - --enable-remediation=false

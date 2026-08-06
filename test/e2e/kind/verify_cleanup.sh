@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cluster_name="${FLUXAGENT_CLUSTER_NAME:-fluxagent-demo}"
+cluster_name="${FLUXSEER_RCA_CLUSTER_NAME:-fluxseer-rca-demo}"
 
 if kind get clusters | grep -qx "${cluster_name}"; then
   echo "expected kind cluster ${cluster_name} to be cleaned up" >&2

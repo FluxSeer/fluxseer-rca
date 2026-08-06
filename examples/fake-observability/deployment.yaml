@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fluxagent-observability
+  name: fluxseer-rca-observability
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fluxagent-observability
+      app: fluxseer-rca-observability
   template:
     metadata:
       labels:
-        app: fluxagent-observability
+        app: fluxseer-rca-observability
     spec:
       containers:
         - name: observability
-          image: fluxagent/demo-observability:v0.2.0-beta.1
+          image: fluxseer/fluxseer-rca/demo-observability:v0.2.0-beta.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -23,10 +23,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: fluxagent-observability
+  name: fluxseer-rca-observability
 spec:
   selector:
-    app: fluxagent-observability
+    app: fluxseer-rca-observability
   ports:
     - name: http
       port: 8080

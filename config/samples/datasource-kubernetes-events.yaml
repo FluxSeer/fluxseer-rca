@@ -2,6 +2,6 @@ apiVersion: aiops.platform/v1alpha1
 kind: DataSource
 metadata:
   name: kubernetes-events
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   type: kubernetesEvents

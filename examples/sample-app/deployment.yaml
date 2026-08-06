@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fluxagent-sample
+  name: fluxseer-rca-sample
   annotations:
-    fluxagent.aiops.platform/enabled: "true"
-    fluxagent.aiops.platform/prometheus-query: |
-      sum(rate(http_requests_total{namespace="fluxagent-demo",app="fluxagent-sample",status=~"5.."}[5m]))
-    fluxagent.aiops.platform/prometheus-threshold: "0.2"
-    fluxagent.aiops.platform/loki-query: |
-      {namespace="fluxagent-demo",app="fluxagent-sample"} |= "error"
+    fluxseer-rca.aiops.platform/enabled: "true"
+    fluxseer-rca.aiops.platform/prometheus-query: |
+      sum(rate(http_requests_total{namespace="fluxseer-rca-demo",app="fluxseer-rca-sample",status=~"5.."}[5m]))
+    fluxseer-rca.aiops.platform/prometheus-threshold: "0.2"
+    fluxseer-rca.aiops.platform/loki-query: |
+      {namespace="fluxseer-rca-demo",app="fluxseer-rca-sample"} |= "error"
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fluxagent-sample
+      app: fluxseer-rca-sample
   template:
     metadata:
       labels:
-        app: fluxagent-sample
+        app: fluxseer-rca-sample
     spec:
       containers:
         - name: app
@@ -25,7 +25,7 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - -listen=:8080
-            - -text=fluxagent sample app
+            - -text=fluxseer-rca sample app
           ports:
             - containerPort: 8080
               name: http
@@ -33,10 +33,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: fluxagent-sample
+  name: fluxseer-rca-sample
 spec:
   selector:
-    app: fluxagent-sample
+    app: fluxseer-rca-sample
   ports:
     - name: http
       port: 8080

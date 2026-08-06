@@ -25,11 +25,11 @@ ARG GIT_DIRTY=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_DATE_EPOCH=0
 
-LABEL org.opencontainers.image.title="FluxAgent Demo Observability" \
+LABEL org.opencontainers.image.title="FluxSeer RCA Demo Observability" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
-      io.fluxagent.git-dirty="${GIT_DIRTY}"
+      io.fluxseer.git-dirty="${GIT_DIRTY}"
 
 WORKDIR /
 COPY --from=builder /out/demo-observability /demo-observability

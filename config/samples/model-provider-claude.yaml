@@ -2,7 +2,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: ModelProvider
 metadata:
   name: claude-provider
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   provider: claude
   model: claude-sonnet-4

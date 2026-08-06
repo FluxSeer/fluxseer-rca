@@ -1,4 +1,4 @@
-namespace: fluxagent-system
+namespace: fluxseer-rca-system
 
 resources:
   - ../crd

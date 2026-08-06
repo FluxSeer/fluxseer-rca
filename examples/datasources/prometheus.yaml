@@ -4,5 +4,5 @@ metadata:
   name: prometheus
 spec:
   type: prometheus
-  endpoint: http://fluxagent-observability.fluxagent-demo.svc.cluster.local:8080
+  endpoint: http://fluxseer-rca-observability.fluxseer-rca-demo.svc.cluster.local:8080
   timeout: 10s

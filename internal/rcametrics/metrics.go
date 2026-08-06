@@ -40,28 +40,28 @@ var (
 	InvestigationTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_investigation_total",
-			Help: "Total FluxAgent investigations by namespace, provider type, result, and root cause type.",
+			Help: "Total FluxSeer RCA investigations by namespace, provider type, result, and root cause type.",
 		},
 		AllowedLabels["fluxseer_rca_investigation_total"],
 	)
 	ProviderRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_provider_requests_total",
-			Help: "Total FluxAgent provider requests by provider type and result.",
+			Help: "Total FluxSeer RCA provider requests by provider type and result.",
 		},
 		AllowedLabels["fluxseer_rca_provider_requests_total"],
 	)
 	ProviderFailuresTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_provider_failures_total",
-			Help: "Total FluxAgent provider failures by provider type and low-cardinality reason.",
+			Help: "Total FluxSeer RCA provider failures by provider type and low-cardinality reason.",
 		},
 		AllowedLabels["fluxseer_rca_provider_failures_total"],
 	)
 	DatasourceQueryDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "fluxseer_rca_datasource_query_duration_seconds",
-			Help:    "FluxAgent datasource query duration by datasource type and result.",
+			Help:    "FluxSeer RCA datasource query duration by datasource type and result.",
 			Buckets: prometheus.DefBuckets,
 		},
 		AllowedLabels["fluxseer_rca_datasource_query_duration_seconds"],
@@ -69,63 +69,63 @@ var (
 	EvidenceTruncatedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_evidence_truncated_total",
-			Help: "Total FluxAgent truncated evidence references by evidence kind and low-cardinality reason.",
+			Help: "Total FluxSeer RCA truncated evidence references by evidence kind and low-cardinality reason.",
 		},
 		AllowedLabels["fluxseer_rca_evidence_truncated_total"],
 	)
 	ClaimVerificationTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_claim_verification_total",
-			Help: "Total FluxAgent RCA claims by verification status.",
+			Help: "Total FluxSeer RCA RCA claims by verification status.",
 		},
 		AllowedLabels["fluxseer_rca_claim_verification_total"],
 	)
 	QueryPolicyDecisionsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_query_policy_decisions_total",
-			Help: "Total FluxAgent query policy decisions by backend, decision, and low-cardinality reason.",
+			Help: "Total FluxSeer RCA query policy decisions by backend, decision, and low-cardinality reason.",
 		},
 		AllowedLabels["fluxseer_rca_query_policy_decisions_total"],
 	)
 	QueryResultLimitExceededTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_query_result_limit_exceeded_total",
-			Help: "Total FluxAgent datasource query result native limit exceedances by backend type and dimension.",
+			Help: "Total FluxSeer RCA datasource query result native limit exceedances by backend type and dimension.",
 		},
 		AllowedLabels["fluxseer_rca_query_result_limit_exceeded_total"],
 	)
 	DatasourceQueryQueueDepth = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "fluxseer_rca_datasource_query_queue_depth",
-			Help: "FluxAgent datasource queries waiting for a scheduler slot.",
+			Help: "FluxSeer RCA datasource queries waiting for a scheduler slot.",
 		},
 		AllowedLabels["fluxseer_rca_datasource_query_queue_depth"],
 	)
 	DatasourceQueriesInFlight = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "fluxseer_rca_datasource_queries_in_flight",
-			Help: "FluxAgent datasource queries currently executing in the datasource scheduler.",
+			Help: "FluxSeer RCA datasource queries currently executing in the datasource scheduler.",
 		},
 		AllowedLabels["fluxseer_rca_datasource_queries_in_flight"],
 	)
 	DeduplicationHitsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_deduplication_hits_total",
-			Help: "Total FluxAgent deduplication hits by low-cardinality source.",
+			Help: "Total FluxSeer RCA deduplication hits by low-cardinality source.",
 		},
 		AllowedLabels["fluxseer_rca_deduplication_hits_total"],
 	)
 	LoopPreventionTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_loop_prevention_total",
-			Help: "Total FluxAgent loop prevention decisions by reason.",
+			Help: "Total FluxSeer RCA loop prevention decisions by reason.",
 		},
 		AllowedLabels["fluxseer_rca_loop_prevention_total"],
 	)
 	StatusUpdateConflictsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_status_update_conflicts_total",
-			Help: "Total FluxAgent status update conflicts by resource type.",
+			Help: "Total FluxSeer RCA status update conflicts by resource type.",
 		},
 		AllowedLabels["fluxseer_rca_status_update_conflicts_total"],
 	)

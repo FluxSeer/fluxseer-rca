@@ -27,37 +27,37 @@ if [[ -n "${clusters}" ]]; then
   exit 1
 fi
 
-running_release_containers="$(docker ps -a --format '{{.ID}} {{.Image}}' | grep -E ' fluxagent/(operator|demo-observability):release-' || true)"
+running_release_containers="$(docker ps -a --format '{{.ID}} {{.Image}}' | grep -E ' fluxseer/fluxseer-rca/(operator|demo-observability):release-' || true)"
 if [[ -n "${running_release_containers}" ]]; then
-  echo "FluxAgent release test containers are still running:" >&2
+  echo "FluxSeer RCA release test containers are still running:" >&2
   echo "${running_release_containers}" >&2
   exit 1
 fi
 
 release_test_tags=(
-  fluxagent/operator:release-rulepack-test
-  fluxagent/demo-observability:release-rulepack-test
-  fluxagent/operator:release-e2e-test
-  fluxagent/demo-observability:release-e2e-test
-  fluxagent/operator:release-investigation-test
-  fluxagent/demo-observability:release-investigation-test
-  fluxagent/operator:release-identity-test
-  fluxagent/demo-observability:release-identity-test
-  fluxagent/operator:release-packaging-test
-  fluxagent/demo-observability:release-packaging-test
-  fluxagent/operator:release-reproducibility-test
-  fluxagent/demo-observability:release-reproducibility-test
-  fluxagent/operator:release-lifecycle-test
-  fluxagent/demo-observability:release-lifecycle-test
-  fluxagent/operator:release-upgrade-test
-  fluxagent/demo-observability:release-upgrade-test
+  fluxseer/fluxseer-rca/operator:release-rulepack-test
+  fluxseer/fluxseer-rca/demo-observability:release-rulepack-test
+  fluxseer/fluxseer-rca/operator:release-e2e-test
+  fluxseer/fluxseer-rca/demo-observability:release-e2e-test
+  fluxseer/fluxseer-rca/operator:release-investigation-test
+  fluxseer/fluxseer-rca/demo-observability:release-investigation-test
+  fluxseer/fluxseer-rca/operator:release-identity-test
+  fluxseer/fluxseer-rca/demo-observability:release-identity-test
+  fluxseer/fluxseer-rca/operator:release-packaging-test
+  fluxseer/fluxseer-rca/demo-observability:release-packaging-test
+  fluxseer/fluxseer-rca/operator:release-reproducibility-test
+  fluxseer/fluxseer-rca/demo-observability:release-reproducibility-test
+  fluxseer/fluxseer-rca/operator:release-lifecycle-test
+  fluxseer/fluxseer-rca/demo-observability:release-lifecycle-test
+  fluxseer/fluxseer-rca/operator:release-upgrade-test
+  fluxseer/fluxseer-rca/demo-observability:release-upgrade-test
 )
 
 docker image rm "${release_test_tags[@]}" >/dev/null 2>&1 || true
 
-remaining_release_images="$(docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E '^fluxagent/(operator|demo-observability):release-' || true)"
+remaining_release_images="$(docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E '^fluxseer/fluxseer-rca/(operator|demo-observability):release-' || true)"
 if [[ -n "${remaining_release_images}" ]]; then
-  echo "FluxAgent release test images remain:" >&2
+  echo "FluxSeer RCA release test images remain:" >&2
   echo "${remaining_release_images}" >&2
   exit 1
 fi

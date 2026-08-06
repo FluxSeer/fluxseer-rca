@@ -34,7 +34,7 @@ func (e NotificationExecutor) Execute(ctx context.Context, action ApprovedAction
 	if e.WebhookURL != "" {
 		client := webhooknotifier.Notifier{URL: e.WebhookURL}
 		if err := client.Notify(ctx, notifier.Message{
-			Title:   "FluxAgent Notification",
+			Title:   "FluxSeer RCA Notification",
 			Summary: summary,
 			Body:    action.DryRunResult,
 			Fields: map[string]any{
