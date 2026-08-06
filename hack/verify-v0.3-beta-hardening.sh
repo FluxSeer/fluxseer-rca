@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-chart="${root}/charts/kube-ai-sre"
+chart="${root}/charts/fluxagent"
 
 for command_name in go kubectl helm; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then

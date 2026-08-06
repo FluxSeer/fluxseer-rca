@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-chart="$root/charts/kube-ai-sre"
+chart="$root/charts/fluxagent"
 
 default_render="$(mktemp)"
 all_render="$(mktemp)"

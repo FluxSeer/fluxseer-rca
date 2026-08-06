@@ -98,7 +98,7 @@ jobs:
         run: make verify-rule-packs
 
       - name: Helm lint
-        run: helm lint charts/kube-ai-sre
+        run: helm lint charts/fluxagent
 
   image-identity:
     name: Verify Image Identity
@@ -264,8 +264,8 @@ jobs:
           set -euo pipefail
           chart_ref="oci://${{ steps.meta.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts"
           mkdir -p "dist/test-${GITHUB_SHA::7}"
-          helm lint charts/kube-ai-sre
-          helm package charts/kube-ai-sre \
+          helm lint charts/fluxagent
+          helm package charts/fluxagent \
             --version "${{ steps.meta.outputs.chart_version }}" \
             --app-version "${{ steps.meta.outputs.image_tag }}" \
             --destination "dist/test-${GITHUB_SHA::7}"
@@ -390,8 +390,8 @@ jobs:
           set -euo pipefail
           chart_ref="oci://${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.repository_prefix }}/charts"
           mkdir -p "dist/main-${GITHUB_SHA::7}"
-          helm lint charts/kube-ai-sre
-          helm package charts/kube-ai-sre \
+          helm lint charts/fluxagent
+          helm package charts/fluxagent \
             --version "${{ steps.meta.outputs.chart_version }}" \
             --app-version "${{ steps.meta.outputs.image_tag }}" \
             --destination "dist/main-${GITHUB_SHA::7}"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-chart="${root}/charts/kube-ai-sre"
+chart="${root}/charts/fluxagent"
 
 for command_name in go kubectl helm; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
@@ -41,7 +41,13 @@ echo "==> v0.3 schema freeze audit: frozen baseline"
     echo "missing frozen baseline tag: v0.3.0-beta.1" >&2
     exit 1
   fi
-  git diff --exit-code v0.3.0-beta.1 -- api/v1alpha1 config/crd/bases charts/kube-ai-sre/crds >/dev/null
+  # charts/*/crds is intentionally excluded here: the chart directory was
+  # renamed after v0.3.0-beta.1 was tagged, so diffing its new path against
+  # the old tag would show a spurious full-file add. The CRD
+  # source/chart consistency check above already proves the chart's CRDs
+  # equal config/crd/bases in the current tree, and config/crd/bases is
+  # diffed against the tag right here, so drift is still fully covered.
+  git diff --exit-code v0.3.0-beta.1 -- api/v1alpha1 config/crd/bases >/dev/null
 )
 
 echo "==> v0.3 schema freeze audit: Kustomize render"

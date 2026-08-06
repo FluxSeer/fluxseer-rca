@@ -249,8 +249,8 @@ jobs:
           version="${{ steps.release.outputs.version }}"
           chart_version="${{ steps.release.outputs.chart_version }}"
           mkdir -p "dist/release-$version"
-          helm lint charts/kube-ai-sre
-          helm package charts/kube-ai-sre --destination "dist/release-$version"
+          helm lint charts/fluxagent
+          helm package charts/fluxagent --destination "dist/release-$version"
           package="dist/release-$version/${CHART_NAME}-$chart_version.tgz"
           package_abs="$PWD/$package"
           shasum -a 256 "$package" | sed "s#  dist/release-$version/#  #" > "dist/release-$version/SHA256SUMS"

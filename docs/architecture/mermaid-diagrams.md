@@ -830,7 +830,7 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     Values[Helm values.yaml]
-    Chart[charts/kube-ai-sre]
+    Chart[charts/fluxagent]
     CRDs[crds/*.yaml]
     Deploy[controller Deployment]
     SA[controller ServiceAccount]
@@ -908,7 +908,7 @@ flowchart TB
     Verifier[internal/verifier]
     Metrics[internal/rcametrics]
     API[api/v1alpha1]
-    Helm[charts/kube-ai-sre]
+    Helm[charts/fluxagent]
     Config[config]
     Examples[examples]
 

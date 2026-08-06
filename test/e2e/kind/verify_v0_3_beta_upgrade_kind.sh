@@ -90,7 +90,7 @@ install_previous_release() {
 upgrade_candidate_release() {
   local legacy_enabled="$1"
 
-  helm upgrade "${RELEASE_NAME}" "${repo_root}/charts/kube-ai-sre" \
+  helm upgrade "${RELEASE_NAME}" "${repo_root}/charts/fluxagent" \
     --namespace "${RELEASE_NAMESPACE}" \
     --wait \
     --timeout 180s \

@@ -66,7 +66,7 @@ wait_for_crds() {
 install_chart() {
   local phase="$1"
 
-  helm upgrade --install "${RELEASE_NAME}" "${repo_root}/charts/kube-ai-sre" \
+  helm upgrade --install "${RELEASE_NAME}" "${repo_root}/charts/fluxagent" \
     --namespace "${RELEASE_NAMESPACE}" \
     --create-namespace \
     --wait \
