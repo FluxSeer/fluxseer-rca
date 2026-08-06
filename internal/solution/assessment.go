@@ -3,7 +3,7 @@ package solution
 import (
 	"strings"
 
-	"fluxagent/api/v1alpha1"
+	"fluxseer/api/v1alpha1"
 )
 
 const (

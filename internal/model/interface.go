@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"fluxagent/internal/domain"
+	"fluxseer/internal/domain"
 )
 
 type Provider interface {

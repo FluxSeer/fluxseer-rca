@@ -10,7 +10,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"fluxagent/api/v1alpha1"
+	"fluxseer/api/v1alpha1"
 )
 
 const (

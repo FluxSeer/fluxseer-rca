@@ -18,13 +18,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/datasource"
-	"fluxagent/internal/domain"
-	"fluxagent/internal/investigation"
-	"fluxagent/internal/knowledge"
-	"fluxagent/internal/model"
-	"fluxagent/internal/modelgateway"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/datasource"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/investigation"
+	"fluxseer/internal/knowledge"
+	"fluxseer/internal/model"
+	"fluxseer/internal/modelgateway"
 )
 
 type rawToFinalFixture struct {

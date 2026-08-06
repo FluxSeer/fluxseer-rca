@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/domain"
-	"fluxagent/internal/evidence"
-	"fluxagent/internal/knowledge"
-	"fluxagent/internal/model"
-	"fluxagent/internal/reasoning"
-	"fluxagent/internal/rule"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/evidence"
+	"fluxseer/internal/knowledge"
+	"fluxseer/internal/model"
+	"fluxseer/internal/reasoning"
+	"fluxseer/internal/rule"
 )
 
 type AnalyzeError struct {

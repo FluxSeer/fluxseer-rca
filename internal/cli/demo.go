@@ -6,15 +6,15 @@ import (
 	"io"
 	"time"
 
-	"fluxagent/internal/audit"
-	"fluxagent/internal/controlplane"
-	"fluxagent/internal/domain"
-	"fluxagent/internal/executor"
-	"fluxagent/internal/guardrails"
-	"fluxagent/internal/ingestion"
-	"fluxagent/internal/knowledge"
-	"fluxagent/internal/model/heuristic"
-	"fluxagent/internal/reasoning"
+	"fluxseer/internal/audit"
+	"fluxseer/internal/controlplane"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/executor"
+	"fluxseer/internal/guardrails"
+	"fluxseer/internal/ingestion"
+	"fluxseer/internal/knowledge"
+	"fluxseer/internal/model/heuristic"
+	"fluxseer/internal/reasoning"
 )
 
 func runDemo(stdout io.Writer) error {

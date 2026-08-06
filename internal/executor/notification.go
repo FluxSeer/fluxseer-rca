@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"fluxagent/internal/domain"
-	"fluxagent/internal/notifier"
-	webhooknotifier "fluxagent/internal/notifier/webhook"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/notifier"
+	webhooknotifier "fluxseer/internal/notifier/webhook"
 )
 
 type NotificationExecutor struct {

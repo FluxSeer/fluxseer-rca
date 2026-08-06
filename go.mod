@@ -1,4 +1,4 @@
-module fluxagent
+module fluxseer
 
 go 1.26.2
 

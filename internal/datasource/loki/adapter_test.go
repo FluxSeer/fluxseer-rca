@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/datasource"
-	"fluxagent/internal/domain"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/datasource"
+	"fluxseer/internal/domain"
 )
 
 func TestAdapterQueryParsesLokiStreams(t *testing.T) {

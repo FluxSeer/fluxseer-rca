@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"fluxagent/internal/domain"
+	"fluxseer/internal/domain"
 )
 
 type Policy struct {

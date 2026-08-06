@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"fluxagent/internal/domain"
+	"fluxseer/internal/domain"
 )
 
 func TestRouterRoutesToKubernetesExecutor(t *testing.T) {

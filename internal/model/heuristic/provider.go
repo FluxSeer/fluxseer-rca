@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"fluxagent/internal/domain"
+	"fluxseer/internal/domain"
 )
 
 type Provider struct{}

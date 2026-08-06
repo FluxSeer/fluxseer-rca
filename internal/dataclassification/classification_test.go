@@ -3,8 +3,8 @@ package dataclassification
 import (
 	"testing"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/domain"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/domain"
 )
 
 func TestDefaultForObservationClassifiesLogSamplesAsConfidential(t *testing.T) {

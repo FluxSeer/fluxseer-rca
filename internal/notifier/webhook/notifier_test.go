@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"fluxagent/internal/notifier"
+	"fluxseer/internal/notifier"
 )
 
 func TestNotifierPostsJSONPayload(t *testing.T) {

@@ -15,7 +15,7 @@ FluxAgent is designed as an open, adapter-driven Kubernetes operator. Contributi
 ```bash
 cd FluxAgent
 GOWORK=off go test ./...
-GOWORK=off go run ./cmd/fluxagent
+GOWORK=off go run ./cmd/fluxseer
 GOWORK=off go run ./cmd/manager
 ```
 

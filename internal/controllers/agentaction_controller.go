@@ -9,9 +9,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/canonicaldigest"
-	"fluxagent/internal/executor"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/canonicaldigest"
+	"fluxseer/internal/executor"
 )
 
 type AgentActionReconciler struct {

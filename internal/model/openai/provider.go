@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"fluxagent/internal/domain"
-	"fluxagent/internal/model"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/model"
 )
 
 const defaultEndpoint = "https://api.openai.com/v1/chat/completions"

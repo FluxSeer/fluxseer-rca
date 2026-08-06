@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"fluxagent/internal/domain"
-	"fluxagent/internal/knowledge"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/knowledge"
 )
 
 type providerRCAFixture struct {

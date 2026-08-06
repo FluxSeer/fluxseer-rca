@@ -41,7 +41,7 @@ sha256_file() {
   fi
 }
 
-ldflags="-X fluxagent/internal/version.Version=${version} -X fluxagent/internal/version.GitCommit=${git_commit} -X fluxagent/internal/version.GitDirty=${git_dirty} -X fluxagent/internal/version.BuildDate=${build_date}"
+ldflags="-X fluxseer/internal/version.Version=${version} -X fluxseer/internal/version.GitCommit=${git_commit} -X fluxseer/internal/version.GitDirty=${git_dirty} -X fluxseer/internal/version.BuildDate=${build_date}"
 
 build_binary() {
   local pkg="$1"

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"fluxagent/internal/domain"
+	"fluxseer/internal/domain"
 )
 
 type ApprovedAction struct {
@@ -105,7 +105,7 @@ func (e GitOpsExecutor) Execute(_ context.Context, action ApprovedAction) (domai
 		Executor:   e.Name(),
 		Status:     "succeeded",
 		Summary:    fmt.Sprintf("Simulated GitOps change for %s", action.Resource.Name),
-		Outputs:    map[string]string{"branch": "fluxagent/remediation", "actionType": action.ActionType},
+		Outputs:    map[string]string{"branch": "fluxseer/remediation", "actionType": action.ActionType},
 		FinishedAt: now(),
 	}, nil
 }

@@ -3,7 +3,7 @@ package domain
 import (
 	"time"
 
-	"fluxagent/api/v1alpha1"
+	"fluxseer/api/v1alpha1"
 )
 
 type Severity string

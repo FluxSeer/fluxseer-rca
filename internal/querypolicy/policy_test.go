@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/datasource"
-	"fluxagent/internal/domain"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/datasource"
+	"fluxseer/internal/domain"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

@@ -18,15 +18,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/canonicaldigest"
-	"fluxagent/internal/datasource"
-	"fluxagent/internal/domain"
-	"fluxagent/internal/investigation"
-	"fluxagent/internal/modelgateway"
-	"fluxagent/internal/querypolicy"
-	"fluxagent/internal/rcametrics"
-	"fluxagent/internal/rule"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/canonicaldigest"
+	"fluxseer/internal/datasource"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/investigation"
+	"fluxseer/internal/modelgateway"
+	"fluxseer/internal/querypolicy"
+	"fluxseer/internal/rcametrics"
+	"fluxseer/internal/rule"
 )
 
 type RiskRuleReconciler struct {

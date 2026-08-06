@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"fluxagent/internal/version"
+	"fluxseer/internal/version"
 )
 
 func Run(args []string, stdout, stderr io.Writer) error {

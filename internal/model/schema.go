@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"fluxagent/internal/domain"
+	"fluxseer/internal/domain"
 )
 
 type StructuredOutput struct {

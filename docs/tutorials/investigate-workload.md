@@ -58,7 +58,7 @@ The CLI creates `InvestigationRequest` objects for you.
 Simple mode uses repeated `--datasource` flags and lets the controller choose default queries from datasource capabilities:
 
 ```bash
-GOWORK=off go run ./cmd/fluxagent investigate deployment open-api \
+GOWORK=off go run ./cmd/fluxseer investigate deployment open-api \
   -n prod \
   --datasource kubernetes-events \
   --datasource prometheus \
@@ -71,7 +71,7 @@ GOWORK=off go run ./cmd/fluxagent investigate deployment open-api \
 Advanced mode uses a query file that maps directly to `spec.queries[]`:
 
 ```bash
-GOWORK=off go run ./cmd/fluxagent investigate deployment open-api \
+GOWORK=off go run ./cmd/fluxseer investigate deployment open-api \
   -n prod \
   --query-file config/samples/investigation-queries.yaml \
   --question "Why did open-api latency increase after the latest rollout?" \

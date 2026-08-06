@@ -12,9 +12,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/detector"
-	"fluxagent/internal/domain"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/detector"
+	"fluxseer/internal/domain"
 )
 
 type DeploymentRiskReconciler struct {

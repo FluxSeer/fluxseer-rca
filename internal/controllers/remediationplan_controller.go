@@ -11,9 +11,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/domain"
-	"fluxagent/internal/guardrails"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/guardrails"
 )
 
 type RemediationPlanReconciler struct {

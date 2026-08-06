@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"fluxagent/api/v1alpha1"
+	"fluxseer/api/v1alpha1"
 )
 
 func validateLogQLPolicy(policy v1alpha1.LogQLPolicy, req Request) Decision {

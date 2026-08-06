@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"fluxagent/internal/datasource"
-	"fluxagent/internal/domain"
+	"fluxseer/internal/datasource"
+	"fluxseer/internal/domain"
 )
 
 const (

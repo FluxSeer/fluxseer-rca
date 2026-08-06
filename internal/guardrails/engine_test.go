@@ -3,7 +3,7 @@ package guardrails
 import (
 	"testing"
 
-	"fluxagent/internal/domain"
+	"fluxseer/internal/domain"
 )
 
 func TestEvaluateAutoApproveLowSeverity(t *testing.T) {

@@ -1,4 +1,4 @@
-APP=fluxagent
+APP=fluxseer
 GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
 VERSION ?= dev
@@ -11,7 +11,7 @@ GIT_COMMIT := $(shell git rev-parse HEAD)
 GIT_DIRTY := $(shell test -z "$$(git status --porcelain)" && echo false || echo true)
 SOURCE_DATE_EPOCH := $(shell git show -s --format=%ct HEAD)
 BUILD_DATE := $(shell ./hack/source-date.sh "$(SOURCE_DATE_EPOCH)")
-VERSION_PACKAGE := fluxagent/internal/version
+VERSION_PACKAGE := fluxseer/internal/version
 GO_LDFLAGS := -X $(VERSION_PACKAGE).Version=$(VERSION) -X $(VERSION_PACKAGE).GitCommit=$(GIT_COMMIT) -X $(VERSION_PACKAGE).GitDirty=$(GIT_DIRTY) -X $(VERSION_PACKAGE).BuildDate=$(BUILD_DATE)
 GO_BUILD_FLAGS := -trimpath -buildvcs=false
 OPERATOR_IMAGE ?= fluxagent/operator

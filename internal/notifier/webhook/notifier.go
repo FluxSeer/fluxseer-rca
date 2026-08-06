@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"fluxagent/internal/notifier"
+	"fluxseer/internal/notifier"
 )
 
 type Notifier struct {

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"fluxagent/internal/version"
+	"fluxseer/internal/version"
 )
 
 type serverState struct {

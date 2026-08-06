@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"fluxagent/internal/cli"
+	"fluxseer/internal/cli"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package controllers
 import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
-	"fluxagent/internal/rcametrics"
+	"fluxseer/internal/rcametrics"
 )
 
 func recordStatusUpdateConflict(resource string, err error) bool {

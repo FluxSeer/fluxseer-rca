@@ -19,15 +19,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/datasource"
-	"fluxagent/internal/domain"
-	evidencepkg "fluxagent/internal/evidence"
-	"fluxagent/internal/knowledge"
-	"fluxagent/internal/model"
-	"fluxagent/internal/model/heuristic"
-	"fluxagent/internal/modelgateway"
-	"fluxagent/internal/rcametrics"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/datasource"
+	"fluxseer/internal/domain"
+	evidencepkg "fluxseer/internal/evidence"
+	"fluxseer/internal/knowledge"
+	"fluxseer/internal/model"
+	"fluxseer/internal/model/heuristic"
+	"fluxseer/internal/modelgateway"
+	"fluxseer/internal/rcametrics"
 )
 
 type clientObject = client.Object

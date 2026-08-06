@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"fluxagent/internal/operatorapp"
-	"fluxagent/internal/version"
+	"fluxseer/internal/operatorapp"
+	"fluxseer/internal/version"
 )
 
 func main() {

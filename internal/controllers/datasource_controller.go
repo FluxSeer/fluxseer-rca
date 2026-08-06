@@ -11,9 +11,9 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/datasource"
-	"fluxagent/internal/datasourceconfig"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/datasource"
+	"fluxseer/internal/datasourceconfig"
 )
 
 type DataSourceReconciler struct {

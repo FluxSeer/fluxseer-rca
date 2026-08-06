@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"fluxagent/internal/audit"
-	"fluxagent/internal/domain"
-	"fluxagent/internal/executor"
-	"fluxagent/internal/guardrails"
-	"fluxagent/internal/ingestion"
-	"fluxagent/internal/knowledge"
-	"fluxagent/internal/model/heuristic"
-	"fluxagent/internal/reasoning"
+	"fluxseer/internal/audit"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/executor"
+	"fluxseer/internal/guardrails"
+	"fluxseer/internal/ingestion"
+	"fluxseer/internal/knowledge"
+	"fluxseer/internal/model/heuristic"
+	"fluxseer/internal/reasoning"
 )
 
 func TestOrchestratorProducesManualApprovalForHighRisk(t *testing.T) {

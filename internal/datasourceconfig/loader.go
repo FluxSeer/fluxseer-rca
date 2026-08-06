@@ -14,11 +14,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/datasource"
-	k8sadapter "fluxagent/internal/datasource/kubernetes"
-	lokiadapter "fluxagent/internal/datasource/loki"
-	promadapter "fluxagent/internal/datasource/prometheus"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/datasource"
+	k8sadapter "fluxseer/internal/datasource/kubernetes"
+	lokiadapter "fluxseer/internal/datasource/loki"
+	promadapter "fluxseer/internal/datasource/prometheus"
 )
 
 const (

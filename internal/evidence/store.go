@@ -11,9 +11,9 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/canonicaldigest"
-	"fluxagent/internal/domain"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/canonicaldigest"
+	"fluxseer/internal/domain"
 )
 
 const (

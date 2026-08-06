@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"fluxagent/internal/domain"
-	"fluxagent/internal/model"
-	"fluxagent/internal/model/claude"
-	"fluxagent/internal/model/gemini"
-	"fluxagent/internal/model/openai"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/model"
+	"fluxseer/internal/model/claude"
+	"fluxseer/internal/model/gemini"
+	"fluxseer/internal/model/openai"
 )
 
 func TestOpenAIProviderCompletesStructuredResponse(t *testing.T) {

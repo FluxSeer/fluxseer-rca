@@ -7,13 +7,13 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/audit"
-	"fluxagent/internal/domain"
-	"fluxagent/internal/executor"
-	"fluxagent/internal/guardrails"
-	"fluxagent/internal/ingestion"
-	"fluxagent/internal/reasoning"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/audit"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/executor"
+	"fluxseer/internal/guardrails"
+	"fluxseer/internal/ingestion"
+	"fluxseer/internal/reasoning"
 )
 
 type Orchestrator struct {

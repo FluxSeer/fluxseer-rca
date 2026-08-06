@@ -7,8 +7,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"fluxagent/internal/domain"
-	"fluxagent/internal/rcametrics"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/rcametrics"
 )
 
 func TestPipelineRecordsDeduplicationHits(t *testing.T) {

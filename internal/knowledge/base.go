@@ -3,7 +3,7 @@ package knowledge
 import (
 	"strings"
 
-	"fluxagent/internal/domain"
+	"fluxseer/internal/domain"
 )
 
 type Base struct {

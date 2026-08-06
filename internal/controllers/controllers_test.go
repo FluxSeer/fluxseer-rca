@@ -12,10 +12,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/domain"
-	"fluxagent/internal/executor"
-	"fluxagent/internal/guardrails"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/executor"
+	"fluxseer/internal/guardrails"
 )
 
 func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) {

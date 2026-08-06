@@ -16,16 +16,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"fluxagent/api/v1alpha1"
-	"fluxagent/internal/canonicaldigest"
-	"fluxagent/internal/dataclassification"
-	"fluxagent/internal/domain"
-	evidencepkg "fluxagent/internal/evidence"
-	"fluxagent/internal/investigation"
-	"fluxagent/internal/rcametrics"
-	"fluxagent/internal/statusbudget"
-	"fluxagent/internal/verifier"
-	"fluxagent/internal/version"
+	"fluxseer/api/v1alpha1"
+	"fluxseer/internal/canonicaldigest"
+	"fluxseer/internal/dataclassification"
+	"fluxseer/internal/domain"
+	evidencepkg "fluxseer/internal/evidence"
+	"fluxseer/internal/investigation"
+	"fluxseer/internal/rcametrics"
+	"fluxseer/internal/statusbudget"
+	"fluxseer/internal/verifier"
+	"fluxseer/internal/version"
 )
 
 const (

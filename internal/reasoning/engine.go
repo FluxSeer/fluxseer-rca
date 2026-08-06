@@ -3,9 +3,9 @@ package reasoning
 import (
 	"context"
 
-	"fluxagent/internal/domain"
-	"fluxagent/internal/knowledge"
-	"fluxagent/internal/model"
+	"fluxseer/internal/domain"
+	"fluxseer/internal/knowledge"
+	"fluxseer/internal/model"
 )
 
 type Engine struct {

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"fluxagent/internal/datasource"
-	"fluxagent/internal/domain"
+	"fluxseer/internal/datasource"
+	"fluxseer/internal/domain"
 )
 
 type Adapter struct {
