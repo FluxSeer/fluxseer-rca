@@ -1,6 +1,6 @@
 # `AgentAction` Reference
 
-`AgentAction` is the guarded execution contract in FluxAgent.
+`AgentAction` is the guarded execution contract in FluxSeer RCA.
 
 ## API
 

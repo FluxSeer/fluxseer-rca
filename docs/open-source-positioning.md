@@ -1,9 +1,12 @@
 # Open Source Positioning
 
-FluxSeer RCA is the forward-looking product name for the project currently
-published as FluxAgent. It is positioned as a Kubernetes-native control plane
-for evidence-verifiable RCA, not as a bot tied to one monitoring stack and not
-as a general-purpose agent shell first.
+FluxSeer RCA is the project's product name, and source code, Helm charts, and
+build artifacts now use matching `fluxseer` / `fluxseer-rca` naming (renamed
+from the earlier `fluxagent` identity; see
+[architecture/rename-migration-plan.md](architecture/rename-migration-plan.md)).
+It is positioned as a Kubernetes-native control plane for evidence-verifiable
+RCA, not as a bot tied to one monitoring stack and not as a general-purpose
+agent shell first.
 
 Its open-source value is:
 
@@ -47,7 +50,7 @@ Security is part of the product positioning. FluxSeer RCA is read-only by defaul
 - Prometheus, Loki, CloudWatch, and OpenTelemetry are adapters, not hard dependencies.
 - OpenAI API, Claude API, and Gemini API are provider choices, not platform assumptions.
 - GitOps and notifications are preferred integration points for higher-risk actions.
-- fake observability endpoints in the demo are for validation convenience, not a claim that FluxAgent owns the user's monitoring stack.
+- fake observability endpoints in the demo are for validation convenience, not a claim that FluxSeer RCA owns the user's monitoring stack.
 - CLI and future UI surfaces should wrap `InvestigationRequest` rather than define a separate execution truth.
 - `RiskRule` remains an optional bootstrap signal source rather than the center of product identity.
 - raw secrets, authorization headers, unredacted evidence, provider prompts, and provider raw responses should not be stored as default CRD status.
@@ -79,7 +82,7 @@ It does not mean:
 
 ## What Should Become Valuable
 
-FluxAgent should create open-source value around assets that platform teams can inspect, adapt, and test:
+FluxSeer RCA should create open-source value around assets that platform teams can inspect, adapt, and test:
 
 - stable RCA status contracts
 - rule packs with explicit scope and thresholds

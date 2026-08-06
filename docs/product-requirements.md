@@ -6,11 +6,11 @@ This document consolidates the product requirements that should guide README, ar
 
 ## Product Positioning
 
-FluxSeer RCA is the forward-looking product name for the Kubernetes-native
-control plane for evidence-verifiable root cause analysis currently published
-as FluxAgent.
+FluxSeer RCA is the product name for the Kubernetes-native control plane for
+evidence-verifiable root cause analysis. Source code and build artifacts now
+use matching `fluxseer` / `fluxseer-rca` naming.
 
-Current compatibility name:
+Compatibility name (last published release, `v0.3.0-beta.3`):
 
 ```text
 FluxAgent
@@ -50,7 +50,7 @@ Current release scope:
 v0.3.0-beta.3 is a beta hardening prerelease with canonical RCA preflight semantics, evidence gating, direct RiskRule compatibility, hardened read-only defaults, least-privilege default RBAC, GHCR images, Helm OCI packaging, and verified provenance.
 ```
 
-The long-term product positioning is intentionally narrower than a general AI SRE agent. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it. The product rename must not be used as a shortcut for breaking the current v1alpha1 API, metric, annotation, or release-artifact compatibility surfaces.
+The long-term product positioning is intentionally narrower than a general AI SRE agent. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it. The product rename must not be used as a shortcut for breaking the current v1alpha1 API, metric, annotation, or release-artifact compatibility surfaces once real external installs depend on them. (The `fluxagent` -> `fluxseer` / `fluxseer-rca` metric, annotation, and schema/digest identifier rename was an exception made before any external cluster ran this product; see [architecture/rename-migration-plan.md](architecture/rename-migration-plan.md).)
 
 ## Product Principles
 
@@ -69,7 +69,7 @@ The long-term product positioning is intentionally narrower than a general AI SR
 
 ## Product Boundaries
 
-FluxAgent should not compete on the breadth of built-in Kubernetes analyzers, autonomous agent tool use, full observability ownership, or production self-healing.
+FluxSeer RCA should not compete on the breadth of built-in Kubernetes analyzers, autonomous agent tool use, full observability ownership, or production self-healing.
 
 Primary product ownership:
 
@@ -121,11 +121,11 @@ Remediation must remain downstream from RCA and must not grant reasoning provide
 
 ## Existence And Value
 
-FluxAgent exists to give Kubernetes platform teams an auditable RCA workflow substrate without requiring them to adopt a black-box AI monitoring agent, a full replacement observability stack, or a specific model vendor.
+FluxSeer RCA exists to give Kubernetes platform teams an auditable RCA workflow substrate without requiring them to adopt a black-box AI monitoring agent, a full replacement observability stack, or a specific model vendor.
 
-The core advantage is not that FluxAgent can also use AI to look at Kubernetes problems. The core advantage is that it turns temporary, opaque, and hard-to-repeat RCA into durable organizational knowledge with governed workflow state.
+The core advantage is not that FluxSeer RCA can also use AI to look at Kubernetes problems. The core advantage is that it turns temporary, opaque, and hard-to-repeat RCA into durable organizational knowledge with governed workflow state.
 
-FluxAgent should solve operational problems platform teams actually feel:
+FluxSeer RCA should solve operational problems platform teams actually feel:
 
 - nobody knows what was checked during an incident
 - different responders reach different conclusions for the same symptoms
@@ -137,7 +137,7 @@ FluxAgent should solve operational problems platform teams actually feel:
 The intended value is:
 
 - teams define what matters through native Kubernetes resources
-- FluxAgent collects bounded evidence from declared datasources
+- FluxSeer RCA collects bounded evidence from declared datasources
 - evidence is normalized and redacted before model reasoning
 - heuristic mode remains usable without external API calls
 - hosted OpenAI, Claude, and Gemini providers are opt-in through workload-scoped credentials
@@ -156,13 +156,13 @@ Every hosted provider transmission can be governed and audited.
 Every terminal investigation can become a reusable replay artifact or evaluation input.
 ```
 
-FluxAgent should become useful first for teams that already have Kubernetes, Prometheus, Loki, Alertmanager, and GitOps, but need AI-assisted RCA to satisfy platform governance instead of bypassing it.
+FluxSeer RCA should become useful first for teams that already have Kubernetes, Prometheus, Loki, Alertmanager, and GitOps, but need AI-assisted RCA to satisfy platform governance instead of bypassing it.
 
 ## Product Moats
 
 ### RCA Contract
 
-FluxAgent should standardize:
+FluxSeer RCA should standardize:
 
 - verdict
 - claim
@@ -173,7 +173,7 @@ FluxAgent should standardize:
 
 ### Replay Corpus
 
-FluxAgent should make completed investigations reusable for:
+FluxSeer RCA should make completed investigations reusable for:
 
 - provider regression tests
 - prompt and model upgrade comparison
@@ -184,7 +184,7 @@ FluxAgent should make completed investigations reusable for:
 
 ### Policy Governance
 
-FluxAgent should keep these controls explicit and auditable:
+FluxSeer RCA should keep these controls explicit and auditable:
 
 - query policy
 - data classification
@@ -195,7 +195,7 @@ FluxAgent should keep these controls explicit and auditable:
 
 ### Kubernetes Ecosystem Integration
 
-FluxAgent should integrate through Kubernetes-native surfaces:
+FluxSeer RCA should integrate through Kubernetes-native surfaces:
 
 - `RiskRule`
 - `InvestigationRequest`
@@ -220,7 +220,7 @@ The long-term community asset should be high-quality, replayable, and verifiable
 
 ## Non-Goals And False Wedges
 
-FluxAgent should avoid product directions that dilute the control-plane value:
+FluxSeer RCA should avoid product directions that dilute the control-plane value:
 
 - building another AI Kubernetes chatbot
 - claiming that CRDs alone make a control plane
@@ -232,7 +232,7 @@ The project should first prove that it can produce trusted, traceable, and repea
 
 ## Security Principles
 
-Read-only does not automatically prevent data exposure. Logs, events, pod specs, ConfigMaps, and error messages can still contain tokens or connection strings. FluxAgent therefore treats evidence minimization and redaction as core product requirements, not implementation details.
+Read-only does not automatically prevent data exposure. Logs, events, pod specs, ConfigMaps, and error messages can still contain tokens or connection strings. FluxSeer RCA therefore treats evidence minimization and redaction as core product requirements, not implementation details.
 
 Reasoning providers must not receive unrestricted Kubernetes access. Hosted providers should receive only bounded, normalized, and redacted evidence collected through declared `InvestigationRequest`, `RiskRule`, datasource, and policy configuration.
 
@@ -259,7 +259,7 @@ The current published beta release includes:
 - `ModelProvider`-backed RCA generation with heuristic default plus optional OpenAI, Claude, and Gemini API providers
 - explicit hosted-provider data egress policy on the canonical `InvestigationRequest` path
 - `RiskSignal` output with materialized findings, compact evidence references, and compatibility RCA fields for read-only rule evaluation
-- `fluxagent investigate` as a CLI wrapper around `InvestigationRequest`
+- `fluxseer investigate` as a CLI wrapper around `InvestigationRequest`
 - optional discovered `RiskSignal` materialization from `InvestigationRequest`
 - webhook notification
 - TTL cleanup for `RiskSignal` and `InvestigationRequest`
@@ -272,7 +272,7 @@ The current scope includes the frozen v0.3 structured `InvestigationRequest.stat
 
 ## Baseline Rule Pack Contract
 
-FluxAgent should not require users to hand-write every initial `RiskRule`, but built-in rules must remain explicit, bounded, and secondary to the RCA workflow.
+FluxSeer RCA should not require users to hand-write every initial `RiskRule`, but built-in rules must remain explicit, bounded, and secondary to the RCA workflow.
 
 Rule pack principles:
 
@@ -329,7 +329,7 @@ Application profile
 - external API rate limiting
 ```
 
-Application profiles must expose query expressions and labels as values. FluxAgent should not assume that every workload uses `http_requests_total`, the same histogram buckets, the same queue metric, or the same application label shape.
+Application profiles must expose query expressions and labels as values. FluxSeer RCA should not assume that every workload uses `http_requests_total`, the same histogram buckets, the same queue metric, or the same application label shape.
 
 Verification contract:
 
@@ -383,7 +383,7 @@ Recommended shared services:
 
 ## Provider And Agent Runtime Boundary
 
-FluxAgent should keep synchronous model reasoning separate from multi-step agent execution.
+FluxSeer RCA should keep synchronous model reasoning separate from multi-step agent execution.
 
 `ModelProvider` is the abstraction for bounded, structured, relatively stateless RCA generation:
 
@@ -400,7 +400,7 @@ Expected implementations include:
 - `ClaudeProvider`
 - `GeminiProvider`
 
-FluxAgent's open-source product line intentionally does not include CLI agent runtimes, subscription-session runners, or Kubernetes pods that mount developer-local interactive auth caches. RCA reasoning is provided through `ModelProvider` using either the no-secret heuristic provider or workload-scoped API credentials for OpenAI, Claude, and Gemini.
+FluxSeer RCA's open-source product line intentionally does not include CLI agent runtimes, subscription-session runners, or Kubernetes pods that mount developer-local interactive auth caches. RCA reasoning is provided through `ModelProvider` using either the no-secret heuristic provider or workload-scoped API credentials for OpenAI, Claude, and Gemini.
 
 `ModelProvider` is the current `v1alpha1` name. Before a breaking API cut, evaluate whether the abstraction should become `ReasoningProvider` to cover heuristic, hosted model APIs, and future RCA runtime providers without implying that every provider is a model.
 
@@ -416,7 +416,7 @@ These capabilities must not all be granted to the same pod or ServiceAccount.
 
 ## Trustworthy RCA Contract
 
-FluxAgent now includes the frozen v0.3 structured RCA status contract for `InvestigationRequest`. The next product hardening target is runtime validation, replay coverage, dashboards, provider accuracy, and real-cluster compatibility without changing the frozen schema.
+FluxSeer RCA now includes the frozen v0.3 structured RCA status contract for `InvestigationRequest`. The next product hardening target is runtime validation, replay coverage, dashboards, provider accuracy, and real-cluster compatibility without changing the frozen schema.
 
 The contract should make this relationship explicit:
 

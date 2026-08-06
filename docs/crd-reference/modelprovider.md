@@ -19,7 +19,7 @@ Source schema: [api/v1alpha1/modelprovider_types.go](../../api/v1alpha1/modelpro
 - `spec.timeout`: provider request timeout
 - `spec.maxTokens`: provider output token limit
 - `spec.fallbackProviderRef`: optional fallback provider
-- `spec.dataPolicy.allowExternalTransmission`: must be `true` before FluxAgent sends evidence to hosted providers
+- `spec.dataPolicy.allowExternalTransmission`: must be `true` before FluxSeer RCA sends evidence to hosted providers
 - `spec.dataPolicy.allowedEvidenceKinds[]`: optional allowlist such as `MetricObservation`, `KubernetesEventObservation`, `LogObservation`, or `DeploymentConditionObservation`
 - `spec.dataPolicy.deniedSensitivityTags[]`: optional denylist such as `CredentialLike`, `PersonalData`, `CustomerData`, `SourceCode`, `InfrastructureMetadata`, or `SecuritySensitive`
 - `spec.dataPolicy.allowLogSamples`: controls whether log sample text may be sent independently from metric and event metadata
@@ -30,7 +30,7 @@ Source schema: [api/v1alpha1/modelprovider_types.go](../../api/v1alpha1/modelpro
 
 The built-in `heuristic` provider remains local and does not require external transmission. Hosted providers such as `openai`, `claude`, and `gemini` are blocked unless `spec.dataPolicy.allowExternalTransmission` is explicitly set to `true`.
 
-When hosted transmission is allowed, FluxAgent sends normalized, redacted, and policy-filtered evidence. Log samples are omitted unless `allowLogSamples` is true.
+When hosted transmission is allowed, FluxSeer RCA sends normalized, redacted, and policy-filtered evidence. Log samples are omitted unless `allowLogSamples` is true.
 
 Hosted provider egress uses this order:
 
@@ -58,4 +58,4 @@ Redaction does not automatically lower classification. For example, a log sample
 
 Execution metadata records an egress audit with decision, reason, provider type, evidence bundle digest, evidence kinds, sensitivity tags sent, whether log samples were included, maximum classification observed, maximum classification allowed, maximum classification sent, and classification policy version. The audit does not include full evidence payloads, full prompts, raw provider responses, secrets, or complete queries.
 
-Read-only means FluxAgent does not mutate user workloads. It does not mean zero data egress when a hosted provider is explicitly enabled.
+Read-only means FluxSeer RCA does not mutate user workloads. It does not mean zero data egress when a hosted provider is explicitly enabled.

@@ -1,6 +1,6 @@
 # Helm Rule Packs
 
-FluxAgent Helm installs can create built-in `RiskRule` resources through `rulePacks`.
+FluxSeer RCA Helm installs can create built-in `RiskRule` resources through `rulePacks`.
 
 Rule packs are explicit configuration. They do not install Prometheus, Loki, hosted model providers, provider secrets, or any external agent.
 
@@ -63,18 +63,18 @@ When `defaultTargetSelector.namespaceSelector.matchNames` is omitted, the chart 
 | `rulePacks.defaultTargetSelector.namespaceSelector.matchNames` | release namespace | Namespaces scanned by generated rule packs. Use `[]` only when cluster-wide scanning is intended. |
 | `rulePacks.defaultTargetSelector.workloadSelector.kinds` | `["Deployment"]` | Workload kinds discovered by generated rules. Current rule evaluation supports Deployment targets. |
 | `rulePacks.defaultTargetSelector.workloadSelector.matchLabels` | `{}` | Optional labels that target workloads must match. |
-| `rulePacks.kubernetesBaseline.enabled` | `true` | Creates `fluxagent-kubernetes-baseline`. |
+| `rulePacks.kubernetesBaseline.enabled` | `true` | Creates `fluxseer-rca-kubernetes-baseline`. |
 | `rulePacks.kubernetesBaseline.interval` | `2m` | Rule reconciliation interval. |
 | `rulePacks.kubernetesBaseline.window` | `10m` | Evidence lookback window. |
 | `rulePacks.kubernetesBaseline.severity` | `warning` | Severity used on generated `RiskSignal` resources. |
-| `rulePacks.kubernetesBaseline.rcaEnabled` | `true` | Enables RCA enrichment. With no providerRef, FluxAgent uses the built-in heuristic provider. |
+| `rulePacks.kubernetesBaseline.rcaEnabled` | `true` | Enables RCA enrichment. With no providerRef, FluxSeer RCA uses the built-in heuristic provider. |
 | `rulePacks.kubernetesBaseline.providerRef.name` | `""` | Optional `ModelProvider` name for RCA. |
-| `rulePacks.prometheusBaseline.enabled` | `false` | Creates `fluxagent-prometheus-baseline`. Requires a matching `DataSource`. |
+| `rulePacks.prometheusBaseline.enabled` | `false` | Creates `fluxseer-rca-prometheus-baseline`. Requires a matching `DataSource`. |
 | `rulePacks.prometheusBaseline.datasourceRef.name` | `prometheus` | `DataSource` name used by Prometheus signals. |
 | `rulePacks.prometheusBaseline.interval` | `2m` | Rule reconciliation interval. |
 | `rulePacks.prometheusBaseline.window` | `10m` | Evidence lookback window. |
 | `rulePacks.prometheusBaseline.severity` | `warning` | Severity used on generated `RiskSignal` resources. |
-| `rulePacks.prometheusBaseline.rcaEnabled` | `true` | Enables RCA enrichment. With no providerRef, FluxAgent uses the built-in heuristic provider. |
+| `rulePacks.prometheusBaseline.rcaEnabled` | `true` | Enables RCA enrichment. With no providerRef, FluxSeer RCA uses the built-in heuristic provider. |
 | `rulePacks.prometheusBaseline.trafficAnomaly.comparisonOffset` | `30m` | Offset used to compare current request rate against a previous baseline window. |
 | `rulePacks.prometheusBaseline.trafficAnomaly.increaseRatio` | `3` | Current/request baseline ratio required for the request-rate-surge signal. |
 | `rulePacks.prometheusBaseline.trafficAnomaly.minimumCurrentRate` | `10` | Minimum current request rate before request-rate-surge can trigger. |
@@ -83,12 +83,12 @@ When `defaultTargetSelector.namespaceSelector.matchNames` is omitted, the chart 
 | `rulePacks.prometheusBaseline.resourceThresholds.memoryWorkingSetBytes` | `1073741824` | Absolute memory working set fallback threshold. |
 | `rulePacks.prometheusBaseline.resourceThresholds.memoryNearLimitRatio` | `0.9` | Memory working set divided by configured memory limit threshold. |
 | `rulePacks.prometheusBaseline.providerRef.name` | `""` | Optional `ModelProvider` name for RCA. |
-| `rulePacks.lokiBaseline.enabled` | `false` | Creates `fluxagent-loki-baseline`. Requires a matching `DataSource`. |
+| `rulePacks.lokiBaseline.enabled` | `false` | Creates `fluxseer-rca-loki-baseline`. Requires a matching `DataSource`. |
 | `rulePacks.lokiBaseline.datasourceRef.name` | `loki` | `DataSource` name used by Loki signals. |
 | `rulePacks.lokiBaseline.interval` | `2m` | Rule reconciliation interval. |
 | `rulePacks.lokiBaseline.window` | `10m` | Evidence lookback window. |
 | `rulePacks.lokiBaseline.severity` | `warning` | Severity used on generated `RiskSignal` resources. |
-| `rulePacks.lokiBaseline.rcaEnabled` | `true` | Enables RCA enrichment. With no providerRef, FluxAgent uses the built-in heuristic provider. |
+| `rulePacks.lokiBaseline.rcaEnabled` | `true` | Enables RCA enrichment. With no providerRef, FluxSeer RCA uses the built-in heuristic provider. |
 | `rulePacks.lokiBaseline.providerRef.name` | `""` | Optional `ModelProvider` name for RCA. |
 | `rulePacks.applicationProfiles.enabled` | `false` | Creates user-defined application profile `RiskRule` resources. |
 | `rulePacks.applicationProfiles.profiles[]` | `[]` | Application-specific metric profile definitions. |

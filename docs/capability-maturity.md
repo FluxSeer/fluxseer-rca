@@ -1,6 +1,6 @@
 # Capability Maturity
 
-FluxAgent exposes several Kubernetes resources and adapters, but they are not all part of the same maturity tier.
+FluxSeer RCA exposes several Kubernetes resources and adapters, but they are not all part of the same maturity tier.
 
 The default product path is intentionally narrow:
 
@@ -38,7 +38,7 @@ InvestigationRequest
 | OpenAI API provider | Beta / opt-in | Requires `ModelProvider`, Secret, and hosted-provider data egress opt-in. |
 | Claude API provider | Beta / opt-in | Requires `ModelProvider`, Secret, and hosted-provider data egress opt-in. |
 | Gemini API provider | Beta / opt-in | Requires `ModelProvider`, Secret, and hosted-provider data egress opt-in. |
-| Normalized snapshot retention | Beta / opt-in | Requires `FLUXAGENT_EVIDENCE_STORE_DIR` and `storageRef.name: local-filesystem`. |
+| Normalized snapshot retention | Beta / opt-in | Requires `FLUXSEER_RCA_EVIDENCE_STORE_DIR` and `storageRef.name: local-filesystem`. |
 | Raw snapshot retention | Reserved / unsupported | Contract is present, runtime rejects it in v0.3. |
 | Replay artifacts and comparison | Foundation / library | Terminal CRD export and deterministic bundle comparison exist; no runtime replay runner or controller entrypoint is shipped. |
 | OpenTelemetry adapter | Scaffold | Not part of the supported v0.3 adapter set. |
@@ -76,7 +76,7 @@ features:
     enabled: false
 ```
 
-An empty `rbac.profile` lets Helm derive the profile from feature flags. The default derived profile is `readOnlyRCA`, which keeps workload access read-only and grants write access only to FluxAgent-owned RCA resources and statuses.
+An empty `rbac.profile` lets Helm derive the profile from feature flags. The default derived profile is `readOnlyRCA`, which keeps workload access read-only and grants write access only to FluxSeer RCA-owned RCA resources and statuses.
 
 Experimental remediation requires explicit opt-in:
 

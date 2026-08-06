@@ -1,6 +1,6 @@
 # Enable Guarded Remediation
 
-FluxAgent ships with remediation controllers, but they are disabled by default.
+FluxSeer RCA ships with remediation controllers, but they are disabled by default.
 
 ## Start the Manager in Remediation Mode
 

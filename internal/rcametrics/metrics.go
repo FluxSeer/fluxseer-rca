@@ -76,7 +76,7 @@ var (
 	ClaimVerificationTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fluxseer_rca_claim_verification_total",
-			Help: "Total FluxSeer RCA RCA claims by verification status.",
+			Help: "Total FluxSeer RCA claims by verification status.",
 		},
 		AllowedLabels["fluxseer_rca_claim_verification_total"],
 	)

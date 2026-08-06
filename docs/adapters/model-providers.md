@@ -1,6 +1,6 @@
 # Model Providers
 
-FluxAgent treats model providers as interchangeable backends, not as core platform assumptions.
+FluxSeer RCA treats model providers as interchangeable backends, not as core platform assumptions.
 
 ## Available Provider Packages
 
@@ -17,7 +17,7 @@ FluxAgent treats model providers as interchangeable backends, not as core platfo
 
 ## Multi-provider Usage
 
-FluxAgent expects users to select the AI backend through `ModelProvider`, not by embedding vendor-specific details into `RiskRule`.
+FluxSeer RCA expects users to select the AI backend through `ModelProvider`, not by embedding vendor-specific details into `RiskRule`.
 
 Typical pattern:
 
@@ -25,7 +25,7 @@ Typical pattern:
 2. create one `ModelProvider` per hosted model choice
 3. point `RiskRule.spec.ai.providerRef.name` at the desired provider
 
-Provider token `Secret` objects are namespace-local to the `ModelProvider`. The default Helm RBAC grants Secret read permission only in the FluxAgent controller namespace, so cross-namespace provider credentials require explicit additional RoleBinding configuration.
+Provider token `Secret` objects are namespace-local to the `ModelProvider`. The default Helm RBAC grants Secret read permission only in the FluxSeer RCA controller namespace, so cross-namespace provider credentials require explicit additional RoleBinding configuration.
 
 Example provider choices:
 
@@ -101,7 +101,7 @@ ai:
 
 ## Hosted Provider Contract
 
-Hosted providers use a shared response contract. FluxAgent expects the upstream model output to normalize into these fields:
+Hosted providers use a shared response contract. FluxSeer RCA expects the upstream model output to normalize into these fields:
 
 - `riskTitle`
 - `riskSummary`
@@ -112,7 +112,7 @@ Hosted providers use a shared response contract. FluxAgent expects the upstream 
 - `rcaCauses`
 - `actionType`
 
-If a hosted provider response cannot be normalized to this schema, FluxAgent marks `RCAReady=False` with reason `InvalidProviderResponse`.
+If a hosted provider response cannot be normalized to this schema, FluxSeer RCA marks `RCAReady=False` with reason `InvalidProviderResponse`.
 
 Hosted provider runtime behavior is now unified across `openai`, `gemini`, and `claude`:
 
@@ -131,14 +131,14 @@ Classification level and sensitivity tags are separate. Levels are ordered as `P
 
 `spec.fallbackProviderRef.name` is optional.
 
-When it is set, FluxAgent attempts the primary `ModelProvider` first. If the primary path fails because of provider availability, unsupported provider type, secret resolution, or invalid structured response, the model gateway resolves the fallback provider and retries RCA there.
+When it is set, FluxSeer RCA attempts the primary `ModelProvider` first. If the primary path fails because of provider availability, unsupported provider type, secret resolution, or invalid structured response, the model gateway resolves the fallback provider and retries RCA there.
 
 Typical pattern:
 
 - primary: hosted provider such as `openai`, `gemini`, or `claude`
 - fallback: `heuristic-provider` for a no-secret fail-closed path
 
-If the fallback resolution fails, FluxAgent surfaces the fallback failure reason such as:
+If the fallback resolution fails, FluxSeer RCA surfaces the fallback failure reason such as:
 
 - `ProviderNotFound`
 - `ResolverUnavailable`
@@ -168,7 +168,7 @@ Invalid provider responses should remain visible because they may indicate schem
 
 ## Why This Matters
 
-This design keeps FluxAgent:
+This design keeps FluxSeer RCA:
 
 - open-source friendly
 - runnable without secrets

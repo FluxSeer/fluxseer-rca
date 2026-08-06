@@ -33,9 +33,9 @@ The supported path is to set event reasons on `RiskRule` or `InvestigationReques
 
 The legacy Deployment annotation path also accepts this per-workload override when `--enable-legacy-deployment-risk=true` is explicitly enabled:
 
-- `fluxagent.aiops.platform/event-keywords`
+- `fluxseer-rca.aiops.platform/event-keywords`
 
-If not provided, FluxAgent looks for these keywords:
+If not provided, FluxSeer RCA looks for these keywords:
 
 - `backoff`
 - `oomkilled`
@@ -44,7 +44,7 @@ If not provided, FluxAgent looks for these keywords:
 
 ## Detection Behavior
 
-When a matching event is found through the legacy path, FluxAgent creates a high-severity finding:
+When a matching event is found through the legacy path, FluxSeer RCA creates a high-severity finding:
 
 - signal type: `workload.kubernetes_event`
 - confidence: `90`

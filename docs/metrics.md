@@ -1,6 +1,6 @@
 # Metrics
 
-FluxAgent exposes low-cardinality Prometheus metrics for RCA control-plane health.
+FluxSeer RCA exposes low-cardinality Prometheus metrics for RCA control-plane health.
 
 ## Controller Runtime Workqueue
 
@@ -16,7 +16,7 @@ controller_runtime_active_workers
 controller_runtime_max_concurrent_reconciles
 ```
 
-FluxAgent does not maintain a duplicate reconciler queue counter. If a FluxAgent-prefixed compatibility metric is useful for dashboards, enable the Helm recording rule:
+FluxSeer RCA does not maintain a duplicate reconciler queue counter. If a FluxSeer RCA-prefixed compatibility metric is useful for dashboards, enable the Helm recording rule:
 
 ```yaml
 metrics:
@@ -28,18 +28,18 @@ metrics:
 This creates:
 
 ```text
-fluxagent_queue_depth
+fluxseer_rca_queue_depth
 ```
 
 as an alias backed by `workqueue_depth`.
 
 ## Datasource Scheduler
 
-FluxAgent-owned datasource scheduler metrics are separate from controller-runtime reconcile queues:
+FluxSeer RCA-owned datasource scheduler metrics are separate from controller-runtime reconcile queues:
 
 ```text
-fluxagent_datasource_query_queue_depth
-fluxagent_datasource_queries_in_flight
+fluxseer_rca_datasource_query_queue_depth
+fluxseer_rca_datasource_queries_in_flight
 ```
 
 `queue_depth` means datasource queries submitted to the bounded scheduler but still waiting for a slot. `in_flight` means queries that acquired a slot and have not completed.

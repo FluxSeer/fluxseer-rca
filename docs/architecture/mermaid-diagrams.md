@@ -1,6 +1,6 @@
-# FluxAgent Mermaid Architecture Diagrams
+# FluxSeer RCA Mermaid Architecture Diagrams
 
-This document is the maintained Mermaid diagram set for the current `v0.3` FluxAgent architecture.
+This document is the maintained Mermaid diagram set for the current `v0.3` FluxSeer RCA architecture.
 
 Scope:
 
@@ -24,7 +24,7 @@ flowchart TB
     GitOps[GitOps Repository]
     ExternalAlert[External Alert Source]
     KubeAPI[Kubernetes API Server]
-    FluxAgent[FluxAgent Controller Manager]
+    FluxSeer RCA[FluxSeer RCA Controller Manager]
     Workloads[User Workloads]
     Events[Kubernetes Events]
     Prometheus[Prometheus]
@@ -42,17 +42,17 @@ flowchart TB
     GitOps -->|applies CRDs and manifests| KubeAPI
     ExternalAlert -->|future producer creates| KubeAPI
 
-    KubeAPI -->|watch events delivered through API server| FluxAgent
-    FluxAgent -->|status updates| KubeAPI
-    FluxAgent -->|list/get/watch workloads and events through RBAC| KubeAPI
+    KubeAPI -->|watch events delivered through API server| FluxSeer RCA
+    FluxSeer RCA -->|status updates| KubeAPI
+    FluxSeer RCA -->|list/get/watch workloads and events through RBAC| KubeAPI
     KubeAPI --> Workloads
     KubeAPI --> Events
-    FluxAgent -->|bounded metric queries| Prometheus
-    FluxAgent -->|bounded log queries| Loki
-    FluxAgent -->|hosted RCA API call| OpenAI
-    FluxAgent -->|hosted RCA API call| Claude
-    FluxAgent -->|hosted RCA API call| Gemini
-    FluxAgent -->|local no-secret RCA| Heuristic
+    FluxSeer RCA -->|bounded metric queries| Prometheus
+    FluxSeer RCA -->|bounded log queries| Loki
+    FluxSeer RCA -->|hosted RCA API call| OpenAI
+    FluxSeer RCA -->|hosted RCA API call| Claude
+    FluxSeer RCA -->|hosted RCA API call| Gemini
+    FluxSeer RCA -->|local no-secret RCA| Heuristic
 
     HelmClient -->|pull chart| HelmOCI
     HelmClient -->|render/apply manifests| KubeAPI
@@ -830,7 +830,7 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     Values[Helm values.yaml]
-    Chart[charts/fluxagent]
+    Chart[charts/fluxseer-rca]
     CRDs[crds/*.yaml]
     Deploy[controller Deployment]
     SA[controller ServiceAccount]
@@ -908,7 +908,7 @@ flowchart TB
     Verifier[internal/verifier]
     Metrics[internal/rcametrics]
     API[api/v1alpha1]
-    Helm[charts/fluxagent]
+    Helm[charts/fluxseer-rca]
     Config[config]
     Examples[examples]
 

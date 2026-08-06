@@ -2,22 +2,22 @@
 
 This tutorial shows the operator-first investigation path built around `InvestigationRequest`.
 
-Use it when you want FluxAgent to investigate one workload now, collect evidence, run RCA, and optionally promote the result into `RiskSignal`.
+Use it when you want FluxSeer RCA to investigate one workload now, collect evidence, run RCA, and optionally promote the result into `RiskSignal`.
 
 ## What You Need
 
-- a Kubernetes cluster with FluxAgent installed
+- a Kubernetes cluster with FluxSeer RCA installed
 - `kubectl`
-- Go toolchain if you want to run the local `fluxagent` CLI from source
+- Go toolchain if you want to run the local `fluxseer` CLI from source
 - at least one `DataSource`
 - optional `ModelProvider`
 
-If you omit `spec.modelProviderRef`, FluxAgent falls back to the built-in heuristic provider.
+If you omit `spec.modelProviderRef`, FluxSeer RCA falls back to the built-in heuristic provider.
 
-## 1. Deploy FluxAgent
+## 1. Deploy FluxSeer RCA
 
 ```bash
-kubectl create namespace fluxagent-system
+kubectl create namespace fluxseer-rca-system
 kubectl apply -k config/default
 ```
 
@@ -42,8 +42,8 @@ Use the sample CRD when you want a fully explicit investigation plan:
 
 ```bash
 kubectl apply -f config/samples/investigation-request.yaml
-kubectl get investigationrequest -n fluxagent-system
-kubectl describe investigationrequest investigate-open-api -n fluxagent-system
+kubectl get investigationrequest -n fluxseer-rca-system
+kubectl describe investigationrequest investigate-open-api -n fluxseer-rca-system
 ```
 
 That sample uses:
@@ -51,7 +51,7 @@ That sample uses:
 - `queries[]` for explicit per-datasource collection steps
 - `createRiskSignal: true` so successful RCA is promoted into a `RiskSignal`
 
-## 4. Use The `fluxagent investigate` CLI
+## 4. Use The `fluxseer investigate` CLI
 
 The CLI creates `InvestigationRequest` objects for you.
 
@@ -82,18 +82,18 @@ GOWORK=off go run ./cmd/fluxseer investigate deployment open-api \
 
 Useful flags:
 
-- `--request-namespace`: namespace that stores the `InvestigationRequest`, default `fluxagent-system`
+- `--request-namespace`: namespace that stores the `InvestigationRequest`, default `fluxseer-rca-system`
 - `--request-name`: explicit object name instead of generated name
 - `--lookback`: evidence window, default `15m`
 - `--timeout`: wait timeout when `--wait=true`, default `90s`
 
-If you set `spec.ttlSeconds`, FluxAgent keeps the finished `InvestigationRequest` until `status.completedAt + ttlSeconds`, then removes it automatically. This does not delete any promoted `RiskSignal`.
+If you set `spec.ttlSeconds`, FluxSeer RCA keeps the finished `InvestigationRequest` until `status.completedAt + ttlSeconds`, then removes it automatically. This does not delete any promoted `RiskSignal`.
 
 ## 5. Inspect Results
 
 ```bash
-kubectl get investigationrequest -n fluxagent-system
-kubectl get investigationrequest -n fluxagent-system -o yaml
+kubectl get investigationrequest -n fluxseer-rca-system
+kubectl get investigationrequest -n fluxseer-rca-system -o yaml
 kubectl get risksignal -n prod
 ```
 
@@ -130,7 +130,7 @@ Common degraded reasons:
 Example:
 
 ```bash
-kubectl describe investigationrequest <name> -n fluxagent-system
+kubectl describe investigationrequest <name> -n fluxseer-rca-system
 ```
 
-Look at `status.conditions` to see which stage failed and whether FluxAgent marked the request as degraded because an optional dependency was unavailable.
+Look at `status.conditions` to see which stage failed and whether FluxSeer RCA marked the request as degraded because an optional dependency was unavailable.

@@ -1,11 +1,11 @@
 # Enable Loki
 
-Loki is optional in FluxAgent and is used through `DataSource`, `RiskRule`, and `InvestigationRequest`.
+Loki is optional in FluxSeer RCA and is used through `DataSource`, `RiskRule`, and `InvestigationRequest`.
 
 ## Local Run
 
 ```bash
-export FLUXAGENT_LOKI_URL=http://localhost:3100
+export FLUXSEER_RCA_LOKI_URL=http://localhost:3100
 GOWORK=off go run ./cmd/manager
 ```
 
@@ -13,7 +13,7 @@ GOWORK=off go run ./cmd/manager
 
 ```yaml
 env:
-  - name: FLUXAGENT_LOKI_URL
+  - name: FLUXSEER_RCA_LOKI_URL
     value: http://loki.monitoring.svc:3100
 ```
 
@@ -47,7 +47,7 @@ spec:
 
 ## What Happens
 
-- FluxAgent calls Loki `query_range`
+- FluxSeer RCA calls Loki `query_range`
 - matching log lines are converted into evidence
 - any non-empty result can create a `RiskSignal` or `InvestigationRequest` depending on rule policy
 - log samples are redacted and bounded before they reach provider reasoning

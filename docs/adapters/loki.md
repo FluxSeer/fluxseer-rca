@@ -1,18 +1,18 @@
 # Loki Adapter
 
-FluxAgent uses Loki as an optional log datasource for read-only detection.
+FluxSeer RCA uses Loki as an optional log datasource for read-only detection.
 
 ## Runtime Wiring
 
 The adapter is registered when either:
 
-- `FLUXAGENT_LOKI_URL` is set
+- `FLUXSEER_RCA_LOKI_URL` is set
 - a `DataSource` resource of type `loki` is present
 
 Env-based example:
 
 ```bash
-export FLUXAGENT_LOKI_URL=http://your-loki.example
+export FLUXSEER_RCA_LOKI_URL=http://your-loki.example
 ```
 
 Implementation source: [internal/datasource/loki/adapter.go](../../internal/datasource/loki/adapter.go)
@@ -34,9 +34,9 @@ Current request behavior:
 
 ## Per-Workload Annotation
 
-- `fluxagent.aiops.platform/loki-query`
+- `fluxseer-rca.aiops.platform/loki-query`
 
-If no annotation is present, FluxAgent falls back to:
+If no annotation is present, FluxSeer RCA falls back to:
 
 ```logql
 {namespace="<ns>",app="<app>"} |= "error"
@@ -44,7 +44,7 @@ If no annotation is present, FluxAgent falls back to:
 
 ## Detection Behavior
 
-When any matching log line is returned, FluxAgent creates a medium-severity finding:
+When any matching log line is returned, FluxSeer RCA creates a medium-severity finding:
 
 - signal type: `workload.error_logs`
 - confidence: `68`
@@ -58,6 +58,6 @@ The kind demo points Loki traffic at the fake observability service:
 
 ```yaml
 env:
-  - name: FLUXAGENT_LOKI_URL
-    value: http://fluxagent-observability:8080
+  - name: FLUXSEER_RCA_LOKI_URL
+    value: http://fluxseer-rca-observability:8080
 ```

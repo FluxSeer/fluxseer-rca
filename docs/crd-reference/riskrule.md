@@ -27,7 +27,7 @@ Supported query types include:
 
 ## Investigation Routing
 
-`spec.investigationPolicy.mode` controls what FluxAgent creates after a rule match:
+`spec.investigationPolicy.mode` controls what FluxSeer RCA creates after a rule match:
 
 - `DirectRiskSignal`: default v0.2-compatible path. The controller materializes a `RiskSignal` directly.
 - `CreateRequest`: opt-in v0.3 path. The controller creates or updates a deterministic `InvestigationRequest` and lets `InvestigationRequest.status` own the canonical RCA result.
@@ -48,7 +48,7 @@ spec:
 
 `CreateRequest` uses a deterministic identity derived from the `RiskRule`, target, normalized window bucket, and finding identity. Repeated reconciles for the same incident occurrence update the same request instead of creating unbounded objects. The created request carries lineage annotations that the `InvestigationRequest` controller writes to `status.lineage`.
 
-FluxAgent records three finding identities:
+FluxSeer RCA records three finding identities:
 
 - `objectFindingIdentity`: source UID, target UID, finding type, and normalized evidence attributes. Use this for precise deduplication across reconciles.
 - `logicalFindingIdentity`: source apiVersion/kind/namespace/name, target apiVersion/kind/namespace/name, finding type, and normalized evidence attributes. Use this for dashboards and long-term correlation when objects are recreated with new UIDs.

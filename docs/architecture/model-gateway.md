@@ -1,6 +1,6 @@
 # Model Gateway
 
-FluxAgent keeps model providers behind a provider-neutral interface so the control plane does not depend on one vendor.
+FluxSeer RCA keeps model providers behind a provider-neutral interface so the control plane does not depend on one vendor.
 
 ## Provider Contract
 
@@ -117,11 +117,11 @@ EvidenceBundle
 -> structured RCA output
 ```
 
-FluxAgent does not package CLI agent runtimes or developer-local interactive auth caches as a supported path. Hosted providers must use workload-scoped API credentials referenced by `ModelProvider`.
+FluxSeer RCA does not package CLI agent runtimes or developer-local interactive auth caches as a supported path. Hosted providers must use workload-scoped API credentials referenced by `ModelProvider`.
 
 ## Provider-neutral Structured RCA
 
-Provider implementations may differ in reasoning quality, but they must normalize to one FluxAgent-owned contract. The canonical RCA result should be stored on `InvestigationRequest.status`; `RiskSignal` should keep summaries, lineage, and compact evidence references when a risk is materialized.
+Provider implementations may differ in reasoning quality, but they must normalize to one FluxSeer RCA-owned contract. The canonical RCA result should be stored on `InvestigationRequest.status`; `RiskSignal` should keep summaries, lineage, and compact evidence references when a risk is materialized.
 
 Target output shape:
 
@@ -159,7 +159,7 @@ Expected provider behavior:
 ## Design Rules
 
 - Provider output must be explainable and attachable to evidence.
-- Provider output must normalize to FluxAgent-owned RCA fields rather than vendor-specific schemas.
+- Provider output must normalize to FluxSeer RCA-owned RCA fields rather than vendor-specific schemas.
 - Guardrails must evaluate actions after reasoning, not inside the provider.
 - Runtime should stay functional when no remote model is configured.
 - Provider integrations should be swappable without CRD schema changes.

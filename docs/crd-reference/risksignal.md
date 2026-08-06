@@ -1,6 +1,6 @@
 # `RiskSignal` Reference
 
-`RiskSignal` is the core read-only output of FluxAgent `v0.1`.
+`RiskSignal` is the core read-only output of FluxSeer RCA `v0.1`.
 
 ## API
 
@@ -111,8 +111,8 @@ Time-to-live in seconds for `RiskSignal` retention.
 
 Current controller behavior:
 
-- if `ttlSeconds` is greater than zero, FluxAgent requeues the signal for expiry
-- when the TTL window elapses, FluxAgent deletes the `RiskSignal`
+- if `ttlSeconds` is greater than zero, FluxSeer RCA requeues the signal for expiry
+- when the TTL window elapses, FluxSeer RCA deletes the `RiskSignal`
 - when remediation is enabled, owner-referenced downstream `RemediationPlan` resources are cleaned up with it
 
 ### `spec.evidence`
@@ -133,7 +133,7 @@ Recommended persisted evidence fields:
 - original and retained byte counts
 - collection timestamp
 
-Evidence digests use the same `sha256` / `fluxagent-observation-json-v1` contract as `InvestigationRequest.status.evidenceRefs`.
+Evidence digests use the same `sha256` / `fluxseer-rca-observation-json-v1` contract as `InvestigationRequest.status.evidenceRefs`.
 
 `spec.evidence[].classification` follows the same compact classification summary as `InvestigationRequest.status.evidenceRefs[]`: ordered `level`, `sensitivityTags[]`, `source`, and `policyVersion`. It helps downstream notification and review tools understand the data boundary without storing raw evidence.
 

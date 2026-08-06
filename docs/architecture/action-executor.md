@@ -1,6 +1,6 @@
 # Action Executor
 
-FluxAgent separates decision-making from execution. The executor layer only runs actions that have already passed policy and approval.
+FluxSeer RCA separates decision-making from execution. The executor layer only runs actions that have already passed policy and approval.
 
 ## Router Contract
 
@@ -51,7 +51,7 @@ This means controllers and model providers do not need to know how a Kubernetes 
 
 ### Notification Executor
 
-- can send a real webhook when `FLUXAGENT_WEBHOOK_URL` is configured
+- can send a real webhook when `FLUXSEER_RCA_WEBHOOK_URL` is configured
 - source: [internal/executor/notification.go](../../internal/executor/notification.go)
 
 ## Architecture Diagram
@@ -90,7 +90,7 @@ Without a dedicated executor layer, the controller or model logic would need to 
 - how to notify chat systems
 - how to persist execution results
 
-That would couple reasoning, policy, and side effects together. FluxAgent avoids that.
+That would couple reasoning, policy, and side effects together. FluxSeer RCA avoids that.
 
 ## Execution Contract Expectations
 

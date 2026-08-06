@@ -42,18 +42,18 @@ Supported `spec.target.kind` values for direct `InvestigationRequest` resolution
 - `Job` (`batch/v1`)
 - `CronJob` (`batch/v1`)
 
-For workload controllers, FluxAgent merges object labels and pod-template labels when generating default metric and log queries. Template labels win when the same key appears in both places. `RiskRule` background target discovery supports the primary workload controllers and canonicalizes Pod owner chains where possible.
+For workload controllers, FluxSeer RCA merges object labels and pod-template labels when generating default metric and log queries. Template labels win when the same key appears in both places. `RiskRule` background target discovery supports the primary workload controllers and canonicalizes Pod owner chains where possible.
 
 ### Simple Mode: `dataSources[]`
 
-Use `dataSources[]` when you want FluxAgent to infer a default investigation plan from datasource capabilities.
+Use `dataSources[]` when you want FluxSeer RCA to infer a default investigation plan from datasource capabilities.
 
 ```yaml
 apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: investigate-open-api
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   target:
     namespace: prod
@@ -86,7 +86,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: investigate-open-api
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   target:
     namespace: prod
@@ -159,9 +159,9 @@ Query field behavior:
 - `loopPolicy.maxDepth`: maximum allowed lineage depth before execution is blocked; default is `1`
 - `loopPolicy.allowRiskSignalSource`: opt-in escape hatch for investigations sourced from `RiskSignal`; default is `false`
 
-If `modelProviderRef.name` is empty, FluxAgent falls back to the built-in heuristic provider.
+If `modelProviderRef.name` is empty, FluxSeer RCA falls back to the built-in heuristic provider.
 
-When an evidence requirements profile is configured, FluxAgent checks required evidence before calling the model provider. Missing required evidence produces `phase: Completed`, `outcome: Inconclusive`, `status.missingEvidence[]`, and a `RequiredEvidenceMissing` degradation reason. This is not a workflow failure.
+When an evidence requirements profile is configured, FluxSeer RCA checks required evidence before calling the model provider. Missing required evidence produces `phase: Completed`, `outcome: Inconclusive`, `status.missingEvidence[]`, and a `RequiredEvidenceMissing` degradation reason. This is not a workflow failure.
 
 Current required evidence profiles:
 
@@ -173,7 +173,7 @@ Current required evidence profiles:
 | `LatencyRegression` | Metric evidence |
 | `RolloutLatencyRegression` | Metric evidence and deployment condition evidence |
 
-If required evidence is complete and profile-specific checks find no matching abnormal signal, FluxAgent completes the request with `phase: Completed`, `outcome: NoIssueFound`, and does not call the model provider. `NoIssueFound` is only valid after required evidence is complete; inability to collect required evidence remains `Inconclusive`.
+If required evidence is complete and profile-specific checks find no matching abnormal signal, FluxSeer RCA completes the request with `phase: Completed`, `outcome: NoIssueFound`, and does not call the model provider. `NoIssueFound` is only valid after required evidence is complete; inability to collect required evidence remains `Inconclusive`.
 
 When a profile gate runs, `status.evidenceCoverage` records the deterministic audit surface for the gate:
 
@@ -183,7 +183,7 @@ When a profile gate runs, `status.evidenceCoverage` records the deterministic au
 - `incompleteChecks[]`: checks that prevented a complete profile
 - `issueMatches`: number of matching abnormal evidence refs; `0` is required for `NoIssueFound`
 
-External evidence storage is disabled by default. `MetadataOnly` remains the default. `NormalizedSnapshot` is supported only with `storageRef.name: local-filesystem` and a controller runtime evidence store directory configured through `FLUXAGENT_EVIDENCE_STORE_DIR`. Snapshot payload references store only `scheme`, digest, expiry, encryption flag, and retention class; they do not expose local file paths or access credentials. `RawSnapshot` remains rejected because raw evidence retention requires a separate opt-in storage and security review.
+External evidence storage is disabled by default. `MetadataOnly` remains the default. `NormalizedSnapshot` is supported only with `storageRef.name: local-filesystem` and a controller runtime evidence store directory configured through `FLUXSEER_RCA_EVIDENCE_STORE_DIR`. Snapshot payload references store only `scheme`, digest, expiry, encryption flag, and retention class; they do not expose local file paths or access credentials. `RawSnapshot` remains rejected because raw evidence retention requires a separate opt-in storage and security review.
 
 `queryRetention.mode` controls whether rendered datasource query text is persisted in `status.evidenceRefs[]`:
 
@@ -195,7 +195,7 @@ External evidence storage is disabled by default. `MetadataOnly` remains the def
 
 The default is `DigestOnly` to reduce accidental leakage of tenant names, token-like matchers, internal hostnames, or other sensitive values embedded in query strings.
 
-When `queryBudget` is configured, FluxAgent rejects invalid limits, excessive lookback windows, or excessive query counts during validation before contacting datasources. It stops evidence collection when cumulative datasource duration or response-byte limits are exceeded. Native result-kind limits are enforced after datasource responses are decoded and before flattening/normalization; the generic flat-record limit remains a compatibility fallback. Exceeded result limits retain bounded partial evidence, set truncation metadata, and preserve deterministic record order.
+When `queryBudget` is configured, FluxSeer RCA rejects invalid limits, excessive lookback windows, or excessive query counts during validation before contacting datasources. It stops evidence collection when cumulative datasource duration or response-byte limits are exceeded. Native result-kind limits are enforced after datasource responses are decoded and before flattening/normalization; the generic flat-record limit remains a compatibility fallback. Exceeded result limits retain bounded partial evidence, set truncation metadata, and preserve deterministic record order.
 
 ### Mode Contract
 
@@ -269,7 +269,7 @@ These fields are the v0.3 target contract. New integrations should check the gen
 - `evidenceLinks[]`: evidence references with role such as `Supports` or `Contradicts` and strength such as `Direct`
 - `verification`: current verification state: `Supported`, `Inferred`, `Unsupported`, `Contradicted`, or `Unverified`
 
-FluxAgent applies a deterministic heuristic verifier before writing claims. In the current implementation, a claim is `Supported` only when compact evidence metadata is relevant to the claim text. Claims with contradictory compact evidence are `Contradicted`, claims with evidence in the bundle but no relevant match are `Unsupported`, and claims with no evidence are `Unverified`. `status.verdict.confidenceDetail.verifiedScore` is bounded by this evidence coverage and can be lower than the provider score. The final execution metadata records `status.execution.verifierVersion`.
+FluxSeer RCA applies a deterministic heuristic verifier before writing claims. In the current implementation, a claim is `Supported` only when compact evidence metadata is relevant to the claim text. Claims with contradictory compact evidence are `Contradicted`, claims with evidence in the bundle but no relevant match are `Unsupported`, and claims with no evidence are `Unverified`. `status.verdict.confidenceDetail.verifiedScore` is bounded by this evidence coverage and can be lower than the provider score. The final execution metadata records `status.execution.verifierVersion`.
 
 `status.evidenceRefs[]` stores compact evidence references. Each entry may include:
 
@@ -301,13 +301,13 @@ These fields are compact normalized-observation metadata. They let consumers aud
 - `level`: ordered sensitivity level, one of `Public`, `Internal`, `Confidential`, or `Restricted`
 - `sensitivityTags[]`: closed tags such as `CredentialLike`, `PersonalData`, `CustomerData`, `SourceCode`, `InfrastructureMetadata`, or `SecuritySensitive`
 - `source`: classification origin, such as `Default`, `Explicit`, `Inherited`, `ContentDetection`, or `RedactionPolicy`
-- `policyVersion`: classification policy version, currently `fluxagent-data-classification-v1`
+- `policyVersion`: classification policy version, currently `fluxseer-rca-data-classification-v1`
 
-Normalized observations carry the same computed classification summary. When multiple evidence items contribute to an observation or provider bundle, FluxAgent uses the highest classification level and the union of sensitivity tags. Redaction does not automatically lower classification; a redacted credential-like log sample remains classified conservatively.
+Normalized observations carry the same computed classification summary. When multiple evidence items contribute to an observation or provider bundle, FluxSeer RCA uses the highest classification level and the union of sensitivity tags. Redaction does not automatically lower classification; a redacted credential-like log sample remains classified conservatively.
 
 When retention adapters create external evidence payloads, `payloadRef` records `scheme`, `digest`, `encrypted`, `expiresAt`, and `retentionClass`. `payloadRef` must not contain signed URLs, credentials, bearer tokens, inline secrets, filesystem paths, or provider-specific authorization material. It is a verifiable pointer, not an access credential.
 
-`queryDigest` and `contentDigest` use `digestAlgorithm: sha256` and `digestCanonicalization: fluxagent-observation-json-v1`. The v1 canonicalization contract uses deterministic JSON object keys, preserves array order unless a field-specific contract says otherwise, normalizes strings to Unicode NFC, excludes non-semantic collection timestamps from content digests, and expects timestamp producers to write UTC timestamps.
+`queryDigest` and `contentDigest` use `digestAlgorithm: sha256` and `digestCanonicalization: fluxseer-rca-observation-json-v1`. The v1 canonicalization contract uses deterministic JSON object keys, preserves array order unless a field-specific contract says otherwise, normalizes strings to Unicode NFC, excludes non-semantic collection timestamps from content digests, and expects timestamp producers to write UTC timestamps.
 
 Status budget limits are intentionally conservative:
 
@@ -318,7 +318,7 @@ Status budget limits are intentionally conservative:
 - `maxSummaryBytes`: 2048
 - `maxStatusBytes`: 65536
 
-When status budget enforcement is required, FluxAgent preserves canonical state before descriptive detail: `phase`, `outcome`, `failure.code`, verdict, execution identity, degradation metadata, evidence digests, claim IDs, claim verification, and truncation metadata have priority over long summaries, extra evidence refs, and extra claims.
+When status budget enforcement is required, FluxSeer RCA preserves canonical state before descriptive detail: `phase`, `outcome`, `failure.code`, verdict, execution identity, degradation metadata, evidence digests, claim IDs, claim verification, and truncation metadata have priority over long summaries, extra evidence refs, and extra claims.
 
 `status.failure` records workflow failure details when an investigation cannot reach a completed RCA state:
 
@@ -327,7 +327,7 @@ When status budget enforcement is required, FluxAgent preserves canonical state 
 - `stage`: workflow stage such as `Validation`, `TargetResolution`, `DataSourceResolution`, `QueryValidation`, `EvidenceCollection`, `Reasoning`, `Verification`, `Projection`, or `Persistence`
 - `retryable`: whether a later reconcile or recreated request may reasonably succeed without a spec change
 
-`status.alternativeHypotheses[]`, `status.missingEvidence[]`, and `status.degradation` are reserved for partial-failure and claim-hardening semantics. They let FluxAgent report uncertainty explicitly instead of silently presenting an incomplete RCA as fully proven. `status.degradation.reasons[]` uses structured `code`, `stage`, optional `sourceRef`, and `message` fields.
+`status.alternativeHypotheses[]`, `status.missingEvidence[]`, and `status.degradation` are reserved for partial-failure and claim-hardening semantics. They let FluxSeer RCA report uncertainty explicitly instead of silently presenting an incomplete RCA as fully proven. `status.degradation.reasons[]` uses structured `code`, `stage`, optional `sourceRef`, and `message` fields.
 
 `status.execution` records RCA execution metadata:
 
@@ -351,7 +351,7 @@ When status budget enforcement is required, FluxAgent preserves canonical state 
 - `egressAttempts[]`
 - `providerResult`
 
-`status.execution.id` is the logical execution identity for the RCA input. It is derived from the request generation, target identity available to the controller, compact evidence digest, provider identity, RCA schema version, canonicalization version, and reasoning policy version. `status.execution.attempts[]` records FluxAgent attempt identity, provider request IDs when adapters expose them, idempotency keys generated by FluxAgent, result, retry reason, and attempt timestamps. Provider request IDs are correlation metadata; they are not execution identity.
+`status.execution.id` is the logical execution identity for the RCA input. It is derived from the request generation, target identity available to the controller, compact evidence digest, provider identity, RCA schema version, canonicalization version, and reasoning policy version. `status.execution.attempts[]` records FluxSeer RCA attempt identity, provider request IDs when adapters expose them, idempotency keys generated by FluxSeer RCA, result, retry reason, and attempt timestamps. Provider request IDs are correlation metadata; they are not execution identity.
 
 `status.execution.egressAudit` records the hosted-provider transmission decision without preserving sensitive payloads:
 
@@ -369,11 +369,11 @@ When status budget enforcement is required, FluxAgent preserves canonical state 
 
 `status.execution.egressAttempts[]` records bounded per-provider transmission decisions, capped at 8 attempts. It uses the same compact policy fields as `egressAudit` and adds attempt `ordinal`, `providerRef`, `providerGeneration`, and `result`. The existing `egressAudit` field remains a compatibility summary for the primary canonical provider decision.
 
-`status.execution.providerResult` is the durable normalized provider checkpoint. It stores the common RCA result, schema version, provider request ID when available, provider result classification, and digest used by FluxAgent after provider response parsing and validation. It does not store raw provider responses, prompts, chain-of-thought, or unclassified provider metadata.
+`status.execution.providerResult` is the durable normalized provider checkpoint. It stores the common RCA result, schema version, provider request ID when available, provider result classification, and digest used by FluxSeer RCA after provider response parsing and validation. It does not store raw provider responses, prompts, chain-of-thought, or unclassified provider metadata.
 
 Hosted provider results inherit at least the transmitted evidence bundle classification because a provider summary may restate sensitive input. The built-in heuristic provider is local and does not require hosted-provider egress.
 
-FluxAgent guarantees persisted-completion idempotency: if the same `execution.id` already has a persisted `ProviderCompleted` or `Finalized` provider result, the controller reuses that normalized result instead of calling the provider again. This is not an exactly-once external invocation guarantee. If the controller crashes or loses a status write after provider success but before `ProviderCompleted` is persisted, a later reconcile may call the provider again unless provider-side idempotency is available and honored.
+FluxSeer RCA guarantees persisted-completion idempotency: if the same `execution.id` already has a persisted `ProviderCompleted` or `Finalized` provider result, the controller reuses that normalized result instead of calling the provider again. This is not an exactly-once external invocation guarantee. If the controller crashes or loses a status write after provider success but before `ProviderCompleted` is persisted, a later reconcile may call the provider again unless provider-side idempotency is available and honored.
 
 The v0.3 checkpoint state model is `NotStarted -> AttemptPrepared -> ProviderInFlight -> ProviderCompleted -> Verified -> Finalized`. The current controller persists the first durable cut at `ProviderCompleted` after parsing, normalization, validation, digesting, and status persistence succeed.
 
@@ -401,15 +401,15 @@ Legal terminal combinations are:
 
 Non-terminal phases should leave `outcome`, `failure`, and `completedAt` unset. `status.degradation` is orthogonal to phase and outcome; a completed investigation may still be degraded if it reached a conclusion with partial evidence.
 
-`status.lineage` records where the investigation came from when it was created by another FluxAgent workflow. For `RiskRule` routing, it includes the source rule reference, source UID and generation, target UID, compatibility finding fingerprint, structured finding identity, and investigation depth. This lets downstream consumers trace `RiskRule -> InvestigationRequest -> optional RiskSignal` without treating `RiskSignal` as the canonical RCA surface.
+`status.lineage` records where the investigation came from when it was created by another FluxSeer RCA workflow. For `RiskRule` routing, it includes the source rule reference, source UID and generation, target UID, compatibility finding fingerprint, structured finding identity, and investigation depth. This lets downstream consumers trace `RiskRule -> InvestigationRequest -> optional RiskSignal` without treating `RiskSignal` as the canonical RCA surface.
 
-Lineage in `status.lineage` is the canonical loop-prevention signal after it has been initialized. Lineage annotations are auxiliary seed metadata used for newly created requests. By default, FluxAgent blocks `RiskSignal`-sourced investigations and any request whose `investigationDepth` reaches `spec.loopPolicy.maxDepth`; blocked requests finish as `phase: Failed`, `outcome: Unknown`, with a non-retryable validation failure.
+Lineage in `status.lineage` is the canonical loop-prevention signal after it has been initialized. Lineage annotations are auxiliary seed metadata used for newly created requests. By default, FluxSeer RCA blocks `RiskSignal`-sourced investigations and any request whose `investigationDepth` reaches `spec.loopPolicy.maxDepth`; blocked requests finish as `phase: Failed`, `outcome: Unknown`, with a non-retryable validation failure.
 
 When `createRiskSignal: true` succeeds, `status.linkedRiskSignalRef` points to the emitted `RiskSignal`. The RCA itself remains on `InvestigationRequest.status`; the linked `RiskSignal` represents a materialized finding for downstream workflows, not the canonical RCA result.
 
-If `ttlSeconds` is greater than zero, FluxAgent keeps the completed request for that many seconds after `status.completedAt`, then deletes it automatically.
+If `ttlSeconds` is greater than zero, FluxSeer RCA keeps the completed request for that many seconds after `status.completedAt`, then deletes it automatically.
 
-Compatibility note: `status.summary`, `status.hypothesis`, `status.confidence`, and `status.provider` remain available for the v0.2 path. `status.provider` is populated only when FluxAgent has persisted provider reasoning or a provider attempt result; it is not the selected provider from preflight resolution. The selected provider remains in `spec.modelProviderRef`. New consumers should prefer `status.verdict`, `status.claims`, `status.degradation`, and `status.execution`.
+Compatibility note: `status.summary`, `status.hypothesis`, `status.confidence`, and `status.provider` remain available for the v0.2 path. `status.provider` is populated only when FluxSeer RCA has persisted provider reasoning or a provider attempt result; it is not the selected provider from preflight resolution. The selected provider remains in `spec.modelProviderRef`. New consumers should prefer `status.verdict`, `status.claims`, `status.degradation`, and `status.execution`.
 
 ## Conditions
 

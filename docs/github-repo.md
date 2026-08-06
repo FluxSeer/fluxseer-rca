@@ -59,9 +59,11 @@ history, or individual responder memory.
 Compatibility note:
 
 ```markdown
-FluxSeer RCA is currently published through `fluxagent` binaries, Helm charts,
-images, metrics, and CRDs. Those names remain compatibility surfaces until the
-dedicated rename release completes.
+Source code, Helm charts, images, metrics, and CRDs now use `fluxseer` /
+`fluxseer-rca` naming. The most recently published release, `v0.3.0-beta.3`,
+was built under the earlier `fluxagent` name; existing installs from that
+release remain a compatibility reference until a dedicated rename release is
+published.
 ```
 
 ## Release Plan

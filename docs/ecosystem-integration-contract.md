@@ -1,6 +1,6 @@
 # Kubernetes Ecosystem Integration Contract
 
-FluxAgent exposes RCA workflow state through Kubernetes API objects. External tools should consume stable object metadata, top-level conditions, and bounded status fields before parsing provider-specific execution details.
+FluxSeer RCA exposes RCA workflow state through Kubernetes API objects. External tools should consume stable object metadata, top-level conditions, and bounded status fields before parsing provider-specific execution details.
 
 ## Recommended Consumption Model
 
@@ -96,22 +96,22 @@ UnsupportedRetentionMode
 
 ## Labels And Annotations
 
-FluxAgent-owned objects use low-cardinality metadata for ownership, lineage, and finding identity.
+FluxSeer RCA-owned objects use low-cardinality metadata for ownership, lineage, and finding identity.
 
 Examples:
 
 ```text
-fluxagent.aiops.platform/managed-by
-fluxagent.aiops.platform/risk-rule
-fluxagent.aiops.platform/target-ref
-fluxagent.aiops.platform/lineage-source
-fluxagent.aiops.platform/lineage-source-kind
-fluxagent.aiops.platform/target-uid
-fluxagent.aiops.platform/finding-fingerprint
-fluxagent.aiops.platform/object-finding-identity
-fluxagent.aiops.platform/logical-finding-identity
-fluxagent.aiops.platform/incident-occurrence
-fluxagent.aiops.platform/investigation-depth
+fluxseer-rca.aiops.platform/managed-by
+fluxseer-rca.aiops.platform/risk-rule
+fluxseer-rca.aiops.platform/target-ref
+fluxseer-rca.aiops.platform/lineage-source
+fluxseer-rca.aiops.platform/lineage-source-kind
+fluxseer-rca.aiops.platform/target-uid
+fluxseer-rca.aiops.platform/finding-fingerprint
+fluxseer-rca.aiops.platform/object-finding-identity
+fluxseer-rca.aiops.platform/logical-finding-identity
+fluxseer-rca.aiops.platform/incident-occurrence
+fluxseer-rca.aiops.platform/investigation-depth
 ```
 
 Do not add object UID, full query text, evidence bundle digest, prompt text, or target name as metric labels.
@@ -128,17 +128,17 @@ RiskSignal status.phase
 RiskSignal status.conditions[]
 ```
 
-Use FluxAgent native metrics for controller and RCA quality signals:
+Use FluxSeer RCA native metrics for controller and RCA quality signals:
 
 ```text
-fluxagent_investigation_total
-fluxagent_provider_requests_total
-fluxagent_provider_failures_total
-fluxagent_datasource_query_duration_seconds
-fluxagent_datasource_query_queue_depth
-fluxagent_datasource_queries_in_flight
-fluxagent_evidence_truncated_total
-fluxagent_claim_verification_total
+fluxseer_rca_investigation_total
+fluxseer_rca_provider_requests_total
+fluxseer_rca_provider_failures_total
+fluxseer_rca_datasource_query_duration_seconds
+fluxseer_rca_datasource_query_queue_depth
+fluxseer_rca_datasource_queries_in_flight
+fluxseer_rca_evidence_truncated_total
+fluxseer_rca_claim_verification_total
 ```
 
 ## Argo CD Health Example
@@ -162,7 +162,7 @@ if obj.status ~= nil and obj.status.conditions ~= nil then
   end
 end
 hs.status = "Progressing"
-hs.message = "waiting for FluxAgent RCA status"
+hs.message = "waiting for FluxSeer RCA status"
 return hs
 ```
 
@@ -174,7 +174,7 @@ Example policy intent:
 deny hosted ModelProvider objects unless dataPolicy.allowExternalTransmission=true is explicitly reviewed by the platform team
 ```
 
-FluxAgent still enforces hosted-provider egress at runtime. Admission policy is an additional organizational control, not the primary data boundary.
+FluxSeer RCA still enforces hosted-provider egress at runtime. Admission policy is an additional organizational control, not the primary data boundary.
 
 ## External Alert Producer Boundary
 
@@ -195,4 +195,4 @@ Alertmanager / webhook / Argo Events
 
 External producers should preserve source lineage through labels, annotations, or `status.lineage.source` when a controller owns the object.
 
-FluxAgent remains the RCA control plane. Alert producers should not bypass FluxAgent evidence policy by sending raw logs or arbitrary provider prompts directly to hosted AI.
+FluxSeer RCA remains the RCA control plane. Alert producers should not bypass FluxSeer RCA evidence policy by sending raw logs or arbitrary provider prompts directly to hosted AI.

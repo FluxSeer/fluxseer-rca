@@ -38,7 +38,7 @@ RiskRule / Alert / Manual Request
 → optional discovered RiskSignal
 ```
 
-This path is the current bounded read-only RCA flow. It calls `ModelProvider` for structured reasoning over collected evidence. FluxAgent's supported open-source path does not run long-lived CLI agent runtimes or reuse developer-local interactive sessions.
+This path is the current bounded read-only RCA flow. It calls `ModelProvider` for structured reasoning over collected evidence. FluxSeer RCA's supported open-source path does not run long-lived CLI agent runtimes or reuse developer-local interactive sessions.
 
 In `v0.2`, external alerting systems integrate by creating `InvestigationRequest` resources through the Kubernetes API. Built-in alert receivers, webhook ingress, and Kubernetes Event to `InvestigationRequest` adapters are future producer adapters.
 
@@ -47,13 +47,13 @@ In `v0.2`, external alerting systems integrate by creating `InvestigationRequest
 `RiskRule` answers recurring policy questions:
 
 ```text
-What should FluxAgent keep checking automatically?
+What should FluxSeer RCA keep checking automatically?
 ```
 
 `InvestigationRequest` should answer immediate operator questions:
 
 ```text
-What should FluxAgent investigate now?
+What should FluxSeer RCA investigate now?
 ```
 
 That split keeps the system declarative without forcing every user interaction into a future chat product.
@@ -69,7 +69,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: investigate-open-api
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   target:
     kind: Deployment
@@ -173,7 +173,7 @@ That default is important because:
 - users may want RCA without opening another workflow object
 - read-only investigation should stay cheap and low-side-effect
 
-When `createRiskSignal: true`, FluxAgent can emit a discovered `RiskSignal` for downstream workflows. The RCA itself remains on `InvestigationRequest.status`; the linked `RiskSignal` is a materialized finding, not a replacement for the investigation result.
+When `createRiskSignal: true`, FluxSeer RCA can emit a discovered `RiskSignal` for downstream workflows. The RCA itself remains on `InvestigationRequest.status`; the linked `RiskSignal` is a materialized finding, not a replacement for the investigation result.
 
 Discovered `RiskSignal` emission must preserve lineage and avoid loops:
 
@@ -224,7 +224,7 @@ InvestigationRequest UID
 + providerConfigDigest
 ```
 
-For the same execution key, the controller should observe the existing result instead of starting another paid model call. If evidence, spec, or provider configuration changes, FluxAgent can create a new execution key and attempt.
+For the same execution key, the controller should observe the existing result instead of starting another paid model call. If evidence, spec, or provider configuration changes, FluxSeer RCA can create a new execution key and attempt.
 
 ## Future Entry Points
 
@@ -232,7 +232,7 @@ The CRD should be the source of truth.
 
 Future entrypoints should be wrappers around it:
 
-- `fluxagent investigate ...`
+- `fluxseer investigate ...`
 - a thin UI form
 - a webhook bridge
 - a chat bridge

@@ -1,6 +1,6 @@
 # Contributing
 
-FluxAgent is designed as an open, adapter-driven Kubernetes operator. Contributions should preserve that direction.
+FluxSeer RCA is designed as an open, adapter-driven Kubernetes operator. Contributions should preserve that direction.
 
 ## Principles
 
@@ -13,7 +13,7 @@ FluxAgent is designed as an open, adapter-driven Kubernetes operator. Contributi
 ## Development
 
 ```bash
-cd FluxAgent
+cd fluxseer-rca
 GOWORK=off go test ./...
 GOWORK=off go run ./cmd/fluxseer
 GOWORK=off go run ./cmd/manager

@@ -1,6 +1,6 @@
-# FluxAgent Roadmap
+# FluxSeer RCA Roadmap
 
-FluxAgent is being built as a Kubernetes-native AI SRE Agent Operator with a safe default path and an optional guarded remediation path.
+FluxSeer RCA is being built as a Kubernetes-native AI SRE Agent Operator with a safe default path and an optional guarded remediation path.
 
 ## Positioning
 

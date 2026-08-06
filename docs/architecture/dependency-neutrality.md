@@ -1,6 +1,6 @@
 # Dependency Neutrality
 
-FluxAgent can integrate with Kubernetes, Prometheus, Loki, and external model providers, but the project should not be structurally bound to any one of them.
+FluxSeer RCA can integrate with Kubernetes, Prometheus, Loki, and external model providers, but the project should not be structurally bound to any one of them.
 
 The design rule is:
 
@@ -13,7 +13,7 @@ Do not couple the core product truth to one stack.
 
 ### Runtime Dependency
 
-FluxAgent should remain usable when optional systems are absent.
+FluxSeer RCA should remain usable when optional systems are absent.
 
 Expected baseline:
 
@@ -27,13 +27,13 @@ Expected baseline:
 Examples:
 
 - without Prometheus, `RiskRule` evaluation can still use Kubernetes Events
-- without Loki, FluxAgent can still produce `RiskSignal`
-- without external model credentials, FluxAgent can fall back to the heuristic provider
-- without remediation enablement, FluxAgent must not create `RemediationPlan` or `AgentAction`
+- without Loki, FluxSeer RCA can still produce `RiskSignal`
+- without external model credentials, FluxSeer RCA can fall back to the heuristic provider
+- without remediation enablement, FluxSeer RCA must not create `RemediationPlan` or `AgentAction`
 
 ### Compile-time Dependency
 
-Core logic should depend on FluxAgent-owned contracts, not vendor SDKs or Kubernetes API types everywhere.
+Core logic should depend on FluxSeer RCA-owned contracts, not vendor SDKs or Kubernetes API types everywhere.
 
 Required direction:
 
@@ -45,11 +45,11 @@ Required direction:
 
 ### Deployment Dependency
 
-FluxAgent should not install a monitoring stack for the user by default.
+FluxSeer RCA should not install a monitoring stack for the user by default.
 
 Expected behavior:
 
-- Helm and manifests install FluxAgent
+- Helm and manifests install FluxSeer RCA
 - Prometheus and Loki remain bring-your-own integrations
 - optional examples may show how to connect to those systems
 - demos may ship fake observability endpoints for repeatable local validation
@@ -85,13 +85,13 @@ The core path should know that evidence is metrics, logs, or events. It should n
 
 ## Domain Model Boundary
 
-FluxAgent already has internal domain types such as [internal/domain/types.go](../../internal/domain/types.go).
+FluxSeer RCA already has internal domain types such as [internal/domain/types.go](../../internal/domain/types.go).
 
 That boundary should remain the center of the design:
 
-- adapters translate external payloads into FluxAgent domain types
+- adapters translate external payloads into FluxSeer RCA domain types
 - controllers translate Kubernetes resources into domain inputs
-- reasoning and evaluation operate on FluxAgent-owned models
+- reasoning and evaluation operate on FluxSeer RCA-owned models
 
 This is the main protection against scattering `appsv1.Deployment`, `corev1.Event`, or vendor response types across the whole codebase.
 
@@ -99,7 +99,7 @@ This is the main protection against scattering `appsv1.Deployment`, `corev1.Even
 
 Current repo status:
 
-- FluxAgent already has a datasource registry and adapter interface
+- FluxSeer RCA already has a datasource registry and adapter interface
 - Prometheus and Loki are optional registrations
 - Kubernetes Events are available by default
 - `RiskRule` first-batch schema still uses inline signal `type` and `query`
@@ -161,7 +161,7 @@ Examples:
 - model provider not found: still create `RiskSignal`, but mark RCA condition as not ready
 - optional adapter unhealthy: continue with remaining evidence sources when possible
 
-FluxAgent should fail closed on mutation, but fail soft on optional evidence enrichment.
+FluxSeer RCA should fail closed on mutation, but fail soft on optional evidence enrichment.
 
 ## Staged Delivery
 

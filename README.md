@@ -6,10 +6,12 @@ Current release: `v0.3.0-beta.3`
 
 Status: `v0.3.0-beta.3 published, canonical RCA runtime semantics verified, provenance verified`
 
-FluxSeer RCA is the forward-looking product name for the project currently
-published as FluxAgent. Existing `fluxagent` binaries, Helm artifacts, CRDs,
-metrics, and documentation remain compatibility surfaces until a dedicated
-rename release completes the migration.
+FluxSeer RCA is the project's product name. Source code, binaries, Helm
+artifacts, CRDs, metrics, and Kubernetes resource naming were renamed from the
+earlier `fluxagent` identity to `fluxseer` / `fluxseer-rca` ahead of the next
+release. The most recently published release, `v0.3.0-beta.3`, was built
+under the `fluxagent` name; existing installs from that release remain a
+compatibility reference until a dedicated rename release is published.
 
 FluxSeer RCA turns production signals and operator questions into governed, evidence-verifiable RCA workflows with replay-oriented audit artifacts in Kubernetes.
 
@@ -31,11 +33,11 @@ FluxSeer RCA is the Kubernetes control plane and audit contract around RCA. It i
 
 FluxSeer RCA does not grant reasoning providers unrestricted cluster access. It sends only bounded, normalized, and redacted evidence collected through declared investigation policies and datasource capabilities.
 
-## Why FluxAgent
+## Why FluxSeer RCA
 
 RCA often starts as an urgent, one-off investigation and ends as an ephemeral answer in Slack, a dashboard screenshot, a terminal command history, or one responder's memory. After the incident, teams may not know which evidence was checked, which model produced the answer, which claims were supported, which data left the cluster, or whether a later model version would produce a worse conclusion.
 
-FluxAgent exists to turn that workflow into durable Kubernetes API state:
+FluxSeer RCA exists to turn that workflow into durable Kubernetes API state:
 
 ```text
 temporary RCA answer
@@ -46,7 +48,7 @@ temporary RCA answer
 -> replay-oriented evaluation artifact
 ```
 
-FluxAgent is built around four product decisions:
+FluxSeer RCA is built around four product decisions:
 
 - Evidence-linked RCA over free-form incident prose.
 - Kubernetes CRD status as the durable workflow and audit surface.
@@ -55,7 +57,7 @@ FluxAgent is built around four product decisions:
 
 This positioning is intentionally narrower than a general AI SRE agent. `RiskRule` is an optional bootstrap signal source, not an attempt to replace Alertmanager or own all Kubernetes detection. Remediation CRDs are optional extensions, not the default product path.
 
-Alert assistants help operators respond faster. FluxAgent helps platform teams standardize and govern how RCA is collected, reasoned about, verified, recorded, and compared later.
+Alert assistants help operators respond faster. FluxSeer RCA helps platform teams standardize and govern how RCA is collected, reasoned about, verified, recorded, and compared later.
 
 ## Minimum Flow
 
@@ -95,7 +97,7 @@ Claim
 
 ## Capability Maturity
 
-FluxAgent does not treat every CRD, adapter, and controller as equally mature:
+FluxSeer RCA does not treat every CRD, adapter, and controller as equally mature:
 
 - Canonical core: `InvestigationRequest`, `DataSource`, `ModelProvider`.
 - Bootstrap detection: `RiskRule` for Kubernetes workload targets.
@@ -197,7 +199,7 @@ Canonical v0.3 status fields:
 
 ## Security Posture
 
-FluxAgent is security-first by default:
+FluxSeer RCA is security-first by default:
 
 - runs read-only unless guarded remediation is explicitly enabled
 - uses heuristic RCA without external model calls by default
@@ -221,7 +223,7 @@ flowchart LR
         Rule[Optional RiskRule]
     end
 
-    subgraph Operator[FluxAgent Operator]
+    subgraph Operator[FluxSeer RCA Operator]
         IR[InvestigationRequest Controller]
         Collector[Evidence Collector]
         Redactor[Redactor]
@@ -278,11 +280,11 @@ This is the default mode when you run the operator.
 
 ## Dependency Matrix
 
-FluxAgent distinguishes runtime, compile-time, and deployment dependency.
+FluxSeer RCA distinguishes runtime, compile-time, and deployment dependency.
 
 | Integration | Runtime | Compile-time | Deployment | Current Role |
 | --- | --- | --- | --- | --- |
-| Kubernetes | required for operator mode | yes in controllers and CRD API | installed by FluxAgent manifests | control plane and default event source |
+| Kubernetes | required for operator mode | yes in controllers and CRD API | installed by FluxSeer RCA manifests | control plane and default event source |
 | Kubernetes Events | enabled by default | yes via Kubernetes adapter | no extra stack required | default datasource |
 | Prometheus | optional | isolated to adapter packages | not installed by default | metrics datasource |
 | Loki | optional | isolated to adapter packages | not installed by default | logs datasource |
@@ -295,7 +297,7 @@ The longer-form design constraints are documented in [docs/architecture/dependen
 
 ### Bootstrap Rule Packs
 
-FluxAgent includes an optional Kubernetes Events rule pack for first-run bootstrap. It helps a new install surface common workload failure events without requiring users to write their first `RiskRule` by hand, but it is not intended to replace Alertmanager or a production detection platform.
+FluxSeer RCA includes an optional Kubernetes Events rule pack for first-run bootstrap. It helps a new install surface common workload failure events without requiring users to write their first `RiskRule` by hand, but it is not intended to replace Alertmanager or a production detection platform.
 
 See [docs/helm-rulepacks.md](docs/helm-rulepacks.md) for configuration and supported rules.
 
@@ -357,6 +359,10 @@ See:
 
 ### Install The Beta Chart
 
+The `v0.3.0-beta.3` chart is currently published under the pre-rename
+`fluxagent` name (see [architecture/rename-migration-plan.md](docs/architecture/rename-migration-plan.md)).
+Use these names until a rename release is published:
+
 ```bash
 helm install fluxagent \
   oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent \
@@ -395,7 +401,7 @@ spec:
   timeRange:
     lookback: 15m
   question: |
-    Is the FluxAgent controller healthy after install?
+    Is the FluxSeer RCA controller healthy after install?
   dataSources:
     - name: kubernetes-events
   mode: readOnly
@@ -485,7 +491,7 @@ See:
 ### Development
 
 ```bash
-cd FluxAgent
+cd fluxseer-rca
 GOWORK=off go test ./...
 make verify-v0.3-schema-freeze
 ```
@@ -499,7 +505,7 @@ Hosted OpenAI, Gemini, and Claude provider usage is documented in:
 ## kind Demo
 
 ```bash
-cd FluxAgent
+cd fluxseer-rca
 make demo-up
 make inject-fault
 make demo-status
@@ -521,13 +527,13 @@ make demo-degrade-all DEMO_PAUSE_SECONDS=6
 
 This demo deploys:
 
-- FluxAgent manager
+- FluxSeer RCA manager
 - a sample app selected by `RiskRule`
 - a sample heuristic `ModelProvider`
 - `DataSource` resources for Prometheus, Loki, and Kubernetes Events
 - a fake observability service that simulates Prometheus, Loki, and webhook outputs
 
-The demo uses fake observability on purpose. FluxAgent does not require installing Prometheus or Loki just to validate the read-only path.
+The demo uses fake observability on purpose. FluxSeer RCA does not require installing Prometheus or Loki just to validate the read-only path.
 
 `make demo-status` now shows the core condition surfaces for:
 
@@ -571,7 +577,7 @@ This target will:
 
 ## Current Scope
 
-FluxAgent is a working open-source RCA control plane with a frozen v0.3 RCA status contract. The contract is publishable as a beta, while runtime reliability and field coverage still need broader real-cluster validation.
+FluxSeer RCA is a working open-source RCA control plane with a frozen v0.3 RCA status contract. The contract is publishable as a beta, while runtime reliability and field coverage still need broader real-cluster validation.
 
 Implemented today:
 

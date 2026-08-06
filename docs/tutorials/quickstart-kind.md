@@ -1,11 +1,11 @@
 # Quickstart: kind Demo
 
-This is the fastest end-to-end demo path for FluxAgent.
+This is the fastest end-to-end demo path for FluxSeer RCA.
 
 ## What You Get
 
 - a local kind cluster
-- FluxAgent manager and CRDs
+- FluxSeer RCA manager and CRDs
 - a sample application selected by `RiskRule`
 - `DataSource` resources for Prometheus, Loki, and Kubernetes Events
 - a sample `ModelProvider`
@@ -24,13 +24,13 @@ Helm installs also include a Kubernetes Events baseline rule pack by default. Th
 ## Start the Demo
 
 ```bash
-cd FluxAgent
+cd FluxSeer RCA
 make demo-up
 ```
 
 This target:
 
-1. creates a kind cluster named `fluxagent-demo`
+1. creates a kind cluster named `fluxseer-rca-demo`
 2. builds the operator image
 3. builds the fake observability image
 4. loads both images into kind
@@ -38,15 +38,15 @@ This target:
 
 ## Expected Cluster State After `make demo-up`
 
-You should see these workload families in `fluxagent-demo`:
+You should see these workload families in `fluxseer-rca-demo`:
 
-- `fluxagent-controller-manager`
-- `fluxagent-sample`
-- `fluxagent-observability`
+- `fluxseer-rca-controller-manager`
+- `fluxseer-rca-sample`
+- `fluxseer-rca-observability`
 
 You should also see the control-plane resources:
 
-- `riskrule.aiops.platform/fluxagent-sample-latency`
+- `riskrule.aiops.platform/fluxseer-rca-sample-latency`
 - `datasource.aiops.platform/prometheus`
 - `datasource.aiops.platform/loki`
 - `datasource.aiops.platform/kubernetes-events`
@@ -55,11 +55,11 @@ You should also see the control-plane resources:
 Example:
 
 ```bash
-$ kubectl get deployment -n fluxagent-demo
+$ kubectl get deployment -n fluxseer-rca-demo
 NAME                           READY   UP-TO-DATE   AVAILABLE   AGE
-fluxagent-controller-manager   1/1     1            1           30s
-fluxagent-observability        1/1     1            1           20s
-fluxagent-sample               1/1     1            1           20s
+fluxseer-rca-controller-manager   1/1     1            1           30s
+fluxseer-rca-observability        1/1     1            1           20s
+fluxseer-rca-sample               1/1     1            1           20s
 ```
 
 ## Inject a Fault
@@ -77,46 +77,46 @@ Example:
 
 ```bash
 $ make inject-fault
-kubectl patch deployment fluxagent-sample -n fluxagent-demo ...
-deployment.apps/fluxagent-sample patched
-{"app":"fluxagent-sample","faulted":true}
+kubectl patch deployment fluxseer-rca-sample -n fluxseer-rca-demo ...
+deployment.apps/fluxseer-rca-sample patched
+{"app":"fluxseer-rca-sample","faulted":true}
 pod "curl-fault" deleted
 ```
 
 ## Inspect Results
 
 ```bash
-kubectl get datasource,riskrule,modelprovider -n fluxagent-demo
-kubectl get risksignal -n fluxagent-demo
-kubectl describe datasource prometheus -n fluxagent-demo
-kubectl describe riskrule fluxagent-sample-latency -n fluxagent-demo
-SIGNAL_NAME="$(kubectl get risksignal -n fluxagent-demo \
-  -l fluxagent.aiops.platform/risk-rule=fluxagent-sample-latency \
+kubectl get datasource,riskrule,modelprovider -n fluxseer-rca-demo
+kubectl get risksignal -n fluxseer-rca-demo
+kubectl describe datasource prometheus -n fluxseer-rca-demo
+kubectl describe riskrule fluxseer-rca-sample-latency -n fluxseer-rca-demo
+SIGNAL_NAME="$(kubectl get risksignal -n fluxseer-rca-demo \
+  -l fluxseer-rca.aiops.platform/risk-rule=fluxseer-rca-sample-latency \
   --sort-by=.metadata.creationTimestamp \
-  -o 'jsonpath={range .items[?(@.spec.target.name=="fluxagent-sample")]}{.metadata.name}{"\n"}{end}' | tail -n1)"
-kubectl describe risksignal "${SIGNAL_NAME}" -n fluxagent-demo
+  -o 'jsonpath={range .items[?(@.spec.target.name=="fluxseer-rca-sample")]}{.metadata.name}{"\n"}{end}' | tail -n1)"
+kubectl describe risksignal "${SIGNAL_NAME}" -n fluxseer-rca-demo
 make demo-status
 ```
 
 Expected `RiskSignal` listing:
 
 ```bash
-$ kubectl get risksignal -n fluxagent-demo
+$ kubectl get risksignal -n fluxseer-rca-demo
 NAME                                                        AGE
-fluxagent-sample-latency-elevated-5xx-rate-a1b2c3d4e5f6-risk   20s
+fluxseer-rca-sample-latency-elevated-5xx-rate-a1b2c3d4e5f6-risk   20s
 ```
 
 Expected `describe` highlights:
 
 ```text
-Name:         fluxagent-sample-latency-elevated-5xx-rate-a1b2c3d4e5f6-risk
-Namespace:    fluxagent-demo
+Name:         fluxseer-rca-sample-latency-elevated-5xx-rate-a1b2c3d4e5f6-risk
+Namespace:    fluxseer-rca-demo
 Kind:         RiskSignal
 Phase:        Notified
 Severity:     high
 Signal Type:  prometheus
 Confidence:   94
-Rca Summary:  Multiple signals indicate elevated risk for fluxagent-sample: elevated-5xx-rate, error-logs, unhealthy-events.
+Rca Summary:  Multiple signals indicate elevated risk for fluxseer-rca-sample: elevated-5xx-rate, error-logs, unhealthy-events.
 Evidence:
   - Source: prometheus
     Summary: metric value 0.92 crossed threshold 0.20
@@ -131,8 +131,8 @@ Evidence:
 Expected condition checks:
 
 - `DataSource/prometheus`: `Ready=True`, `Unsupported=False`
-- `RiskRule/fluxagent-sample-latency`: `DatasourceResolved=True`, `QueryTypeSupported=True`, `Ready=True`
-- matching `RiskSignal` for `RiskRule/fluxagent-sample-latency` and target `fluxagent-sample`: `EvidenceCollectionReady=True`, `RCAReady=True`
+- `RiskRule/fluxseer-rca-sample-latency`: `DatasourceResolved=True`, `QueryTypeSupported=True`, `Ready=True`
+- matching `RiskSignal` for `RiskRule/fluxseer-rca-sample-latency` and target `fluxseer-rca-sample`: `EvidenceCollectionReady=True`, `RCAReady=True`
 
 `RCAReady=True` means an RCA result is available. It does not indicate that the target workload is healthy or remediated.
 
@@ -140,24 +140,24 @@ Expected `demo-status` shape:
 
 ```bash
 $ make demo-status
-kubectl get deployment,pod,datasource,riskrule,risksignal -n fluxagent-demo
+kubectl get deployment,pod,datasource,riskrule,risksignal -n fluxseer-rca-demo
 NAME                                          READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/fluxagent-controller-manager  1/1     1            1           2m
-deployment.apps/fluxagent-observability       1/1     1            1           2m
-deployment.apps/fluxagent-sample              0/1     1            0           2m
+deployment.apps/fluxseer-rca-controller-manager  1/1     1            1           2m
+deployment.apps/fluxseer-rca-observability       1/1     1            1           2m
+deployment.apps/fluxseer-rca-sample              0/1     1            0           2m
 
 NAME                                   READY   STATUS             RESTARTS
-pod/fluxagent-sample-xxxx              0/1     CrashLoopBackOff   3
+pod/fluxseer-rca-sample-xxxx              0/1     CrashLoopBackOff   3
 
 NAME                                                               AGE
-risksignal.aiops.platform/fluxagent-sample-latency-elevated-5xx-rate-a1b2c3d4e5f6-risk   1m
+risksignal.aiops.platform/fluxseer-rca-sample-latency-elevated-5xx-rate-a1b2c3d4e5f6-risk   1m
 ```
 
 `make demo-status` also runs:
 
-- `kubectl describe datasource prometheus -n fluxagent-demo`
-- `kubectl describe riskrule fluxagent-sample-latency -n fluxagent-demo`
-- `kubectl describe risksignal "${SIGNAL_NAME}" -n fluxagent-demo`
+- `kubectl describe datasource prometheus -n fluxseer-rca-demo`
+- `kubectl describe riskrule fluxseer-rca-sample-latency -n fluxseer-rca-demo`
+- `kubectl describe risksignal "${SIGNAL_NAME}" -n fluxseer-rca-demo`
 
 ## Force a Degraded Case
 
@@ -171,8 +171,8 @@ make demo-degrade-missing-datasource
 
 Expected signals:
 
-- `RiskRule/fluxagent-sample-latency`: `DatasourceResolved=False`, `Ready=False`
-- matching `RiskSignal` for `RiskRule/fluxagent-sample-latency` and target `fluxagent-sample`: `EvidenceCollectionReady=False`
+- `RiskRule/fluxseer-rca-sample-latency`: `DatasourceResolved=False`, `Ready=False`
+- matching `RiskSignal` for `RiskRule/fluxseer-rca-sample-latency` and target `fluxseer-rca-sample`: `EvidenceCollectionReady=False`
 
 Capability mismatch case:
 
@@ -182,8 +182,8 @@ make demo-degrade-capability-mismatch
 
 Expected signals:
 
-- `RiskRule/fluxagent-sample-latency`: `QueryTypeSupported=False`, `Ready=False`
-- matching `RiskSignal` for `RiskRule/fluxagent-sample-latency` and target `fluxagent-sample`: `EvidenceCollectionReady=False`
+- `RiskRule/fluxseer-rca-sample-latency`: `QueryTypeSupported=False`, `Ready=False`
+- matching `RiskSignal` for `RiskRule/fluxseer-rca-sample-latency` and target `fluxseer-rca-sample`: `EvidenceCollectionReady=False`
 
 Hosted provider auth failure case:
 
@@ -193,8 +193,8 @@ make demo-degrade-provider-auth-failed
 
 Expected signals:
 
-- `RiskRule/fluxagent-sample-latency`: `Ready=True`
-- matching `RiskSignal` for `RiskRule/fluxagent-sample-latency` and target `fluxagent-sample`: `EvidenceCollectionReady=True`, `RCAReady=False` with reason `ProviderAuthFailed`
+- `RiskRule/fluxseer-rca-sample-latency`: `Ready=True`
+- matching `RiskSignal` for `RiskRule/fluxseer-rca-sample-latency` and target `fluxseer-rca-sample`: `EvidenceCollectionReady=True`, `RCAReady=False` with reason `ProviderAuthFailed`
 
 Reset the demo rule:
 
@@ -235,9 +235,9 @@ make demo-degrade-all DEMO_PAUSE_SECONDS=6
 Webhook output can also be inspected through the fake observability state endpoint:
 
 ```bash
-kubectl run curl-status -n fluxagent-demo --restart=Never --rm -i \
+kubectl run curl-status -n fluxseer-rca-demo --restart=Never --rm -i \
   --image=curlimages/curl:8.8.0 -- \
-  curl -s http://fluxagent-observability:8080/demo/state
+  curl -s http://fluxseer-rca-observability:8080/demo/state
 ```
 
 Expected webhook payload shape:
@@ -245,18 +245,18 @@ Expected webhook payload shape:
 ```json
 {
   "faultedApps": {
-    "fluxagent-sample": true
+    "fluxseer-rca-sample": true
   },
   "webhookEvents": [
     {
-      "title": "RiskSignal detected: fluxagent-sample-observed-risk",
-      "summary": "elevated-5xx-rate crossed threshold for fluxagent-sample | error-logs triggered for fluxagent-sample | unhealthy-events detected 1 matching events for fluxagent-sample",
-      "body": "Summary: elevated-5xx-rate crossed threshold for fluxagent-sample | error-logs triggered for fluxagent-sample | unhealthy-events detected 1 matching events for fluxagent-sample\nRule: fluxagent-sample-latency\nTarget: fluxagent-demo/fluxagent-sample Deployment\nRCA Summary: Multiple signals indicate elevated risk for fluxagent-sample: elevated-5xx-rate, error-logs, unhealthy-events.\nRCA Hypothesis: A recent release likely introduced elevated memory or startup failures.\n[prometheus] metric value 0.92 matched > 0.20\n[loki] error timeout while calling upstream (matched 2 log lines)\n[kubernetes-events] crash loop (matched 1 events)",
+      "title": "RiskSignal detected: fluxseer-rca-sample-observed-risk",
+      "summary": "elevated-5xx-rate crossed threshold for fluxseer-rca-sample | error-logs triggered for fluxseer-rca-sample | unhealthy-events detected 1 matching events for fluxseer-rca-sample",
+      "body": "Summary: elevated-5xx-rate crossed threshold for fluxseer-rca-sample | error-logs triggered for fluxseer-rca-sample | unhealthy-events detected 1 matching events for fluxseer-rca-sample\nRule: fluxseer-rca-sample-latency\nTarget: fluxseer-rca-demo/fluxseer-rca-sample Deployment\nRCA Summary: Multiple signals indicate elevated risk for fluxseer-rca-sample: elevated-5xx-rate, error-logs, unhealthy-events.\nRCA Hypothesis: A recent release likely introduced elevated memory or startup failures.\n[prometheus] metric value 0.92 matched > 0.20\n[loki] error timeout while calling upstream (matched 2 log lines)\n[kubernetes-events] crash loop (matched 1 events)",
       "fields": {
-        "namespace": "fluxagent-demo",
+        "namespace": "fluxseer-rca-demo",
         "severity": "high",
         "signalType": "prometheus",
-        "riskRule": "fluxagent-sample-latency",
+        "riskRule": "fluxseer-rca-sample-latency",
         "origin": "risk-rule"
       }
     }
@@ -268,9 +268,9 @@ Expected webhook payload shape:
 
 If you want screenshots for README or release notes, capture these three states:
 
-1. `kubectl get deployment,pod,riskrule,risksignal -n fluxagent-demo`
-2. `kubectl describe risksignal "${SIGNAL_NAME}" -n fluxagent-demo`
-3. `curl http://fluxagent-observability:8080/demo/state`
+1. `kubectl get deployment,pod,riskrule,risksignal -n fluxseer-rca-demo`
+2. `kubectl describe risksignal "${SIGNAL_NAME}" -n fluxseer-rca-demo`
+3. `curl http://fluxseer-rca-observability:8080/demo/state`
 
 ## Recover the Demo
 
@@ -282,9 +282,9 @@ Expected recovery shape:
 
 ```bash
 $ make recover-demo
-service/fluxagent-sample unchanged
-deployment.apps/fluxagent-sample configured
-{"app":"fluxagent-sample","faulted":false}
+service/fluxseer-rca-sample unchanged
+deployment.apps/fluxseer-rca-sample configured
+{"app":"fluxseer-rca-sample","faulted":false}
 pod "curl-recover" deleted
 ```
 

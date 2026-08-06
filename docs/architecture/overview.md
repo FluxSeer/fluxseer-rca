@@ -1,6 +1,6 @@
-# FluxAgent Architecture Overview
+# FluxSeer RCA Architecture Overview
 
-FluxAgent adopts a layered plus split-path architecture.
+FluxSeer RCA adopts a layered plus split-path architecture.
 
 Product positioning:
 
@@ -29,11 +29,11 @@ Guarded remediation remains a separate optional expansion path. Only when it is 
 
 ## Dependency Model
 
-FluxAgent treats dependencies in three separate categories:
+FluxSeer RCA treats dependencies in three separate categories:
 
 - runtime dependency: only Kubernetes is required for operator mode; Prometheus, Loki, and external model APIs are optional
-- compile-time dependency: controllers and adapters may import Kubernetes or provider-specific packages, but core evaluation and reasoning should stay expressed through FluxAgent domain types
-- deployment dependency: FluxAgent manifests install FluxAgent itself, not a full monitoring stack on the user's behalf
+- compile-time dependency: controllers and adapters may import Kubernetes or provider-specific packages, but core evaluation and reasoning should stay expressed through FluxSeer RCA domain types
+- deployment dependency: FluxSeer RCA manifests install FluxSeer RCA itself, not a full monitoring stack on the user's behalf
 
 That distinction matters because the project goal is integration without structural lock-in.
 
@@ -45,7 +45,7 @@ See [mermaid-diagrams.md](mermaid-diagrams.md) for maintained Mermaid architectu
 
 ### 1. Signal Sources
 
-FluxAgent accepts signals from multiple systems without hard-coding one observability stack into the core:
+FluxSeer RCA accepts signals from multiple systems without hard-coding one observability stack into the core:
 
 - Kubernetes Events
 - Prometheus
@@ -92,7 +92,7 @@ The legacy annotation-driven runtime uses `DeploymentRiskReconciler` plus `detec
 Responsibilities:
 
 - watch `Deployment`
-- require `fluxagent.aiops.platform/enabled: "true"` for opt-in
+- require `fluxseer-rca.aiops.platform/enabled: "true"` for opt-in
 - query enabled datasource adapters
 - merge evidence by severity and confidence
 - produce a normalized `Finding`
@@ -107,11 +107,11 @@ Key files:
 - `internal/detector/service.go`
 - `internal/controllers/risksignal_notification_controller.go`
 
-This layer should continue to consume FluxAgent-owned evidence and domain types rather than pass Kubernetes objects or vendor SDK payloads deep into the system.
+This layer should continue to consume FluxSeer RCA-owned evidence and domain types rather than pass Kubernetes objects or vendor SDK payloads deep into the system.
 
 ### 4. CRD Contract Layer
 
-FluxAgent exposes its workflow through Kubernetes-native CRDs:
+FluxSeer RCA exposes its workflow through Kubernetes-native CRDs:
 
 - `DataSource`
 - `RiskRule`
@@ -127,7 +127,7 @@ The API group is `aiops.platform/v1alpha1`.
 
 These CRDs are not only data models. They are workflow state carriers. Each controller advances only the state it owns, so detection, reasoning, approval, and execution do not collapse into one controller.
 
-This gives FluxAgent:
+This gives FluxSeer RCA:
 
 - auditable state transitions
 - observable control-plane behavior
@@ -155,7 +155,7 @@ This layer is intended to support:
 - future thin UI entrypoints
 - future webhook or chat bridges
 
-Without this layer, FluxAgent remains background-rule oriented. With it, FluxAgent gains an immediate investigation workflow without becoming a generic agent shell.
+Without this layer, FluxSeer RCA remains background-rule oriented. With it, FluxSeer RCA gains an immediate investigation workflow without becoming a generic agent shell.
 
 ### Controller Ownership Boundary
 
@@ -204,7 +204,7 @@ Deep investigation and remediation proposal flows should use explicit executor c
 Expected split:
 
 ```text
-FluxAgent Controller
+FluxSeer RCA Controller
 ├─ watch resources and signals
 ├─ normalize evidence
 ├─ create and observe InvestigationRequest state
@@ -293,7 +293,7 @@ RiskRule / Alert / Manual Request
 In runtime terms:
 
 1. `DeploymentRiskReconciler` watches `Deployment`.
-2. It only processes workloads annotated with `fluxagent.aiops.platform/enabled: "true"`.
+2. It only processes workloads annotated with `fluxseer-rca.aiops.platform/enabled: "true"`.
 3. `detector.Service` queries the enabled adapters.
 4. Evidence is merged into a `Finding`.
 5. The controller creates or updates a `RiskSignal`.
@@ -414,11 +414,11 @@ Simulation-oriented today:
 - most `gitops.*` executor behavior
 - most `runbook.*` executor behavior
 
-This means FluxAgent should be described today as a read-only RCA control plane with optional `RiskSignal` projection and guarded remediation expansion seams, not as a fully autonomous production remediation system.
+This means FluxSeer RCA should be described today as a read-only RCA control plane with optional `RiskSignal` projection and guarded remediation expansion seams, not as a fully autonomous production remediation system.
 
 ## Safety Model
 
-FluxAgent is designed around explicit safety boundaries.
+FluxSeer RCA is designed around explicit safety boundaries.
 
 Read-only defaults:
 
@@ -439,7 +439,7 @@ This safety model is why the read-only track and the remediation track are docum
 
 ## Extension Points
 
-FluxAgent is designed to grow through stable seams instead of controller rewrites.
+FluxSeer RCA is designed to grow through stable seams instead of controller rewrites.
 
 - datasource adapter: add a new observability backend behind the shared datasource contract
 - model provider: add or swap a reasoning backend without changing CRD schemas
@@ -459,7 +459,7 @@ flowchart LR
         D[Deployment Context]
     end
 
-    subgraph Core[FluxAgent Core]
+    subgraph Core[FluxSeer RCA Core]
         R1[DeploymentRiskReconciler]
         RR[RiskRuleReconciler]
         IR[InvestigationRequestReconciler]
@@ -502,13 +502,13 @@ flowchart LR
 
 ## What This Means for Open Source Users
 
-FluxAgent can already be described externally as:
+FluxSeer RCA can already be described externally as:
 
-`FluxAgent is a Kubernetes-native SRE investigation control plane with explicit recurring detection, ad-hoc read-only investigation workflows, and optional AI-assisted reasoning.`
+`FluxSeer RCA is a Kubernetes-native SRE investigation control plane with explicit recurring detection, ad-hoc read-only investigation workflows, and optional AI-assisted reasoning.`
 
 It should not yet be described as:
 
-`FluxAgent fully automates AI remediation in production.`
+`FluxSeer RCA fully automates AI remediation in production.`
 
 That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.
 

@@ -17,9 +17,9 @@ The read-only path is started by [cmd/manager/main.go](../../cmd/manager/main.go
 Default behavior:
 
 - register Kubernetes Events adapter unconditionally
-- register Prometheus adapter when `FLUXAGENT_PROMETHEUS_URL` is set
-- register Loki adapter when `FLUXAGENT_LOKI_URL` is set
-- register webhook notification controller when `FLUXAGENT_WEBHOOK_URL` is set
+- register Prometheus adapter when `FLUXSEER_RCA_PROMETHEUS_URL` is set
+- register Loki adapter when `FLUXSEER_RCA_LOKI_URL` is set
+- register webhook notification controller when `FLUXSEER_RCA_WEBHOOK_URL` is set
 - keep remediation disabled unless `--enable-remediation=true`
 - keep legacy Deployment annotation detection disabled unless `--enable-legacy-deployment-risk=true`
 
@@ -45,15 +45,15 @@ When explicitly enabled, the controller watches `Deployment` resources, but dete
 ```yaml
 metadata:
   annotations:
-    fluxagent.aiops.platform/enabled: "true"
+    fluxseer-rca.aiops.platform/enabled: "true"
 ```
 
 Optional per-workload annotations:
 
-- `fluxagent.aiops.platform/prometheus-query`
-- `fluxagent.aiops.platform/prometheus-threshold`
-- `fluxagent.aiops.platform/loki-query`
-- `fluxagent.aiops.platform/event-keywords`
+- `fluxseer-rca.aiops.platform/prometheus-query`
+- `fluxseer-rca.aiops.platform/prometheus-threshold`
+- `fluxseer-rca.aiops.platform/loki-query`
+- `fluxseer-rca.aiops.platform/event-keywords`
 
 The default Helm chart does not enable this watcher. Prefer `RiskRule` resources for new recurring detection.
 

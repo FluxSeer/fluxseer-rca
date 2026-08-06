@@ -1,6 +1,6 @@
 # Datasource Adapters
 
-FluxAgent uses datasource adapters to collect evidence without binding the core workflow to one observability backend.
+FluxSeer RCA uses datasource adapters to collect evidence without binding the core workflow to one observability backend.
 
 ## Current Product Truth
 
@@ -13,7 +13,7 @@ Current implementation entrypoint: [internal/datasource/interface.go](../interna
 
 ## Why Adapters Exist
 
-The adapter boundary keeps FluxAgent from hard-coding Prometheus, Loki, or another vendor into the main workflow.
+The adapter boundary keeps FluxSeer RCA from hard-coding Prometheus, Loki, or another vendor into the main workflow.
 
 The design rule is:
 

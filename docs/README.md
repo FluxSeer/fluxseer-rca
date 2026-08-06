@@ -1,8 +1,10 @@
 # FluxSeer RCA Docs
 
-FluxSeer RCA is the forward-looking product name for the Kubernetes-native RCA
-control plane currently published as FluxAgent. The current beta artifacts still
-use `fluxagent` names for compatibility.
+FluxSeer RCA is the product name for this Kubernetes-native RCA control
+plane. Source code, Helm charts, and build artifacts use matching `fluxseer` /
+`fluxseer-rca` naming; the most recently published release, `v0.3.0-beta.3`,
+was still built under the earlier `fluxagent` name (see
+[architecture/rename-migration-plan.md](architecture/rename-migration-plan.md)).
 
 Current published release: `v0.3.0-beta.3`
 
@@ -54,7 +56,7 @@ Current maintained architecture:
 - [Action executor](architecture/action-executor.md)
 - [Remediation flow](architecture/remediation-flow.md)
 - [v0.3 investigation experience](architecture/v0.3-investigation-experience.md)
-- [FluxAgent → FluxSeer RCA rename migration plan](architecture/rename-migration-plan.md)
+- [FluxSeer RCA → FluxSeer RCA rename migration plan](architecture/rename-migration-plan.md)
 
 Historical architecture records:
 

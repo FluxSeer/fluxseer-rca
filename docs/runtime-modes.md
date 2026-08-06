@@ -1,6 +1,6 @@
-# FluxAgent Runtime Modes
+# FluxSeer RCA Runtime Modes
 
-This document defines the supported mode switches in FluxAgent and separates user-facing runtime configuration from maintainer-only deployment and release flows.
+This document defines the supported mode switches in FluxSeer RCA and separates user-facing runtime configuration from maintainer-only deployment and release flows.
 
 Current release baseline: `v0.3.0-beta.3`
 
@@ -10,7 +10,7 @@ The API group and version identity are fixed for the current v0.3 line. This doe
 
 ## Mode Ownership
 
-FluxAgent has several configuration surfaces. They should not be treated as one flat list.
+FluxSeer RCA has several configuration surfaces. They should not be treated as one flat list.
 
 ```text
 Helm values
@@ -78,7 +78,7 @@ Capability semantics:
 
 | Capability | Default | Maturity | Meaning |
 | --- | --- | --- | --- |
-| read-only RCA | enabled | Supported | Collect bounded evidence and write FluxAgent CRD status without mutating workloads. |
+| read-only RCA | enabled | Supported | Collect bounded evidence and write FluxSeer RCA CRD status without mutating workloads. |
 | `legacyDeploymentRisk` | disabled | Legacy / opt-in | Enables the annotation-driven Deployment watcher. |
 | `remediation` | disabled | Experimental / opt-in | Enables `RemediationPlan` and `AgentAction` reconciliation. |
 | `experimentalExecutor` | disabled | Experimental / opt-in | Adds executor-like permissions such as Job and ConfigMap mutation. |
@@ -93,7 +93,7 @@ legacy watcher       -> compatibility only
 
 ## RCA Entry
 
-FluxAgent has two public RCA entrypoints, but they are not equivalent long-term ownership surfaces.
+FluxSeer RCA has two public RCA entrypoints, but they are not equivalent long-term ownership surfaces.
 
 | Resource | Role |
 | --- | --- |
@@ -131,7 +131,7 @@ spec:
   mode: readOnly
 ```
 
-`readOnly` means FluxAgent may read declared evidence sources and write FluxAgent-owned status or optional result resources. It does not grant workload mutation.
+`readOnly` means FluxSeer RCA may read declared evidence sources and write FluxSeer RCA-owned status or optional result resources. It does not grant workload mutation.
 
 Other execution modes are not implemented in `v0.3.0-beta.3`. The field exists as a compatibility and future-extension point, not as a hidden remediation switch.
 
@@ -182,10 +182,10 @@ These states are not the same. A provider can be configured while transmission i
 
 | Style | Field | Owner |
 | --- | --- | --- |
-| Controller-planned evidence | `spec.dataSources[]` | FluxAgent chooses datasource-specific default queries. |
+| Controller-planned evidence | `spec.dataSources[]` | FluxSeer RCA chooses datasource-specific default queries. |
 | User-planned evidence | `spec.queries[]` | User supplies explicit query type, datasource, and query or template. |
 
-These fields are mutually exclusive at runtime. If both are set, the request is ambiguous because FluxAgent cannot tell whether the controller or the user owns the evidence plan, so the controller marks the request `InvalidSpec`.
+These fields are mutually exclusive at runtime. If both are set, the request is ambiguous because FluxSeer RCA cannot tell whether the controller or the user owns the evidence plan, so the controller marks the request `InvalidSpec`.
 
 Optional future CRD admission validation direction:
 
@@ -199,7 +199,7 @@ Any future CEL implementation should choose the exact form based on the generate
 
 ## Evidence Retention
 
-Evidence retention controls what FluxAgent keeps after collection and normalization.
+Evidence retention controls what FluxSeer RCA keeps after collection and normalization.
 
 | Mode | Support level | Runtime behavior |
 | --- | --- | --- |
@@ -210,7 +210,7 @@ Evidence retention controls what FluxAgent keeps after collection and normalizat
 `NormalizedSnapshot` requires an evidence store, currently configured through:
 
 ```text
-FLUXAGENT_EVIDENCE_STORE_DIR
+FLUXSEER_RCA_EVIDENCE_STORE_DIR
 ```
 
 `RawSnapshot` must not be silently accepted or downgraded.
@@ -356,7 +356,7 @@ For normal users, Helm should be the public configuration surface. Container arg
 
 ## Maintainer Release Channels
 
-CI/CD release channels are maintainer workflows, not FluxAgent runtime modes.
+CI/CD release channels are maintainer workflows, not FluxSeer RCA runtime modes.
 
 | Channel | Trigger | Artifact target |
 | --- | --- | --- |

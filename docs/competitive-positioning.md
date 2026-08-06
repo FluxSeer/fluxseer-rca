@@ -1,7 +1,8 @@
 # Competitive Positioning
 
-FluxSeer RCA is the forward-looking product name for the project currently
-published as FluxAgent. It should not try to become the broadest AI SRE agent.
+FluxSeer RCA is the project's product name, matching the `fluxseer` /
+`fluxseer-rca` naming now used in source code and build artifacts. It should
+not try to become the broadest AI SRE agent.
 
 Its strongest lane is:
 
@@ -28,7 +29,7 @@ FluxSeer RCA does not merely generate RCA answers. It provides the control, evid
 
 ## Strategic Boundary
 
-FluxAgent is not:
+FluxSeer RCA is not:
 
 - a replacement observability platform
 - a replacement Alertmanager
@@ -36,7 +37,7 @@ FluxAgent is not:
 - a free-form autonomous cluster agent
 - a production self-healing platform by default
 
-FluxAgent should own:
+FluxSeer RCA should own:
 
 - RCA workflow state in Kubernetes
 - explicit datasource and provider configuration
@@ -48,19 +49,19 @@ FluxAgent should own:
 
 ## Positioning Map
 
-| Category | Projects That Tend To Own It | FluxAgent Boundary |
+| Category | Projects That Tend To Own It | FluxSeer RCA Boundary |
 | --- | --- | --- |
 | Agentic investigation runtime | HolmesGPT-style systems | Do not compete on tool breadth or unrestricted agent execution. |
 | Kubernetes analyzer catalog | K8sGPT-style systems | Do not compete on the largest built-in rule set. |
 | Full observability and APM | Coroot-style systems | Do not own telemetry storage, eBPF, tracing, profiling, or dashboards as core dependencies. |
 | Automated remediation loop | Kubernaut-style systems | Keep remediation downstream, guarded, and optional. |
-| RCA evaluation framework | OpenSRE-style systems | Build deterministic local evaluation gates for FluxAgent's own RCA contract. |
+| RCA evaluation framework | OpenSRE-style systems | Build deterministic local evaluation gates for FluxSeer RCA's own RCA contract. |
 
 Long-term integrations with external investigation runtimes or evaluation systems can be provider implementations, not product identity.
 
 ## Differentiation
 
-FluxAgent should make these questions first-class:
+FluxSeer RCA should make these questions first-class:
 
 ```text
 Which evidence supported this RCA?
@@ -85,7 +86,7 @@ alert
 -> operator workflow
 ```
 
-FluxAgent should optimize governance and reproducibility of the RCA itself:
+FluxSeer RCA should optimize governance and reproducibility of the RCA itself:
 
 ```text
 request
@@ -96,7 +97,7 @@ request
 -> replay and evaluation
 ```
 
-This is a difference in system of record and control ownership. FluxAgent should be judged less by how quickly it posts a narrative summary and more by whether another controller, GitOps workflow, security reviewer, or future model-evaluation run can trust the recorded RCA state.
+This is a difference in system of record and control ownership. FluxSeer RCA should be judged less by how quickly it posts a narrative summary and more by whether another controller, GitOps workflow, security reviewer, or future model-evaluation run can trust the recorded RCA state.
 
 ## Practical Wedge
 

@@ -1,4 +1,4 @@
-# FluxAgent Architecture
+# FluxSeer RCA Architecture
 
 This file is kept as a compatibility entry point.
 

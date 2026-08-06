@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Use `DataSource` to describe how FluxAgent should connect to a datasource without hard-coding every connection through manager environment variables.
+Use `DataSource` to describe how FluxSeer RCA should connect to a datasource without hard-coding every connection through manager environment variables.
 
 Current supported datasource types:
 
@@ -19,7 +19,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: DataSource
 metadata:
   name: prometheus
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   type: prometheus
   endpoint: http://prometheus-server.monitoring.svc:9090
@@ -29,7 +29,7 @@ spec:
     sensitivityTags:
       - InfrastructureMetadata
     source: Explicit
-    policyVersion: fluxagent-data-classification-v1
+    policyVersion: fluxseer-rca-data-classification-v1
 ```
 
 ## Spec
@@ -55,15 +55,15 @@ spec:
 - `spec.dataClassification.level`: default minimum classification for evidence collected from this datasource. Supported levels are `Public`, `Internal`, `Confidential`, and `Restricted`.
 - `spec.dataClassification.sensitivityTags[]`: default sensitivity tags inherited by evidence from this datasource, such as `InfrastructureMetadata`, `CustomerData`, or `SecuritySensitive`.
 - `spec.dataClassification.source`: classification origin, usually `Explicit` for administrator-provided datasource policy.
-- `spec.dataClassification.policyVersion`: classification policy version, currently `fluxagent-data-classification-v1`.
+- `spec.dataClassification.policyVersion`: classification policy version, currently `fluxseer-rca-data-classification-v1`.
 - `spec.auth`: optional auth config
 - `spec.tls`: optional TLS overrides
 
 Datasource HTTP clients apply a network safety guard before registration, for every redirect target, and when dialing resolved hostnames. Metadata endpoints, loopback, link-local, unspecified IPs, IPv4-mapped metadata addresses, and private IP endpoints without `allowedCIDRs` are denied. Cluster service hostnames ending in `.svc` or `.svc.cluster.local` are allowed by default and may resolve to private ClusterIP addresses. Environment proxy settings are disabled for datasource clients.
 
-For HTTP datasources, FluxAgent resolves hostnames through a policy-aware dialer, validates all resolved A/AAAA addresses, and pins the TCP connection to a verified IP. This reduces DNS rebinding risk while keeping the original request hostname available to the HTTP transport. Network-policy diagnostics include bounded host, redirect host, resolved IP, and reason metadata; they do not include credentials, query results, or datasource response bodies.
+For HTTP datasources, FluxSeer RCA resolves hostnames through a policy-aware dialer, validates all resolved A/AAAA addresses, and pins the TCP connection to a verified IP. This reduces DNS rebinding risk while keeping the original request hostname available to the HTTP transport. Network-policy diagnostics include bounded host, redirect host, resolved IP, and reason metadata; they do not include credentials, query results, or datasource response bodies.
 
-When `queryPolicy.mode: TemplatesOnly` is configured, FluxAgent validates rendered queries before any datasource network request. It accepts named `queryTemplate` entries and controller-owned default templates; raw `query` expressions are rejected even when the query name matches an allowed template. Rejections use bounded diagnostic reasons such as `template_required`, `template_not_allowed`, `range_exceeded`, `regex_denied`, `target_scope_required`, `function_denied`, `function_not_allowed`, `subquery_denied`, `offset_denied`, `at_modifier_denied`, `pipeline_stage_denied`, or `pipeline_stage_not_allowed`; full query text is not needed for policy metrics.
+When `queryPolicy.mode: TemplatesOnly` is configured, FluxSeer RCA validates rendered queries before any datasource network request. It accepts named `queryTemplate` entries and controller-owned default templates; raw `query` expressions are rejected even when the query name matches an allowed template. Rejections use bounded diagnostic reasons such as `template_required`, `template_not_allowed`, `range_exceeded`, `regex_denied`, `target_scope_required`, `function_denied`, `function_not_allowed`, `subquery_denied`, `offset_denied`, `at_modifier_denied`, `pipeline_stage_denied`, or `pipeline_stage_not_allowed`; full query text is not needed for policy metrics.
 
 Backend-specific syntax policy is evaluated after template, range, regex, and target-scope checks. Unset backend-specific fields preserve compatibility. Once a field is set, it tightens only the matching backend:
 
@@ -90,7 +90,7 @@ queryPolicy:
       - regexp
 ```
 
-`spec.dataClassification` describes the data exposed by the datasource, not whether that data may leave the cluster. Hosted provider egress is still controlled by `ModelProvider.spec.dataPolicy`. FluxAgent computes effective evidence classification from datasource defaults, evidence-kind defaults, explicit policy, and content detection. The effective level only stays the same or becomes more restrictive; redaction does not automatically lower classification.
+`spec.dataClassification` describes the data exposed by the datasource, not whether that data may leave the cluster. Hosted provider egress is still controlled by `ModelProvider.spec.dataPolicy`. FluxSeer RCA computes effective evidence classification from datasource defaults, evidence-kind defaults, explicit policy, and content detection. The effective level only stays the same or becomes more restrictive; redaction does not automatically lower classification.
 
 ## Current Behavior
 
