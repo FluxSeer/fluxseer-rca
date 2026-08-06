@@ -352,7 +352,7 @@ In runtime terms:
 1. `RiskSignalReconciler` derives a `RemediationPlan`.
 2. `RemediationPlanReconciler` evaluates the plan through the guardrails engine.
 3. Guardrails decide `Approved`, `WaitingApproval`, or `Rejected`.
-4. `AgentActionReconciler` currently executes through the legacy `spec.approvedBy` gate and records `status.approval` as the controller-observed projection.
+4. `AgentActionReconciler` executes only once `status.approval` (controller-written, digest-bound to the current spec) shows the action was auto-approved by guardrails, or was marked as requiring human approval and a reviewer has since supplied `spec.approvedBy`; see [crd-reference/agentaction.md](../crd-reference/agentaction.md#specapprovedby).
 5. Result status is persisted for auditability.
 
 This separation is intentional: risk detection and side-effect execution are not a single direct pipeline.

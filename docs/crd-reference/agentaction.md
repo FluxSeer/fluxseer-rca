@@ -23,7 +23,7 @@ Represent one executable action after policy review and, when required, human ap
 | `spec.target` | object | yes | Execution target. |
 | `spec.actionType` | string | yes | Executor route key such as `kubernetes.rolloutPause`. |
 | `spec.parameters` | object | no | Backend-specific parameters. |
-| `spec.approvedBy` | string | no | Approval identity. Empty means execution must wait. |
+| `spec.approvedBy` | string | no | Approval identity supplied by a human reviewer. On its own this does not authorize execution; see [`spec.approvedBy`](#specapprovedby) below. |
 | `spec.dryRunResult` | string | no | Pre-execution validation or policy result. |
 | `spec.ttlSeconds` | integer | no | Lifecycle hint. |
 | `spec.rollbackPlan` | array | no | Rollback steps attached for auditability. |
@@ -73,9 +73,15 @@ Backend-specific parameters passed to the executor.
 
 ### `spec.approvedBy`
 
-Approval identity. If this is empty, the reconciler keeps the object in `WaitingApproval`.
+Approval identity supplied by a human reviewer. If empty, the reconciler keeps the object in `WaitingApproval`.
 
-This field remains a compatibility input in `v1alpha1`. The controller projects the observed approval state into `status.approval` with a source such as `LegacySpecApprovedBy` or `GuardrailsAutoApproval`, plus an `actionDigest` derived from the desired action spec. Future hardening should replace string-only approval with a non-forgeable approval record.
+**This field alone does not authorize execution.** `spec.approvedBy` is a plain, user-writable spec field — a principal with RBAC write access to `AgentAction` can set it to anything without ever going through `RemediationPlan` or `guardrails.Engine`. The reconciler instead trusts `status.approval`, which only `RemediationPlanReconciler` writes after actually evaluating the action, and requires `status.approval.actionDigest` to match a digest recomputed from the current spec (excluding `approvedBy` itself) before treating the action as approved:
+
+- `status.approval.approved: true` (source `GuardrailsAutoApproval`) — guardrails auto-approved it; `spec.approvedBy` is not consulted.
+- `status.approval.source: ManualApprovalRequired` plus a non-empty `spec.approvedBy` — guardrails required human approval for this exact action content (proven by the digest match) and a reviewer supplied one; the reconciler then executes and records the confirmation as `ManualApprovalConfirmed`.
+- Anything else — including an `AgentAction` created directly without ever going through `RemediationPlan`, or one whose spec changed after `status.approval` was written — is treated as unapproved and stays in `WaitingApproval`, regardless of what `spec.approvedBy` says.
+
+RBAC implication: only principals who should be trusted to approve remediation need write access to the `agentactions/status` subresource (normally just the controller's own ServiceAccount); write access to the base `agentactions` resource does not by itself grant approval power.
 
 ### `spec.dryRunResult`
 

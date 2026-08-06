@@ -240,7 +240,7 @@ erDiagram
         object spec_target
         string spec_actionType
         object spec_parameters
-        string spec_approvedBy_legacy
+        string spec_approvedBy
         string spec_dryRunResult_legacy
         object status_approval
         object status_dryRunResult
@@ -419,7 +419,7 @@ flowchart LR
     NotifyRec -->|notification side effect only when configured| Notify[Webhook notification]
     RPRec -->|guardrails and approval state| RPStatus[RemediationPlan.status]
     RPRec -->|creates or updates action and approval projection| AA[AgentAction]
-    AARec -->|executes through legacy spec.approvedBy gate; records status.approval projection| AAStatus[AgentAction.status]
+    AARec -->|executes only when status.approval is digest-bound approved or guardrails-required-plus-approvedBy| AAStatus[AgentAction.status]
 ```
 
 ## Read-only RiskRule Flow
@@ -798,7 +798,7 @@ sequenceDiagram
     participant AAC as AgentActionReconciler
     participant Exec as executor.Router
 
-    Note over RS,AAC: Disabled by default. Requires explicit feature and RBAC profile. AgentAction status has approval, dry-run, execution, and effectiveness fields; legacy spec.approvedBy/spec.dryRunResult compatibility is tracked for hardening.
+    Note over RS,AAC: Disabled by default. Requires explicit feature and RBAC profile. AgentAction status has approval, dry-run, execution, and effectiveness fields; approval is digest-bound to what guardrails actually evaluated (see crd-reference/agentaction.md), spec.dryRunResult compatibility is still tracked for hardening.
     RS-->>RSC: confirmed signal
     RSC->>RP: optional guarded plan creation
     RP-->>RPC: reconcile plan
@@ -816,8 +816,8 @@ sequenceDiagram
         AAC-->>AA: keep WaitingApproval
     else auto approved
         RPC->>RP: status.phase=Approved
-        RPC->>AA: spec.approvedBy populated by approval workflow
-        AA-->>AAC: reconcile action through legacy spec.approvedBy gate
+        RPC->>AA: status.approval.approved=true, source=GuardrailsAutoApproval, digest-bound to spec
+        AA-->>AAC: reconcile action; execute since status.approval is approved and digest matches
         AAC->>Exec: execute or simulate
         Exec-->>AAC: result
         AAC->>AA: status.execution.phase=Succeeded or Failed
