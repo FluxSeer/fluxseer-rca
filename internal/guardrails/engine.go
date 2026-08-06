@@ -58,7 +58,7 @@ func (e *Engine) Evaluate(input ReviewInput) domain.ApprovalDecision {
 	if severityRank(input.Reasoning.Severity) <= severityRank(autoApproveMax) {
 		return domain.ApprovalDecision{
 			Action:       domain.ApprovalAuto,
-			ApprovedBy:   "fluxagent-policy-engine",
+			ApprovedBy:   "fluxseer-rca-policy-engine",
 			Reason:       "low-risk recommendation auto approved",
 			DryRunResult: "dry-run: safe to execute",
 		}

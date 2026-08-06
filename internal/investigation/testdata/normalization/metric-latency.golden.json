@@ -2,7 +2,7 @@
   "observations": [
     {
       "id": "evidence-001",
-      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "schemaVersion": "observation.fluxseer.io/v1alpha1",
       "dataSourceRef": "prometheus",
       "capability": "metric",
       "queryDigest": "sha256:f09a8782d4b74f28fcaabe8cf6bafdd26d8c945ed37cd0a0e492a7b7639adeae",
@@ -18,9 +18,9 @@
         }
       },
       "summary": "metric http_request_duration_seconds_p95 returned value 2.75",
-      "contentDigest": "sha256:303647eef18b1a7fc8a2416878085bec9f5264344751953c9c5c18c9fd19b250",
+      "contentDigest": "sha256:a4d25303f2f280e5a77a0b78a46fa828963aa2c097b00314419e8dc033b12463",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Internal",
@@ -28,7 +28,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": false,
       "originalCount": 1,
@@ -45,9 +45,9 @@
       "source": "prometheus",
       "summary": "metric http_request_duration_seconds_p95 returned value 2.75",
       "queryDigest": "sha256:f09a8782d4b74f28fcaabe8cf6bafdd26d8c945ed37cd0a0e492a7b7639adeae",
-      "contentDigest": "sha256:303647eef18b1a7fc8a2416878085bec9f5264344751953c9c5c18c9fd19b250",
+      "contentDigest": "sha256:a4d25303f2f280e5a77a0b78a46fa828963aa2c097b00314419e8dc033b12463",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Internal",
@@ -55,7 +55,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "originalCount": 1,
       "retainedCount": 1,

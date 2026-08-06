@@ -40,7 +40,7 @@ func TestAssessMarksCandidateUnverifiedWithoutSupportedEvidence(t *testing.T) {
 
 func solutionRequest(verification string) *v1alpha1.InvestigationRequest {
 	return &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "checkout-latency", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout-latency", Namespace: "fluxseer-rca-system"},
 		Status: v1alpha1.InvestigationRequestStatus{
 			Claims: []v1alpha1.RCAClaim{{
 				Statement:    "latency regression is caused by rollout",

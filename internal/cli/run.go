@@ -28,13 +28,13 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		return nil
 	default:
 		printUsage(stderr)
-		return fmt.Errorf("unknown fluxagent subcommand %q", args[0])
+		return fmt.Errorf("unknown fluxseer subcommand %q", args[0])
 	}
 }
 
 func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "Usage:")
-	_, _ = fmt.Fprintln(w, "  fluxagent demo")
-	_, _ = fmt.Fprintln(w, "  fluxagent investigate <kind> <name> [flags]")
-	_, _ = fmt.Fprintln(w, "  fluxagent version [--output=json]")
+	_, _ = fmt.Fprintln(w, "  fluxseer demo")
+	_, _ = fmt.Fprintln(w, "  fluxseer investigate <kind> <name> [flags]")
+	_, _ = fmt.Fprintln(w, "  fluxseer version [--output=json]")
 }

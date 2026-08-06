@@ -79,7 +79,7 @@ func TestRiskRuleReconcilerMarksRuleObservedAndRequeues(t *testing.T) {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "latency-regression",
-			Namespace:  "fluxagent-system",
+			Namespace:  "fluxseer-rca-system",
 			Generation: 1,
 		},
 		Spec: v1alpha1.RiskRuleSpec{
@@ -166,7 +166,7 @@ func TestRiskRuleReconcilerCreatesIdempotentRiskSignalFromMatchingDeployment(t *
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "latency-regression",
-			Namespace:  "fluxagent-system",
+			Namespace:  "fluxseer-rca-system",
 			Generation: 2,
 		},
 		Spec: v1alpha1.RiskRuleSpec{
@@ -307,8 +307,8 @@ func TestRiskRuleReconcilerDeduplicatesSameEventAcrossWindowBuckets(t *testing.T
 	ruleObj := &v1alpha1.RiskRule{
 		TypeMeta: metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "RiskRule"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       "fluxagent-kubernetes-baseline",
-			Namespace:  "fluxagent-test",
+			Name:       "fluxseer-rca-kubernetes-baseline",
+			Namespace:  "fluxseer-rca-test",
 			UID:        types.UID("riskrule-uid"),
 			Generation: 1,
 		},
@@ -423,7 +423,7 @@ func TestRiskRuleReconcilerRoutesMatchesToInvestigationRequest(t *testing.T) {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "latency-regression",
-			Namespace:  "fluxagent-test",
+			Namespace:  "fluxseer-rca-test",
 			UID:        types.UID("riskrule-latency-uid"),
 			Generation: 4,
 		},
@@ -504,7 +504,7 @@ func TestRiskRuleReconcilerRoutesMatchesToInvestigationRequest(t *testing.T) {
 		t.Fatalf("expected 1 investigation request, got %d", len(requests.Items))
 	}
 	investigation := requests.Items[0]
-	if investigation.Namespace != "fluxagent-test" {
+	if investigation.Namespace != "fluxseer-rca-test" {
 		t.Fatalf("expected investigation request in rule namespace, got %s", investigation.Namespace)
 	}
 	if investigation.Spec.Target.Namespace != "prod" || investigation.Spec.Target.Name != "open-api" {
@@ -519,7 +519,7 @@ func TestRiskRuleReconcilerRoutesMatchesToInvestigationRequest(t *testing.T) {
 	if !investigation.Spec.CreateRiskSignal {
 		t.Fatalf("expected createRiskSignal propagated")
 	}
-	if investigation.Annotations[annotationLineageSource] != "fluxagent-test/latency-regression" ||
+	if investigation.Annotations[annotationLineageSource] != "fluxseer-rca-test/latency-regression" ||
 		investigation.Annotations[annotationLineageSourceUID] != "riskrule-latency-uid" ||
 		investigation.Annotations[annotationLineageGeneration] != "4" ||
 		investigation.Annotations[annotationTargetUID] != "deployment-open-api-uid" ||
@@ -578,7 +578,7 @@ func TestRiskRuleReconcilerRoutesStatefulSetMatchToInvestigationRequest(t *testi
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "stateful-workload",
-			Namespace:  "fluxagent-test",
+			Namespace:  "fluxseer-rca-test",
 			UID:        types.UID("riskrule-stateful-uid"),
 			Generation: 1,
 		},
@@ -704,7 +704,7 @@ func TestRiskRuleReconcilerRoutesAdditionalWorkloadKindsToInvestigationRequest(t
 				t.Fatalf("failed to add scheme: %v", err)
 			}
 			ruleObj := &v1alpha1.RiskRule{
-				ObjectMeta: metav1.ObjectMeta{Name: tc.name + "-rule", Namespace: "fluxagent-test", UID: types.UID("riskrule-" + tc.name), Generation: 1},
+				ObjectMeta: metav1.ObjectMeta{Name: tc.name + "-rule", Namespace: "fluxseer-rca-test", UID: types.UID("riskrule-" + tc.name), Generation: 1},
 				Spec: v1alpha1.RiskRuleSpec{
 					Window: metav1.Duration{Duration: 10 * time.Minute},
 					TargetSelector: v1alpha1.TargetSelector{
@@ -777,7 +777,7 @@ func TestRiskRuleReconcilerReportsUnsupportedSelectedKindCoverage(t *testing.T) 
 		t.Fatalf("failed to add scheme: %v", err)
 	}
 	ruleObj := &v1alpha1.RiskRule{
-		ObjectMeta: metav1.ObjectMeta{Name: "node-coverage", Namespace: "fluxagent-test", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "node-coverage", Namespace: "fluxseer-rca-test", Generation: 1},
 		Spec: v1alpha1.RiskRuleSpec{
 			TargetSelector: v1alpha1.TargetSelector{
 				WorkloadSelector: v1alpha1.WorkloadSelector{Kinds: []string{"Deployment", "Node"}},
@@ -824,7 +824,7 @@ func TestFindingIdentitySeparatesSameWorkloadNameDifferentUID(t *testing.T) {
 	riskRule := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "latency-regression",
-			Namespace: "fluxagent-test",
+			Namespace: "fluxseer-rca-test",
 			UID:       types.UID("riskrule-uid"),
 		},
 	}
@@ -852,7 +852,7 @@ func TestFindingIdentityKeepsOccurrenceStableAcrossWindowAndSeparatesGeneration(
 	riskRule := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "latency-regression",
-			Namespace:  "fluxagent-test",
+			Namespace:  "fluxseer-rca-test",
 			UID:        types.UID("riskrule-uid"),
 			Generation: 1,
 		},
@@ -880,7 +880,7 @@ func TestFindingIdentityKeepsOccurrenceStableAcrossWindowAndSeparatesGeneration(
 }
 
 func TestInvestigationRequestNamePreservesHashSuffixWhenTruncated(t *testing.T) {
-	ruleName := "fluxagent-canonical-kubernetes-baseline"
+	ruleName := "fluxseer-rca-canonical-kubernetes-baseline"
 	firstTarget := "codex-wq-cron-102521-29762066"
 	secondTarget := "codex-wq-cron-102521-29762067"
 	firstOccurrence := "sha256:92060d515fee253fa0654d9804e1616b04377acd0e76a7eedba7fd95cf6f7f12"
@@ -911,8 +911,8 @@ func TestInvestigationRequestNamePreservesHashSuffixWhenTruncated(t *testing.T) 
 func TestDirectRiskSignalNameStableForSameEventAcrossWindow(t *testing.T) {
 	riskRule := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       "fluxagent-kubernetes-baseline",
-			Namespace:  "fluxagent-test",
+			Name:       "fluxseer-rca-kubernetes-baseline",
+			Namespace:  "fluxseer-rca-test",
 			UID:        types.UID("riskrule-uid"),
 			Generation: 1,
 		},
@@ -963,7 +963,7 @@ func TestRiskRuleReconcilerUsesDatasourceRefQueryTypeAndTemplate(t *testing.T) {
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "catalog-error-logs",
-			Namespace: "fluxagent-system",
+			Namespace: "fluxseer-rca-system",
 		},
 		Spec: v1alpha1.RiskRuleSpec{
 			TargetSelector: v1alpha1.TargetSelector{
@@ -1092,7 +1092,7 @@ func TestRiskRuleReconcilerSkipsCapabilityMismatch(t *testing.T) {
 		},
 	}
 	ruleObj := &v1alpha1.RiskRule{
-		ObjectMeta: metav1.ObjectMeta{Name: "capability-mismatch", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "capability-mismatch", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
@@ -1180,7 +1180,7 @@ func TestRiskRuleReconcilerMarksMissingDatasourceOnRuleAndRiskSignal(t *testing.
 		},
 	}
 	ruleObj := &v1alpha1.RiskRule{
-		ObjectMeta: metav1.ObjectMeta{Name: "partial-evidence", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "partial-evidence", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
@@ -1270,7 +1270,7 @@ func TestRiskRuleReconcilerPreservesDatasourceQueryFailureReason(t *testing.T) {
 		},
 	}
 	ruleObj := &v1alpha1.RiskRule{
-		ObjectMeta: metav1.ObjectMeta{Name: "partial-query-failure", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "partial-query-failure", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
@@ -1867,7 +1867,7 @@ func TestRiskRuleReconcilerUsesReferencedOpenAIModelProvider(t *testing.T) {
 		},
 	}
 	ruleObj := &v1alpha1.RiskRule{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-provider", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
 			Severity: "high",
 			TargetSelector: v1alpha1.TargetSelector{
@@ -1882,7 +1882,7 @@ func TestRiskRuleReconcilerUsesReferencedOpenAIModelProvider(t *testing.T) {
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-5.1",
@@ -1898,7 +1898,7 @@ func TestRiskRuleReconcilerUsesReferencedOpenAIModelProvider(t *testing.T) {
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxseer-rca-system"},
 		Data:       map[string][]byte{"api-key": []byte("openai-token")},
 	}
 	eventSource := &fakeRuleDataSource{
@@ -2003,7 +2003,7 @@ func testRiskRuleReconcilerHostedProviderFailure(t *testing.T, statusCode int, h
 		},
 	}
 	ruleObj := &v1alpha1.RiskRule{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-hosted-failure", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-hosted-failure", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
@@ -2017,7 +2017,7 @@ func testRiskRuleReconcilerHostedProviderFailure(t *testing.T, statusCode int, h
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-5.1",
@@ -2033,7 +2033,7 @@ func testRiskRuleReconcilerHostedProviderFailure(t *testing.T, statusCode int, h
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxseer-rca-system"},
 		Data:       map[string][]byte{"api-key": []byte("openai-token")},
 	}
 	eventSource := &fakeRuleDataSource{
@@ -2107,7 +2107,7 @@ func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderSecretMissing(t *te
 		},
 	}
 	ruleObj := &v1alpha1.RiskRule{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-missing-secret", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-missing-secret", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
@@ -2121,7 +2121,7 @@ func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderSecretMissing(t *te
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-5.1",
@@ -2208,7 +2208,7 @@ func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderResponseInvalid(t *
 		},
 	}
 	ruleObj := &v1alpha1.RiskRule{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-invalid-response", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-invalid-response", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
@@ -2222,7 +2222,7 @@ func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderResponseInvalid(t *
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-5.1",
@@ -2237,7 +2237,7 @@ func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderResponseInvalid(t *
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxseer-rca-system"},
 		Data:       map[string][]byte{"api-key": []byte("openai-token")},
 	}
 	eventSource := &fakeRuleDataSource{
@@ -2310,7 +2310,7 @@ func TestRiskRuleReconcilerBlocksHostedProviderWithoutExternalTransmissionOptIn(
 		},
 	}
 	ruleObj := &v1alpha1.RiskRule{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-policy-denied", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-policy-denied", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
@@ -2324,7 +2324,7 @@ func TestRiskRuleReconcilerBlocksHostedProviderWithoutExternalTransmissionOptIn(
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-5.1",
@@ -2336,7 +2336,7 @@ func TestRiskRuleReconcilerBlocksHostedProviderWithoutExternalTransmissionOptIn(
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxseer-rca-system"},
 		Data:       map[string][]byte{"api-key": []byte("openai-token")},
 	}
 	eventSource := &fakeRuleDataSource{
@@ -2513,7 +2513,7 @@ func testEventFindingMatch(reason string, evidenceDigest string) rule.Match {
 				Summary:                "pod event matched",
 				ContentDigest:          evidenceDigest,
 				DigestAlgorithm:        "sha256",
-				DigestCanonicalization: "fluxagent-kubernetes-event-identity-v1",
+				DigestCanonicalization: "fluxseer-rca-kubernetes-event-identity-v1",
 			},
 		},
 	}

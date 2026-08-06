@@ -185,7 +185,7 @@ func evaluateKubernetesEventSignal(signal v1alpha1.RiskRuleSignal, result *datas
 					Summary:                message,
 					ContentDigest:          kubernetesEventEvidenceDigest(record),
 					DigestAlgorithm:        "sha256",
-					DigestCanonicalization: "fluxagent-kubernetes-event-identity-v1",
+					DigestCanonicalization: "fluxseer-rca-kubernetes-event-identity-v1",
 				})
 			}
 			break

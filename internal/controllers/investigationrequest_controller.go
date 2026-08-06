@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	rcaSchemaVersion                       = "fluxagent-rca-result-v1"
+	rcaSchemaVersion                       = "fluxseer-rca-result-v1"
 	rcaCanonicalizationVersion             = canonicaldigest.RCAJSONV1
 	reasoningPolicyVersion                 = "rca-v2-compat"
 	executionStateProviderCompleted        = "ProviderCompleted"
@@ -2124,7 +2124,7 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 		riskSignal.Labels[labelManagedBy] = "investigationrequest-controller"
 		riskSignal.Annotations[annotationTargetRef] = preflight.Target.Namespace + "/" + preflight.Target.Name
 		riskSignal.Annotations[annotationDetectionSource] = "investigation-request"
-		riskSignal.Annotations["fluxagent.aiops.platform/investigation-request"] = request.Namespace + "/" + request.Name
+		riskSignal.Annotations["fluxseer-rca.aiops.platform/investigation-request"] = request.Namespace + "/" + request.Name
 		if request.Status.Lineage != nil {
 			applyFindingIdentityAnnotations(riskSignal.Annotations, request.Status.Lineage.FindingIdentity)
 		}

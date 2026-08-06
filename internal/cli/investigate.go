@@ -98,14 +98,14 @@ func runInvestigate(args []string, stdout, stderr io.Writer) error {
 func parseInvestigateArgs(args []string, stderr io.Writer) (investigateOptions, string, string, error) {
 	opts := investigateOptions{
 		targetNamespace:  "default",
-		requestNamespace: "fluxagent-system",
+		requestNamespace: "fluxseer-rca-system",
 		lookback:         15 * time.Minute,
 		wait:             true,
 		timeout:          90 * time.Second,
 	}
 	var datasourceFlags stringSliceFlag
 
-	fs := flag.NewFlagSet("fluxagent investigate", flag.ContinueOnError)
+	fs := flag.NewFlagSet("fluxseer investigate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.targetNamespace, "namespace", opts.targetNamespace, "target workload namespace")
 	fs.StringVar(&opts.targetNamespace, "n", opts.targetNamespace, "target workload namespace")
@@ -134,13 +134,13 @@ func parseInvestigateArgs(args []string, stderr io.Writer) (investigateOptions, 
 	if kind == "" || name == "" {
 		remaining := fs.Args()
 		if len(remaining) != 2 {
-			return opts, "", "", errors.New("usage: fluxagent investigate <kind> <name> [flags]")
+			return opts, "", "", errors.New("usage: fluxseer investigate <kind> <name> [flags]")
 		}
 		kind = remaining[0]
 		name = remaining[1]
 	}
 	if len(fs.Args()) != 0 && (kind != "" && name != "") && len(parseArgs) != len(args) {
-		return opts, "", "", errors.New("usage: fluxagent investigate <kind> <name> [flags]")
+		return opts, "", "", errors.New("usage: fluxseer investigate <kind> <name> [flags]")
 	}
 	opts.datasources = append([]string(nil), datasourceFlags...)
 	return opts, kind, name, nil

@@ -44,7 +44,7 @@ import (
 )
 
 func Run(args []string, out io.Writer) error {
-	fs := flag.NewFlagSet("fluxagent-manager", flag.ContinueOnError)
+	fs := flag.NewFlagSet("fluxseer-rca-manager", flag.ContinueOnError)
 	fs.SetOutput(out)
 
 	var metricsAddr string
@@ -61,7 +61,7 @@ func Run(args []string, out io.Writer) error {
 		return err
 	}
 	info := version.Current()
-	_, _ = fmt.Fprintf(out, "fluxagent starting version=%s gitCommit=%s gitDirty=%s buildDate=%s\n", info.Version, info.GitCommit, info.GitDirty, info.BuildDate)
+	_, _ = fmt.Fprintf(out, "fluxseer-rca starting version=%s gitCommit=%s gitDirty=%s buildDate=%s\n", info.Version, info.GitCommit, info.GitDirty, info.BuildDate)
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zap.Options{Development: false})))
 
 	scheme := runtime.NewScheme()
@@ -75,7 +75,7 @@ func Run(args []string, out io.Writer) error {
 		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "fluxagent-manager.aiops.platform",
+		LeaderElectionID:       "fluxseer-rca-manager.aiops.platform",
 	})
 	if err != nil {
 		return fmt.Errorf("unable to start manager: %w", err)
@@ -222,7 +222,7 @@ func Run(args []string, out io.Writer) error {
 		return fmt.Errorf("unable to set up ready check: %w", err)
 	}
 
-	ctrl.Log.WithName("setup").Info("starting fluxagent manager")
+	ctrl.Log.WithName("setup").Info("starting fluxseer-rca manager")
 	return mgr.Start(ctrl.SetupSignalHandler())
 }
 

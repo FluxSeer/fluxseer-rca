@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	AnnotationEnabled             = "fluxagent.aiops.platform/enabled"
-	AnnotationPrometheusQuery     = "fluxagent.aiops.platform/prometheus-query"
-	AnnotationPrometheusThreshold = "fluxagent.aiops.platform/prometheus-threshold"
-	AnnotationLokiQuery           = "fluxagent.aiops.platform/loki-query"
-	AnnotationEventKeywords       = "fluxagent.aiops.platform/event-keywords"
+	AnnotationEnabled             = "fluxseer-rca.aiops.platform/enabled"
+	AnnotationPrometheusQuery     = "fluxseer-rca.aiops.platform/prometheus-query"
+	AnnotationPrometheusThreshold = "fluxseer-rca.aiops.platform/prometheus-threshold"
+	AnnotationLokiQuery           = "fluxseer-rca.aiops.platform/loki-query"
+	AnnotationEventKeywords       = "fluxseer-rca.aiops.platform/event-keywords"
 )
 
 type Request struct {

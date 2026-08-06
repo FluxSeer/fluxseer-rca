@@ -50,7 +50,7 @@ type ruleEvaluationSummary struct {
 	CoveragePartial    *evaluationIssue
 }
 
-const findingIdentitySchemaVersion = "fluxagent-finding-identity-v1"
+const findingIdentitySchemaVersion = "fluxseer-rca-finding-identity-v1"
 
 func (r *RiskRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var rule v1alpha1.RiskRule

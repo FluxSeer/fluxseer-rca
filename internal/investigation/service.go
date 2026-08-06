@@ -1207,7 +1207,7 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 	})
 	obs := domain.Observation{
 		ID:               fmt.Sprintf("evidence-%03d", index+1),
-		SchemaVersion:    "observation.fluxagent.io/v1alpha1",
+		SchemaVersion:    "observation.fluxseer.io/v1alpha1",
 		DataSourceRef:    source,
 		Capability:       req.QueryType,
 		QueryDigest:      queryDigest,

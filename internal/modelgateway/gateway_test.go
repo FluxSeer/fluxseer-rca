@@ -95,7 +95,7 @@ func TestGatewayBlocksHostedProviderBeforeHTTPRequestWhenExternalTransmissionDen
 	defer server.Close()
 
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-denied", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-denied", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-test",
@@ -238,7 +238,7 @@ func (r resolverStub) Resolve(_ context.Context, namespace string, ref *v1alpha1
 
 func TestGatewayFallsBackToSecondaryProvider(t *testing.T) {
 	primary := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "primary-openai", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-openai", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "broken",
 			Model:    "gpt-broken",
@@ -248,7 +248,7 @@ func TestGatewayFallsBackToSecondaryProvider(t *testing.T) {
 		},
 	}
 	fallback := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "fallback-capture", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-capture", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "capture",
 		},
@@ -259,7 +259,7 @@ func TestGatewayFallsBackToSecondaryProvider(t *testing.T) {
 		Providers: model.NewRegistry(failingProvider{}, capture),
 		Resolver: resolverStub{
 			providers: map[string]*v1alpha1.ModelProvider{
-				"fluxagent-system/fallback-capture": fallback,
+				"fluxseer-rca-system/fallback-capture": fallback,
 			},
 		},
 	}
@@ -288,7 +288,7 @@ func TestGatewayFallsBackToSecondaryProvider(t *testing.T) {
 
 func TestGatewayReevaluatesFallbackProviderExternalTransmissionPolicy(t *testing.T) {
 	primary := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "broken",
 			Model:    "gpt-broken",
@@ -298,7 +298,7 @@ func TestGatewayReevaluatesFallbackProviderExternalTransmissionPolicy(t *testing
 		},
 	}
 	fallback := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-5.1",
@@ -310,7 +310,7 @@ func TestGatewayReevaluatesFallbackProviderExternalTransmissionPolicy(t *testing
 		Providers: model.NewRegistry(failingProvider{}, openai),
 		Resolver: resolverStub{
 			providers: map[string]*v1alpha1.ModelProvider{
-				"fluxagent-system/fallback-openai": fallback,
+				"fluxseer-rca-system/fallback-openai": fallback,
 			},
 		},
 	}
@@ -338,7 +338,7 @@ func TestGatewayReevaluatesFallbackProviderExternalTransmissionPolicy(t *testing
 
 func TestGatewayTraceRecordsPrimaryAndFallbackAttempts(t *testing.T) {
 	primary := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "broken",
 			Model:    "gpt-broken",
@@ -348,7 +348,7 @@ func TestGatewayTraceRecordsPrimaryAndFallbackAttempts(t *testing.T) {
 		},
 	}
 	fallback := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-5.1",
@@ -360,7 +360,7 @@ func TestGatewayTraceRecordsPrimaryAndFallbackAttempts(t *testing.T) {
 		Providers: model.NewRegistry(failingProvider{}, openai),
 		Resolver: resolverStub{
 			providers: map[string]*v1alpha1.ModelProvider{
-				"fluxagent-system/fallback-openai": fallback,
+				"fluxseer-rca-system/fallback-openai": fallback,
 			},
 		},
 	}
@@ -387,7 +387,7 @@ func TestGatewayTraceRecordsPrimaryAndFallbackAttempts(t *testing.T) {
 
 func TestGatewayAllowsLocalFallbackAfterHostedProviderPolicyDenial(t *testing.T) {
 	primary := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "primary-openai", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-openai", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-5.1",
@@ -397,7 +397,7 @@ func TestGatewayAllowsLocalFallbackAfterHostedProviderPolicyDenial(t *testing.T)
 		},
 	}
 	fallback := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "fallback-capture", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-capture", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "capture",
 		},
@@ -408,7 +408,7 @@ func TestGatewayAllowsLocalFallbackAfterHostedProviderPolicyDenial(t *testing.T)
 		Providers: model.NewRegistry(capture),
 		Resolver: resolverStub{
 			providers: map[string]*v1alpha1.ModelProvider{
-				"fluxagent-system/fallback-capture": fallback,
+				"fluxseer-rca-system/fallback-capture": fallback,
 			},
 		},
 	}
@@ -432,7 +432,7 @@ func TestGatewayAllowsLocalFallbackAfterHostedProviderPolicyDenial(t *testing.T)
 
 func TestGatewayReturnsFallbackResolutionFailure(t *testing.T) {
 	primary := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "primary-openai", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-openai", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "broken",
 			Model:    "gpt-broken",

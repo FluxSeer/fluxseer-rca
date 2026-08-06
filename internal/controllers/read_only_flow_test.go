@@ -61,17 +61,17 @@ func TestReadOnlyFlowCreatesRiskSignalAndNotifies(t *testing.T) {
 	now := time.Date(2026, 6, 17, 9, 0, 0, 0, time.UTC)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "fluxagent-sample",
-			Namespace: "fluxagent-demo",
+			Name:      "fluxseer-rca-sample",
+			Namespace: "fluxseer-rca-demo",
 			Annotations: map[string]string{
 				detector.AnnotationEnabled: "true",
 			},
-			Labels: map[string]string{"app": "fluxagent-sample"},
+			Labels: map[string]string{"app": "fluxseer-rca-sample"},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "fluxagent-sample"}},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "fluxseer-rca-sample"}},
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "fluxagent-sample"}},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "fluxseer-rca-sample"}},
 			},
 		},
 	}
@@ -105,7 +105,7 @@ func TestReadOnlyFlowCreatesRiskSignalAndNotifies(t *testing.T) {
 	}
 
 	var riskSignal v1alpha1.RiskSignal
-	if err := client.Get(context.Background(), types.NamespacedName{Name: "fluxagent-sample-observed-risk", Namespace: "fluxagent-demo"}, &riskSignal); err != nil {
+	if err := client.Get(context.Background(), types.NamespacedName{Name: "fluxseer-rca-sample-observed-risk", Namespace: "fluxseer-rca-demo"}, &riskSignal); err != nil {
 		t.Fatalf("expected risk signal: %v", err)
 	}
 	if riskSignal.Status.Phase != v1alpha1.PhaseConfirmed {

@@ -23,7 +23,7 @@ const (
 	AzureBlobStoreName       = "azure-blob"
 	PVCStoreName             = "pvc"
 	normalizedSnapshotClass  = "normalized-snapshot"
-	normalizedSnapshotV1     = "fluxagent-normalized-evidence-snapshot-v1"
+	normalizedSnapshotV1     = "fluxseer-rca-normalized-evidence-snapshot-v1"
 )
 
 type SnapshotStore interface {

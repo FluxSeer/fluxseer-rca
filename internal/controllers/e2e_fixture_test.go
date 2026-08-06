@@ -138,7 +138,7 @@ func fixtureReconciler(t *testing.T, fixture rawToFinalFixture) (*InvestigationR
 	}
 	target := fixtureTargetOrDefault(fixture.Target)
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: fixture.Name, Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: fixture.Name, Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace:  target.Namespace,
@@ -153,7 +153,7 @@ func fixtureReconciler(t *testing.T, fixture rawToFinalFixture) (*InvestigationR
 		},
 	}
 	providerObj := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "fixture-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "fixture-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "fixture", Model: "fixture-model"},
 	}
 	client := fake.NewClientBuilder().

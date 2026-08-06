@@ -19,7 +19,7 @@ func TestExportCompletedInvestigationRequestBundle(t *testing.T) {
 	if bundle.SchemaVersion != BundleSchemaVersion {
 		t.Fatalf("unexpected schema version %q", bundle.SchemaVersion)
 	}
-	if bundle.Source.Namespace != "fluxagent-system" || bundle.Source.Name != "checkout-latency" {
+	if bundle.Source.Namespace != "fluxseer-rca-system" || bundle.Source.Name != "checkout-latency" {
 		t.Fatalf("unexpected source %#v", bundle.Source)
 	}
 	if bundle.Status.Verdict == nil || bundle.Status.Verdict.RootCauseType != "LatencyRegression" {
@@ -73,7 +73,7 @@ func replayRequest() *v1alpha1.InvestigationRequest {
 	return &v1alpha1.InvestigationRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "checkout-latency",
-			Namespace:  "fluxagent-system",
+			Namespace:  "fluxseer-rca-system",
 			UID:        types.UID("investigation-uid"),
 			Generation: 3,
 		},
@@ -109,9 +109,9 @@ func replayRequest() *v1alpha1.InvestigationRequest {
 			Execution: &v1alpha1.RCAExecution{
 				ID:                     "execution-001",
 				Provider:               "heuristic-provider",
-				RCASchemaVersion:       "fluxagent-rca-result-v1",
-				VerifierVersion:        "fluxagent-verifier-v1",
-				ReasoningPolicyVersion: "fluxagent-reasoning-policy-v1",
+				RCASchemaVersion:       "fluxseer-rca-result-v1",
+				VerifierVersion:        "fluxseer-rca-verifier-v1",
+				ReasoningPolicyVersion: "fluxseer-rca-reasoning-policy-v1",
 			},
 		},
 	}

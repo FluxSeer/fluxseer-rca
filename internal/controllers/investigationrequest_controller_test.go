@@ -47,10 +47,10 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	request := &v1alpha1.InvestigationRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "investigate-open-api",
-			Namespace:  "fluxagent-system",
+			Namespace:  "fluxseer-rca-system",
 			Generation: 1,
 			Annotations: map[string]string{
-				annotationLineageSource:      "fluxagent-system/latency-regression",
+				annotationLineageSource:      "fluxseer-rca-system/latency-regression",
 				annotationLineageSourceUID:   "riskrule-uid",
 				annotationLineageGeneration:  "4",
 				annotationTargetUID:          "deployment-uid",
@@ -88,7 +88,7 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system", Generation: 3},
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxseer-rca-system", Generation: 3},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "heuristic",
 			Model:    "built-in",
@@ -218,7 +218,7 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	}
 	if stored.Status.Execution.ProviderRef == nil ||
 		stored.Status.Execution.ProviderRef.Name != "heuristic-provider" ||
-		stored.Status.Execution.ProviderRef.Namespace != "fluxagent-system" {
+		stored.Status.Execution.ProviderRef.Namespace != "fluxseer-rca-system" {
 		t.Fatalf("expected provider ref metadata, got %#v", stored.Status.Execution)
 	}
 	if stored.Status.Execution.ProviderGeneration != 3 ||
@@ -226,8 +226,8 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 		stored.Status.Execution.Model != "built-in" {
 		t.Fatalf("expected provider identity metadata, got %#v", stored.Status.Execution)
 	}
-	if stored.Status.Execution.RCASchemaVersion != "fluxagent-rca-result-v1" ||
-		stored.Status.Execution.CanonicalizationVersion != "fluxagent-rca-json-v1" ||
+	if stored.Status.Execution.RCASchemaVersion != "fluxseer-rca-result-v1" ||
+		stored.Status.Execution.CanonicalizationVersion != "fluxseer-rca-json-v1" ||
 		stored.Status.Execution.ReasoningPolicyVersion != "rca-v2-compat" ||
 		stored.Status.Execution.ControllerVersion == "" {
 		t.Fatalf("expected execution policy and controller versions, got %#v", stored.Status.Execution)
@@ -241,7 +241,7 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 		t.Fatalf("expected structured execution attempt metadata, got %#v", stored.Status.Execution.Attempts)
 	}
 	if stored.Status.Execution.ProviderResult == nil ||
-		stored.Status.Execution.ProviderResult.SchemaVersion != "fluxagent-rca-result-v1" ||
+		stored.Status.Execution.ProviderResult.SchemaVersion != "fluxseer-rca-result-v1" ||
 		stored.Status.Execution.ProviderResult.Digest == nil ||
 		stored.Status.Execution.ProviderResult.NormalizedResult == nil ||
 		stored.Status.Execution.ProviderResult.NormalizedResult.RiskSummary == "" {
@@ -249,7 +249,7 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	}
 	if stored.Status.Lineage == nil ||
 		stored.Status.Lineage.Source.Kind != "RiskRule" ||
-		stored.Status.Lineage.Source.Namespace != "fluxagent-system" ||
+		stored.Status.Lineage.Source.Namespace != "fluxseer-rca-system" ||
 		stored.Status.Lineage.Source.Name != "latency-regression" ||
 		stored.Status.Lineage.Source.UID != "riskrule-uid" ||
 		stored.Status.Lineage.Source.Generation != 4 ||
@@ -291,7 +291,7 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 	now := time.Date(2026, 7, 6, 10, 15, 0, 0, time.UTC)
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "promote-open-api", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "promote-open-api", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace: "prod",
@@ -322,7 +322,7 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "heuristic", Model: "built-in"},
 	}
 	client := fake.NewClientBuilder().
@@ -406,7 +406,7 @@ func TestInvestigationRequestReconcilerDoesNotPromoteRiskSignalWhenDisabled(t *t
 	now := time.Date(2026, 7, 6, 10, 16, 0, 0, time.UTC)
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "no-promote-open-api", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "no-promote-open-api", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace: "prod",
@@ -435,7 +435,7 @@ func TestInvestigationRequestReconcilerDoesNotPromoteRiskSignalWhenDisabled(t *t
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "heuristic", Model: "built-in"},
 	}
 	client := fake.NewClientBuilder().
@@ -495,7 +495,7 @@ func TestInvestigationRequestReconcilerKeepsUnverifiedUnhealthyEventInconclusive
 	now := time.Date(2026, 7, 6, 10, 20, 0, 0, time.UTC)
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "unhealthy-event-report", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "unhealthy-event-report", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace: "prod",
@@ -524,7 +524,7 @@ func TestInvestigationRequestReconcilerKeepsUnverifiedUnhealthyEventInconclusive
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "heuristic", Model: "built-in"},
 	}
 	client := fake.NewClientBuilder().
@@ -640,7 +640,7 @@ func TestLineageForReconcilePrefersStatusLineageWhenAnnotationsMissing(t *testin
 		Source: v1alpha1.InvestigationLineageSource{
 			APIVersion: v1alpha1.SchemeGroupVersion.String(),
 			Kind:       "RiskRule",
-			Namespace:  "fluxagent-system",
+			Namespace:  "fluxseer-rca-system",
 			Name:       "latency-regression",
 			UID:        "riskrule-uid",
 			Generation: 4,
@@ -903,7 +903,7 @@ func TestInvestigationRequestReconcilerMarksUnsupportedRetentionModeNotRunnable(
 		t.Fatalf("failed to add aiops scheme: %v", err)
 	}
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "raw-retention", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "raw-retention", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace: "prod",
@@ -988,7 +988,7 @@ func TestValidateInvestigationRequestSpecRejectsUnknownQueryRetentionMode(t *tes
 
 func TestProviderEgressAuditUsesFilteredMetadataOnly(t *testing.T) {
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			DataPolicy: v1alpha1.ModelProviderDataPolicy{
@@ -1043,7 +1043,7 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 	}))
 	defer providerServer.Close()
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "policy-rejected", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "policy-rejected", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace:  "prod",
@@ -1061,7 +1061,7 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
 	}
 	modelProvider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-test",
@@ -1077,7 +1077,7 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxseer-rca-system"},
 		Data:       map[string][]byte{"api-key": []byte("test-token")},
 	}
 	kubeClient := fake.NewClientBuilder().
@@ -1139,7 +1139,7 @@ func TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit(t
 	if attempt.Ordinal != 1 || attempt.Decision != "Rejected" || attempt.Result != "Rejected" || attempt.Reason != "ClassificationExceeded" {
 		t.Fatalf("expected rejected egress attempt metadata, got %#v", attempt)
 	}
-	if attempt.ProviderRef == nil || attempt.ProviderRef.Name != "openai-provider" || attempt.ProviderRef.Namespace != "fluxagent-system" {
+	if attempt.ProviderRef == nil || attempt.ProviderRef.Name != "openai-provider" || attempt.ProviderRef.Namespace != "fluxseer-rca-system" {
 		t.Fatalf("expected provider ref on rejected egress attempt, got %#v", attempt.ProviderRef)
 	}
 	if attempt.ProviderGeneration != modelProvider.Generation {
@@ -1159,7 +1159,7 @@ func TestInvestigationRequestReconcilerPersistsFallbackEgressAttempts(t *testing
 		t.Fatal(err)
 	}
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "fallback-denied", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-denied", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace:  "prod",
@@ -1177,7 +1177,7 @@ func TestInvestigationRequestReconcilerPersistsFallbackEgressAttempts(t *testing
 		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
 	}
 	primary := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system", Generation: 3},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxseer-rca-system", Generation: 3},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "broken",
 			Model:    "broken-model",
@@ -1187,7 +1187,7 @@ func TestInvestigationRequestReconcilerPersistsFallbackEgressAttempts(t *testing
 		},
 	}
 	fallback := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system", Generation: 7},
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxseer-rca-system", Generation: 7},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			Model:    "gpt-test",
@@ -1254,7 +1254,7 @@ func TestInvestigationRequestReconcilerStopsBeforeEvidenceWhenTargetNotFound(t *
 		t.Fatal(err)
 	}
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "missing-target", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "missing-target", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace:  "missing",
@@ -1269,7 +1269,7 @@ func TestInvestigationRequestReconcilerStopsBeforeEvidenceWhenTargetNotFound(t *
 		},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
 	}
 	kubeClient := fake.NewClientBuilder().
@@ -1355,7 +1355,7 @@ func TestInvestigationRequestReconcilerMarksProviderNotFoundAsHardProviderResolu
 		t.Fatal(err)
 	}
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "missing-provider", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "missing-provider", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace:  "prod",
@@ -1443,7 +1443,7 @@ func TestInvestigationRequestReconcilerMarksInvalidProviderResponseDistinctly(t 
 		t.Fatal(err)
 	}
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "invalid-provider-response", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "invalid-provider-response", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace:  "prod",
@@ -1462,7 +1462,7 @@ func TestInvestigationRequestReconcilerMarksInvalidProviderResponseDistinctly(t 
 		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
 	}
 	counter := &countingModelProvider{
@@ -1544,7 +1544,7 @@ func TestInvestigationRequestReconcilerMarksProviderFallbackLoopDistinctly(t *te
 		t.Fatal(err)
 	}
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "fallback-loop", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-loop", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace:  "prod",
@@ -1563,7 +1563,7 @@ func TestInvestigationRequestReconcilerMarksProviderFallbackLoopDistinctly(t *te
 		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
 	}
 	primary := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system", Generation: 3},
+		ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxseer-rca-system", Generation: 3},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "broken",
 			Model:    "broken-model",
@@ -1573,7 +1573,7 @@ func TestInvestigationRequestReconcilerMarksProviderFallbackLoopDistinctly(t *te
 		},
 	}
 	fallback := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "fallback-broken", Namespace: "fluxagent-system", Generation: 4},
+		ObjectMeta: metav1.ObjectMeta{Name: "fallback-broken", Namespace: "fluxseer-rca-system", Generation: 4},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "broken",
 			Model:    "broken-model",
@@ -1649,7 +1649,7 @@ func TestInvestigationRequestReconcilerBlocksRiskSignalSourceByDefault(t *testin
 		t.Fatalf("failed to add aiops scheme: %v", err)
 	}
 	request := loopPolicyTestRequest("risk-signal-loop", map[string]string{
-		annotationLineageSource:      "fluxagent-system/discovered-open-api",
+		annotationLineageSource:      "fluxseer-rca-system/discovered-open-api",
 		annotationLineageSourceKind:  "RiskSignal",
 		annotationLineageSourceAPI:   v1alpha1.SchemeGroupVersion.String(),
 		annotationLineageSourceUID:   "risk-signal-uid",
@@ -1694,7 +1694,7 @@ func TestInvestigationRequestReconcilerEnforcesInvestigationDepthLimit(t *testin
 		t.Fatalf("failed to add aiops scheme: %v", err)
 	}
 	request := loopPolicyTestRequest("depth-limit", map[string]string{
-		annotationLineageSource:      "fluxagent-system/latency-regression",
+		annotationLineageSource:      "fluxseer-rca-system/latency-regression",
 		annotationLineageSourceKind:  "RiskRule",
 		annotationLineageSourceAPI:   v1alpha1.SchemeGroupVersion.String(),
 		annotationLineageSourceUID:   "riskrule-uid",
@@ -1737,7 +1737,7 @@ func TestInvestigationRequestReconcilerMarksInconclusiveWhenRequiredEvidenceMiss
 	}
 	request := evidenceRequirementTestRequest("latency-missing-metric", "LatencyRegression", "kubernetes-events")
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
 	}
 	counter := &countingModelProvider{}
@@ -1794,7 +1794,7 @@ func TestInvestigationRequestReconcilerMarksNoIssueFoundWhenRequiredEvidenceNorm
 	}
 	request := evidenceRequirementTestRequest("latency-normal-metric", "LatencyRegression", "prometheus")
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
 	}
 	counter := &countingModelProvider{}
@@ -1866,7 +1866,7 @@ func TestInvestigationRequestReconcilerDoesNotMarkCrashLoopNoIssueFromScheduledO
 	}
 	request := evidenceRequirementTestRequest("crashloop-scheduled-only", "CrashLoopBackOff", "kubernetes-events")
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
 	}
 	counter := &countingModelProvider{}
@@ -2060,7 +2060,7 @@ func TestInvestigationRequestReconcilerAllowsImagePullBackOffWhenEventEvidencePr
 	}
 	request := evidenceRequirementTestRequest("imagepull-event-present", "ImagePullBackOff", "kubernetes-events")
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
 	}
 	counter := &countingModelProvider{
@@ -2124,7 +2124,7 @@ func TestInvestigationRequestReconcilerReusesProviderCompletedCheckpoint(t *test
 	now := time.Date(2026, 7, 6, 10, 30, 0, 0, time.UTC)
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "checkpointed-open-api", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "checkpointed-open-api", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace: "prod",
@@ -2143,7 +2143,7 @@ func TestInvestigationRequestReconcilerReusesProviderCompletedCheckpoint(t *test
 		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxagent-system", Generation: 7},
+		ObjectMeta: metav1.ObjectMeta{Name: "counting-provider", Namespace: "fluxseer-rca-system", Generation: 7},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "counting", Model: "test-model"},
 	}
 	counter := &countingModelProvider{}
@@ -2234,7 +2234,7 @@ func TestInvestigationRequestReconcilerSkipsCompletedGenerationAndSchedulesTTL(t
 	now := completedAt.Add(2 * time.Minute)
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "ttl-active", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "ttl-active", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target:     v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "open-api"},
 			TTLSeconds: 300,
@@ -2297,7 +2297,7 @@ func TestInvestigationRequestReconcilerDeletesExpiredCompletedRequest(t *testing
 	now := completedAt.Add(10 * time.Minute)
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "ttl-expired", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "ttl-expired", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target:     v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "open-api"},
 			TTLSeconds: 300,
@@ -2345,7 +2345,7 @@ func TestInvestigationRequestReconcilerRejectsInvalidTarget(t *testing.T) {
 	now := time.Date(2026, 7, 6, 10, 5, 0, 0, time.UTC)
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "invalid-request", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "invalid-request", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Kind: "Deployment",
@@ -2419,7 +2419,7 @@ func TestInvestigationRequestReconcilerMarksDatasourceResolutionFailure(t *testi
 	now := time.Date(2026, 7, 6, 10, 10, 0, 0, time.UTC)
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "missing-ds", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "missing-ds", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace: "prod",
@@ -2511,7 +2511,7 @@ func TestInvestigationRequestReconcilerMarksQueryTypeMismatch(t *testing.T) {
 	now := time.Date(2026, 7, 6, 10, 20, 0, 0, time.UTC)
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "bad-query", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "bad-query", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace: "prod",
@@ -2534,7 +2534,7 @@ func TestInvestigationRequestReconcilerMarksQueryTypeMismatch(t *testing.T) {
 	}
 	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod"}}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "heuristic", Model: "built-in"},
 	}
 	client := fake.NewClientBuilder().
@@ -2597,7 +2597,7 @@ func TestInvestigationRequestReconcilerMarksQueryPolicyRejectedStage(t *testing.
 	}
 
 	request := &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: "blocked-query", Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "blocked-query", Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace: "prod",
@@ -2618,7 +2618,7 @@ func TestInvestigationRequestReconcilerMarksQueryPolicyRejectedStage(t *testing.
 	}
 	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod"}}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxseer-rca-system"},
 		Spec:       v1alpha1.ModelProviderSpec{Provider: "heuristic", Model: "built-in"},
 	}
 	client := fake.NewClientBuilder().
@@ -2748,7 +2748,7 @@ func loopPolicyTestRequest(name string, annotations map[string]string) *v1alpha1
 	return &v1alpha1.InvestigationRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
-			Namespace:   "fluxagent-system",
+			Namespace:   "fluxseer-rca-system",
 			Generation:  1,
 			Annotations: annotations,
 		},
@@ -2792,7 +2792,7 @@ func loopPolicyTestReconciler(kubeClient client.Client, scheme *runtime.Scheme, 
 
 func evidenceRequirementTestRequest(name string, profile string, datasourceName string) *v1alpha1.InvestigationRequest {
 	return &v1alpha1.InvestigationRequest{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "fluxagent-system", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "fluxseer-rca-system", Generation: 1},
 		Spec: v1alpha1.InvestigationRequestSpec{
 			Target: v1alpha1.TargetRef{
 				Namespace:  "prod",

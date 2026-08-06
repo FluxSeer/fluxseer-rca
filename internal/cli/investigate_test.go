@@ -11,7 +11,7 @@ import (
 func TestBuildInvestigationRequestWithDatasources(t *testing.T) {
 	req, err := buildInvestigationRequest("deployment", "open-api", investigateOptions{
 		targetNamespace:  "prod",
-		requestNamespace: "fluxagent-system",
+		requestNamespace: "fluxseer-rca-system",
 		requestName:      "investigate-open-api",
 		question:         "Why did latency increase?",
 		lookback:         20 * time.Minute,
@@ -66,7 +66,7 @@ func TestBuildInvestigationRequestNormalizesSupportedTargetKinds(t *testing.T) {
 		t.Run(tc.inputKind, func(t *testing.T) {
 			req, err := buildInvestigationRequest(tc.inputKind, "open-api", investigateOptions{
 				targetNamespace:  "prod",
-				requestNamespace: "fluxagent-system",
+				requestNamespace: "fluxseer-rca-system",
 				lookback:         15 * time.Minute,
 				datasources:      []string{"kubernetes-events"},
 			})
@@ -136,7 +136,7 @@ func TestLoadQueriesFileTopLevelList(t *testing.T) {
 func TestBuildInvestigationRequestRequiresDatasourceOrQueryFile(t *testing.T) {
 	_, err := buildInvestigationRequest("deployment", "open-api", investigateOptions{
 		targetNamespace:  "prod",
-		requestNamespace: "fluxagent-system",
+		requestNamespace: "fluxseer-rca-system",
 		lookback:         15 * time.Minute,
 	})
 	if err == nil {
@@ -157,7 +157,7 @@ queries:
 
 	req, err := buildInvestigationRequest("deployment", "open-api", investigateOptions{
 		targetNamespace:  "prod",
-		requestNamespace: "fluxagent-system",
+		requestNamespace: "fluxseer-rca-system",
 		requestName:      "investigate-open-api",
 		lookback:         15 * time.Minute,
 		queryFile:        path,

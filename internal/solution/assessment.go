@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	SchemaVersion = "fluxagent-solution-assessment-v1"
+	SchemaVersion = "fluxseer-rca-solution-assessment-v1"
 
 	VerificationSupported  = "Supported"
 	VerificationInferred   = "Inferred"

@@ -2,7 +2,7 @@
   "observations": [
     {
       "id": "evidence-001",
-      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "schemaVersion": "observation.fluxseer.io/v1alpha1",
       "dataSourceRef": "prometheus",
       "capability": "metric",
       "queryDigest": "sha256:4127bd5dcc471c7c5fc7c82dfd667974a9916c5ee4e661c93f2447b5152ebffc",
@@ -18,9 +18,9 @@
         }
       },
       "summary": "metric container_cpu_usage_seconds_total returned value 3.00",
-      "contentDigest": "sha256:0acc61a57ac4aa5b1dc604a9aca1690cafa3237422c022375bba10ecadd03959",
+      "contentDigest": "sha256:bf58ee4f5ce58a2a32c2660ab62cae408d9c82527a7b063de7735687e6dfbf3b",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Internal",
@@ -28,7 +28,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": false,
       "originalCount": 3,
@@ -39,7 +39,7 @@
     },
     {
       "id": "evidence-002",
-      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "schemaVersion": "observation.fluxseer.io/v1alpha1",
       "dataSourceRef": "prometheus",
       "capability": "metric",
       "queryDigest": "sha256:4127bd5dcc471c7c5fc7c82dfd667974a9916c5ee4e661c93f2447b5152ebffc",
@@ -55,9 +55,9 @@
         }
       },
       "summary": "metric unknown returned value not-a-number",
-      "contentDigest": "sha256:f708381580a407abc6b9918d093dcbd40ee827d866595f72ca4dfaec32f9d67e",
+      "contentDigest": "sha256:84e0620a3b48cc2a6ec6c3a314f87375c8480edcc31a6c66b81c9119a970763e",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Internal",
@@ -65,7 +65,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": false,
       "originalCount": 3,
@@ -76,7 +76,7 @@
     },
     {
       "id": "evidence-003",
-      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "schemaVersion": "observation.fluxseer.io/v1alpha1",
       "dataSourceRef": "prometheus",
       "capability": "metric",
       "queryDigest": "sha256:4127bd5dcc471c7c5fc7c82dfd667974a9916c5ee4e661c93f2447b5152ebffc",
@@ -92,9 +92,9 @@
         }
       },
       "summary": "metric container_cpu_usage_seconds_total returned value map[unexpected:shape]",
-      "contentDigest": "sha256:321e7f838b566c850f03d43930e16ab0514c9eea7a7ae5471090c03f2fa07c46",
+      "contentDigest": "sha256:63cffbdd3241c53f304aab29c70273efeb69f3fcd4c1c0e66be7c05bfd7488de",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Internal",
@@ -102,7 +102,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": false,
       "originalCount": 3,
@@ -119,9 +119,9 @@
       "source": "prometheus",
       "summary": "metric container_cpu_usage_seconds_total returned value 3.00",
       "queryDigest": "sha256:4127bd5dcc471c7c5fc7c82dfd667974a9916c5ee4e661c93f2447b5152ebffc",
-      "contentDigest": "sha256:0acc61a57ac4aa5b1dc604a9aca1690cafa3237422c022375bba10ecadd03959",
+      "contentDigest": "sha256:bf58ee4f5ce58a2a32c2660ab62cae408d9c82527a7b063de7735687e6dfbf3b",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Internal",
@@ -129,7 +129,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "originalCount": 3,
       "retainedCount": 3,
@@ -143,9 +143,9 @@
       "source": "prometheus",
       "summary": "metric unknown returned value not-a-number",
       "queryDigest": "sha256:4127bd5dcc471c7c5fc7c82dfd667974a9916c5ee4e661c93f2447b5152ebffc",
-      "contentDigest": "sha256:f708381580a407abc6b9918d093dcbd40ee827d866595f72ca4dfaec32f9d67e",
+      "contentDigest": "sha256:84e0620a3b48cc2a6ec6c3a314f87375c8480edcc31a6c66b81c9119a970763e",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Internal",
@@ -153,7 +153,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "originalCount": 3,
       "retainedCount": 3,
@@ -167,9 +167,9 @@
       "source": "prometheus",
       "summary": "metric container_cpu_usage_seconds_total returned value map[unexpected:shape]",
       "queryDigest": "sha256:4127bd5dcc471c7c5fc7c82dfd667974a9916c5ee4e661c93f2447b5152ebffc",
-      "contentDigest": "sha256:321e7f838b566c850f03d43930e16ab0514c9eea7a7ae5471090c03f2fa07c46",
+      "contentDigest": "sha256:63cffbdd3241c53f304aab29c70273efeb69f3fcd4c1c0e66be7c05bfd7488de",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Internal",
@@ -177,7 +177,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "originalCount": 3,
       "retainedCount": 3,

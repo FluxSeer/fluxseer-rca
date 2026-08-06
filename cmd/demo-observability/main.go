@@ -206,7 +206,7 @@ func inferApp(query string) string {
 			return value
 		}
 	}
-	for _, candidate := range []string{"fluxagent-sample", "payments-api"} {
+	for _, candidate := range []string{"fluxseer-rca-sample", "payments-api"} {
 		if strings.Contains(query, candidate) {
 			return candidate
 		}

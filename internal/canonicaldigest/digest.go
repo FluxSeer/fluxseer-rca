@@ -13,8 +13,8 @@ import (
 
 const (
 	AlgorithmSHA256   = "sha256"
-	ObservationJSONV1 = "fluxagent-observation-json-v1"
-	RCAJSONV1         = "fluxagent-rca-json-v1"
+	ObservationJSONV1 = "fluxseer-rca-observation-json-v1"
+	RCAJSONV1         = "fluxseer-rca-json-v1"
 )
 
 type Result struct {

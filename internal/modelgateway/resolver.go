@@ -12,7 +12,7 @@ import (
 	"fluxseer/api/v1alpha1"
 )
 
-const DefaultSystemNamespace = "fluxagent-system"
+const DefaultSystemNamespace = "fluxseer-rca-system"
 
 type ResolveError struct {
 	Reason  string

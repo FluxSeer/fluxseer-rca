@@ -59,7 +59,7 @@ func TestServicePreflightResolvesTargetDatasourcesAndProvider(t *testing.T) {
 				},
 			},
 			&v1alpha1.ModelProvider{
-				ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+				ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxseer-rca-system"},
 				Spec: v1alpha1.ModelProviderSpec{
 					Provider: "heuristic",
 					Model:    "built-in",
@@ -1031,7 +1031,7 @@ func TestServiceCollectEvidenceBuildsNormalizedObservations(t *testing.T) {
 	if first.ID != "evidence-001" {
 		t.Fatalf("expected stable observation id evidence-001, got %#v", first)
 	}
-	if first.SchemaVersion != "observation.fluxagent.io/v1alpha1" {
+	if first.SchemaVersion != "observation.fluxseer.io/v1alpha1" {
 		t.Fatalf("expected schema version, got %#v", first)
 	}
 	if first.Type != domain.ObservationTypeLog || first.Value.Log == nil {
@@ -1046,7 +1046,7 @@ func TestServiceCollectEvidenceBuildsNormalizedObservations(t *testing.T) {
 	if !strings.HasPrefix(first.ContentDigest, "sha256:") || len(first.ContentDigest) != len("sha256:")+64 {
 		t.Fatalf("expected sha256 content digest, got %q", first.ContentDigest)
 	}
-	if first.DigestAlgorithm != "sha256" || first.DigestCanonicalization != "fluxagent-observation-json-v1" {
+	if first.DigestAlgorithm != "sha256" || first.DigestCanonicalization != "fluxseer-rca-observation-json-v1" {
 		t.Fatalf("expected observation digest metadata, got %#v", first)
 	}
 	if !first.Truncated || first.OriginalCount != 6 || first.RetainedCount != 5 {
@@ -1422,7 +1422,7 @@ func TestServiceGenerateRCAReturnsReasoningOutput(t *testing.T) {
 			Service:   "open-api",
 		},
 		Provider: &v1alpha1.ModelProvider{
-			ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxagent-system"},
+			ObjectMeta: metav1.ObjectMeta{Name: "heuristic-provider", Namespace: "fluxseer-rca-system"},
 			Spec: v1alpha1.ModelProviderSpec{
 				Provider: "heuristic",
 				Model:    "built-in",
@@ -1470,7 +1470,7 @@ func TestServiceGenerateRCABlocksHostedProviderWithoutExternalTransmission(t *te
 	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
 		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
 		Provider: &v1alpha1.ModelProvider{
-			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 			Spec:       v1alpha1.ModelProviderSpec{Provider: "openai", Model: "test-model"},
 		},
 	}, EvidenceCollectionResult{
@@ -1507,8 +1507,8 @@ func TestServiceGenerateRCARecordsFallbackProviderEgressAttempts(t *testing.T) {
 			),
 			Resolver: serviceResolverStub{
 				providers: map[string]*v1alpha1.ModelProvider{
-					"fluxagent-system/fallback-openai": {
-						ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system", Generation: 7},
+					"fluxseer-rca-system/fallback-openai": {
+						ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxseer-rca-system", Generation: 7},
 						Spec: v1alpha1.ModelProviderSpec{
 							Provider: "openai",
 							Model:    "gpt-test",
@@ -1522,7 +1522,7 @@ func TestServiceGenerateRCARecordsFallbackProviderEgressAttempts(t *testing.T) {
 	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
 		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
 		Provider: &v1alpha1.ModelProvider{
-			ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system", Generation: 3},
+			ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxseer-rca-system", Generation: 3},
 			Spec: v1alpha1.ModelProviderSpec{
 				Provider: "broken",
 				Model:    "broken-model",
@@ -1575,8 +1575,8 @@ func TestServiceGenerateRCAReevaluatesFallbackProviderClassificationPolicy(t *te
 			),
 			Resolver: serviceResolverStub{
 				providers: map[string]*v1alpha1.ModelProvider{
-					"fluxagent-system/fallback-openai": {
-						ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxagent-system", Generation: 9},
+					"fluxseer-rca-system/fallback-openai": {
+						ObjectMeta: metav1.ObjectMeta{Name: "fallback-openai", Namespace: "fluxseer-rca-system", Generation: 9},
 						Spec: v1alpha1.ModelProviderSpec{
 							Provider: "openai",
 							Model:    "gpt-test",
@@ -1594,7 +1594,7 @@ func TestServiceGenerateRCAReevaluatesFallbackProviderClassificationPolicy(t *te
 	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
 		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
 		Provider: &v1alpha1.ModelProvider{
-			ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxagent-system", Generation: 3},
+			ObjectMeta: metav1.ObjectMeta{Name: "primary-broken", Namespace: "fluxseer-rca-system", Generation: 3},
 			Spec: v1alpha1.ModelProviderSpec{
 				Provider: "broken",
 				Model:    "broken-model",
@@ -1654,7 +1654,7 @@ func TestServiceGenerateRCAFiltersHostedProviderEvidenceByDataPolicy(t *testing.
 	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
 		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
 		Provider: &v1alpha1.ModelProvider{
-			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 			Spec: v1alpha1.ModelProviderSpec{
 				Provider: "openai",
 				Model:    "test-model",
@@ -1707,7 +1707,7 @@ func TestServiceGenerateRCARejectsClassificationAboveProviderPolicy(t *testing.T
 	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
 		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
 		Provider: &v1alpha1.ModelProvider{
-			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 			Spec: v1alpha1.ModelProviderSpec{
 				Provider: "openai",
 				Model:    "test-model",
@@ -1759,7 +1759,7 @@ func TestServiceGenerateRCARejectsDeniedSensitivityTags(t *testing.T) {
 	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
 		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
 		Provider: &v1alpha1.ModelProvider{
-			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+			ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 			Spec: v1alpha1.ModelProviderSpec{
 				Provider: "openai",
 				Model:    "test-model",

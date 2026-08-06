@@ -28,7 +28,7 @@ func TestDataSourceReconcilerRegistersValidatedSource(t *testing.T) {
 	resource := &v1alpha1.DataSource{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "prometheus",
-			Namespace: "fluxagent-system",
+			Namespace: "fluxseer-rca-system",
 		},
 		Spec: v1alpha1.DataSourceSpec{
 			Type:     "prometheus",
@@ -78,7 +78,7 @@ func TestDataSourceReconcilerUnregistersInvalidSource(t *testing.T) {
 	resource := &v1alpha1.DataSource{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "prometheus",
-			Namespace: "fluxagent-system",
+			Namespace: "fluxseer-rca-system",
 		},
 		Spec: v1alpha1.DataSourceSpec{
 			Type: "prometheus",

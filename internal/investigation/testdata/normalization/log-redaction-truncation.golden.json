@@ -2,7 +2,7 @@
   "observations": [
     {
       "id": "evidence-001",
-      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "schemaVersion": "observation.fluxseer.io/v1alpha1",
       "dataSourceRef": "loki",
       "capability": "log",
       "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
@@ -17,9 +17,9 @@
         }
       },
       "summary": "checkout failed token=[REDACTED] password=[REDACTED]",
-      "contentDigest": "sha256:468014770cf30d0595a098f755bb25d53876c2700bbf2ec7ed8ed0822eb786e7",
+      "contentDigest": "sha256:9501e0a77ed2592479757f43197d762491603cb9f0d54abe5ae3be4f8da2772f",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Restricted",
@@ -28,7 +28,7 @@
           "InfrastructureMetadata"
         ],
         "source": "ContentDetection",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": true,
       "originalCount": 6,
@@ -39,7 +39,7 @@
     },
     {
       "id": "evidence-002",
-      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "schemaVersion": "observation.fluxseer.io/v1alpha1",
       "dataSourceRef": "loki",
       "capability": "log",
       "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
@@ -54,9 +54,9 @@
         }
       },
       "summary": "checkout retry succeeded",
-      "contentDigest": "sha256:aeed6775a5046f426d2e928b4ee440238808296f79d6473bb93c89730ff6d8c5",
+      "contentDigest": "sha256:a478ea2657881a87a466e5b60a40e488f393b8cce5748e6dd06e17cb2dd532bb",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Confidential",
@@ -64,7 +64,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": true,
       "originalCount": 6,
@@ -75,7 +75,7 @@
     },
     {
       "id": "evidence-003",
-      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "schemaVersion": "observation.fluxseer.io/v1alpha1",
       "dataSourceRef": "loki",
       "capability": "log",
       "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
@@ -90,9 +90,9 @@
         }
       },
       "summary": "checkout timeout after 30s",
-      "contentDigest": "sha256:f347abc5ef8e181253bd9fce97dbbf59c370f85ad13037db8b6d3db409c5924c",
+      "contentDigest": "sha256:0f51ab0853c31ed5f171f382309abcdd65f5359734f1d6c99a06e6e7aee145d9",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Confidential",
@@ -100,7 +100,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": true,
       "originalCount": 6,
@@ -111,7 +111,7 @@
     },
     {
       "id": "evidence-004",
-      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "schemaVersion": "observation.fluxseer.io/v1alpha1",
       "dataSourceRef": "loki",
       "capability": "log",
       "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
@@ -126,9 +126,9 @@
         }
       },
       "summary": "checkout upstream unavailable",
-      "contentDigest": "sha256:da78b12492bb0c491c63587eea367ac56c8c9040d1020ffe730696826c4e36f9",
+      "contentDigest": "sha256:e86012f392c71ab3fe0fd8f289dcbdcdbb01fa1780f19d7f9735dfec5fdca62c",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Confidential",
@@ -136,7 +136,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": true,
       "originalCount": 6,
@@ -147,7 +147,7 @@
     },
     {
       "id": "evidence-005",
-      "schemaVersion": "observation.fluxagent.io/v1alpha1",
+      "schemaVersion": "observation.fluxseer.io/v1alpha1",
       "dataSourceRef": "loki",
       "capability": "log",
       "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
@@ -162,9 +162,9 @@
         }
       },
       "summary": "checkout pool exhausted",
-      "contentDigest": "sha256:ad2443112d4b14b3dd60eaf8517855c1bf9f420a72f8c28c39f8e0ab4e13eaa4",
+      "contentDigest": "sha256:e8369c90d0b8ce45b0d91584bb3f1f2ee8c3cc40eabf55cc541b76ce559c9e84",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Confidential",
@@ -172,7 +172,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": true,
       "originalCount": 6,
@@ -189,9 +189,9 @@
       "source": "loki",
       "summary": "checkout failed token=[REDACTED] password=[REDACTED]",
       "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
-      "contentDigest": "sha256:468014770cf30d0595a098f755bb25d53876c2700bbf2ec7ed8ed0822eb786e7",
+      "contentDigest": "sha256:9501e0a77ed2592479757f43197d762491603cb9f0d54abe5ae3be4f8da2772f",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Restricted",
@@ -200,7 +200,7 @@
           "InfrastructureMetadata"
         ],
         "source": "ContentDetection",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": true,
       "originalCount": 6,
@@ -215,9 +215,9 @@
       "source": "loki",
       "summary": "checkout retry succeeded",
       "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
-      "contentDigest": "sha256:aeed6775a5046f426d2e928b4ee440238808296f79d6473bb93c89730ff6d8c5",
+      "contentDigest": "sha256:a478ea2657881a87a466e5b60a40e488f393b8cce5748e6dd06e17cb2dd532bb",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Confidential",
@@ -225,7 +225,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": true,
       "originalCount": 6,
@@ -240,9 +240,9 @@
       "source": "loki",
       "summary": "checkout timeout after 30s",
       "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
-      "contentDigest": "sha256:f347abc5ef8e181253bd9fce97dbbf59c370f85ad13037db8b6d3db409c5924c",
+      "contentDigest": "sha256:0f51ab0853c31ed5f171f382309abcdd65f5359734f1d6c99a06e6e7aee145d9",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Confidential",
@@ -250,7 +250,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": true,
       "originalCount": 6,
@@ -265,9 +265,9 @@
       "source": "loki",
       "summary": "checkout upstream unavailable",
       "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
-      "contentDigest": "sha256:da78b12492bb0c491c63587eea367ac56c8c9040d1020ffe730696826c4e36f9",
+      "contentDigest": "sha256:e86012f392c71ab3fe0fd8f289dcbdcdbb01fa1780f19d7f9735dfec5fdca62c",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Confidential",
@@ -275,7 +275,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": true,
       "originalCount": 6,
@@ -290,9 +290,9 @@
       "source": "loki",
       "summary": "checkout pool exhausted",
       "queryDigest": "sha256:f004c2972176a33c284bc4eb120bf12fea0618987f20f43cc3b9b4bf32d98ec4",
-      "contentDigest": "sha256:ad2443112d4b14b3dd60eaf8517855c1bf9f420a72f8c28c39f8e0ab4e13eaa4",
+      "contentDigest": "sha256:e8369c90d0b8ce45b0d91584bb3f1f2ee8c3cc40eabf55cc541b76ce559c9e84",
       "digestAlgorithm": "sha256",
-      "digestCanonicalization": "fluxagent-observation-json-v1",
+      "digestCanonicalization": "fluxseer-rca-observation-json-v1",
       "redactionProfile": "default-v1",
       "classification": {
         "level": "Confidential",
@@ -300,7 +300,7 @@
           "InfrastructureMetadata"
         ],
         "source": "Default",
-        "policyVersion": "fluxagent-data-classification-v1"
+        "policyVersion": "fluxseer-rca-data-classification-v1"
       },
       "truncated": true,
       "originalCount": 6,

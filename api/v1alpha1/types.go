@@ -36,7 +36,7 @@ type TargetRef struct {
 }
 
 const (
-	DataClassificationPolicyVersion = "fluxagent-data-classification-v1"
+	DataClassificationPolicyVersion = "fluxseer-rca-data-classification-v1"
 
 	DataClassificationLevelPublic       = "Public"
 	DataClassificationLevelInternal     = "Internal"

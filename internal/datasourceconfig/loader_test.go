@@ -37,7 +37,7 @@ func TestRegisterFromResourcesBuildsRegistry(t *testing.T) {
 			&corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "prom-token",
-					Namespace: "fluxagent-system",
+					Namespace: "fluxseer-rca-system",
 				},
 				Data: map[string][]byte{
 					"token": []byte("secret-token"),
@@ -46,7 +46,7 @@ func TestRegisterFromResourcesBuildsRegistry(t *testing.T) {
 			&v1alpha1.DataSource{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "prometheus",
-					Namespace: "fluxagent-system",
+					Namespace: "fluxseer-rca-system",
 				},
 				Spec: v1alpha1.DataSourceSpec{
 					Type:     "prometheus",
@@ -64,7 +64,7 @@ func TestRegisterFromResourcesBuildsRegistry(t *testing.T) {
 			&v1alpha1.DataSource{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "loki",
-					Namespace: "fluxagent-system",
+					Namespace: "fluxseer-rca-system",
 				},
 				Spec: v1alpha1.DataSourceSpec{
 					Type:     "loki",
@@ -75,7 +75,7 @@ func TestRegisterFromResourcesBuildsRegistry(t *testing.T) {
 			&v1alpha1.DataSource{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "kubernetes-events",
-					Namespace: "fluxagent-system",
+					Namespace: "fluxseer-rca-system",
 				},
 				Spec: v1alpha1.DataSourceSpec{
 					Type: "kubernetesEvents",

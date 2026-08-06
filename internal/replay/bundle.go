@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	BundleSchemaVersion = "fluxagent-rca-replay-bundle-v1"
+	BundleSchemaVersion = "fluxseer-rca-replay-bundle-v1"
 )
 
 type Bundle struct {

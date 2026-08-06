@@ -18,11 +18,11 @@ func TestKubeSecretResolverResolvesAPIKey(t *testing.T) {
 	_ = v1alpha1.AddToScheme(scheme)
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-secret", Namespace: "fluxseer-rca-system"},
 		Data:       map[string][]byte{"api-key": []byte("secret-token")},
 	}
 	provider := &v1alpha1.ModelProvider{
-		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxagent-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.ModelProviderSpec{
 			Provider: "openai",
 			APIKeySecretRef: &v1alpha1.SecretKeyRef{

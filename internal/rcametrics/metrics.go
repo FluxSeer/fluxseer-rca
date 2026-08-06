@@ -9,19 +9,19 @@ import (
 )
 
 var AllowedLabels = map[string][]string{
-	"fluxagent_investigation_total":               {"namespace", "provider_type", "result", "root_cause_type"},
-	"fluxagent_provider_requests_total":           {"provider_type", "result"},
-	"fluxagent_provider_failures_total":           {"provider_type", "reason"},
-	"fluxagent_datasource_query_duration_seconds": {"datasource_type", "result"},
-	"fluxagent_evidence_truncated_total":          {"kind", "reason"},
-	"fluxagent_claim_verification_total":          {"verification_status"},
-	"fluxagent_query_policy_decisions_total":      {"backend", "decision", "reason"},
-	"fluxagent_query_result_limit_exceeded_total": {"backend_type", "dimension"},
-	"fluxagent_datasource_query_queue_depth":      {"scheduler"},
-	"fluxagent_datasource_queries_in_flight":      {"scheduler"},
-	"fluxagent_deduplication_hits_total":          {"source"},
-	"fluxagent_loop_prevention_total":             {"reason"},
-	"fluxagent_status_update_conflicts_total":     {"resource"},
+	"fluxseer_rca_investigation_total":               {"namespace", "provider_type", "result", "root_cause_type"},
+	"fluxseer_rca_provider_requests_total":           {"provider_type", "result"},
+	"fluxseer_rca_provider_failures_total":           {"provider_type", "reason"},
+	"fluxseer_rca_datasource_query_duration_seconds": {"datasource_type", "result"},
+	"fluxseer_rca_evidence_truncated_total":          {"kind", "reason"},
+	"fluxseer_rca_claim_verification_total":          {"verification_status"},
+	"fluxseer_rca_query_policy_decisions_total":      {"backend", "decision", "reason"},
+	"fluxseer_rca_query_result_limit_exceeded_total": {"backend_type", "dimension"},
+	"fluxseer_rca_datasource_query_queue_depth":      {"scheduler"},
+	"fluxseer_rca_datasource_queries_in_flight":      {"scheduler"},
+	"fluxseer_rca_deduplication_hits_total":          {"source"},
+	"fluxseer_rca_loop_prevention_total":             {"reason"},
+	"fluxseer_rca_status_update_conflicts_total":     {"resource"},
 }
 
 var forbiddenLabels = map[string]struct{}{
@@ -39,95 +39,95 @@ var forbiddenLabels = map[string]struct{}{
 var (
 	InvestigationTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fluxagent_investigation_total",
+			Name: "fluxseer_rca_investigation_total",
 			Help: "Total FluxAgent investigations by namespace, provider type, result, and root cause type.",
 		},
-		AllowedLabels["fluxagent_investigation_total"],
+		AllowedLabels["fluxseer_rca_investigation_total"],
 	)
 	ProviderRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fluxagent_provider_requests_total",
+			Name: "fluxseer_rca_provider_requests_total",
 			Help: "Total FluxAgent provider requests by provider type and result.",
 		},
-		AllowedLabels["fluxagent_provider_requests_total"],
+		AllowedLabels["fluxseer_rca_provider_requests_total"],
 	)
 	ProviderFailuresTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fluxagent_provider_failures_total",
+			Name: "fluxseer_rca_provider_failures_total",
 			Help: "Total FluxAgent provider failures by provider type and low-cardinality reason.",
 		},
-		AllowedLabels["fluxagent_provider_failures_total"],
+		AllowedLabels["fluxseer_rca_provider_failures_total"],
 	)
 	DatasourceQueryDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "fluxagent_datasource_query_duration_seconds",
+			Name:    "fluxseer_rca_datasource_query_duration_seconds",
 			Help:    "FluxAgent datasource query duration by datasource type and result.",
 			Buckets: prometheus.DefBuckets,
 		},
-		AllowedLabels["fluxagent_datasource_query_duration_seconds"],
+		AllowedLabels["fluxseer_rca_datasource_query_duration_seconds"],
 	)
 	EvidenceTruncatedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fluxagent_evidence_truncated_total",
+			Name: "fluxseer_rca_evidence_truncated_total",
 			Help: "Total FluxAgent truncated evidence references by evidence kind and low-cardinality reason.",
 		},
-		AllowedLabels["fluxagent_evidence_truncated_total"],
+		AllowedLabels["fluxseer_rca_evidence_truncated_total"],
 	)
 	ClaimVerificationTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fluxagent_claim_verification_total",
+			Name: "fluxseer_rca_claim_verification_total",
 			Help: "Total FluxAgent RCA claims by verification status.",
 		},
-		AllowedLabels["fluxagent_claim_verification_total"],
+		AllowedLabels["fluxseer_rca_claim_verification_total"],
 	)
 	QueryPolicyDecisionsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fluxagent_query_policy_decisions_total",
+			Name: "fluxseer_rca_query_policy_decisions_total",
 			Help: "Total FluxAgent query policy decisions by backend, decision, and low-cardinality reason.",
 		},
-		AllowedLabels["fluxagent_query_policy_decisions_total"],
+		AllowedLabels["fluxseer_rca_query_policy_decisions_total"],
 	)
 	QueryResultLimitExceededTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fluxagent_query_result_limit_exceeded_total",
+			Name: "fluxseer_rca_query_result_limit_exceeded_total",
 			Help: "Total FluxAgent datasource query result native limit exceedances by backend type and dimension.",
 		},
-		AllowedLabels["fluxagent_query_result_limit_exceeded_total"],
+		AllowedLabels["fluxseer_rca_query_result_limit_exceeded_total"],
 	)
 	DatasourceQueryQueueDepth = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "fluxagent_datasource_query_queue_depth",
+			Name: "fluxseer_rca_datasource_query_queue_depth",
 			Help: "FluxAgent datasource queries waiting for a scheduler slot.",
 		},
-		AllowedLabels["fluxagent_datasource_query_queue_depth"],
+		AllowedLabels["fluxseer_rca_datasource_query_queue_depth"],
 	)
 	DatasourceQueriesInFlight = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "fluxagent_datasource_queries_in_flight",
+			Name: "fluxseer_rca_datasource_queries_in_flight",
 			Help: "FluxAgent datasource queries currently executing in the datasource scheduler.",
 		},
-		AllowedLabels["fluxagent_datasource_queries_in_flight"],
+		AllowedLabels["fluxseer_rca_datasource_queries_in_flight"],
 	)
 	DeduplicationHitsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fluxagent_deduplication_hits_total",
+			Name: "fluxseer_rca_deduplication_hits_total",
 			Help: "Total FluxAgent deduplication hits by low-cardinality source.",
 		},
-		AllowedLabels["fluxagent_deduplication_hits_total"],
+		AllowedLabels["fluxseer_rca_deduplication_hits_total"],
 	)
 	LoopPreventionTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fluxagent_loop_prevention_total",
+			Name: "fluxseer_rca_loop_prevention_total",
 			Help: "Total FluxAgent loop prevention decisions by reason.",
 		},
-		AllowedLabels["fluxagent_loop_prevention_total"],
+		AllowedLabels["fluxseer_rca_loop_prevention_total"],
 	)
 	StatusUpdateConflictsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fluxagent_status_update_conflicts_total",
+			Name: "fluxseer_rca_status_update_conflicts_total",
 			Help: "Total FluxAgent status update conflicts by resource type.",
 		},
-		AllowedLabels["fluxagent_status_update_conflicts_total"],
+		AllowedLabels["fluxseer_rca_status_update_conflicts_total"],
 	)
 )
 
