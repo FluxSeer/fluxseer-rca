@@ -54,6 +54,7 @@ Current maintained architecture:
 - [Action executor](architecture/action-executor.md)
 - [Remediation flow](architecture/remediation-flow.md)
 - [v0.3 investigation experience](architecture/v0.3-investigation-experience.md)
+- [FluxAgent → FluxSeer RCA rename migration plan](architecture/rename-migration-plan.md)
 
 Historical architecture records:
 
