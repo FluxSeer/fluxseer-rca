@@ -19,6 +19,18 @@ GOWORK=off go run ./cmd/fluxseer
 GOWORK=off go run ./cmd/manager
 ```
 
+Run the linter before opening a pull request:
+
+```bash
+make lint
+```
+
+This runs `golangci-lint` with the repository's `.golangci.yml` config. CI runs the same check on every pull request.
+
+## Developer Certificate of Origin
+
+This project does not require a separate CLA. By submitting a pull request, you certify that you wrote the contribution yourself, or otherwise have the right to submit it under the project's [Apache License, Version 2.0](LICENSE), per the [Developer Certificate of Origin](https://developercertificate.org/).
+
 ## Branching
 
 - Fork the repository and open pull requests against `main`. `main` is the only branch external contributors should target — it is where CI runs on GitHub-hosted runners and where releases are tagged from.

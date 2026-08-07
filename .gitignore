@@ -20,5 +20,11 @@ coverage.out
 .env
 .env.*
 
+# Credentials and keys
+*.pem
+*.key
+kubeconfig*
+*credentials*
+
 # Reports
 reports/runtime/
