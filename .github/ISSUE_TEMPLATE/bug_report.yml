@@ -1,0 +1,44 @@
+name: Bug Report
+description: Report a problem with the operator, CLI, Helm chart, or an adapter
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps, CRD manifests, or `RiskRule`/`InvestigationRequest` specs that trigger the issue.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: FluxSeer RCA version
+      description: Operator image tag or Helm chart version (e.g. `v0.3.0-beta.3`).
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Kubernetes version, cluster type (kind/EKS/GKE/etc.), and which datasource adapters/model providers are configured.
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or status
+      description: Operator logs, `kubectl describe` output, or CRD status. Redact any secrets, tokens, or internal hostnames before pasting.
+      render: shell
+    validations:
+      required: false

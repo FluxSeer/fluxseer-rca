@@ -1,0 +1,27 @@
+name: Feature Request
+description: Propose a new capability, adapter, or CRD field
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: The gap or workflow this would improve. Reference the current [Roadmap](../../ROADMAP.md) if related.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Rough shape of the change (new CRD field, adapter, controller behavior, etc.).
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve this, and why this approach is preferred.
+    validations:
+      required: false

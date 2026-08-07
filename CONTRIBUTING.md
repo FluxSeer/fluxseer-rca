@@ -2,6 +2,8 @@
 
 FluxSeer RCA is designed as an open, adapter-driven Kubernetes operator. Contributions should preserve that direction.
 
+Participation in this project is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). Please report security vulnerabilities per [SECURITY.md](SECURITY.md) rather than as public issues.
+
 ## Principles
 
 - Keep the core controller loop provider-neutral.

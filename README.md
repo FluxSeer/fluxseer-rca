@@ -1,5 +1,9 @@
 # FluxSeer RCA
 
+[![CI](https://github.com/FluxSeer/fluxseer-rca/actions/workflows/ci.yml/badge.svg)](https://github.com/FluxSeer/fluxseer-rca/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/FluxSeer/fluxseer-rca.svg)](https://pkg.go.dev/github.com/FluxSeer/fluxseer-rca)
+[![License](https://img.shields.io/github/license/FluxSeer/fluxseer-rca)](LICENSE)
+
 Kubernetes-native RCA control plane for platform and security/compliance-governance teams that need explicit, auditable, and security-first AI-assisted investigation — not a general-purpose on-call chat assistant.
 
 Current release: `v0.3.0-beta.3`
