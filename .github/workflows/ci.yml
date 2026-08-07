@@ -85,7 +85,7 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v2.12.2
 
       - name: Verify v0.3 beta hardening gate
         run: make verify-v0.3-beta-hardening
