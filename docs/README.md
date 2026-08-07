@@ -39,7 +39,6 @@ dashboard screenshots, terminal history, or individual responder memory.
 - [Mermaid architecture diagrams](architecture/mermaid-diagrams.md)
 - [Capability maturity](capability-maturity.md)
 - [Runtime modes](runtime-modes.md)
-- [Release checkpoint](release-checkpoint.md)
 - [Quickstart with kind](tutorials/quickstart-kind.md)
 - [Investigate a workload](tutorials/investigate-workload.md)
 

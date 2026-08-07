@@ -6,7 +6,7 @@ FluxSeer RCA is being built as a Kubernetes-native AI SRE Agent Operator with a 
 
 Current public truth:
 
-- FluxAgent `v0.1` is a read-only `RiskSignal` operator.
+- FluxSeer RCA `v0.1` is a read-only `RiskSignal` operator.
 - Prometheus, Loki, and Kubernetes Events adapters are part of the runnable demo path.
 - Guarded remediation exists as a controller and contract path, but is not yet production-grade autonomous repair.
 

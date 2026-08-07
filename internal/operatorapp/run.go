@@ -98,7 +98,7 @@ func Run(args []string, out io.Writer) error {
 		executor.KubernetesExecutor{},
 		executor.GitOpsExecutor{},
 		executor.RunbookExecutor{},
-		executor.NotificationExecutor{WebhookURL: os.Getenv("FLUXAGENT_WEBHOOK_URL")},
+		executor.NotificationExecutor{WebhookURL: os.Getenv("FLUXSEER_RCA_WEBHOOK_URL")},
 	)
 
 	registry := datasource.NewRegistry(
@@ -119,16 +119,16 @@ func Run(args []string, out io.Writer) error {
 		Client: mgr.GetClient(),
 	}
 	gateway.Resolver = resolver
-	if url := os.Getenv("FLUXAGENT_PROMETHEUS_URL"); url != "" {
+	if url := os.Getenv("FLUXSEER_RCA_PROMETHEUS_URL"); url != "" {
 		registry.Register(promadapter.Adapter{BaseURL: url})
 	}
-	if url := os.Getenv("FLUXAGENT_LOKI_URL"); url != "" {
+	if url := os.Getenv("FLUXSEER_RCA_LOKI_URL"); url != "" {
 		registry.Register(lokiadapter.Adapter{BaseURL: url})
 	}
-	if endpoint := os.Getenv("FLUXAGENT_OTEL_ENDPOINT"); endpoint != "" {
+	if endpoint := os.Getenv("FLUXSEER_RCA_OTEL_ENDPOINT"); endpoint != "" {
 		registry.Register(oteladapter.Adapter{Endpoint: endpoint})
 	}
-	if region := os.Getenv("FLUXAGENT_CLOUDWATCH_REGION"); region != "" {
+	if region := os.Getenv("FLUXSEER_RCA_CLOUDWATCH_REGION"); region != "" {
 		registry.Register(cwadapter.Adapter{Region: region})
 	}
 	if err := datasourceconfig.RegisterFromResources(context.Background(), mgr.GetAPIReader(), registry, mgr.GetClient()); err != nil {
@@ -143,7 +143,7 @@ func Run(args []string, out io.Writer) error {
 	}
 
 	if enableLegacyDeploymentRisk {
-		detectionInterval := parseDurationEnv("FLUXAGENT_SCAN_INTERVAL", 30*time.Second)
+		detectionInterval := parseDurationEnv("FLUXSEER_RCA_SCAN_INTERVAL", 30*time.Second)
 		if err := (&controllers.DeploymentRiskReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
@@ -180,7 +180,7 @@ func Run(args []string, out io.Writer) error {
 		return fmt.Errorf("unable to create InvestigationRequest controller: %w", err)
 	}
 
-	if webhookURL := os.Getenv("FLUXAGENT_WEBHOOK_URL"); webhookURL != "" {
+	if webhookURL := os.Getenv("FLUXSEER_RCA_WEBHOOK_URL"); webhookURL != "" {
 		if err := (&controllers.RiskSignalNotificationReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   mgr.GetScheme(),
@@ -227,7 +227,7 @@ func Run(args []string, out io.Writer) error {
 }
 
 func evidenceStoreFromEnv() evidencepkg.SnapshotStore {
-	root := os.Getenv("FLUXAGENT_EVIDENCE_STORE_DIR")
+	root := os.Getenv("FLUXSEER_RCA_EVIDENCE_STORE_DIR")
 	if strings.TrimSpace(root) == "" {
 		return nil
 	}
