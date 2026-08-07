@@ -83,7 +83,7 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
 
