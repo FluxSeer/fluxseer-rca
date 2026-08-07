@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"fluxseer/internal/domain"
-	"fluxseer/internal/rcametrics"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/rcametrics"
 )
 
 type Request struct {

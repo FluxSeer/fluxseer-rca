@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/template"
 
-	"fluxseer/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 )
 
 func RenderQuery(raw string, target domain.ResourceRef, labels map[string]string) (string, error) {

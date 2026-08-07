@@ -41,7 +41,7 @@ sha256_file() {
   fi
 }
 
-ldflags="-X fluxseer/internal/version.Version=${version} -X fluxseer/internal/version.GitCommit=${git_commit} -X fluxseer/internal/version.GitDirty=${git_dirty} -X fluxseer/internal/version.BuildDate=${build_date}"
+ldflags="-X github.com/FluxSeer/fluxseer-rca/internal/version.Version=${version} -X github.com/FluxSeer/fluxseer-rca/internal/version.GitCommit=${git_commit} -X github.com/FluxSeer/fluxseer-rca/internal/version.GitDirty=${git_dirty} -X github.com/FluxSeer/fluxseer-rca/internal/version.BuildDate=${build_date}"
 
 build_binary() {
   local pkg="$1"

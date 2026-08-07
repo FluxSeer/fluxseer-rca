@@ -3,7 +3,7 @@ package solution
 import (
 	"strings"
 
-	"fluxseer/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 )
 
 const (

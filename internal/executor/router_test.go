@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"fluxseer/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 )
 
 func TestRouterRoutesToKubernetesExecutor(t *testing.T) {

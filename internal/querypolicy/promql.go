@@ -6,7 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"fluxseer/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 )
 
 var promQLAggregators = map[string]struct{}{

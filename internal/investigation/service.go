@@ -18,17 +18,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/canonicaldigest"
-	"fluxseer/internal/dataclassification"
-	"fluxseer/internal/datasource"
-	"fluxseer/internal/domain"
-	evidencepkg "fluxseer/internal/evidence"
-	"fluxseer/internal/modelgateway"
-	"fluxseer/internal/querypolicy"
-	"fluxseer/internal/rcametrics"
-	"fluxseer/internal/rule"
-	"fluxseer/internal/statusbudget"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
+	"github.com/FluxSeer/fluxseer-rca/internal/dataclassification"
+	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
+	"github.com/FluxSeer/fluxseer-rca/internal/modelgateway"
+	"github.com/FluxSeer/fluxseer-rca/internal/querypolicy"
+	"github.com/FluxSeer/fluxseer-rca/internal/rcametrics"
+	"github.com/FluxSeer/fluxseer-rca/internal/rule"
+	"github.com/FluxSeer/fluxseer-rca/internal/statusbudget"
 )
 
 type Issue struct {

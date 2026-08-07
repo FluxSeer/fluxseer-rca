@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"fluxseer/internal/domain"
-	"fluxseer/internal/notifier"
-	webhooknotifier "fluxseer/internal/notifier/webhook"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
+	webhooknotifier "github.com/FluxSeer/fluxseer-rca/internal/notifier/webhook"
 )
 
 type NotificationExecutor struct {

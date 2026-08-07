@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"fluxseer/internal/operatorapp"
-	"fluxseer/internal/version"
+	"github.com/FluxSeer/fluxseer-rca/internal/operatorapp"
+	"github.com/FluxSeer/fluxseer-rca/internal/version"
 )
 
 func main() {

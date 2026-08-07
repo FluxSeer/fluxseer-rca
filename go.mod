@@ -1,4 +1,4 @@
-module fluxseer
+module github.com/FluxSeer/fluxseer-rca
 
 go 1.26.2
 

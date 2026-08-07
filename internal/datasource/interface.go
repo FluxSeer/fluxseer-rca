@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 )
 
 type QueryRequest struct {

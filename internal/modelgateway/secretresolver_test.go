@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"fluxseer/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 )
 
 func TestKubeSecretResolverResolvesAPIKey(t *testing.T) {

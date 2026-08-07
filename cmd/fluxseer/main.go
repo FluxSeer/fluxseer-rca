@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"fluxseer/internal/cli"
+	"github.com/FluxSeer/fluxseer-rca/internal/cli"
 )
 
 func main() {

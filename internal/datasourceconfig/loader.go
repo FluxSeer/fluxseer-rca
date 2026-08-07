@@ -14,11 +14,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/datasource"
-	k8sadapter "fluxseer/internal/datasource/kubernetes"
-	lokiadapter "fluxseer/internal/datasource/loki"
-	promadapter "fluxseer/internal/datasource/prometheus"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
+	k8sadapter "github.com/FluxSeer/fluxseer-rca/internal/datasource/kubernetes"
+	lokiadapter "github.com/FluxSeer/fluxseer-rca/internal/datasource/loki"
+	promadapter "github.com/FluxSeer/fluxseer-rca/internal/datasource/prometheus"
 )
 
 const (

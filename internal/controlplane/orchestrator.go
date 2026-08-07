@@ -7,13 +7,13 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/audit"
-	"fluxseer/internal/domain"
-	"fluxseer/internal/executor"
-	"fluxseer/internal/guardrails"
-	"fluxseer/internal/ingestion"
-	"fluxseer/internal/reasoning"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/audit"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/executor"
+	"github.com/FluxSeer/fluxseer-rca/internal/guardrails"
+	"github.com/FluxSeer/fluxseer-rca/internal/ingestion"
+	"github.com/FluxSeer/fluxseer-rca/internal/reasoning"
 )
 
 type Orchestrator struct {

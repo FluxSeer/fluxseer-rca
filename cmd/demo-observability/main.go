@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"fluxseer/internal/version"
+	"github.com/FluxSeer/fluxseer-rca/internal/version"
 )
 
 type serverState struct {

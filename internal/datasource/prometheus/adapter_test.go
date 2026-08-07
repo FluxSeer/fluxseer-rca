@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/datasource"
-	"fluxseer/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 )
 
 func TestAdapterQueryParsesPrometheusSeries(t *testing.T) {

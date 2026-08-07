@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/domain"
-	"fluxseer/internal/evidence"
-	"fluxseer/internal/knowledge"
-	"fluxseer/internal/model"
-	"fluxseer/internal/reasoning"
-	"fluxseer/internal/rule"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/evidence"
+	"github.com/FluxSeer/fluxseer-rca/internal/knowledge"
+	"github.com/FluxSeer/fluxseer-rca/internal/model"
+	"github.com/FluxSeer/fluxseer-rca/internal/reasoning"
+	"github.com/FluxSeer/fluxseer-rca/internal/rule"
 )
 
 type AnalyzeError struct {

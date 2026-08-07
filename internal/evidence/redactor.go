@@ -3,7 +3,7 @@ package evidence
 import (
 	"regexp"
 
-	"fluxseer/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 )
 
 type Redactor interface {

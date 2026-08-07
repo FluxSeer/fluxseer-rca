@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"fluxseer/internal/version"
+	"github.com/FluxSeer/fluxseer-rca/internal/version"
 )
 
 func Run(args []string, stdout, stderr io.Writer) error {

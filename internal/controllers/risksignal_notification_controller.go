@@ -10,8 +10,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/notifier"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
 
 type RiskSignalNotificationReconciler struct {

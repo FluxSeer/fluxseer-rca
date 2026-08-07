@@ -10,7 +10,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"fluxseer/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 )
 
 const (

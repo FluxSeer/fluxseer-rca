@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"fluxseer/internal/audit"
-	"fluxseer/internal/domain"
-	"fluxseer/internal/executor"
-	"fluxseer/internal/guardrails"
-	"fluxseer/internal/ingestion"
-	"fluxseer/internal/knowledge"
-	"fluxseer/internal/model/heuristic"
-	"fluxseer/internal/reasoning"
+	"github.com/FluxSeer/fluxseer-rca/internal/audit"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/executor"
+	"github.com/FluxSeer/fluxseer-rca/internal/guardrails"
+	"github.com/FluxSeer/fluxseer-rca/internal/ingestion"
+	"github.com/FluxSeer/fluxseer-rca/internal/knowledge"
+	"github.com/FluxSeer/fluxseer-rca/internal/model/heuristic"
+	"github.com/FluxSeer/fluxseer-rca/internal/reasoning"
 )
 
 func TestOrchestratorProducesManualApprovalForHighRisk(t *testing.T) {

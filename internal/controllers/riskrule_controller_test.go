@@ -19,15 +19,15 @@ import (
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/datasource"
-	"fluxseer/internal/domain"
-	"fluxseer/internal/knowledge"
-	"fluxseer/internal/model"
-	"fluxseer/internal/model/heuristic"
-	"fluxseer/internal/model/openai"
-	"fluxseer/internal/modelgateway"
-	"fluxseer/internal/rule"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/knowledge"
+	"github.com/FluxSeer/fluxseer-rca/internal/model"
+	"github.com/FluxSeer/fluxseer-rca/internal/model/heuristic"
+	"github.com/FluxSeer/fluxseer-rca/internal/model/openai"
+	"github.com/FluxSeer/fluxseer-rca/internal/modelgateway"
+	"github.com/FluxSeer/fluxseer-rca/internal/rule"
 )
 
 type fakeRuleDataSource struct {

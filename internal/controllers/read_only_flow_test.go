@@ -13,11 +13,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/datasource"
-	"fluxseer/internal/detector"
-	"fluxseer/internal/domain"
-	"fluxseer/internal/notifier"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
+	"github.com/FluxSeer/fluxseer-rca/internal/detector"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
 
 type fakeDataSource struct {

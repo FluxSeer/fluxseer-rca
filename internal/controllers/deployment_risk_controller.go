@@ -12,9 +12,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/detector"
-	"fluxseer/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/detector"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 )
 
 type DeploymentRiskReconciler struct {

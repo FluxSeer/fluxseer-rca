@@ -11,12 +11,12 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/domain"
-	"fluxseer/internal/knowledge"
-	"fluxseer/internal/model"
-	"fluxseer/internal/model/openai"
-	"fluxseer/internal/rule"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/knowledge"
+	"github.com/FluxSeer/fluxseer-rca/internal/model"
+	"github.com/FluxSeer/fluxseer-rca/internal/model/openai"
+	"github.com/FluxSeer/fluxseer-rca/internal/rule"
 )
 
 type captureProvider struct {

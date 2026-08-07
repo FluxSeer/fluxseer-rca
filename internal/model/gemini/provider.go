@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"time"
 
-	"fluxseer/internal/domain"
-	"fluxseer/internal/model"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/model"
 )
 
 const defaultEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent"

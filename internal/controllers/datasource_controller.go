@@ -11,9 +11,9 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/datasource"
-	"fluxseer/internal/datasourceconfig"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
+	"github.com/FluxSeer/fluxseer-rca/internal/datasourceconfig"
 )
 
 type DataSourceReconciler struct {

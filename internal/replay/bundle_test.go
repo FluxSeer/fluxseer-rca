@@ -7,7 +7,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"fluxseer/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 )
 
 func TestExportCompletedInvestigationRequestBundle(t *testing.T) {

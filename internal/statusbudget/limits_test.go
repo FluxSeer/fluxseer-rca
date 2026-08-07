@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"fluxseer/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 )
 
 func TestTruncateUTF8PreservesValidUTF8(t *testing.T) {

@@ -16,16 +16,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"fluxseer/api/v1alpha1"
-	"fluxseer/internal/canonicaldigest"
-	"fluxseer/internal/dataclassification"
-	"fluxseer/internal/domain"
-	evidencepkg "fluxseer/internal/evidence"
-	"fluxseer/internal/investigation"
-	"fluxseer/internal/rcametrics"
-	"fluxseer/internal/statusbudget"
-	"fluxseer/internal/verifier"
-	"fluxseer/internal/version"
+	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
+	"github.com/FluxSeer/fluxseer-rca/internal/dataclassification"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
+	"github.com/FluxSeer/fluxseer-rca/internal/investigation"
+	"github.com/FluxSeer/fluxseer-rca/internal/rcametrics"
+	"github.com/FluxSeer/fluxseer-rca/internal/statusbudget"
+	"github.com/FluxSeer/fluxseer-rca/internal/verifier"
+	"github.com/FluxSeer/fluxseer-rca/internal/version"
 )
 
 const (

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"fluxseer/internal/domain"
-	"fluxseer/internal/knowledge"
-	"fluxseer/internal/model"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/knowledge"
+	"github.com/FluxSeer/fluxseer-rca/internal/model"
 )
 
 type invalidStructuredProvider struct{}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"fluxseer/internal/domain"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 )
 
 type Policy struct {

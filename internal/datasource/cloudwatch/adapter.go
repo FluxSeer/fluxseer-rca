@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"fluxseer/internal/datasource"
+	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
 )
 
 type Adapter struct {
