@@ -112,20 +112,6 @@ Product positioning:
 - [Enable Loki](tutorials/enable-loki.md)
 - [Enable remediation](tutorials/enable-remediation.md)
 
-## Releases
-
-Current release:
-
-- [v0.3.0-beta.3](releases/v0.3.0-beta.3.md)
-
-Historical releases:
-
-- [v0.3.0-beta.2](releases/v0.3.0-beta.2.md)
-- [v0.3.0-beta.1](releases/v0.3.0-beta.1.md)
-- [v0.2.0-beta.1](releases/v0.2.0-beta.1.md)
-- [v0.2.0-beta.1 freeze report](releases/v0.2.0-beta.1-freeze.md)
-- [v0.2.0-alpha.2](releases/v0.2.0-alpha.2.md)
-
 ## Backlog And Audit Records
 
 Current planning:
