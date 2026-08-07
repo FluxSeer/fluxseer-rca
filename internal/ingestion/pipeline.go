@@ -150,7 +150,7 @@ func collectMetrics(signals []domain.Signal) map[string]float64 {
 		}
 		if value, ok := signal.Attributes["value"]; ok {
 			var parsed float64
-			fmt.Sscanf(value, "%f", &parsed)
+			_, _ = fmt.Sscanf(value, "%f", &parsed)
 			metrics[signal.Attributes["metric"]] = parsed
 		}
 	}

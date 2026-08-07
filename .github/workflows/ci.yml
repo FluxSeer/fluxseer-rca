@@ -82,6 +82,11 @@ jobs:
       - name: Setup Helm
         uses: azure/setup-helm@v4
 
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
       - name: Verify v0.3 beta hardening gate
         run: make verify-v0.3-beta-hardening
 

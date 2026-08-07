@@ -222,7 +222,7 @@ func TestBuildHTTPClientRejectsDeniedDatasourceEndpoints(t *testing.T) {
 					Endpoint: tc.endpoint,
 				},
 			})
-			expectNetworkPolicyDenied(t, err)
+			_ = expectNetworkPolicyDenied(t, err)
 		})
 	}
 }
@@ -381,7 +381,7 @@ func TestDatasourcePolicyDialContextRejectsWhenAnyResolvedIPDenied(t *testing.T)
 	)
 
 	_, err := dial(context.Background(), "tcp", "prometheus.example:9090")
-	expectNetworkPolicyDenied(t, err)
+	_ = expectNetworkPolicyDenied(t, err)
 	if dialCalled {
 		t.Fatal("expected one denied resolved IP to block before dial")
 	}

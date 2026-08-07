@@ -143,7 +143,7 @@ func (r *RiskSignalReconciler) handleTTL(ctx context.Context, riskSignal *v1alph
 		return ctrl.Result{}, false, nil
 	}
 
-	expiresAt := riskSignal.CreationTimestamp.Time.Add(time.Duration(riskSignal.Spec.TTLSeconds) * time.Second)
+	expiresAt := riskSignal.CreationTimestamp.Add(time.Duration(riskSignal.Spec.TTLSeconds) * time.Second)
 	if riskSignal.CreationTimestamp.IsZero() {
 		expiresAt = now.Add(time.Duration(riskSignal.Spec.TTLSeconds) * time.Second)
 	}

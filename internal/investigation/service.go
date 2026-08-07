@@ -1084,14 +1084,6 @@ func localRefOrNil(ref v1alpha1.LocalObjectReference) *v1alpha1.LocalObjectRefer
 	return &ref
 }
 
-func deploymentLabels(deployment appsv1.Deployment) map[string]string {
-	return workloadLabels(deployment.Labels, deployment.Spec.Template.Labels)
-}
-
-func deploymentToResource(deployment appsv1.Deployment) domain.ResourceRef {
-	return workloadToResource("Deployment", "apps/v1", deployment.Name, deployment.Namespace, deployment.Labels, deployment.Spec.Template.Labels)
-}
-
 func workloadLabels(objectLabels map[string]string, templateLabels map[string]string) map[string]string {
 	labels := make(map[string]string, len(objectLabels)+len(templateLabels))
 	for key, value := range objectLabels {

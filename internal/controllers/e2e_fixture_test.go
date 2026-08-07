@@ -102,7 +102,7 @@ func TestRawToFinalE2EFixtureReplay(t *testing.T) {
 			}
 
 			var stored v1alpha1.InvestigationRequest
-			if err := reconciler.Client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+			if err := reconciler.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
 				t.Fatalf("get stored request: %v", err)
 			}
 			if stored.Status.Phase != fixture.Expected.Phase || stored.Status.Outcome != fixture.Expected.Outcome {

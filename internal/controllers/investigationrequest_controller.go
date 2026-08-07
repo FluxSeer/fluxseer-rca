@@ -491,7 +491,7 @@ func metricEvidenceValueAboveZero(ref v1alpha1.EvidenceRef) bool {
 	}
 	var lastValue *float64
 	for _, token := range strings.FieldsFunc(ref.Summary, func(r rune) bool {
-		return !(r == '.' || r == '-' || r >= '0' && r <= '9')
+		return r != '.' && r != '-' && (r < '0' || r > '9')
 	}) {
 		value, err := strconv.ParseFloat(strings.TrimSpace(token), 64)
 		if err == nil {
@@ -1972,22 +1972,6 @@ func verifierEvidenceLinks(links []verifier.EvidenceLink) []v1alpha1.RCAEvidence
 		})
 	}
 	return out
-}
-
-func inferRootCauseType(hypothesis string, causes []string) string {
-	text := strings.ToLower(hypothesis + " " + strings.Join(causes, " "))
-	switch {
-	case strings.Contains(text, "config"):
-		return "ConfigurationMismatch"
-	case strings.Contains(text, "backoff") || strings.Contains(text, "crash") || strings.Contains(text, "restart"):
-		return "CrashLoop"
-	case strings.Contains(text, "latency"):
-		return "LatencyRegression"
-	case strings.Contains(text, "memory") || strings.Contains(text, "oom"):
-		return "ResourcePressure"
-	default:
-		return "WorkloadDegradation"
-	}
 }
 
 func investigationDurationSeconds(request *v1alpha1.InvestigationRequest, now time.Time) int64 {

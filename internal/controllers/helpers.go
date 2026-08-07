@@ -106,10 +106,6 @@ func remediationFromPlan(plan *v1alpha1.RemediationPlan) domain.Remediation {
 	}
 }
 
-func actionSummary(actionType string, target v1alpha1.TargetRef) string {
-	return fmt.Sprintf("%s prepared for %s/%s", actionType, target.Namespace, target.Name)
-}
-
 func targetRefString(target v1alpha1.TargetRef) string {
 	return fmt.Sprintf("%s/%s %s", target.Namespace, target.Name, target.Kind)
 }

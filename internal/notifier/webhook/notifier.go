@@ -47,7 +47,7 @@ func (n Notifier) Notify(ctx context.Context, message notifier.Message) error {
 	if err != nil {
 		return fmt.Errorf("send webhook: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		payload, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("webhook returned %s: %s", resp.Status, strings.TrimSpace(string(payload)))
