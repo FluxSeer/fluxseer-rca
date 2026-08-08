@@ -131,6 +131,13 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			recordStatusUpdateConflict("AgentAction", err)
 			return ctrl.Result{}, err
 		}
+		// Emit Event only after successful status update
+		if original.Status.Phase != action.Status.Phase {
+			eventType, reason, message := phaseTransitionEvent(original.Status.Phase, action.Status.Phase)
+			if reason != "" {
+				r.EventRecorder.Event(&action, eventType, reason, message)
+			}
+		}
 	}
 
 	result, err := r.Executor.Execute(ctx, executor.ApprovedAction{
@@ -147,6 +154,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		finishedAt := metav1.NewTime(now())
 		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseFailed, err.Error(), action.Generation, finishedAt.Time)
+		originalExecution := action.Status.Phase
 		action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 			Phase:      "Failed",
 			Summary:    err.Error(),
@@ -156,12 +164,20 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			recordStatusUpdateConflict("AgentAction", updateErr)
 			return ctrl.Result{}, updateErr
 		}
+		// Emit Event only after successful status update
+		if originalExecution != action.Status.Phase {
+			eventType, reason, message := phaseTransitionEvent(originalExecution, action.Status.Phase)
+			if reason != "" {
+				r.EventRecorder.Event(&action, eventType, reason, message)
+			}
+		}
 		return ctrl.Result{}, err
 	}
 
 	if err := r.Get(ctx, req.NamespacedName, &action); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	originalPhase := action.Status.Phase
 	finishedAt := metav1.NewTime(now())
 	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, finishedAt.Time)
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
@@ -177,6 +193,13 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.Status().Update(ctx, &action); err != nil {
 		recordStatusUpdateConflict("AgentAction", err)
 		return ctrl.Result{}, err
+	}
+	// Emit Event only after successful status update
+	if originalPhase != action.Status.Phase {
+		eventType, reason, message := phaseTransitionEvent(originalPhase, action.Status.Phase)
+		if reason != "" {
+			r.EventRecorder.Event(&action, eventType, reason, message)
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -211,6 +234,13 @@ func (r *AgentActionReconciler) reconcilePending(ctx context.Context, action *v1
 			if err := r.Status().Update(ctx, action); err != nil {
 				recordStatusUpdateConflict("AgentAction", err)
 				return ctrl.Result{}, err
+			}
+			// Emit Event only after successful status update
+			if original.Status.Phase != action.Status.Phase {
+				eventType, reason, message := phaseTransitionEvent(original.Status.Phase, action.Status.Phase)
+				if reason != "" {
+					r.EventRecorder.Event(action, eventType, reason, message)
+				}
 			}
 		}
 		return ctrl.Result{}, nil
@@ -264,6 +294,13 @@ func (r *AgentActionReconciler) reconcileApprovalTimeout(ctx context.Context, ac
 		if err := r.Status().Update(ctx, action); err != nil {
 			recordStatusUpdateConflict("AgentAction", err)
 			return ctrl.Result{}, err
+		}
+		// Emit Event only after successful status update
+		if original.Status.Phase != action.Status.Phase {
+			eventType, reason, message := phaseTransitionEvent(original.Status.Phase, action.Status.Phase)
+			if reason != "" {
+				r.EventRecorder.Event(action, eventType, reason, message)
+			}
 		}
 	}
 	return ctrl.Result{}, nil
