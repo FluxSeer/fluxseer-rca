@@ -175,6 +175,133 @@ func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) 
 	}
 }
 
+func TestApprovalAuditTimelineAndEventsAcrossEscalation(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	decisionAt := time.Date(2026, 8, 8, 9, 0, 0, 0, time.UTC)
+	plan := &v1alpha1.RemediationPlan{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api-plan", Namespace: "payments", Generation: 1},
+		Spec: v1alpha1.RemediationPlanSpec{
+			Target:                 v1alpha1.TargetRef{Namespace: "payments", Kind: "Deployment", Name: "payments-api", APIVersion: "apps/v1"},
+			Severity:               "high",
+			Confidence:             90,
+			DryRun:                 true,
+			ApprovalTimeoutSeconds: 60,
+			Steps: []v1alpha1.RemediationStep{{
+				Name:       "pause-rollout",
+				ActionType: "kubernetes.rolloutPause",
+			}},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RemediationPlan{}, &v1alpha1.AgentAction{}).
+		WithObjects(plan).
+		Build()
+	eventRecorder := record.NewFakeRecorder(20)
+	planReconciler := &RemediationPlanReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Guardrails: guardrails.NewEngine(guardrails.Policy{
+			AllowedActionTypes:       []string{"kubernetes.rolloutPause"},
+			ProtectedNamespaces:      []string{"payments"},
+			AutoApproveMaxSeverity:   domain.SeverityLow,
+			RequireApprovalAtOrAbove: domain.SeverityMedium,
+		}),
+		EventRecorder: eventRecorder,
+		Now:           func() time.Time { return decisionAt },
+	}
+
+	planKey := types.NamespacedName{Name: plan.Name, Namespace: plan.Namespace}
+	if _, err := planReconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: planKey}); err != nil {
+		t.Fatalf("plan reconcile failed: %v", err)
+	}
+
+	actionKey := types.NamespacedName{Name: plan.Name + "-action", Namespace: plan.Namespace}
+	var action v1alpha1.AgentAction
+	if err := fakeClient.Get(context.Background(), actionKey, &action); err != nil {
+		t.Fatalf("expected AgentAction: %v", err)
+	}
+	if action.Status.Phase != v1alpha1.PhaseWaitingApproval || action.Status.Approval == nil {
+		t.Fatalf("expected waiting approval action, got phase=%s approval=%#v", action.Status.Phase, action.Status.Approval)
+	}
+	if action.Status.Approval.DecidedAt == nil || !action.Status.Approval.DecidedAt.Time.Equal(decisionAt) || action.Status.Approval.DecidedBy != approvalDecisionActor {
+		t.Fatalf("expected decision audit at %v by %q, got %#v", decisionAt, approvalDecisionActor, action.Status.Approval)
+	}
+
+	current := decisionAt.Add(61 * time.Second)
+	spy := &spyNotifier{}
+	actionReconciler := &AgentActionReconciler{
+		Client:        fakeClient,
+		Scheme:        scheme,
+		Executor:      executor.NewRouter(executor.KubernetesExecutor{}, executor.GitOpsExecutor{}, executor.RunbookExecutor{}, executor.NotificationExecutor{}),
+		Notifier:      spy,
+		EventRecorder: eventRecorder,
+		Now:           func() time.Time { return current },
+	}
+	if _, err := actionReconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err != nil {
+		t.Fatalf("escalation reconcile failed: %v", err)
+	}
+	if err := fakeClient.Get(context.Background(), actionKey, &action); err != nil {
+		t.Fatalf("fetch after escalation: %v", err)
+	}
+	if action.Status.Phase != v1alpha1.PhaseEscalated || action.Status.Approval.EscalatedAt == nil || !action.Status.Approval.EscalatedAt.Time.Equal(current) {
+		t.Fatalf("expected escalated audit at %v, got phase=%s approval=%#v", current, action.Status.Phase, action.Status.Approval)
+	}
+	if action.Status.Approval.DecidedAt == nil || !action.Status.Approval.DecidedAt.Time.Equal(decisionAt) {
+		t.Fatalf("expected decision timestamp to survive escalation, got %#v", action.Status.Approval)
+	}
+
+	approvedAt := current.Add(time.Second)
+	action.Spec.ApprovedBy = "sre-oncall@example.com"
+	if err := fakeClient.Update(context.Background(), &action); err != nil {
+		t.Fatalf("simulate human approval: %v", err)
+	}
+	current = approvedAt
+	if _, err := actionReconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err != nil {
+		t.Fatalf("post-escalation approval reconcile failed: %v", err)
+	}
+	if err := fakeClient.Get(context.Background(), actionKey, &action); err != nil {
+		t.Fatalf("fetch after approval: %v", err)
+	}
+	if action.Status.Phase != v1alpha1.PhaseSucceeded || action.Status.Approval.ApprovedAt == nil || !action.Status.Approval.ApprovedAt.Time.Equal(approvedAt) {
+		t.Fatalf("expected approved timeline ending in success at %v, got phase=%s approval=%#v", approvedAt, action.Status.Phase, action.Status.Approval)
+	}
+	if action.Status.Approval.DecidedAt == nil || action.Status.Approval.EscalatedAt == nil {
+		t.Fatalf("expected all audit timestamps to remain available, got %#v", action.Status.Approval)
+	}
+
+	events := drainRecorderEvents(eventRecorder)
+	for _, expected := range []string{"Normal ApprovalRequired", "Warning EscalationTriggered", "Normal ExecutionSucceeded"} {
+		found := false
+		for _, event := range events {
+			if strings.Contains(event, expected) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected event containing %q, got %v", expected, events)
+		}
+	}
+}
+
+func drainRecorderEvents(recorder *record.FakeRecorder) []string {
+	var events []string
+	for {
+		select {
+		case event := <-recorder.Events:
+			events = append(events, event)
+		default:
+			return events
+		}
+	}
+}
+
 // spyExecutor records whether it was ever invoked, so tests can prove an
 // AgentAction was never executed rather than only inferring it from status
 // fields.
