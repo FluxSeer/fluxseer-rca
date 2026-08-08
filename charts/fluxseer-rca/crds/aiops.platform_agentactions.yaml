@@ -40,6 +40,7 @@ spec:
                 approvedBy: {type: string}
                 dryRunResult: {type: string}
                 ttlSeconds: {type: integer, format: int64}
+                approvalTimeoutSeconds: {type: integer, format: int64}
                 rollbackPlan:
                   type: array
                   items:
@@ -60,6 +61,7 @@ spec:
                     actionDigest: {type: string}
                     approvedGeneration: {type: integer, format: int64}
                     approvedAt: {type: string, format: date-time}
+                    escalatedAt: {type: string, format: date-time}
                 dryRunResult:
                   type: object
                   properties:

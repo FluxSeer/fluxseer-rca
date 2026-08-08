@@ -53,6 +53,7 @@ spec:
                 confidence: {type: integer}
                 dryRun: {type: boolean}
                 ttlSeconds: {type: integer, format: int64}
+                approvalTimeoutSeconds: {type: integer, format: int64}
                 evidence:
                   type: array
                   items:
