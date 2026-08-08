@@ -2,11 +2,11 @@
 
 FluxSeer RCA is the product name for this Kubernetes-native RCA control
 plane. Source code, Helm charts, and build artifacts use matching `fluxseer` /
-`fluxseer-rca` naming; the most recently published release, `v0.4.0-beta.1`,
+`fluxseer-rca` naming; the most recently published release, `v0.4.0-beta.2`,
 includes approval lifecycle and guardrails for production remediation governance (see
 [architecture/rename-migration-plan.md](architecture/rename-migration-plan.md)).
 
-Current published release: `v0.4.0-beta.1`
+Current published release: `v0.4.0-beta.2`
 
 Current API identity: `aiops.platform/v1alpha1`
 
@@ -23,7 +23,7 @@ dashboard screenshots, terminal history, or individual responder memory.
 - Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
 - Highest-value promise: make Kubernetes incident investigations durable,
   evidence-linked organizational knowledge.
-- Current release scope: `v0.4.0-beta.1` introduces approval lifecycle, escalation handling, approval audit timestamps, notification retry tracking, and production governance for remediation actions while maintaining read-only RCA as the default.
+- Current release scope: `v0.4.0-beta.2` introduces approval lifecycle, escalation handling, approval audit timestamps, notification retry tracking, and production governance for remediation actions while maintaining read-only RCA as the default.
 - Current v0.4 engineering state: guardrails and approval lifecycle consolidation, preparing for v0.5 low-risk action execution.
 - `InvestigationRequest` is the primary operator-first entrypoint for ad-hoc or externally triggered RCA.
 - `RiskRule` is a valid bootstrap detection and rule-pack entrypoint, not the canonical RCA ownership surface.
