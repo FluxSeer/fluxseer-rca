@@ -31,7 +31,7 @@ env:
 jobs:
   publish:
     name: Publish Release Artifacts
-    runs-on: [self-hosted, Linux, X64, fluxseer-rca-prod]
+    runs-on: [self-hosted, Linux, X64, fluxseer-rca-test]
     steps:
       - name: Resolve release version
         id: release

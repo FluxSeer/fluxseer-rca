@@ -36,7 +36,7 @@ env:
 jobs:
   verify:
     name: Verify Source And Packaging
-    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON(format('["self-hosted","Linux","X64","{0}"]', github.ref == 'refs/heads/main' && 'fluxseer-rca-prod' || 'fluxseer-rca-test')) }}
+    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","fluxseer-rca-test"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -107,7 +107,7 @@ jobs:
 
   image-identity:
     name: Verify Image Identity
-    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON(format('["self-hosted","Linux","X64","{0}"]', github.ref == 'refs/heads/main' && 'fluxseer-rca-prod' || 'fluxseer-rca-test')) }}
+    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","fluxseer-rca-test"]') }}
     needs: [verify]
     steps:
       - name: Checkout
@@ -296,7 +296,7 @@ jobs:
 
   publish-main-image:
     name: Publish Main Artifacts
-    runs-on: [self-hosted, Linux, X64, fluxseer-rca-prod]
+    runs-on: [self-hosted, Linux, X64, fluxseer-rca-test]
     needs: [verify, image-identity]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
