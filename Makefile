@@ -7,6 +7,10 @@ V0_3_RELEASE_VERSION ?= v0.3.0-beta.3
 V0_3_PREVIOUS_RELEASE_VERSION ?= v0.3.0-beta.2
 V0_3_PUBLISHED_CHART_OCI ?= oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca
 V0_3_PUBLISHED_IMAGE_REPOSITORY ?= ghcr.io/fluxseer/fluxseer-rca/operator
+V0_4_RELEASE_VERSION ?= v0.4.0-beta.1
+V0_4_PREVIOUS_RELEASE_VERSION ?= v0.3.0-beta.3
+V0_4_PUBLISHED_CHART_OCI ?= oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca
+V0_4_PUBLISHED_IMAGE_REPOSITORY ?= ghcr.io/fluxseer/fluxseer-rca/operator
 GIT_COMMIT := $(shell git rev-parse HEAD)
 GIT_DIRTY := $(shell test -z "$$(git status --porcelain)" && echo false || echo true)
 SOURCE_DATE_EPOCH := $(shell git show -s --format=%ct HEAD)

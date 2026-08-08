@@ -84,8 +84,8 @@ func TestRiskRuleReconcilerMarksRuleObservedAndRequeues(t *testing.T) {
 		},
 		Spec: v1alpha1.RiskRuleSpec{
 			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
-			Interval: metav1.Duration{Duration: 2 * time.Minute},
-			Severity: "warning",
+			Interval:            metav1.Duration{Duration: 2 * time.Minute},
+			Severity:            "warning",
 			Signals: []v1alpha1.RiskRuleSignal{
 				{
 					Name:  "p95-latency",
@@ -172,9 +172,9 @@ func TestRiskRuleReconcilerCreatesIdempotentRiskSignalFromMatchingDeployment(t *
 		},
 		Spec: v1alpha1.RiskRuleSpec{
 			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
-			Interval: metav1.Duration{Duration: 2 * time.Minute},
-			Window:   metav1.Duration{Duration: 10 * time.Minute},
-			Severity: "warning",
+			Interval:            metav1.Duration{Duration: 2 * time.Minute},
+			Window:              metav1.Duration{Duration: 10 * time.Minute},
+			Severity:            "warning",
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{
 					MatchNames: []string{"prod"},
@@ -316,9 +316,9 @@ func TestRiskRuleReconcilerDeduplicatesSameEventAcrossWindowBuckets(t *testing.T
 		},
 		Spec: v1alpha1.RiskRuleSpec{
 			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
-			Interval: metav1.Duration{Duration: 2 * time.Minute},
-			Window:   metav1.Duration{Duration: 10 * time.Minute},
-			Severity: "warning",
+			Interval:            metav1.Duration{Duration: 2 * time.Minute},
+			Window:              metav1.Duration{Duration: 10 * time.Minute},
+			Severity:            "warning",
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"database-test"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{Kinds: []string{"Deployment"}},
@@ -1053,7 +1053,7 @@ func TestRiskRuleReconcilerRejectsDisallowedQueryTemplateBeforeQuery(t *testing.
 	matches, summary, err := reconciler.evaluateTarget(context.Background(), &v1alpha1.RiskRule{
 		Spec: v1alpha1.RiskRuleSpec{
 			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
-			Window: metav1.Duration{Duration: 5 * time.Minute},
+			Window:              metav1.Duration{Duration: 5 * time.Minute},
 			Signals: []v1alpha1.RiskRuleSignal{
 				{
 					Name:          "custom-template",
@@ -1398,7 +1398,7 @@ func TestRiskRuleReconcilerUsesReferencedHeuristicModelProvider(t *testing.T) {
 		},
 		Spec: v1alpha1.RiskRuleSpec{
 			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
-			Severity: "high",
+			Severity:            "high",
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector: v1alpha1.WorkloadSelector{
@@ -1551,7 +1551,7 @@ func TestRiskRuleReconcilerSeparatesSameTargetDifferentEventFindings(t *testing.
 		},
 		Spec: v1alpha1.RiskRuleSpec{
 			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
-			Window: metav1.Duration{Duration: 10 * time.Minute},
+			Window:              metav1.Duration{Duration: 10 * time.Minute},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector: v1alpha1.WorkloadSelector{
@@ -1883,7 +1883,7 @@ func TestRiskRuleReconcilerUsesReferencedOpenAIModelProvider(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-provider", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
 			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
-			Severity: "high",
+			Severity:            "high",
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
