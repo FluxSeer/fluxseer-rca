@@ -180,7 +180,8 @@ func Run(args []string, out io.Writer) error {
 		return fmt.Errorf("unable to create InvestigationRequest controller: %w", err)
 	}
 
-	if webhookURL := os.Getenv("FLUXSEER_RCA_WEBHOOK_URL"); webhookURL != "" {
+	webhookURL := os.Getenv("FLUXSEER_RCA_WEBHOOK_URL")
+	if webhookURL != "" {
 		if err := (&controllers.RiskSignalNotificationReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   mgr.GetScheme(),
@@ -198,11 +199,18 @@ func Run(args []string, out io.Writer) error {
 		}).SetupWithManager(mgr); err != nil {
 			return fmt.Errorf("unable to create RemediationPlan controller: %w", err)
 		}
-		if err := (&controllers.AgentActionReconciler{
+		agentActionReconciler := &controllers.AgentActionReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   mgr.GetScheme(),
 			Executor: executorRouter,
-		}).SetupWithManager(mgr); err != nil {
+		}
+		if webhookURL != "" {
+			// Reuse the same webhook endpoint RiskSignalNotificationReconciler
+			// uses; approval escalation is just another notification, not a
+			// separate channel.
+			agentActionReconciler.Notifier = webhook.Notifier{URL: webhookURL}
+		}
+		if err := agentActionReconciler.SetupWithManager(mgr); err != nil {
 			return fmt.Errorf("unable to create AgentAction controller: %w", err)
 		}
 	}

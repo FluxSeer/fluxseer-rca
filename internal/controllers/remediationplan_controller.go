@@ -67,6 +67,7 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		action.Spec.Parameters = step.Parameters
 		action.Spec.DryRunResult = decision.DryRunResult
 		action.Spec.TTLSeconds = plan.Spec.TTLSeconds
+		action.Spec.ApprovalTimeoutSeconds = plan.Spec.ApprovalTimeoutSeconds
 		action.Spec.RollbackPlan = plan.Spec.RollbackPlan
 		if decision.Action == domain.ApprovalAuto {
 			action.Spec.ApprovedBy = decision.ApprovedBy
