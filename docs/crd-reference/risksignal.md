@@ -28,6 +28,7 @@ Capture a detected workload risk with enough context for notification, review, a
 | `spec.confidence` | integer | yes | Detection confidence score from `0` to `100` for the merged finding. |
 | `spec.dryRun` | boolean | yes | Whether the signal is intended for non-mutating handling. |
 | `spec.ttlSeconds` | integer | no | Lifecycle hint for retention or cleanup. |
+| `spec.approvalTimeoutSeconds` | integer | no | Optional approval timeout propagated to downstream remediation resources. |
 | `spec.evidence` | array | no | List of evidence records attached to the signal. |
 | `spec.parameters` | object | no | Optional key-value metadata for downstream consumers. |
 
@@ -114,6 +115,12 @@ Current controller behavior:
 - if `ttlSeconds` is greater than zero, FluxSeer RCA requeues the signal for expiry
 - when the TTL window elapses, FluxSeer RCA deletes the `RiskSignal`
 - when remediation is enabled, owner-referenced downstream `RemediationPlan` resources are cleaned up with it
+
+### `spec.approvalTimeoutSeconds`
+
+Optional approval timeout propagated through `RemediationPlan` to
+`AgentAction`. It has an effect only when guarded remediation is explicitly
+enabled and the generated action requires human approval.
 
 ### `spec.evidence`
 
