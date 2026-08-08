@@ -67,6 +67,19 @@ func phaseTransitionEvent(originalPhase, newPhase string) (string, string, strin
 	return eventType, reason, message
 }
 
+// recordPhaseTransition is a nil-safe helper to emit Kubernetes Events for phase transitions.
+// It checks if recorder is nil (test/unconfigured scenarios) before attempting to emit.
+func recordPhaseTransition(recorder record.EventRecorder, object runtime.Object, fromPhase, toPhase string) {
+	if recorder == nil || fromPhase == toPhase {
+		return
+	}
+
+	eventType, reason, message := phaseTransitionEvent(fromPhase, toPhase)
+	if reason != "" {
+		recorder.Event(object, eventType, reason, message)
+	}
+}
+
 type AgentActionReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
@@ -132,12 +145,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, err
 		}
 		// Emit Event only after successful status update
-		if original.Status.Phase != action.Status.Phase {
-			eventType, reason, message := phaseTransitionEvent(original.Status.Phase, action.Status.Phase)
-			if reason != "" {
-				r.EventRecorder.Event(&action, eventType, reason, message)
-			}
-		}
+		recordPhaseTransition(r.EventRecorder, &action, original.Status.Phase, action.Status.Phase)
 	}
 
 	result, err := r.Executor.Execute(ctx, executor.ApprovedAction{
@@ -165,12 +173,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, updateErr
 		}
 		// Emit Event only after successful status update
-		if originalExecution != action.Status.Phase {
-			eventType, reason, message := phaseTransitionEvent(originalExecution, action.Status.Phase)
-			if reason != "" {
-				r.EventRecorder.Event(&action, eventType, reason, message)
-			}
-		}
+		recordPhaseTransition(r.EventRecorder, &action, originalExecution, action.Status.Phase)
 		return ctrl.Result{}, err
 	}
 
@@ -195,12 +198,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 	// Emit Event only after successful status update
-	if originalPhase != action.Status.Phase {
-		eventType, reason, message := phaseTransitionEvent(originalPhase, action.Status.Phase)
-		if reason != "" {
-			r.EventRecorder.Event(&action, eventType, reason, message)
-		}
-	}
+	recordPhaseTransition(r.EventRecorder, &action, originalPhase, action.Status.Phase)
 
 	return ctrl.Result{}, nil
 }
@@ -236,12 +234,7 @@ func (r *AgentActionReconciler) reconcilePending(ctx context.Context, action *v1
 				return ctrl.Result{}, err
 			}
 			// Emit Event only after successful status update
-			if original.Status.Phase != action.Status.Phase {
-				eventType, reason, message := phaseTransitionEvent(original.Status.Phase, action.Status.Phase)
-				if reason != "" {
-					r.EventRecorder.Event(action, eventType, reason, message)
-				}
-			}
+			recordPhaseTransition(r.EventRecorder, action, original.Status.Phase, action.Status.Phase)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -296,12 +289,7 @@ func (r *AgentActionReconciler) reconcileApprovalTimeout(ctx context.Context, ac
 			return ctrl.Result{}, err
 		}
 		// Emit Event only after successful status update
-		if original.Status.Phase != action.Status.Phase {
-			eventType, reason, message := phaseTransitionEvent(original.Status.Phase, action.Status.Phase)
-			if reason != "" {
-				r.EventRecorder.Event(action, eventType, reason, message)
-			}
-		}
+		recordPhaseTransition(r.EventRecorder, action, original.Status.Phase, action.Status.Phase)
 	}
 	return ctrl.Result{}, nil
 }

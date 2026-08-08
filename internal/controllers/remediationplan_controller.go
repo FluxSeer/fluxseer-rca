@@ -140,13 +140,8 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if err := r.Status().Update(ctx, action); err != nil && !recordStatusUpdateConflict("AgentAction", err) {
 			return ctrl.Result{}, err
 		}
-		// Emit Event only after successful status update
-		if originalAction.Status.Phase != action.Status.Phase {
-			eventType, reason, message := phaseTransitionEvent(originalAction.Status.Phase, action.Status.Phase)
-			if reason != "" {
-				r.EventRecorder.Event(action, eventType, reason, message)
-			}
-		}
+		// Emit Event only after successful status update (using nil-safe helper)
+		recordPhaseTransition(r.EventRecorder, action, originalAction.Status.Phase, action.Status.Phase)
 	}
 
 	return ctrl.Result{}, nil
