@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 	"github.com/FluxSeer/fluxseer-rca/internal/executor"
 	"github.com/FluxSeer/fluxseer-rca/internal/guardrails"
+	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
 
 func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) {
@@ -573,6 +575,25 @@ func TestRiskSignalReconcilerCreatesPlanAndPreservesTTLRequeue(t *testing.T) {
 	}
 }
 
+// spyNotifier records every Notify call so tests can assert exactly how many
+// times (and whether) an escalation notification fired, and can be made to
+// fail on demand to test retry behavior.
+type spyNotifier struct {
+	calls    int
+	failNext bool
+}
+
+func (s *spyNotifier) Name() string { return "spy-notifier" }
+
+func (s *spyNotifier) Notify(_ context.Context, _ notifier.Message) error {
+	s.calls++
+	if s.failNext {
+		s.failNext = false
+		return fmt.Errorf("simulated notifier failure")
+	}
+	return nil
+}
+
 func TestRemediationPlanReconcilerDoesNotOverwriteTerminalAgentActionStatus(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -681,5 +702,297 @@ func TestRemediationPlanReconcilerDoesNotOverwriteTerminalAgentActionStatus(t *t
 	}
 	if action.Status.Execution == nil || action.Status.Execution.Phase != "Succeeded" {
 		t.Fatalf("expected execution status to remain intact after second plan reconcile, got %#v", action.Status.Execution)
+	}
+}
+
+func TestAgentActionReconcilerAllowsApprovalAfterRepeatedPendingReconciles(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 8, 8, 9, 0, 0, 0, time.UTC)
+	riskSignal := &v1alpha1.RiskSignal{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api-risk", Namespace: "payments", Generation: 1},
+		Spec: v1alpha1.RiskSignalSpec{
+			Target:     v1alpha1.TargetRef{Cluster: "prod", Namespace: "payments", Kind: "Deployment", Name: "payments-api", APIVersion: "apps/v1", Service: "payments-api"},
+			SignalType: "incident",
+			ActionType: "kubernetes.rolloutPause",
+			Severity:   "high",
+			Confidence: 90,
+			DryRun:     true,
+			TTLSeconds: 1800,
+			Evidence:   []v1alpha1.EvidenceRef{{Kind: "event", Summary: "Pod entered OOMKilled"}},
+			Parameters: map[string]string{"reason": "auto-generated"},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskSignal{}, &v1alpha1.RemediationPlan{}, &v1alpha1.AgentAction{}).
+		WithObjects(riskSignal).
+		Build()
+
+	riskReconciler := &RiskSignalReconciler{Client: fakeClient, Scheme: scheme, Enabled: true, Now: func() time.Time { return now }}
+	if _, err := riskReconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: riskSignal.Name, Namespace: riskSignal.Namespace},
+	}); err != nil {
+		t.Fatalf("risk reconcile failed: %v", err)
+	}
+
+	var plan v1alpha1.RemediationPlan
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "payments-api-risk-plan", Namespace: "payments"}, &plan); err != nil {
+		t.Fatalf("expected remediation plan: %v", err)
+	}
+
+	planReconciler := &RemediationPlanReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Guardrails: guardrails.NewEngine(guardrails.Policy{
+			AllowedActionTypes:       []string{"kubernetes.rolloutPause", "kubernetes.scaleDeployment"},
+			ProtectedNamespaces:      []string{"payments"},
+			AutoApproveMaxSeverity:   domain.SeverityLow,
+			RequireApprovalAtOrAbove: domain.SeverityMedium,
+		}),
+		Now: func() time.Time { return now },
+	}
+	if _, err := planReconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: plan.Name, Namespace: plan.Namespace},
+	}); err != nil {
+		t.Fatalf("plan reconcile failed: %v", err)
+	}
+
+	actionKey := types.NamespacedName{Name: "payments-api-risk-plan-action", Namespace: "payments"}
+	actionReconciler := &AgentActionReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Executor: executor.NewRouter(
+			executor.KubernetesExecutor{Now: func() time.Time { return now }},
+			executor.GitOpsExecutor{Now: func() time.Time { return now }},
+			executor.RunbookExecutor{Now: func() time.Time { return now }},
+			executor.NotificationExecutor{Now: func() time.Time { return now }},
+		),
+		Now: func() time.Time { return now },
+	}
+
+	// Simulate several resyncs/requeues landing before any human acts. None
+	// of them may strip the action's ability to be approved later.
+	for i := 0; i < 3; i++ {
+		if _, err := actionReconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err != nil {
+			t.Fatalf("pending reconcile #%d failed: %v", i, err)
+		}
+		var pending v1alpha1.AgentAction
+		if err := fakeClient.Get(context.Background(), actionKey, &pending); err != nil {
+			t.Fatalf("fetch pending action #%d: %v", i, err)
+		}
+		if pending.Status.Phase != v1alpha1.PhaseWaitingApproval {
+			t.Fatalf("expected WaitingApproval on pass #%d, got %s", i, pending.Status.Phase)
+		}
+		if pending.Status.Approval == nil || pending.Status.Approval.Source != "ManualApprovalRequired" {
+			t.Fatalf("expected source to stay ManualApprovalRequired on pass #%d, got %#v", i, pending.Status.Approval)
+		}
+	}
+
+	var action v1alpha1.AgentAction
+	if err := fakeClient.Get(context.Background(), actionKey, &action); err != nil {
+		t.Fatalf("fetch action before approval: %v", err)
+	}
+	action.Spec.ApprovedBy = "sre-oncall@example.com"
+	if err := fakeClient.Update(context.Background(), &action); err != nil {
+		t.Fatalf("failed to simulate approval: %v", err)
+	}
+
+	if _, err := actionReconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err != nil {
+		t.Fatalf("approved reconcile failed: %v", err)
+	}
+	if err := fakeClient.Get(context.Background(), actionKey, &action); err != nil {
+		t.Fatalf("fetch approved action: %v", err)
+	}
+	if action.Status.Phase != v1alpha1.PhaseSucceeded {
+		t.Fatalf("expected approval after repeated pending reconciles to still execute, got %s", action.Status.Phase)
+	}
+}
+
+func TestAgentActionReconcilerEscalatesAfterApprovalTimeout(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	waitStart := time.Date(2026, 8, 8, 9, 0, 0, 0, time.UTC)
+	action := &v1alpha1.AgentAction{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api-action", Namespace: "payments"},
+		Spec: v1alpha1.AgentActionSpec{
+			Target:                 v1alpha1.TargetRef{Namespace: "payments", Kind: "Deployment", Name: "payments-api", APIVersion: "apps/v1"},
+			ActionType:             "kubernetes.rolloutPause",
+			ApprovalTimeoutSeconds: 300,
+		},
+	}
+	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseWaitingApproval, "waiting for human approval", action.Generation, waitStart)
+	action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
+		Approved:           false,
+		Source:             "ManualApprovalRequired",
+		ActionDigest:       agentActionSpecDigest(action),
+		ApprovedGeneration: action.Generation,
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.AgentAction{}).
+		WithObjects(action).
+		Build()
+
+	actionKey := types.NamespacedName{Name: action.Name, Namespace: action.Namespace}
+	spy := &spyNotifier{}
+	current := waitStart.Add(100 * time.Second)
+	reconciler := &AgentActionReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Executor: executor.NewRouter(
+			executor.KubernetesExecutor{Now: func() time.Time { return current }},
+			executor.GitOpsExecutor{Now: func() time.Time { return current }},
+			executor.RunbookExecutor{Now: func() time.Time { return current }},
+			executor.NotificationExecutor{Now: func() time.Time { return current }},
+		),
+		Notifier: spy,
+		Now:      func() time.Time { return current },
+	}
+
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey})
+	if err != nil {
+		t.Fatalf("reconcile before deadline failed: %v", err)
+	}
+	if result.RequeueAfter <= 0 {
+		t.Fatalf("expected a RequeueAfter before the approval deadline, got %#v", result)
+	}
+	if spy.calls != 0 {
+		t.Fatalf("expected no notification before the deadline, got %d calls", spy.calls)
+	}
+
+	var fetched v1alpha1.AgentAction
+	if err := fakeClient.Get(context.Background(), actionKey, &fetched); err != nil {
+		t.Fatalf("fetch before deadline: %v", err)
+	}
+	if fetched.Status.Phase != v1alpha1.PhaseWaitingApproval {
+		t.Fatalf("expected phase to remain WaitingApproval before the timeout, got %s", fetched.Status.Phase)
+	}
+
+	current = waitStart.Add(301 * time.Second)
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err != nil {
+		t.Fatalf("reconcile at deadline failed: %v", err)
+	}
+
+	if err := fakeClient.Get(context.Background(), actionKey, &fetched); err != nil {
+		t.Fatalf("fetch after escalation: %v", err)
+	}
+	if fetched.Status.Phase != v1alpha1.PhaseEscalated {
+		t.Fatalf("expected Escalated phase, got %s", fetched.Status.Phase)
+	}
+	if fetched.Status.Approval == nil || fetched.Status.Approval.EscalatedAt == nil {
+		t.Fatalf("expected escalatedAt to be recorded, got %#v", fetched.Status.Approval)
+	}
+	if fetched.Status.Approval.Source != "ManualApprovalRequired" {
+		t.Fatalf("expected source to remain ManualApprovalRequired through escalation, got %s", fetched.Status.Approval.Source)
+	}
+	if spy.calls != 1 {
+		t.Fatalf("expected exactly one escalation notification, got %d", spy.calls)
+	}
+
+	// Reconciling again after escalation must stay idempotent.
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err != nil {
+		t.Fatalf("reconcile after escalation failed: %v", err)
+	}
+	if spy.calls != 1 {
+		t.Fatalf("expected escalation notification to stay idempotent, got %d calls", spy.calls)
+	}
+
+	// A human can still approve after escalation.
+	if err := fakeClient.Get(context.Background(), actionKey, &fetched); err != nil {
+		t.Fatalf("fetch before post-escalation approval: %v", err)
+	}
+	fetched.Spec.ApprovedBy = "sre-oncall@example.com"
+	if err := fakeClient.Update(context.Background(), &fetched); err != nil {
+		t.Fatalf("approve after escalation: %v", err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err != nil {
+		t.Fatalf("reconcile after post-escalation approval failed: %v", err)
+	}
+	if err := fakeClient.Get(context.Background(), actionKey, &fetched); err != nil {
+		t.Fatalf("fetch after post-escalation approval: %v", err)
+	}
+	if fetched.Status.Phase != v1alpha1.PhaseSucceeded {
+		t.Fatalf("expected approval after escalation to still execute, got %s", fetched.Status.Phase)
+	}
+}
+
+func TestAgentActionReconcilerRetriesEscalationNotificationAfterFailure(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	waitStart := time.Date(2026, 8, 8, 9, 0, 0, 0, time.UTC)
+	action := &v1alpha1.AgentAction{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api-action", Namespace: "payments"},
+		Spec: v1alpha1.AgentActionSpec{
+			Target:                 v1alpha1.TargetRef{Namespace: "payments", Kind: "Deployment", Name: "payments-api", APIVersion: "apps/v1"},
+			ActionType:             "kubernetes.rolloutPause",
+			ApprovalTimeoutSeconds: 300,
+		},
+	}
+	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseWaitingApproval, "waiting for human approval", action.Generation, waitStart)
+	action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
+		Approved:           false,
+		Source:             "ManualApprovalRequired",
+		ActionDigest:       agentActionSpecDigest(action),
+		ApprovedGeneration: action.Generation,
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.AgentAction{}).
+		WithObjects(action).
+		Build()
+
+	actionKey := types.NamespacedName{Name: action.Name, Namespace: action.Namespace}
+	spy := &spyNotifier{failNext: true}
+	current := waitStart.Add(301 * time.Second)
+	reconciler := &AgentActionReconciler{
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Executor: executor.NewRouter(executor.KubernetesExecutor{}, executor.GitOpsExecutor{}, executor.RunbookExecutor{}, executor.NotificationExecutor{}),
+		Notifier: spy,
+		Now:      func() time.Time { return current },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err == nil {
+		t.Fatal("expected reconcile to surface the notifier failure so it gets retried")
+	}
+	if spy.calls != 1 {
+		t.Fatalf("expected one failed notification attempt, got %d", spy.calls)
+	}
+
+	var fetched v1alpha1.AgentAction
+	if err := fakeClient.Get(context.Background(), actionKey, &fetched); err != nil {
+		t.Fatalf("fetch after failed notification: %v", err)
+	}
+	if fetched.Status.Phase != v1alpha1.PhaseWaitingApproval {
+		t.Fatalf("expected phase to stay WaitingApproval after a failed notification, got %s", fetched.Status.Phase)
+	}
+	if fetched.Status.Approval.EscalatedAt != nil {
+		t.Fatalf("expected escalatedAt to stay unset after a failed notification, got %v", fetched.Status.Approval.EscalatedAt)
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err != nil {
+		t.Fatalf("expected retry to succeed once the notifier stops failing: %v", err)
+	}
+	if spy.calls != 2 {
+		t.Fatalf("expected the retry to call the notifier again, got %d calls", spy.calls)
+	}
+	if err := fakeClient.Get(context.Background(), actionKey, &fetched); err != nil {
+		t.Fatalf("fetch after retried notification: %v", err)
+	}
+	if fetched.Status.Phase != v1alpha1.PhaseEscalated {
+		t.Fatalf("expected Escalated phase after the retry succeeds, got %s", fetched.Status.Phase)
 	}
 }

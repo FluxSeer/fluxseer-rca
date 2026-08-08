@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,12 +13,14 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
 	"github.com/FluxSeer/fluxseer-rca/internal/executor"
+	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
 
 type AgentActionReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Executor *executor.Router
+	Notifier notifier.Notifier
 	Now      func() time.Time
 }
 
@@ -37,21 +40,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if !isAgentActionApproved(&action) {
-		original := action.DeepCopy()
-		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseWaitingApproval, "waiting for human approval", action.Generation, now())
-		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
-			Approved:           false,
-			Source:             "Pending",
-			ActionDigest:       agentActionSpecDigest(&action),
-			ApprovedGeneration: action.Generation,
-		}
-		if statusChangedAction(original, &action) {
-			if err := r.Status().Update(ctx, &action); err != nil {
-				recordStatusUpdateConflict("AgentAction", err)
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
+		return r.reconcilePending(ctx, &action, now())
 	}
 
 	original := action.DeepCopy()
@@ -132,6 +121,93 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	return ctrl.Result{}, nil
+}
+
+// reconcilePending handles an AgentAction that isAgentActionApproved has
+// rejected. It distinguishes two cases that must not be treated the same
+// way. An action that guardrails never validly evaluated (no approval record
+// yet, or the digest no longer matches the current spec because the action
+// was created directly or edited after approval was requested) is reset to a
+// fresh Pending/WaitingApproval state, same as before this method existed.
+// An action that guardrails did evaluate and correctly left waiting on a
+// human must NOT be reset the same way: isAgentActionApproved only honors
+// spec.approvedBy once status.approval.source is still
+// "ManualApprovalRequired", so overwriting that source to "Pending" on every
+// reconcile -- which the previous, single-branch version of this code did --
+// would permanently strip the action's ability to ever be approved as soon
+// as anything (a resync, the timeout check below) reconciles it again before
+// a human acts. That case instead only advances the approval timeout.
+func (r *AgentActionReconciler) reconcilePending(ctx context.Context, action *v1alpha1.AgentAction, now time.Time) (ctrl.Result, error) {
+	digest := agentActionSpecDigest(action)
+	if action.Status.Approval == nil || action.Status.Approval.ActionDigest != digest {
+		original := action.DeepCopy()
+		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseWaitingApproval, "waiting for human approval", action.Generation, now)
+		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
+			Approved:           false,
+			Source:             "Pending",
+			ActionDigest:       digest,
+			ApprovedGeneration: action.Generation,
+		}
+		if statusChangedAction(original, action) {
+			if err := r.Status().Update(ctx, action); err != nil {
+				recordStatusUpdateConflict("AgentAction", err)
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	return r.reconcileApprovalTimeout(ctx, action, now)
+}
+
+// reconcileApprovalTimeout escalates an AgentAction that has been validly
+// WaitingApproval for longer than spec.approvalTimeoutSeconds. It anchors
+// the wait window to status.updatedAt -- the timestamp already recorded when
+// the action first entered WaitingApproval -- and, as long as the deadline
+// has not passed, returns a RequeueAfter without writing any status at all.
+// Writing status on every pass (even "no change" writes that only refresh a
+// timestamp) would slide status.updatedAt forward each time and the timeout
+// would never trip.
+func (r *AgentActionReconciler) reconcileApprovalTimeout(ctx context.Context, action *v1alpha1.AgentAction, now time.Time) (ctrl.Result, error) {
+	if action.Status.Phase == v1alpha1.PhaseEscalated || action.Spec.ApprovalTimeoutSeconds <= 0 || action.Status.UpdatedAt.IsZero() {
+		return ctrl.Result{}, nil
+	}
+
+	deadline := action.Status.UpdatedAt.Add(time.Duration(action.Spec.ApprovalTimeoutSeconds) * time.Second)
+	if now.Before(deadline) {
+		return ctrl.Result{RequeueAfter: deadline.Sub(now)}, nil
+	}
+
+	if r.Notifier != nil {
+		// Notify before persisting Escalated, mirroring
+		// RiskSignalNotificationReconciler's notify-then-mark-done ordering:
+		// a failed delivery leaves the phase as WaitingApproval so the next
+		// reconcile retries the notification instead of losing it silently.
+		if err := r.Notifier.Notify(ctx, notifier.Message{
+			Title:   "FluxSeer RCA approval escalation",
+			Summary: fmt.Sprintf("%s exceeded its %ds approval timeout", targetRefString(action.Spec.Target), action.Spec.ApprovalTimeoutSeconds),
+			Body:    action.Status.Message,
+			Fields: map[string]any{
+				"namespace":  action.Namespace,
+				"name":       action.Name,
+				"actionType": action.Spec.ActionType,
+			},
+		}); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	original := action.DeepCopy()
+	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseEscalated, "approval timeout exceeded, escalation notified", action.Generation, now)
+	escalatedAt := metav1.NewTime(now)
+	action.Status.Approval.EscalatedAt = &escalatedAt
+	if statusChangedAction(original, action) {
+		if err := r.Status().Update(ctx, action); err != nil {
+			recordStatusUpdateConflict("AgentAction", err)
+			return ctrl.Result{}, err
+		}
+	}
 	return ctrl.Result{}, nil
 }
 
