@@ -624,10 +624,10 @@ func signalWithRenderedQuery(signal v1alpha1.RiskRuleSignal, renderedQuery strin
 
 func investigationPolicyMode(mode string) string {
 	switch strings.TrimSpace(mode) {
-	case v1alpha1.RiskRuleInvestigationModeCreateRequest:
-		return v1alpha1.RiskRuleInvestigationModeCreateRequest
-	default:
+	case v1alpha1.RiskRuleInvestigationModeDirectRiskSignal:
 		return v1alpha1.RiskRuleInvestigationModeDirectRiskSignal
+	default:
+		return v1alpha1.RiskRuleInvestigationModeCreateRequest
 	}
 }
 

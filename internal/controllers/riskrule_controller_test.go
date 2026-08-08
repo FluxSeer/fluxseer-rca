@@ -83,6 +83,7 @@ func TestRiskRuleReconcilerMarksRuleObservedAndRequeues(t *testing.T) {
 			Generation: 1,
 		},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			Interval: metav1.Duration{Duration: 2 * time.Minute},
 			Severity: "warning",
 			Signals: []v1alpha1.RiskRuleSignal{
@@ -170,6 +171,7 @@ func TestRiskRuleReconcilerCreatesIdempotentRiskSignalFromMatchingDeployment(t *
 			Generation: 2,
 		},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			Interval: metav1.Duration{Duration: 2 * time.Minute},
 			Window:   metav1.Duration{Duration: 10 * time.Minute},
 			Severity: "warning",
@@ -313,6 +315,7 @@ func TestRiskRuleReconcilerDeduplicatesSameEventAcrossWindowBuckets(t *testing.T
 			Generation: 1,
 		},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			Interval: metav1.Duration{Duration: 2 * time.Minute},
 			Window:   metav1.Duration{Duration: 10 * time.Minute},
 			Severity: "warning",
@@ -779,6 +782,7 @@ func TestRiskRuleReconcilerReportsUnsupportedSelectedKindCoverage(t *testing.T) 
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "node-coverage", Namespace: "fluxseer-rca-test", Generation: 1},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				WorkloadSelector: v1alpha1.WorkloadSelector{Kinds: []string{"Deployment", "Node"}},
 			},
@@ -966,6 +970,7 @@ func TestRiskRuleReconcilerUsesDatasourceRefQueryTypeAndTemplate(t *testing.T) {
 			Namespace: "fluxseer-rca-system",
 		},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "catalog-api"}},
@@ -1047,6 +1052,7 @@ func TestRiskRuleReconcilerRejectsDisallowedQueryTemplateBeforeQuery(t *testing.
 	}
 	matches, summary, err := reconciler.evaluateTarget(context.Background(), &v1alpha1.RiskRule{
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			Window: metav1.Duration{Duration: 5 * time.Minute},
 			Signals: []v1alpha1.RiskRuleSignal{
 				{
@@ -1094,6 +1100,7 @@ func TestRiskRuleReconcilerSkipsCapabilityMismatch(t *testing.T) {
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "capability-mismatch", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "catalog-api"}},
@@ -1182,6 +1189,7 @@ func TestRiskRuleReconcilerMarksMissingDatasourceOnRuleAndRiskSignal(t *testing.
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "partial-evidence", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "open-api"}},
@@ -1272,6 +1280,7 @@ func TestRiskRuleReconcilerPreservesDatasourceQueryFailureReason(t *testing.T) {
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "partial-query-failure", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "open-api"}},
@@ -1388,6 +1397,7 @@ func TestRiskRuleReconcilerUsesReferencedHeuristicModelProvider(t *testing.T) {
 			Namespace: "prod",
 		},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			Severity: "high",
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
@@ -1540,6 +1550,7 @@ func TestRiskRuleReconcilerSeparatesSameTargetDifferentEventFindings(t *testing.
 			Generation: 3,
 		},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			Window: metav1.Duration{Duration: 10 * time.Minute},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
@@ -1703,6 +1714,7 @@ func TestRiskRuleReconcilerFallsBackToDefaultHeuristicWhenProviderRefMissing(t *
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "payments-default-heuristic", Namespace: "prod"},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
@@ -1772,6 +1784,7 @@ func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderMissing(t *testing.
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "payments-missing-provider", Namespace: "prod"},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
@@ -1869,6 +1882,7 @@ func TestRiskRuleReconcilerUsesReferencedOpenAIModelProvider(t *testing.T) {
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-provider", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			Severity: "high",
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
@@ -2005,6 +2019,7 @@ func testRiskRuleReconcilerHostedProviderFailure(t *testing.T, statusCode int, h
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-hosted-failure", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
@@ -2109,6 +2124,7 @@ func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderSecretMissing(t *te
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-missing-secret", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
@@ -2210,6 +2226,7 @@ func TestRiskRuleReconcilerMarksRCAConditionFalseWhenProviderResponseInvalid(t *
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-invalid-response", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
@@ -2312,6 +2329,7 @@ func TestRiskRuleReconcilerBlocksHostedProviderWithoutExternalTransmissionOptIn(
 	ruleObj := &v1alpha1.RiskRule{
 		ObjectMeta: metav1.ObjectMeta{Name: "payments-openai-policy-denied", Namespace: "fluxseer-rca-system"},
 		Spec: v1alpha1.RiskRuleSpec{
+			InvestigationPolicy: v1alpha1.RiskRuleInvestigationPolicy{Mode: v1alpha1.RiskRuleInvestigationModeDirectRiskSignal},
 			TargetSelector: v1alpha1.TargetSelector{
 				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
 				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "payments-api"}},
@@ -2465,6 +2483,113 @@ func TestRiskSignalNotificationIncludesRiskRuleMetadata(t *testing.T) {
 	}
 	if notifier.lastMessage.Fields["rcaProvider"] != "heuristic-provider" {
 		t.Fatalf("expected RCA provider field, got %#v", notifier.lastMessage.Fields["rcaProvider"])
+	}
+}
+
+func TestRiskRuleReconcilerDefaultsUnsetInvestigationPolicyToCreateRequest(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 7, 28, 8, 30, 0, 0, time.UTC)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "api-server",
+			Namespace: "prod",
+			UID:       types.UID("deployment-api-server-uid"),
+			Labels:    map[string]string{"app": "api-server"},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api-server"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api-server"}},
+			},
+		},
+	}
+	ruleObj := &v1alpha1.RiskRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "latency-no-policy",
+			Namespace:  "prod",
+			UID:        types.UID("riskrule-latency-uid"),
+			Generation: 1,
+		},
+		Spec: v1alpha1.RiskRuleSpec{
+			Interval: metav1.Duration{Duration: 1 * time.Minute},
+			Window:   metav1.Duration{Duration: 5 * time.Minute},
+			Severity: "high",
+			TargetSelector: v1alpha1.TargetSelector{
+				NamespaceSelector: v1alpha1.NamespaceSelector{MatchNames: []string{"prod"}},
+				WorkloadSelector:  v1alpha1.WorkloadSelector{MatchLabels: map[string]string{"app": "api-server"}},
+			},
+			Signals: []v1alpha1.RiskRuleSignal{
+				{
+					Name:          "error-rate",
+					DatasourceRef: v1alpha1.LocalObjectReference{Name: "prometheus-main"},
+					QueryType:     "metric",
+					QueryTemplate: `sum(rate(errors_total[5m]))`,
+					Threshold:     v1alpha1.RiskThreshold{Operator: ">", Value: 0.05},
+				},
+			},
+			AI: v1alpha1.RiskRuleAI{
+				ProviderRef: v1alpha1.LocalObjectReference{Name: "heuristic-provider"},
+			},
+		},
+	}
+
+	promSource := &fakeRuleDataSource{
+		name:      "prometheus-main",
+		queryType: domain.QueryTypeMetric,
+		result: &datasource.QueryResult{
+			Source:    "prometheus-main",
+			QueryType: domain.QueryTypeMetric,
+			Records:   []map[string]any{{"value": "0.08"}},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RiskRule{}, &v1alpha1.RiskSignal{}, &v1alpha1.InvestigationRequest{}).
+		WithObjects(ruleObj, deployment).
+		Build()
+
+	reconciler := &RiskRuleReconciler{
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Registry: datasource.NewRegistry(promSource),
+		Resolver: modelgateway.KubeResolver{Client: fakeClient},
+		Gateway: &modelgateway.Gateway{
+			Base:      knowledge.NewBase(),
+			Providers: model.NewRegistry(heuristic.Provider{}),
+		},
+		Now: func() time.Time { return now },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: ruleObj.Name, Namespace: ruleObj.Namespace},
+	}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	var requests v1alpha1.InvestigationRequestList
+	if err := fakeClient.List(context.Background(), &requests); err != nil {
+		t.Fatalf("list investigation requests failed: %v", err)
+	}
+
+	if len(requests.Items) == 0 {
+		t.Fatal("expected at least one InvestigationRequest to be created (default mode should be CreateRequest)")
+	}
+
+	var signals v1alpha1.RiskSignalList
+	if err := fakeClient.List(context.Background(), &signals); err != nil {
+		t.Fatalf("list risk signals failed: %v", err)
+	}
+
+	if len(signals.Items) > 0 {
+		t.Fatalf("expected no RiskSignal (default mode should be CreateRequest, not DirectRiskSignal), but found %d", len(signals.Items))
 	}
 }
 
