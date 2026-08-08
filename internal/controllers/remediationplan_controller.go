@@ -7,6 +7,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -18,9 +19,10 @@ import (
 
 type RemediationPlanReconciler struct {
 	client.Client
-	Scheme     *runtime.Scheme
-	Guardrails *guardrails.Engine
-	Now        func() time.Time
+	Scheme        *runtime.Scheme
+	Guardrails    *guardrails.Engine
+	EventRecorder record.EventRecorder
+	Now           func() time.Time
 }
 
 const approvalDecisionActor = "fluxseer-rca-policy-engine"

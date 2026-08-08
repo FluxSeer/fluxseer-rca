@@ -193,9 +193,10 @@ func Run(args []string, out io.Writer) error {
 
 	if enableRemediation {
 		if err := (&controllers.RemediationPlanReconciler{
-			Client:     mgr.GetClient(),
-			Scheme:     mgr.GetScheme(),
-			Guardrails: policyEngine,
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			Guardrails:    policyEngine,
+			EventRecorder: mgr.GetEventRecorderFor("remediationplan-controller"),
 		}).SetupWithManager(mgr); err != nil {
 			return fmt.Errorf("unable to create RemediationPlan controller: %w", err)
 		}

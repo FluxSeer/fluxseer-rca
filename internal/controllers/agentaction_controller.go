@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -16,6 +17,55 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/executor"
 	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
+
+// phaseTransitionEvent describes an AgentAction phase transition.
+// Returns (eventType, reason, message) if phase changed, or (empty, empty, empty) if no change.
+func phaseTransitionEvent(originalPhase, newPhase string) (string, string, string) {
+	if originalPhase == newPhase {
+		return "", "", ""
+	}
+
+	eventType := corev1.EventTypeNormal
+	reason := ""
+	message := ""
+
+	// Map transitions to event reason and message
+	transition := fmt.Sprintf("%s→%s", originalPhase, newPhase)
+	switch transition {
+	case "→WaitingApproval":
+		reason = "ApprovalRequired"
+		message = "AgentAction is waiting for approval"
+	case "→Approved":
+		reason = "ApprovalGranted"
+		message = "AgentAction has been approved"
+	case "→Rejected":
+		reason = "ApprovalDenied"
+		message = "AgentAction was rejected by guardrails"
+		eventType = corev1.EventTypeWarning
+	case "Approved→Executing", "WaitingApproval→Executing":
+		reason = "ExecutionStarted"
+		message = "AgentAction is now executing"
+	case "WaitingApproval→Escalated":
+		reason = "EscalationTriggered"
+		message = "AgentAction approval timeout reached; escalating for review"
+		eventType = corev1.EventTypeWarning
+	case "Executing→Succeeded":
+		reason = "ExecutionSucceeded"
+		message = "AgentAction execution completed successfully"
+	case "Executing→Failed":
+		reason = "ExecutionFailed"
+		message = "AgentAction execution failed"
+		eventType = corev1.EventTypeWarning
+	}
+
+	if reason == "" {
+		// Unknown transition; record it generically
+		reason = "PhaseTransition"
+		message = fmt.Sprintf("phase changed from %q to %q", originalPhase, newPhase)
+	}
+
+	return eventType, reason, message
+}
 
 type AgentActionReconciler struct {
 	client.Client
