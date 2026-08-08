@@ -29,6 +29,17 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// The guardrails decision is derived once from an immutable plan spec.
+	// Re-deriving it on every reconcile would both self-requeue forever (the
+	// timestamp this loop stamps into plan.Status always differs from the
+	// previous pass) and repeatedly overwrite the owned AgentAction's status
+	// back to this initial decision -- undoing whatever AgentActionReconciler
+	// has since done (approval, execution, escalation), because Owns(&AgentAction{})
+	// re-triggers this reconciler on every AgentAction status change.
+	if plan.Status.Phase != "" {
+		return ctrl.Result{}, nil
+	}
+
 	now := time.Now
 	if r.Now != nil {
 		now = r.Now
