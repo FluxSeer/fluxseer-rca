@@ -200,9 +200,10 @@ func Run(args []string, out io.Writer) error {
 			return fmt.Errorf("unable to create RemediationPlan controller: %w", err)
 		}
 		agentActionReconciler := &controllers.AgentActionReconciler{
-			Client:   mgr.GetClient(),
-			Scheme:   mgr.GetScheme(),
-			Executor: executorRouter,
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			Executor:      executorRouter,
+			EventRecorder: mgr.GetEventRecorderFor("agentaction-controller"),
 		}
 		if webhookURL != "" {
 			// Reuse the same webhook endpoint RiskSignalNotificationReconciler

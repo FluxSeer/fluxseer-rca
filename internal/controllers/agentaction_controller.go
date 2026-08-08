@@ -7,6 +7,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -18,10 +19,11 @@ import (
 
 type AgentActionReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Executor *executor.Router
-	Notifier notifier.Notifier
-	Now      func() time.Time
+	Scheme        *runtime.Scheme
+	Executor      *executor.Router
+	Notifier      notifier.Notifier
+	EventRecorder record.EventRecorder
+	Now           func() time.Time
 }
 
 func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

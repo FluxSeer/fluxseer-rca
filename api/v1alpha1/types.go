@@ -193,6 +193,14 @@ type AgentActionApprovalStatus struct {
 	ApprovedGeneration int64        `json:"approvedGeneration,omitempty"`
 	ApprovedAt         *metav1.Time `json:"approvedAt,omitempty"`
 	EscalatedAt        *metav1.Time `json:"escalatedAt,omitempty"`
+	DecidedAt          *metav1.Time `json:"decidedAt,omitempty"`
+	DecidedBy          string       `json:"decidedBy,omitempty"`
+}
+
+type AgentActionNotificationStatus struct {
+	LastAttemptAt *metav1.Time `json:"lastAttemptAt,omitempty"`
+	RetryCount    int32        `json:"retryCount,omitempty"`
+	LastError     string       `json:"lastError,omitempty"`
 }
 
 type AgentActionDryRunStatus struct {
@@ -216,6 +224,7 @@ type AgentActionEffectivenessStatus struct {
 type AgentActionStatus struct {
 	ResourceStatus `json:",inline"`
 	Approval       *AgentActionApprovalStatus      `json:"approval,omitempty"`
+	Notification   *AgentActionNotificationStatus  `json:"notification,omitempty"`
 	DryRunResult   *AgentActionDryRunStatus        `json:"dryRunResult,omitempty"`
 	Execution      *AgentActionExecutionStatus     `json:"execution,omitempty"`
 	Effectiveness  *AgentActionEffectivenessStatus `json:"effectiveness,omitempty"`
@@ -451,7 +460,17 @@ func (in *AgentAction) DeepCopyInto(out *AgentAction) {
 		if in.Status.Approval.EscalatedAt != nil {
 			approval.EscalatedAt = in.Status.Approval.EscalatedAt.DeepCopy()
 		}
+		if in.Status.Approval.DecidedAt != nil {
+			approval.DecidedAt = in.Status.Approval.DecidedAt.DeepCopy()
+		}
 		out.Status.Approval = &approval
+	}
+	if in.Status.Notification != nil {
+		notification := *in.Status.Notification
+		if in.Status.Notification.LastAttemptAt != nil {
+			notification.LastAttemptAt = in.Status.Notification.LastAttemptAt.DeepCopy()
+		}
+		out.Status.Notification = &notification
 	}
 	if in.Status.DryRunResult != nil {
 		dryRun := *in.Status.DryRunResult
