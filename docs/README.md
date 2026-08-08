@@ -2,15 +2,15 @@
 
 FluxSeer RCA is the product name for this Kubernetes-native RCA control
 plane. Source code, Helm charts, and build artifacts use matching `fluxseer` /
-`fluxseer-rca` naming; the most recently published release, `v0.3.0-beta.3`,
-was still built under the earlier `fluxagent` name (see
+`fluxseer-rca` naming; the most recently published release, `v0.4.0-beta.1`,
+includes approval lifecycle and guardrails for production remediation governance (see
 [architecture/rename-migration-plan.md](architecture/rename-migration-plan.md)).
 
-Current published release: `v0.3.0-beta.3`
+Current published release: `v0.4.0-beta.1`
 
 Current API identity: `aiops.platform/v1alpha1`
 
-The API group/version identity is fixed for the current v0.3 line. This does
+The API group/version identity is fixed for the current v0.4 line. This does
 not mean all future v1alpha1 schema fields are GA-stable.
 
 FluxSeer RCA's highest-value promise is turning every Kubernetes incident
@@ -23,8 +23,8 @@ dashboard screenshots, terminal history, or individual responder memory.
 - Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
 - Highest-value promise: make Kubernetes incident investigations durable,
   evidence-linked organizational knowledge.
-- Current release scope: `v0.3.0-beta.3` is a beta hardening prerelease with canonical RCA preflight, evidence gating, direct RiskRule compatibility, runtime default hardening, least-privilege RBAC defaults, GHCR images, Helm OCI packaging, and verified provenance.
-- Current v0.3 engineering state: post-`v0.3.0-beta.3` stabilization and broader runtime validation.
+- Current release scope: `v0.4.0-beta.1` introduces approval lifecycle, escalation handling, audit persistence, and production governance for remediation actions while maintaining read-only RCA as the default.
+- Current v0.4 engineering state: guardrails and approval lifecycle consolidation, preparing for v0.5 low-risk action execution.
 - `InvestigationRequest` is the primary operator-first entrypoint for ad-hoc or externally triggered RCA.
 - `RiskRule` is a valid bootstrap detection and rule-pack entrypoint, not the canonical RCA ownership surface.
 - `RiskSignal` is a materialized finding, notification target, and compatibility projection.
