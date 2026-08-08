@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -968,13 +970,15 @@ func TestAgentActionReconcilerRetriesEscalationNotificationAfterFailure(t *testi
 
 	actionKey := types.NamespacedName{Name: action.Name, Namespace: action.Namespace}
 	spy := &spyNotifier{failNext: true}
+	eventRecorder := record.NewFakeRecorder(10)
 	current := waitStart.Add(301 * time.Second)
 	reconciler := &AgentActionReconciler{
-		Client:   fakeClient,
-		Scheme:   scheme,
-		Executor: executor.NewRouter(executor.KubernetesExecutor{}, executor.GitOpsExecutor{}, executor.RunbookExecutor{}, executor.NotificationExecutor{}),
-		Notifier: spy,
-		Now:      func() time.Time { return current },
+		Client:        fakeClient,
+		Scheme:        scheme,
+		Executor:      executor.NewRouter(executor.KubernetesExecutor{}, executor.GitOpsExecutor{}, executor.RunbookExecutor{}, executor.NotificationExecutor{}),
+		Notifier:      spy,
+		EventRecorder: eventRecorder,
+		Now:           func() time.Time { return current },
 	}
 
 	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err == nil {
@@ -994,6 +998,17 @@ func TestAgentActionReconcilerRetriesEscalationNotificationAfterFailure(t *testi
 	if fetched.Status.Approval.EscalatedAt != nil {
 		t.Fatalf("expected escalatedAt to stay unset after a failed notification, got %v", fetched.Status.Approval.EscalatedAt)
 	}
+	if fetched.Status.Notification == nil || fetched.Status.Notification.RetryCount != 1 || fetched.Status.Notification.LastError == "" || fetched.Status.Notification.LastAttemptAt == nil {
+		t.Fatalf("expected persisted first notification retry status, got %#v", fetched.Status.Notification)
+	}
+	select {
+	case event := <-eventRecorder.Events:
+		if !strings.Contains(event, "Warning NotificationRetryFailed") || !strings.Contains(event, "attempt 1") {
+			t.Fatalf("expected NotificationRetryFailed event for attempt 1, got %q", event)
+		}
+	default:
+		t.Fatal("expected NotificationRetryFailed event after failed notification")
+	}
 
 	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: actionKey}); err != nil {
 		t.Fatalf("expected retry to succeed once the notifier stops failing: %v", err)
@@ -1006,5 +1021,8 @@ func TestAgentActionReconcilerRetriesEscalationNotificationAfterFailure(t *testi
 	}
 	if fetched.Status.Phase != v1alpha1.PhaseEscalated {
 		t.Fatalf("expected Escalated phase after the retry succeeds, got %s", fetched.Status.Phase)
+	}
+	if fetched.Status.Notification == nil || fetched.Status.Notification.RetryCount != 2 || fetched.Status.Notification.LastError != "" {
+		t.Fatalf("expected successful retry to record two attempts and clear lastError, got %#v", fetched.Status.Notification)
 	}
 }

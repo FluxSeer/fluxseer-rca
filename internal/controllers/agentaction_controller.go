@@ -265,7 +265,21 @@ func (r *AgentActionReconciler) reconcileApprovalTimeout(ctx context.Context, ac
 		// RiskSignalNotificationReconciler's notify-then-mark-done ordering:
 		// a failed delivery leaves the phase as WaitingApproval so the next
 		// reconcile retries the notification instead of losing it silently.
-		if err := r.Notifier.Notify(ctx, notifier.Message{
+		attemptAt := metav1.NewTime(now)
+		attemptCount := int32(1)
+		if action.Status.Notification != nil {
+			attemptCount = action.Status.Notification.RetryCount + 1
+		}
+		action.Status.Notification = &v1alpha1.AgentActionNotificationStatus{
+			LastAttemptAt: &attemptAt,
+			RetryCount:    attemptCount,
+		}
+		if err := r.Status().Update(ctx, action); err != nil {
+			recordStatusUpdateConflict("AgentAction", err)
+			return ctrl.Result{}, err
+		}
+
+		notifyErr := r.Notifier.Notify(ctx, notifier.Message{
 			Title:   "FluxSeer RCA approval escalation",
 			Summary: fmt.Sprintf("%s exceeded its %ds approval timeout", targetRefString(action.Spec.Target), action.Spec.ApprovalTimeoutSeconds),
 			Body:    action.Status.Message,
@@ -274,9 +288,26 @@ func (r *AgentActionReconciler) reconcileApprovalTimeout(ctx context.Context, ac
 				"name":       action.Name,
 				"actionType": action.Spec.ActionType,
 			},
-		}); err != nil {
-			return ctrl.Result{}, err
+		})
+		if notifyErr != nil {
+			action.Status.Notification.LastError = notifyErr.Error()
+			if updateErr := r.Status().Update(ctx, action); updateErr != nil {
+				recordStatusUpdateConflict("AgentAction", updateErr)
+				return ctrl.Result{}, updateErr
+			}
+			if r.EventRecorder != nil {
+				r.EventRecorder.Eventf(
+					action,
+					corev1.EventTypeWarning,
+					"NotificationRetryFailed",
+					"escalation notification attempt %d failed: %v",
+					attemptCount,
+					notifyErr,
+				)
+			}
+			return ctrl.Result{}, notifyErr
 		}
+		action.Status.Notification.LastError = ""
 	}
 
 	original := action.DeepCopy()
