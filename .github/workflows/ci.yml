@@ -90,6 +90,9 @@ jobs:
       - name: Verify v0.3 beta hardening gate
         run: make verify-v0.3-beta-hardening
 
+      - name: Verify v0.4 approval lifecycle gate
+        run: make verify-v0.4-approval-lifecycle
+
       - name: Verify packaging consistency
         run: |
           make verify-packaging-consistency \
