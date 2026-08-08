@@ -48,8 +48,10 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	original := action.DeepCopy()
 	startedAt := metav1.NewTime(now())
 	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseExecuting, "approved action is executing", action.Generation, startedAt.Time)
+	approval := action.Status.Approval
 	approvedBy := action.Status.Approval.ApprovedBy
 	source := action.Status.Approval.Source
+	approvedAt := approval.ApprovedAt
 	if !action.Status.Approval.Approved {
 		// Manual-approval path: guardrails already evaluated this exact
 		// action content (proven by the digest match in
@@ -58,6 +60,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// spec.approvedBy, so we can now treat it as approved.
 		approvedBy = action.Spec.ApprovedBy
 		source = "ManualApprovalConfirmed"
+		approvedAt = &startedAt
 	}
 	action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
 		Approved:           true,
@@ -65,7 +68,10 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		Source:             source,
 		ActionDigest:       agentActionSpecDigest(&action),
 		ApprovedGeneration: action.Generation,
-		ApprovedAt:         &startedAt,
+		ApprovedAt:         approvedAt,
+		DecidedAt:          approval.DecidedAt,
+		DecidedBy:          approval.DecidedBy,
+		EscalatedAt:        approval.EscalatedAt,
 	}
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 		Phase: "Executing",

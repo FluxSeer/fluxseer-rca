@@ -23,6 +23,8 @@ type RemediationPlanReconciler struct {
 	Now        func() time.Time
 }
 
+const approvalDecisionActor = "fluxseer-rca-policy-engine"
+
 func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var plan v1alpha1.RemediationPlan
 	if err := r.Get(ctx, req.NamespacedName, &plan); err != nil {
@@ -108,7 +110,8 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Source:             "GuardrailsAutoApproval",
 			ActionDigest:       agentActionSpecDigest(action),
 			ApprovedGeneration: action.Generation,
-			ApprovedAt:         &recordedAt,
+			DecidedAt:          &recordedAt,
+			DecidedBy:          approvalDecisionActor,
 		}
 	case domain.ApprovalManual:
 		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseWaitingApproval, decision.Reason, action.Generation, recordedAt.Time)
@@ -117,6 +120,8 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Source:             "ManualApprovalRequired",
 			ActionDigest:       agentActionSpecDigest(action),
 			ApprovedGeneration: action.Generation,
+			DecidedAt:          &recordedAt,
+			DecidedBy:          approvalDecisionActor,
 		}
 	default:
 		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseRejected, decision.Reason, action.Generation, recordedAt.Time)
@@ -125,6 +130,8 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Source:             "GuardrailsRejected",
 			ActionDigest:       agentActionSpecDigest(action),
 			ApprovedGeneration: action.Generation,
+			DecidedAt:          &recordedAt,
+			DecidedBy:          approvalDecisionActor,
 		}
 	}
 	if statusChangedAction(originalAction, action) {

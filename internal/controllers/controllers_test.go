@@ -118,6 +118,12 @@ func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) 
 	if action.Status.Approval == nil || action.Status.Approval.Approved || action.Status.Approval.Source != "ManualApprovalRequired" || action.Status.Approval.ActionDigest == "" {
 		t.Fatalf("expected manual approval status, got %#v", action.Status.Approval)
 	}
+	if action.Status.Approval.DecidedAt == nil || !action.Status.Approval.DecidedAt.Time.Equal(now) {
+		t.Fatalf("expected policy decision timestamp %v, got %#v", now, action.Status.Approval.DecidedAt)
+	}
+	if action.Status.Approval.DecidedBy != approvalDecisionActor {
+		t.Fatalf("expected policy decision actor %q, got %q", approvalDecisionActor, action.Status.Approval.DecidedBy)
+	}
 
 	action.Spec.ApprovedBy = "sre-oncall@example.com"
 	if err := fakeClient.Update(context.Background(), &action); err != nil {
@@ -152,6 +158,12 @@ func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) 
 	}
 	if action.Status.Approval == nil || !action.Status.Approval.Approved || action.Status.Approval.Source != "ManualApprovalConfirmed" || action.Status.Approval.ActionDigest == "" {
 		t.Fatalf("expected confirmed manual approval projection, got %#v", action.Status.Approval)
+	}
+	if action.Status.Approval.ApprovedAt == nil || !action.Status.Approval.ApprovedAt.Time.Equal(now) {
+		t.Fatalf("expected manual approval timestamp %v, got %#v", now, action.Status.Approval.ApprovedAt)
+	}
+	if action.Status.Approval.DecidedAt == nil || !action.Status.Approval.DecidedAt.Time.Equal(now) || action.Status.Approval.DecidedBy != approvalDecisionActor {
+		t.Fatalf("expected decision audit fields to survive manual approval, got %#v", action.Status.Approval)
 	}
 	if action.Status.Execution == nil || action.Status.Execution.Phase != "Succeeded" || action.Status.Execution.Executor == "" {
 		t.Fatalf("expected execution status, got %#v", action.Status.Execution)
