@@ -85,11 +85,13 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	originalPlan := plan.DeepCopy()
 	switch decision.Action {
 	case domain.ApprovalAuto:
-		setResourceStatus(&plan.Status, v1alpha1.PhaseApproved, "policy auto-approved remediation plan", plan.Generation, now())
+		setResourceStatus(&plan.Status.ResourceStatus, v1alpha1.PhaseApproved, "policy auto-approved remediation plan", plan.Generation, now())
 	case domain.ApprovalManual:
-		setResourceStatus(&plan.Status, v1alpha1.PhaseWaitingApproval, "human approval required before execution", plan.Generation, now())
+		setResourceStatus(&plan.Status.ResourceStatus, v1alpha1.PhaseWaitingApproval, "human approval required before execution", plan.Generation, now())
 	default:
-		setResourceStatus(&plan.Status, v1alpha1.PhaseRejected, decision.Reason, plan.Generation, now())
+		setResourceStatus(&plan.Status.ResourceStatus, v1alpha1.PhaseRejected, decision.Reason, plan.Generation, now())
+		finishedAt := metav1.NewTime(now())
+		plan.Status.FinishedAt = &finishedAt
 	}
 	if statusChangedPlan(originalPlan, &plan) {
 		if err := r.Status().Update(ctx, &plan); err != nil && !recordStatusUpdateConflict("RemediationPlan", err) {

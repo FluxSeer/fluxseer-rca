@@ -200,6 +200,12 @@ func Run(args []string, out io.Writer) error {
 		}).SetupWithManager(mgr); err != nil {
 			return fmt.Errorf("unable to create RemediationPlan controller: %w", err)
 		}
+		if err := (&controllers.RemediationPlanTTLReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			return fmt.Errorf("unable to create RemediationPlan TTL controller: %w", err)
+		}
 		agentActionReconciler := &controllers.AgentActionReconciler{
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
