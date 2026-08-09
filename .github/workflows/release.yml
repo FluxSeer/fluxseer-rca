@@ -11,6 +11,11 @@ on:
         required: true
         default: "v0.2.0-beta.1"
         type: string
+      release_only:
+        description: "Skip immutable artifact publication and create the GitHub release from existing artifacts"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -162,6 +167,7 @@ jobs:
             DEMO_IMAGE_REPOSITORY="${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/demo-observability"
 
       - name: Check immutable image tags do not exist
+        if: ${{ !inputs.release_only }}
         shell: bash
         run: |
           set -euo pipefail
@@ -184,6 +190,7 @@ jobs:
 
       - name: Build and push operator image
         id: operator
+        if: ${{ !inputs.release_only }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -202,6 +209,7 @@ jobs:
 
       - name: Build and push demo-observability image
         id: demo
+        if: ${{ !inputs.release_only }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -273,6 +281,7 @@ jobs:
           echo "sha256=$package_sha" >> "$GITHUB_OUTPUT"
 
       - name: Check immutable Helm chart tag does not exist
+        if: ${{ !inputs.release_only }}
         shell: bash
         run: |
           set -euo pipefail
@@ -286,6 +295,7 @@ jobs:
 
       - name: Push Helm OCI chart
         id: helm-push
+        if: ${{ !inputs.release_only }}
         shell: bash
         run: |
           set -euo pipefail
@@ -299,6 +309,21 @@ jobs:
           fi
           echo "helm_digest=$helm_digest" >> "$GITHUB_OUTPUT"
           helm show chart "$chart_ref/${CHART_NAME}" --version "${{ steps.release.outputs.chart_version }}"
+
+      - name: Resolve existing Helm chart metadata
+        id: existing-chart
+        if: ${{ inputs.release_only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          chart_ref="oci://${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/charts"
+          chart_version="${{ steps.release.outputs.chart_version }}"
+          helm_digest="$(helm show chart "$chart_ref/${CHART_NAME}" --version "$chart_version" 2>&1 >/dev/null | sed -nE 's/.*Digest:[[:space:]]*(sha256:[[:xdigit:]]+).*/\1/p' | tail -n1)"
+          if [ -z "$helm_digest" ]; then
+            echo "failed to resolve existing Helm chart digest" >&2
+            exit 1
+          fi
+          echo "helm_digest=$helm_digest" >> "$GITHUB_OUTPUT"
 
       - name: Write release notes
         id: notes
@@ -431,7 +456,7 @@ jobs:
             echo "- Source commit: ${{ steps.git.outputs.git_commit }}"
             echo "- Operator digest: ${{ steps.published.outputs.operator_digest }}"
             echo "- Demo digest: ${{ steps.published.outputs.demo_digest }}"
-            echo "- Helm OCI digest: ${{ steps.helm-push.outputs.helm_digest }}"
+            echo "- Helm OCI digest: ${{ steps.helm-push.outputs.helm_digest || steps.existing-chart.outputs.helm_digest }}"
             echo "- Helm package SHA256: ${{ steps.chart.outputs.sha256 }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
