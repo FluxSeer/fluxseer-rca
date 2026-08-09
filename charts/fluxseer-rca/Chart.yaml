@@ -2,5 +2,5 @@ apiVersion: v2
 name: fluxseer-rca
 description: Kubernetes-native RCA control plane and audit contract
 type: application
-version: 0.4.0-beta.2
-appVersion: "v0.4.0-beta.2"
+version: 0.4.0-beta.3
+appVersion: "v0.4.0-beta.3"
