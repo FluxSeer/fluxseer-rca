@@ -127,6 +127,7 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	default:
 		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseRejected, decision.Reason, action.Generation, recordedAt.Time)
+		action.Status.FinishedAt = &recordedAt
 		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
 			Approved:           false,
 			Source:             "GuardrailsRejected",
