@@ -223,6 +223,7 @@ type AgentActionEffectivenessStatus struct {
 
 type AgentActionStatus struct {
 	ResourceStatus `json:",inline"`
+	FinishedAt     *metav1.Time                    `json:"finishedAt,omitempty"`
 	Approval       *AgentActionApprovalStatus      `json:"approval,omitempty"`
 	Notification   *AgentActionNotificationStatus  `json:"notification,omitempty"`
 	DryRunResult   *AgentActionDryRunStatus        `json:"dryRunResult,omitempty"`
@@ -451,6 +452,9 @@ func (in *AgentAction) DeepCopyInto(out *AgentAction) {
 	}
 	if in.Spec.RollbackPlan != nil {
 		out.Spec.RollbackPlan = append([]string(nil), in.Spec.RollbackPlan...)
+	}
+	if in.Status.FinishedAt != nil {
+		out.Status.FinishedAt = in.Status.FinishedAt.DeepCopy()
 	}
 	if in.Status.Approval != nil {
 		approval := *in.Status.Approval

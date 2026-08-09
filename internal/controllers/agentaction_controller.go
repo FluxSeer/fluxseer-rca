@@ -101,7 +101,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if action.Status.Phase == v1alpha1.PhaseSucceeded || action.Status.Phase == v1alpha1.PhaseFailed || action.Status.Phase == v1alpha1.PhaseRejected {
-		return ctrl.Result{}, nil
+		return r.reconcileTerminalStateTTL(ctx, &action, now())
 	}
 
 	if !isAgentActionApproved(&action) {
@@ -163,6 +163,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		finishedAt := metav1.NewTime(now())
 		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseFailed, err.Error(), action.Generation, finishedAt.Time)
 		originalExecution := action.Status.Phase
+		action.Status.FinishedAt = &finishedAt
 		action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 			Phase:      "Failed",
 			Summary:    err.Error(),
@@ -183,6 +184,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	originalPhase := action.Status.Phase
 	finishedAt := metav1.NewTime(now())
 	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, finishedAt.Time)
+	action.Status.FinishedAt = &finishedAt
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 		Phase:      "Succeeded",
 		Executor:   result.Executor,
@@ -370,6 +372,44 @@ func agentActionSpecDigest(action *v1alpha1.AgentAction) string {
 	spec := action.Spec
 	spec.ApprovedBy = ""
 	return canonicaldigest.String(canonicaldigest.RCAJSONV1, spec)
+}
+
+// reconcileTerminalStateTTL handles TTL-based deletion for terminal AgentActions.
+// Terminal phases are Succeeded, Failed, and Rejected.
+// Returns a requeue result if the action should be kept (not yet expired),
+// or deletes the action and returns empty result if it has expired.
+func (r *AgentActionReconciler) reconcileTerminalStateTTL(ctx context.Context, action *v1alpha1.AgentAction, now time.Time) (ctrl.Result, error) {
+	// TTL is disabled if not set or zero
+	if action.Spec.TTLSeconds == 0 {
+		return ctrl.Result{}, nil
+	}
+
+	// Check for retain annotation - if present, never delete
+	if action.ObjectMeta.Annotations != nil {
+		if _, ok := action.ObjectMeta.Annotations["fluxseer-rca.aiops.platform/retain"]; ok {
+			return ctrl.Result{}, nil
+		}
+	}
+
+	// Need finishedAt to calculate expiration. If missing, don't delete (conservative).
+	if action.Status.FinishedAt == nil {
+		return ctrl.Result{}, nil
+	}
+
+	// Calculate when this action should expire
+	expireTime := action.Status.FinishedAt.Add(time.Duration(action.Spec.TTLSeconds) * time.Second)
+
+	if now.After(expireTime) {
+		// TTL expired, delete the action
+		if err := r.Delete(ctx, action); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Not yet expired, requeue after the remaining time
+	remainingTTL := expireTime.Sub(now)
+	return ctrl.Result{RequeueAfter: remainingTTL}, nil
 }
 
 func (r *AgentActionReconciler) SetupWithManager(mgr ctrl.Manager) error {
