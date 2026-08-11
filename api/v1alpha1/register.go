@@ -29,6 +29,12 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&RemediationPlanList{},
 		&AgentAction{},
 		&AgentActionList{},
+		&ApprovalPolicy{},
+		&ApprovalPolicyList{},
+		&NamespaceThreshold{},
+		&NamespaceThresholdList{},
+		&EscalationChain{},
+		&EscalationChainList{},
 	)
 
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
