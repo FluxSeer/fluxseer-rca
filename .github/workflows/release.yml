@@ -309,7 +309,7 @@ jobs:
           chart_version="${{ steps.release.outputs.chart_version }}"
           metadata_file="$(mktemp)"
           trap 'rm -f "$metadata_file"' EXIT
-          helm show chart "$chart_ref/${CHART_NAME}" --version "$chart_version" >/dev/null 2>"$metadata_file"
+          helm show chart "$chart_ref/${CHART_NAME}" --version "$chart_version" 2>&1 | tee "$metadata_file" >/dev/null
           helm_digest="$(sed -nE 's/.*Digest:[[:space:]]*(sha256:[[:xdigit:]]+).*/\1/p' "$metadata_file" | tail -n1)"
           if [ -z "$helm_digest" ]; then
             echo "failed to resolve existing Helm chart digest" >&2
