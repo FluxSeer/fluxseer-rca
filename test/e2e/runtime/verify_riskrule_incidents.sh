@@ -287,23 +287,29 @@ append_direct_case() {
   local rule="$1"
   local name="$2"
   local source="$3"
+  local expected_reason="$4"
   local report="${report_dir}/incidents/${rule}.json"
-  local count
+  local count phases reasons
   count="$(jq '.riskSignals | length' "${report}")"
-  (( count > 0 ))
-  jq -cn --arg id "${rule}" --arg name "${name}" --arg source "${source}" --arg artifact "incidents/${rule}.json" --argjson count "${count}" '{id:$id,name:$name,result:"PASS",expected:{reportSchema:"fluxseer-riskrule-report/v1",mode:"DirectRiskSignal",source:$source,riskSignals:{minimum:1},investigationRequests:0},actual:{reportSchema:"fluxseer-riskrule-report/v1",mode:"DirectRiskSignal",source:$source,riskSignals:$count,investigationRequests:0},assertions:[{id:"report.schemaVersion",result:"PASS",expected:"fluxseer-riskrule-report/v1",actual:"fluxseer-riskrule-report/v1"},{id:"riskSignals.minimum",result:"PASS",expected:1,actual:$count},{id:"investigationRequests",result:"PASS",expected:0,actual:0}],differences:[],artifacts:[$artifact]}' >>"${scenario_results}"
+  phases="$(jq -c '[.riskSignals[].status.phase] | unique' "${report}")"
+  reasons="$(jq -c '[.riskSignals[].status.conditions[].reason] | unique' "${report}")"
+  jq -e --arg reason "${expected_reason}" '(.riskSignals | length) > 0 and all(.riskSignals[]; .status.phase == "Confirmed") and any(.riskSignals[].status.conditions[]; .reason == $reason)' "${report}" >/dev/null
+  jq -cn --arg id "${rule}" --arg name "${name}" --arg source "${source}" --arg reason "${expected_reason}" --arg artifact "incidents/${rule}.json" --argjson count "${count}" --argjson phases "${phases}" --argjson reasons "${reasons}" '{id:$id,name:$name,result:"PASS",expected:{reportSchema:"fluxseer-riskrule-report/v1",mode:"DirectRiskSignal",source:$source,riskSignals:{minimum:1},investigationRequests:0,riskSignalPhases:["Confirmed"],requiredConditionReason:$reason},actual:{reportSchema:"fluxseer-riskrule-report/v1",mode:"DirectRiskSignal",source:$source,riskSignals:$count,investigationRequests:0,riskSignalPhases:$phases,conditionReasons:$reasons},assertions:[{id:"report.schemaVersion",result:"PASS",expected:"fluxseer-riskrule-report/v1",actual:"fluxseer-riskrule-report/v1"},{id:"riskSignals.minimum",result:"PASS",expected:1,actual:$count},{id:"investigationRequests",result:"PASS",expected:0,actual:0},{id:"riskSignal.phase",result:"PASS",expected:["Confirmed"],actual:$phases},{id:"riskSignal.conditionReason",result:"PASS",expected:$reason,actual:$reasons}],differences:[],artifacts:[$artifact]}' >>"${scenario_results}"
 }
 
-append_direct_case runtime-anomaly-event-direct "Kubernetes event anomaly" kubernetes-events
-append_direct_case runtime-anomaly-condition-direct "Deployment condition anomaly" kubernetes-events
-append_direct_case runtime-anomaly-prometheus-direct "Prometheus availability anomaly" prometheus
-append_direct_case runtime-anomaly-loki-direct "Loki error-log anomaly" loki
+append_direct_case runtime-anomaly-event-direct "Kubernetes event anomaly" kubernetes-events EventBackOffObserved
+append_direct_case runtime-anomaly-condition-direct "Deployment condition anomaly" kubernetes-events DeploymentconditionMinimumreplicasunavailableObserved
+append_direct_case runtime-anomaly-prometheus-direct "Prometheus availability anomaly" prometheus MetricObserved
+append_direct_case runtime-anomaly-loki-direct "Loki error-log anomaly" loki LogObserved
 
 canonical_report="${report_dir}/incidents/runtime-anomaly-event-canonical.json"
 canonical_requests="$(jq '.investigationRequests | length' "${canonical_report}")"
 canonical_signals="$(jq '.riskSignals | length' "${canonical_report}")"
-(( canonical_requests > 0 && canonical_signals > 0 ))
-jq -cn --argjson requests "${canonical_requests}" --argjson signals "${canonical_signals}" '{id:"runtime-anomaly-event-canonical",name:"Canonical RiskRule investigation and projection",result:"PASS",expected:{reportSchema:"fluxseer-riskrule-report/v1",mode:"CreateRequest",investigationRequests:{minimum:1},riskSignals:{minimum:1}},actual:{reportSchema:"fluxseer-riskrule-report/v1",mode:"CreateRequest",investigationRequests:$requests,riskSignals:$signals},assertions:[{id:"report.schemaVersion",result:"PASS",expected:"fluxseer-riskrule-report/v1",actual:"fluxseer-riskrule-report/v1"},{id:"investigationRequests.minimum",result:"PASS",expected:1,actual:$requests},{id:"riskSignals.minimum",result:"PASS",expected:1,actual:$signals}],differences:[],artifacts:["incidents/runtime-anomaly-event-canonical.json"]}' >>"${scenario_results}"
+canonical_request_phases="$(jq -c '[.investigationRequests[].status.phase] | unique' "${canonical_report}")"
+canonical_request_outcomes="$(jq -c '[.investigationRequests[].status.outcome] | unique' "${canonical_report}")"
+canonical_signal_phases="$(jq -c '[.riskSignals[].status.phase] | unique' "${canonical_report}")"
+jq -e '(.investigationRequests | length) > 0 and (.riskSignals | length) > 0 and all(.investigationRequests[]; .status.phase == "Completed" and .status.outcome == "Inconclusive") and all(.riskSignals[]; .status.phase == "Inconclusive")' "${canonical_report}" >/dev/null
+jq -cn --argjson requests "${canonical_requests}" --argjson signals "${canonical_signals}" --argjson requestPhases "${canonical_request_phases}" --argjson requestOutcomes "${canonical_request_outcomes}" --argjson signalPhases "${canonical_signal_phases}" '{id:"runtime-anomaly-event-canonical",name:"Canonical RiskRule investigation and projection",result:"PASS",expected:{reportSchema:"fluxseer-riskrule-report/v1",mode:"CreateRequest",investigationRequests:{minimum:1},riskSignals:{minimum:1},investigationRequestPhases:["Completed"],investigationRequestOutcomes:["Inconclusive"],riskSignalPhases:["Inconclusive"]},actual:{reportSchema:"fluxseer-riskrule-report/v1",mode:"CreateRequest",investigationRequests:$requests,riskSignals:$signals,investigationRequestPhases:$requestPhases,investigationRequestOutcomes:$requestOutcomes,riskSignalPhases:$signalPhases},assertions:[{id:"report.schemaVersion",result:"PASS",expected:"fluxseer-riskrule-report/v1",actual:"fluxseer-riskrule-report/v1"},{id:"investigationRequests.minimum",result:"PASS",expected:1,actual:$requests},{id:"riskSignals.minimum",result:"PASS",expected:1,actual:$signals},{id:"investigationRequest.phase",result:"PASS",expected:["Completed"],actual:$requestPhases},{id:"investigationRequest.outcome",result:"PASS",expected:["Inconclusive"],actual:$requestOutcomes},{id:"riskSignal.phase",result:"PASS",expected:["Inconclusive"],actual:$signalPhases}],differences:[],artifacts:["incidents/runtime-anomaly-event-canonical.json"]}' >>"${scenario_results}"
 
 controller_image="$(kubectl get deployment fluxseer-rca-controller-manager -n "${control_namespace}" -o jsonpath='{.spec.template.spec.containers[?(@.name=="manager")].image}')"
 source_dirty=false
