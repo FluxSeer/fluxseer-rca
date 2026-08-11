@@ -14,6 +14,14 @@ Only RiskRule incident exports are user-facing. Synthetic Events, incomplete
 evidence, invalid configuration, mock provider failures, coverage checks, and
 aggregate matrix reports are maintainer-only validation artifacts.
 
+The local runtime views are grouped under:
+
+- `reports/runtime/user-facing/`: simulated user-obtainable RiskRule JSON;
+- `reports/runtime/internal/`: maintainer-only experiment reports.
+
+These are symbolic-link views over the original report paths, so existing
+backlog references remain valid and no report data is duplicated.
+
 New test reports use the shared [`fluxseer-test-report/v1`](../test/reporting/README.md)
 contract. User incident exports use the separate
 `fluxseer-riskrule-report/v1` contract. Use `bash hack/verify-report.sh` to
