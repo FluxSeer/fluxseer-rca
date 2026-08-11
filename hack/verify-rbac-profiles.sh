@@ -13,11 +13,13 @@ trap cleanup EXIT INT TERM
 default_render="${tmpdir}/default.yaml"
 legacy_render="${tmpdir}/legacy.yaml"
 remediation_render="${tmpdir}/remediation.yaml"
+policy_render="${tmpdir}/policy.yaml"
 experimental_render="${tmpdir}/experimental.yaml"
 invalid_experimental_render="${tmpdir}/invalid-experimental.yaml"
 default_clusterrole="${tmpdir}/default-clusterrole.yaml"
 legacy_clusterrole="${tmpdir}/legacy-clusterrole.yaml"
 remediation_clusterrole="${tmpdir}/remediation-clusterrole.yaml"
+policy_clusterrole="${tmpdir}/policy-clusterrole.yaml"
 experimental_clusterrole="${tmpdir}/experimental-clusterrole.yaml"
 
 helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system >"${default_render}"
@@ -26,6 +28,8 @@ helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
 helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
   --set features.remediation.enabled=true \
   --set rbac.profile=remediation >"${remediation_render}"
+helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
+  --set features.policyPack.enabled=true >"${policy_render}"
 helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
   --set features.remediation.enabled=true \
   --set features.experimentalExecutor.enabled=true \
@@ -58,6 +62,7 @@ extract_clusterrole() {
 extract_clusterrole "${default_render}" "${default_clusterrole}"
 extract_clusterrole "${legacy_render}" "${legacy_clusterrole}"
 extract_clusterrole "${remediation_render}" "${remediation_clusterrole}"
+extract_clusterrole "${policy_render}" "${policy_clusterrole}"
 extract_clusterrole "${experimental_render}" "${experimental_clusterrole}"
 
 assert_contains() {
@@ -82,6 +87,7 @@ assert_not_contains() {
 
 assert_contains "${default_render}" "--enable-legacy-deployment-risk=false" "legacy deployment watcher disabled by default"
 assert_contains "${default_render}" "--enable-remediation=false" "remediation disabled by default"
+assert_contains "${default_render}" "--enable-policy-pack=false" "policy pack disabled by default"
 assert_contains "${default_render}" "kind: Role" "namespaced provider Secret reader Role"
 assert_contains "${default_render}" "name: fluxseer-rca-provider-secret-reader" "provider Secret reader RoleBinding"
 
@@ -90,6 +96,10 @@ assert_not_contains "${default_clusterrole}" 'resources: ["jobs"]' "Job mutation
 assert_not_contains "${default_clusterrole}" 'resources: ["configmaps"]' "ConfigMap mutation in default ClusterRole"
 assert_not_contains "${default_clusterrole}" 'resources: ["remediationplans", "agentactions"]' "remediation write permissions in default ClusterRole"
 assert_not_contains "${default_clusterrole}" 'resources: ["remediationplans/status", "agentactions/status"]' "remediation status permissions in default ClusterRole"
+assert_not_contains "${default_clusterrole}" 'resources: ["approvalpolicies"]' "policy pack read permissions in default ClusterRole"
+
+assert_contains "${policy_render}" "--enable-policy-pack=true" "policy pack opt-in"
+assert_contains "${policy_clusterrole}" 'resources: ["approvalpolicies"]' "policy pack ApprovalPolicy read permissions"
 
 assert_contains "${legacy_render}" "--enable-legacy-deployment-risk=true" "legacy deployment watcher opt-in"
 assert_contains "${legacy_render}" "--enable-remediation=false" "remediation remains disabled for legacy-only opt-in"

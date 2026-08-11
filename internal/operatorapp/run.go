@@ -52,11 +52,13 @@ func Run(args []string, out io.Writer) error {
 	var enableLeaderElection bool
 	var enableRemediation bool
 	var enableLegacyDeploymentRisk bool
+	var enablePolicyPack bool
 	fs.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	fs.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	fs.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	fs.BoolVar(&enableRemediation, "enable-remediation", false, "Enable RemediationPlan and AgentAction reconciliation.")
 	fs.BoolVar(&enableLegacyDeploymentRisk, "enable-legacy-deployment-risk", false, "Enable legacy annotation-driven Deployment risk reconciliation.")
+	fs.BoolVar(&enablePolicyPack, "enable-policy-pack", false, "Enable CRD-based ApprovalPolicy evaluation for remediation plans.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -81,7 +83,7 @@ func Run(args []string, out io.Writer) error {
 		return fmt.Errorf("unable to start manager: %w", err)
 	}
 
-	policyEngine := guardrails.NewEngine(guardrails.Policy{
+	legacyGuardrails := guardrails.NewEngine(guardrails.Policy{
 		AllowedActionTypes: []string{
 			"kubernetes.scaleDeployment",
 			"kubernetes.rolloutPause",
@@ -93,6 +95,7 @@ func Run(args []string, out io.Writer) error {
 		AutoApproveMaxSeverity:   "low",
 		RequireApprovalAtOrAbove: "medium",
 	})
+	policyEngine := guardrails.NewPolicyEngine(mgr.GetAPIReader(), legacyGuardrails, enablePolicyPack)
 
 	executorRouter := executor.NewRouter(
 		executor.KubernetesExecutor{},
@@ -195,7 +198,8 @@ func Run(args []string, out io.Writer) error {
 		if err := (&controllers.RemediationPlanReconciler{
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
-			Guardrails:    policyEngine,
+			Guardrails:    legacyGuardrails,
+			PolicyEngine:  policyEngine,
 			EventRecorder: mgr.GetEventRecorderFor("remediationplan-controller"),
 		}).SetupWithManager(mgr); err != nil {
 			return fmt.Errorf("unable to create RemediationPlan controller: %w", err)

@@ -27,6 +27,7 @@ spec:
             - /fluxseer-rca-operator
           args:
             - --leader-elect
+            - --enable-policy-pack=false
           ports:
             - containerPort: 8080
               name: metrics

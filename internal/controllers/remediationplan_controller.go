@@ -2,9 +2,12 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -21,6 +24,7 @@ type RemediationPlanReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	Guardrails    *guardrails.Engine
+	PolicyEngine  *guardrails.PolicyEngine
 	EventRecorder record.EventRecorder
 	Now           func() time.Time
 }
@@ -49,18 +53,20 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		now = r.Now
 	}
 
-	decision := r.Guardrails.Evaluate(guardrails.ReviewInput{
-		Resource: targetToResource(plan.Spec.Target),
-		Reasoning: domain.ReasoningOutput{
-			Severity:    domain.Severity(plan.Spec.Severity),
-			Remediation: remediationFromPlan(&plan),
-		},
-	})
+	evaluation, err := r.evaluatePolicy(ctx, &plan)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	decision := evaluation.Decision
+	approvalTimeoutSeconds := plan.Spec.ApprovalTimeoutSeconds
+	if evaluation.ApprovalTimeoutSeconds > 0 {
+		approvalTimeoutSeconds = evaluation.ApprovalTimeoutSeconds
+	}
 
 	action := &v1alpha1.AgentAction{}
 	action.Name = plan.Name + "-action"
 	action.Namespace = plan.Namespace
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, action, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, action, func() error {
 		if err := controllerutil.SetControllerReference(&plan, action, r.Scheme); err != nil {
 			return err
 		}
@@ -71,7 +77,7 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		action.Spec.Parameters = step.Parameters
 		action.Spec.DryRunResult = decision.DryRunResult
 		action.Spec.TTLSeconds = plan.Spec.TTLSeconds
-		action.Spec.ApprovalTimeoutSeconds = plan.Spec.ApprovalTimeoutSeconds
+		action.Spec.ApprovalTimeoutSeconds = approvalTimeoutSeconds
 		action.Spec.RollbackPlan = plan.Spec.RollbackPlan
 		if decision.Action == domain.ApprovalAuto {
 			action.Spec.ApprovedBy = decision.ApprovedBy
@@ -111,7 +117,7 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
 			Approved:           true,
 			ApprovedBy:         decision.ApprovedBy,
-			Source:             "GuardrailsAutoApproval",
+			Source:             approvalSource(evaluation, "GuardrailsAutoApproval"),
 			ActionDigest:       agentActionSpecDigest(action),
 			ApprovedGeneration: action.Generation,
 			DecidedAt:          &recordedAt,
@@ -121,7 +127,7 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseWaitingApproval, decision.Reason, action.Generation, recordedAt.Time)
 		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
 			Approved:           false,
-			Source:             "ManualApprovalRequired",
+			Source:             approvalSource(evaluation, "ManualApprovalRequired"),
 			ActionDigest:       agentActionSpecDigest(action),
 			ApprovedGeneration: action.Generation,
 			DecidedAt:          &recordedAt,
@@ -132,7 +138,7 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		action.Status.FinishedAt = &recordedAt
 		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
 			Approved:           false,
-			Source:             "GuardrailsRejected",
+			Source:             approvalSource(evaluation, "GuardrailsRejected"),
 			ActionDigest:       agentActionSpecDigest(action),
 			ApprovedGeneration: action.Generation,
 			DecidedAt:          &recordedAt,
@@ -148,6 +154,58 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *RemediationPlanReconciler) evaluatePolicy(ctx context.Context, plan *v1alpha1.RemediationPlan) (guardrails.PolicyEvaluation, error) {
+	if r.PolicyEngine == nil {
+		if r.Guardrails == nil {
+			return guardrails.PolicyEvaluation{}, fmt.Errorf("remediation plan reconciler requires a guardrails evaluator")
+		}
+		return guardrails.PolicyEvaluation{
+			Decision: r.Guardrails.Evaluate(guardrails.ReviewInput{
+				Resource: targetToResource(plan.Spec.Target),
+				Reasoning: domain.ReasoningOutput{
+					Severity:    domain.Severity(plan.Spec.Severity),
+					Remediation: remediationFromPlan(plan),
+				},
+			}),
+			Source: guardrails.PolicySourceLegacy,
+		}, nil
+	}
+
+	input := guardrails.PolicyReviewInput{
+		ReviewInput: guardrails.ReviewInput{
+			Resource: targetToResource(plan.Spec.Target),
+			Reasoning: domain.ReasoningOutput{
+				Severity:    domain.Severity(plan.Spec.Severity),
+				Remediation: remediationFromPlan(plan),
+			},
+		},
+		ResourceLabels: copyStringMap(plan.Labels),
+	}
+
+	namespaceName := plan.Spec.Target.Namespace
+	if namespaceName == "" {
+		namespaceName = plan.Namespace
+	}
+	if namespaceName != "" {
+		var namespace corev1.Namespace
+		err := r.Get(ctx, client.ObjectKey{Name: namespaceName}, &namespace)
+		if err == nil {
+			input.NamespaceLabels = copyStringMap(namespace.Labels)
+		} else if !apierrors.IsNotFound(err) {
+			return guardrails.PolicyEvaluation{}, fmt.Errorf("get target namespace %q: %w", namespaceName, err)
+		}
+	}
+
+	return r.PolicyEngine.Evaluate(ctx, input)
+}
+
+func approvalSource(evaluation guardrails.PolicyEvaluation, fallback string) string {
+	if evaluation.Policy == nil {
+		return fallback
+	}
+	return fmt.Sprintf("%s/%s/%s@%s", evaluation.Policy.Kind, evaluation.Policy.Namespace, evaluation.Policy.Name, evaluation.Policy.Version)
 }
 
 func (r *RemediationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {

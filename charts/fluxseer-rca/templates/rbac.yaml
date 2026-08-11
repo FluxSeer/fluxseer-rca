@@ -18,6 +18,11 @@ rules:
   - apiGroups: ["aiops.platform"]
     resources: ["datasources", "investigationrequests", "modelproviders", "riskrules"]
     verbs: ["get", "list", "watch"]
+  {{- if or .Values.controller.enablePolicyPack .Values.features.policyPack.enabled }}
+  - apiGroups: ["aiops.platform"]
+    resources: ["approvalpolicies"]
+    verbs: ["get", "list", "watch"]
+  {{- end }}
   - apiGroups: ["aiops.platform"]
     resources: ["investigationrequests", "risksignals"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

@@ -15,6 +15,7 @@ controller:
   enableLeaderElection: false
   enableRemediation: false
   enableLegacyDeploymentRisk: false
+  enablePolicyPack: false
   extraArgs: []
   extraEnv: []
   resources: {}
@@ -23,6 +24,8 @@ features:
   legacyDeploymentRisk:
     enabled: false
   remediation:
+    enabled: false
+  policyPack:
     enabled: false
   experimentalExecutor:
     enabled: false
