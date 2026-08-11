@@ -35,14 +35,16 @@ cleanup() {
   kubectl delete modelprovider runtime-canonical-oom-provider runtime-canonical-image-provider -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete secret runtime-canonical-provider-secret -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete event runtime-canonical-oom-event runtime-canonical-image-event -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
-  while IFS= read -r event_name; do
-    [[ -z "${event_name}" ]] || kubectl delete event "${event_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
-  done < <(kubectl get events -n "${namespace}" -o json 2>/dev/null | jq -r '.items[] | select((.involvedObject.name // "") | startswith("runtime-canonical-")) | .metadata.name' 2>/dev/null || true)
   kubectl delete statefulset "${oom_target}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete pod "${image_target}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete deployment "${mock_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete service "${mock_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete configmap runtime-canonical-provider-nginx -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl wait --for=delete "pod/${image_target}" "pod/${oom_target}-0" -n "${namespace}" --timeout=60s >/dev/null 2>&1 || true
+  kubectl wait --for=delete pod -l app=runtime-canonical-provider-mock -n "${namespace}" --timeout=60s >/dev/null 2>&1 || true
+  while IFS= read -r event_name; do
+    [[ -z "${event_name}" ]] || kubectl delete event "${event_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  done < <(kubectl get events -n "${namespace}" -o json 2>/dev/null | jq -r '.items[] | select((.involvedObject.name // "") | startswith("runtime-canonical-")) | .metadata.name' 2>/dev/null || true)
 }
 trap cleanup EXIT INT TERM
 

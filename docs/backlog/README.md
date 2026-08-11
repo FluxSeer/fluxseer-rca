@@ -58,8 +58,11 @@ The complete current P0 cluster matrix was rerun against immutable image
 [`artifacts/runtime-p0-matrix-20260811T034237Z/report.md`](artifacts/runtime-p0-matrix-20260811T034237Z/report.md);
 raw YAML, JSON, pod snapshots, and access logs remain under the ignored
 `reports/runtime/fluxseer-rca-runtime-p0-matrix-20260811T034237Z/` directory.
-The next cluster-runtime targets are the canonical OOMKilled and
-ImagePullBackOff structured-evidence cases.
+The canonical OOMKilled event-only and ImagePullBackOff structured-evidence
+cases also passed 2/2. Their durable summary is
+[`artifacts/runtime-canonical-workloads-20260811T-final-a77adfb/report.md`](artifacts/runtime-canonical-workloads-20260811T-final-a77adfb/report.md),
+with full raw output retained under the ignored `reports/runtime/` path. The
+next approved implementation stream is 3c-2 Policy Engine refinement.
 
 Every validation ticket must record both expected state and forbidden side
 effects. At minimum, reports should cover provider requests, datasource
