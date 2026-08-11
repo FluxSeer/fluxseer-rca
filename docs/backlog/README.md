@@ -74,9 +74,14 @@ The second corpus batch expands this to nine cases with readiness mismatch,
 dependency unavailable, partial datasource failure, and contradictory
 evidence. Durable summary:
 [`artifacts/rca-quality-baseline-boundary-nine-20260811-4ab75da/report.md`](artifacts/rca-quality-baseline-boundary-nine-20260811-4ab75da/report.md).
-The next measurement target is runtime latency and provider token usage where
-those values are actually available, followed by the remaining dogfooding
-cases such as Service port mismatch and full Prometheus/Loki outage.
+The third corpus batch expands this to twelve cases with Service port mismatch
+and complete Prometheus/Loki outages. Durable summary:
+[`artifacts/rca-quality-baseline-operations-twelve-20260811-831103f/report.md`](artifacts/rca-quality-baseline-operations-twelve-20260811-831103f/report.md).
+Provider usage now flows through all three hosted adapters into execution
+status. A test-cluster rerun measured 3 seconds and 321 input / 87 output
+provider-reported tokens on the successful path while preserving the OOM
+evidence gate's zero-call contract. Durable summary:
+[`artifacts/runtime-rca-efficiency-20260811-65a166d/report.md`](artifacts/runtime-rca-efficiency-20260811-65a166d/report.md).
 
 Every validation ticket must record both expected state and forbidden side
 effects. At minimum, reports should cover provider requests, datasource

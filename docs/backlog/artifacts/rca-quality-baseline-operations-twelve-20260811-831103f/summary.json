@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "fluxseer-rca-quality-baseline-v3",
+  "corpus": "operations-twelve-v3",
+  "sourceCommit": "831103f7790773240f1adde04db0488ed90897cf",
+  "result": "PASS",
+  "scenarioCount": 12,
+  "rootCauseTypeAccuracy": 1,
+  "rootCauseEntityAccuracy": 1,
+  "evidencePrecision": 1,
+  "evidenceRecall": 1,
+  "claimVerification": {
+    "Supported": 13,
+    "Unsupported": 1,
+    "Contradicted": 2
+  },
+  "unsupportedClaimRate": 0.0625,
+  "contradictedClaimRate": 0.125,
+  "unsafeNoIssueFoundRate": 0,
+  "failureContractAccuracy": 1,
+  "checkpointReuseRate": 1,
+  "totalQueries": 15,
+  "totalProviderRequests": 8,
+  "tokenUsageAvailableScenarios": 1,
+  "servicePortMismatchTokenUsage": {
+    "inputTokens": 286,
+    "outputTokens": 74
+  }
+}
