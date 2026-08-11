@@ -47,10 +47,15 @@ Local and mock-runtime completion checkpoint:
   resources.
 - `DatasourceQueryFailed` and `EvidenceRetentionWriteFailed` have direct
   regression coverage.
+- `ProviderDataPolicyDenied` and `ProviderDataPolicyRejected` now have cluster
+  runtime evidence that records terminal conditions, `observedGeneration`,
+  rejected egress audits, and zero mock-provider access-log matches. The
+  artifact is
+  `reports/runtime/fluxseer-rca-runtime-access-log-20260811T031721Z/`.
 
-The next validation batch requires cluster runtime evidence: rerun the current
-matrix, capture mock-provider access logs for policy denial/rejection, and
-record terminal condition sets plus `observedGeneration` in the report.
+The remaining cluster validation work is to rerun the complete current P0
+matrix and record terminal condition sets plus `observedGeneration` for every
+scenario. The provider-policy access-log portion is complete.
 
 Every validation ticket must record both expected state and forbidden side
 effects. At minimum, reports should cover provider requests, datasource
