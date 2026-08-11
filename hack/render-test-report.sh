@@ -27,7 +27,8 @@ jq -r '
       (if .efficiency.providerRequestCount != null then "provider=" + (.efficiency.providerRequestCount | tostring) elif .sideEffects.providerRequests != null then "provider=" + (.sideEffects.providerRequests | tostring) else empty end),
       (if .execution.durationSeconds != null then "duration=" + (.execution.durationSeconds | tostring) + "s" else empty end),
       (if .execution.inputTokens != null then "tokens=" + (.execution.inputTokens | tostring) + "/" + ((.execution.outputTokens // 0) | tostring) else empty end)
-    ] | join("; ") | md;
+    ] as $fields |
+    if ($fields | length) > 0 then ($fields | join("; ") | md) else compact end;
   [
     "# \(.suite.name) Test Report",
     "",
