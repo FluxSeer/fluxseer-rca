@@ -10,6 +10,15 @@ release history and track direction.
 
 ## [Unreleased]
 
+### Added
+
+- Phase 3c Policy Pack CRDs: `ApprovalPolicy`, `NamespaceThreshold`, and `EscalationChain`
+- Priority-based policy evaluation with legacy guardrails fallback and policy version audit provenance
+- Namespace threshold enforcement for active remediation plans and pending approvals
+- Escalation chain routing with immutable chain snapshots and version provenance
+- Opt-in `--enable-policy-pack` controller integration with policy resource watches and safe requeue behavior
+- Controller integration tests and a PolicyEngine performance baseline
+
 ## [v0.4.0-beta.2]
 
 Approval audit consolidation with durable timestamps, notification retry tracking,
