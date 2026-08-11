@@ -19,9 +19,9 @@ const (
 )
 
 const (
-	EscalationActionTypeNotify     = "notify"
-	EscalationActionTypeReassign   = "reassign"
-	EscalationActionTypeAutoReject = "auto_reject"
+	EscalationActionTypeNotify       = "notify"
+	EscalationActionTypeReassign     = "reassign"
+	EscalationActionTypeAutoReject   = "auto_reject"
 	EscalationActionTypeForceExecute = "force_execute"
 )
 

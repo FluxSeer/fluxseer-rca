@@ -24,9 +24,9 @@ const (
 )
 
 const (
-	NotificationChannelTypeWebhook = "webhook"
-	NotificationChannelTypeSlack   = "slack"
-	NotificationChannelTypeEmail   = "email"
+	NotificationChannelTypeWebhook   = "webhook"
+	NotificationChannelTypeSlack     = "slack"
+	NotificationChannelTypeEmail     = "email"
 	NotificationChannelTypePagerDuty = "pagerduty"
 )
 
@@ -374,4 +374,3 @@ func (in *NotificationChannel) DeepCopyInto(out *NotificationChannel) {
 		copy(out.EmailAddresses, in.EmailAddresses)
 	}
 }
-

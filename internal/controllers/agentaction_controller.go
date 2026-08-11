@@ -409,8 +409,8 @@ func (r *AgentActionReconciler) reconcileTerminalStateTTL(ctx context.Context, a
 	}
 
 	// Check for retain annotation - if present, never delete
-	if action.ObjectMeta.Annotations != nil {
-		if _, ok := action.ObjectMeta.Annotations["fluxseer-rca.aiops.platform/retain"]; ok {
+	if action.Annotations != nil {
+		if _, ok := action.Annotations["fluxseer-rca.aiops.platform/retain"]; ok {
 			return ctrl.Result{}, nil
 		}
 	}
