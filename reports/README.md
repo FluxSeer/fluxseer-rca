@@ -10,8 +10,10 @@ the current public-API report with `fluxseer report riskrule <name> -n
 reports](../docs/riskrule-reports.md). Runtime suites may save that exact output
 under `incidents/`, then wrap it with test-only expected/actual comparisons.
 
-New reports use the shared [`fluxseer-test-report/v1`](../test/reporting/README.md)
-contract:
+New test reports use the shared [`fluxseer-test-report/v1`](../test/reporting/README.md)
+contract. User incident exports use the separate
+`fluxseer-riskrule-report/v1` contract. Use `bash hack/verify-report.sh` to
+validate either schema.
 
 ```text
 reports/
@@ -48,3 +50,6 @@ Current adopted entrypoints:
 Directories created before `fluxseer-test-report/v1` are historical legacy
 evidence and may not have per-scenario expected/actual comparisons. Do not use
 their shapes as templates for new runners.
+
+See [Report contracts and migration](../docs/reporting.md) for the two-layer
+contract policy and legacy migration rules.

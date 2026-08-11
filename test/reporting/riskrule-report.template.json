@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "fluxseer-riskrule-report/v1",
+  "selection": {
+    "namespace": "fluxseer-rca-test",
+    "riskRule": "example-rule"
+  },
+  "riskRule": {
+    "apiVersion": "aiops.platform/v1alpha1",
+    "kind": "RiskRule",
+    "metadata": {
+      "name": "example-rule",
+      "namespace": "fluxseer-rca-test"
+    }
+  },
+  "investigationRequests": [],
+  "riskSignals": []
+}

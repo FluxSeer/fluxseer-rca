@@ -25,9 +25,11 @@ Validate a generated report with:
 bash hack/verify-test-report.sh path/to/report.json
 ```
 
-Use [`report.template.json`](report.template.json) when adding a runner. The
-JSON Schema in [`report.schema.json`](report.schema.json) documents the stable
-machine-readable envelope. Suite-specific metrics may be added under
+Use [`report.template.json`](report.template.json) when adding a test runner.
+Use [`riskrule-report.template.json`](riskrule-report.template.json) when
+testing the user-facing export contract. The JSON Schema in
+[`report.schema.json`](report.schema.json) documents the stable test envelope.
+Suite-specific metrics may be added under
 `metrics`, and suite-specific expected/actual fields are allowed.
 
 Markdown reports should follow [`report.template.md`](report.template.md) and
@@ -37,3 +39,8 @@ The separate [`riskrule-report.schema.json`](riskrule-report.schema.json)
 defines the user-facing `fluxseer-riskrule-report/v1` envelope. Runtime suites
 embed exact outputs of `fluxseer report riskrule`; they must not substitute a
 test-only representation for the public CRs visible to users.
+
+Use [`hack/verify-report.sh`](../../hack/verify-report.sh) as the unified
+validation entrypoint when the report type is not known in advance. Historical
+suite schemas may remain under `suiteSchemaVersion`, but new top-level report
+schemas require an explicit design review.

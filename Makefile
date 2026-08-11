@@ -185,7 +185,8 @@ verify-runtime-riskrule-incidents-cluster:
 	bash test/e2e/runtime/verify_riskrule_incidents.sh
 
 verify-report-contract:
-	bash hack/verify-test-report.sh test/reporting/report.template.json
+	bash hack/verify-report.sh test/reporting/report.template.json
+	bash hack/verify-report.sh test/reporting/riskrule-report.template.json
 
 verify-rca-quality-baseline:
 	FLUXSEER_RCA_EVALUATION_REPORT=$(EVALUATION_REPORT) FLUXSEER_REPORT_SOURCE_COMMIT=$(GIT_COMMIT) FLUXSEER_REPORT_SOURCE_DIRTY=$(GIT_DIRTY) $(GO) test ./internal/controllers -run '^TestRawToFinalE2EFixtureReplay$$' -count=1 -v

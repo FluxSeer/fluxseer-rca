@@ -90,6 +90,7 @@ Adapter references:
 Operations and packaging:
 
 - [Runtime modes](runtime-modes.md)
+- [Report contracts and migration](reporting.md)
 - [RiskRule anomaly reports](riskrule-reports.md)
 - [Helm rule packs](helm-rulepacks.md)
 - [Metrics](metrics.md)
