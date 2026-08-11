@@ -48,152 +48,152 @@ type EscalationChainList struct {
 	Items           []EscalationChain `json:"items"`
 }
 
-// EscalationChainSpec 定義升級路由的分階段配置
+// EscalationChainSpec defines multi-stage escalation routing configuration.
 type EscalationChainSpec struct {
-	// ResourceSelector 此 escalation chain 適用的資源標籤選擇器
-	// 空選擇器表示適用所有資源
+	// ResourceSelector label selector for resources to which this chain applies.
+	// Empty selector applies to all resources.
 	// +kubebuilder:validation:Optional
 	ResourceSelector *metav1.LabelSelector `json:"resourceSelector,omitempty"`
 
-	// Priority 優先級（數字越大優先級越高）
-	// 解決多個 chain 匹配同一資源的衝突
+	// Priority priority level; higher values take precedence.
+	// Resolves conflicts when multiple chains match the same resource.
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:default=0
 	Priority int32 `json:"priority,omitempty"`
 
-	// Stages escalation 的分階段定義
-	// 按序執行，後續階段只有在觸發條件滿足時才執行
+	// Stages multi-stage escalation definitions.
+	// Executed in order; subsequent stages run only if their conditions are met.
 	// +kubebuilder:validation:MinItems=1
 	Stages []EscalationStage `json:"stages"`
 
-	// Enabled 是否啟用此 escalation chain
+	// Enabled indicates if this escalation chain is enabled.
 	// +kubebuilder:default=true
 	Enabled bool `json:"enabled,omitempty"`
 }
 
-// EscalationStage 單個升級階段
+// EscalationStage represents a single escalation stage.
 type EscalationStage struct {
-	// Name 階段名稱（例如 "L1-OnCall", "L2-Manager", "L3-CTO"）
+	// Name stage name (e.g., "L1-OnCall", "L2-Manager", "L3-CTO").
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
 	Name string `json:"name"`
 
-	// Delay 從前一階段開始後延遲多久觸發此階段（秒）
-	// 第一個階段的 Delay 表示從進入待審批狀態開始的延遲
+	// Delay delay in seconds before this stage is triggered from the previous stage.
+	// For the first stage, delay is measured from entering pending approval state.
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:default=0
 	Delay int64 `json:"delay,omitempty"`
 
-	// Condition 觸發此階段的條件
+	// Condition triggers this stage.
 	// +kubebuilder:validation:Optional
 	Condition *EscalationCondition `json:"condition,omitempty"`
 
-	// Actions 此階段執行的升級動作
+	// Actions escalation actions executed in this stage.
 	// +kubebuilder:validation:Optional
 	Actions []EscalationAction `json:"actions,omitempty"`
 
-	// Assignees 此階段的受理者（通知/分配給誰）
+	// Assignees assignees for this stage (who receives notifications/assignments).
 	// +kubebuilder:validation:Optional
 	Assignees []Assignee `json:"assignees,omitempty"`
 
-	// NotificationTemplate 自訂通知模板名稱
+	// NotificationTemplate custom notification template name.
 	// +kubebuilder:validation:Optional
 	NotificationTemplate string `json:"notificationTemplate,omitempty"`
 
-	// Timeout 此階段的超時時間（秒）
-	// 0 表示使用預設超時
+	// Timeout timeout for this stage in seconds.
+	// 0 means use default timeout.
 	// +kubebuilder:validation:Minimum=0
 	Timeout int64 `json:"timeout,omitempty"`
 }
 
-// EscalationCondition 升級階段的觸發條件
+// EscalationCondition trigger condition for escalation stage.
 type EscalationCondition struct {
-	// Type 條件類型: pending_time/approval_count/severity/manual
+	// Type condition type: pending_time/approval_count/severity/manual.
 	// +kubebuilder:validation:Enum=pending_time;approval_count;severity;manual
 	Type string `json:"type"`
 
-	// Threshold 閾值
-	// - pending_time: 待審批的秒數
-	// - approval_count: 拒絕或無回應的次數
+	// Threshold threshold value.
+	// - pending_time: seconds of pending approval
+	// - approval_count: number of rejections or no-responses
 	// +kubebuilder:validation:Minimum=0
 	Threshold int64 `json:"threshold,omitempty"`
 
-	// SeverityMin 最低 severity（包含）
+	// SeverityMin minimum severity level (inclusive).
 	// +kubebuilder:validation:Enum=Critical;High;Medium;Low;Info
 	// +kubebuilder:validation:Optional
 	SeverityMin string `json:"severityMin,omitempty"`
 
-	// SeverityMax 最高 severity（包含）
+	// SeverityMax maximum severity level (inclusive).
 	// +kubebuilder:validation:Enum=Critical;High;Medium;Low;Info
 	// +kubebuilder:validation:Optional
 	SeverityMax string `json:"severityMax,omitempty"`
 }
 
-// EscalationAction 升級階段的執行動作
+// EscalationAction escalation action executed in a stage.
 type EscalationAction struct {
-	// Type 動作類型: notify/reassign/auto_reject/force_execute
+	// Type action type: notify/reassign/auto_reject/force_execute.
 	// +kubebuilder:validation:Enum=notify;reassign;auto_reject;force_execute
 	Type string `json:"type"`
 
-	// Details 動作的詳細配置（JSON map）
-	// 例如 notify 可指定通知通道、reassign 可指定新的審批者
+	// Details action details configuration (JSON map).
+	// E.g., notify can specify notification channel, reassign can specify new approver.
 	// +kubebuilder:validation:Optional
 	Details map[string]string `json:"details,omitempty"`
 
-	// Enabled 是否啟用此動作
+	// Enabled indicates if this action is enabled.
 	// +kubebuilder:default=true
 	Enabled bool `json:"enabled,omitempty"`
 }
 
-// Assignee 升級階段的受理者
+// Assignee stage assignee.
 type Assignee struct {
-	// Type 受理者類型: user/team/role
+	// Type assignee type: user/team/role.
 	// +kubebuilder:validation:Enum=user;team;role
 	Type string `json:"type"`
 
-	// Name 用戶/team/role 名稱
+	// Name user/team/role name.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Channels 通知渠道（例如 slack, email, pagerduty）
-	// 空列表表示使用預設通知渠道
+	// Channels notification channels (e.g., slack, email, pagerduty).
+	// Empty list means use default notification channels.
 	// +kubebuilder:validation:Optional
 	Channels []string `json:"channels,omitempty"`
 
-	// Enabled 是否啟用此受理者
+	// Enabled indicates if this assignee is enabled.
 	// +kubebuilder:default=true
 	Enabled bool `json:"enabled,omitempty"`
 }
 
-// EscalationChainStatus 表示 EscalationChain 的狀態
+// EscalationChainStatus represents the status of an EscalationChain.
 type EscalationChainStatus struct {
-	// Phase 鏈狀態: Pending/Valid/Invalid/Disabled
+	// Phase chain status: Pending/Valid/Invalid/Disabled.
 	// +kubebuilder:validation:Enum=Pending;Valid;Invalid;Disabled
 	// +kubebuilder:default=Pending
 	Phase string `json:"phase,omitempty"`
 
-	// Conditions 詳細狀態條件
+	// Conditions detailed status conditions.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// UpdatedAt 上次更新時間
+	// UpdatedAt last update time.
 	// +kubebuilder:validation:Optional
 	UpdatedAt *metav1.Time `json:"updatedAt,omitempty"`
 
-	// ValidationErrors 驗證錯誤信息
+	// ValidationErrors validation error messages.
 	// +kubebuilder:validation:Optional
 	ValidationErrors []string `json:"validationErrors,omitempty"`
 
-	// LastAppliedGeneration 上次成功應用的 generation
+	// LastAppliedGeneration last successfully applied generation.
 	// +kubebuilder:validation:Optional
 	LastAppliedGeneration int64 `json:"lastAppliedGeneration,omitempty"`
 
-	// TotalStages 此鏈中的總階段數
+	// TotalStages total number of stages in this chain.
 	// +kubebuilder:validation:Minimum=0
 	TotalStages int32 `json:"totalStages,omitempty"`
 }
 
-// DeepCopyInto 深度複製 EscalationChain
+// DeepCopyInto deep copies EscalationChain.
 func (in *EscalationChain) DeepCopyInto(out *EscalationChain) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
@@ -202,7 +202,7 @@ func (in *EscalationChain) DeepCopyInto(out *EscalationChain) {
 	in.Status.DeepCopyInto(&out.Status)
 }
 
-// DeepCopy 建立 EscalationChain 的副本
+// DeepCopy creates a copy of EscalationChain.
 func (in *EscalationChain) DeepCopy() *EscalationChain {
 	if in == nil {
 		return nil
@@ -212,12 +212,12 @@ func (in *EscalationChain) DeepCopy() *EscalationChain {
 	return out
 }
 
-// DeepCopyObject 實現 runtime.Object 界面
+// DeepCopyObject implements runtime.Object interface.
 func (in *EscalationChain) DeepCopyObject() runtime.Object {
 	return in.DeepCopy()
 }
 
-// DeepCopyInto 深度複製 EscalationChainList
+// DeepCopyInto deep copies EscalationChainList.
 func (in *EscalationChainList) DeepCopyInto(out *EscalationChainList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
@@ -230,7 +230,7 @@ func (in *EscalationChainList) DeepCopyInto(out *EscalationChainList) {
 	}
 }
 
-// DeepCopy 建立 EscalationChainList 的副本
+// DeepCopy creates a copy of EscalationChainList.
 func (in *EscalationChainList) DeepCopy() *EscalationChainList {
 	if in == nil {
 		return nil
@@ -240,12 +240,12 @@ func (in *EscalationChainList) DeepCopy() *EscalationChainList {
 	return out
 }
 
-// DeepCopyObject 實現 runtime.Object 界面
+// DeepCopyObject implements runtime.Object interface.
 func (in *EscalationChainList) DeepCopyObject() runtime.Object {
 	return in.DeepCopy()
 }
 
-// DeepCopyInto 深度複製 EscalationChainSpec
+// DeepCopyInto deep copies EscalationChainSpec.
 func (in *EscalationChainSpec) DeepCopyInto(out *EscalationChainSpec) {
 	*out = *in
 	if in.ResourceSelector != nil {
@@ -259,7 +259,7 @@ func (in *EscalationChainSpec) DeepCopyInto(out *EscalationChainSpec) {
 	}
 }
 
-// DeepCopy 建立 EscalationChainSpec 的副本
+// DeepCopy creates a copy of EscalationChainSpec.
 func (in *EscalationChainSpec) DeepCopy() *EscalationChainSpec {
 	if in == nil {
 		return nil
@@ -269,7 +269,7 @@ func (in *EscalationChainSpec) DeepCopy() *EscalationChainSpec {
 	return out
 }
 
-// DeepCopyInto 深度複製 EscalationStage
+// DeepCopyInto deep copies EscalationStage.
 func (in *EscalationStage) DeepCopyInto(out *EscalationStage) {
 	*out = *in
 	if in.Condition != nil {
@@ -289,7 +289,7 @@ func (in *EscalationStage) DeepCopyInto(out *EscalationStage) {
 	}
 }
 
-// DeepCopy 建立 EscalationStage 的副本
+// DeepCopy creates a copy of EscalationStage.
 func (in *EscalationStage) DeepCopy() *EscalationStage {
 	if in == nil {
 		return nil
@@ -299,7 +299,7 @@ func (in *EscalationStage) DeepCopy() *EscalationStage {
 	return out
 }
 
-// DeepCopy 建立 EscalationCondition 的副本
+// DeepCopy creates a copy of EscalationCondition.
 func (in *EscalationCondition) DeepCopy() *EscalationCondition {
 	if in == nil {
 		return nil
@@ -309,7 +309,7 @@ func (in *EscalationCondition) DeepCopy() *EscalationCondition {
 	return out
 }
 
-// DeepCopyInto 深度複製 EscalationAction
+// DeepCopyInto deep copies EscalationAction.
 func (in *EscalationAction) DeepCopyInto(out *EscalationAction) {
 	*out = *in
 	if in.Details != nil {
@@ -320,7 +320,7 @@ func (in *EscalationAction) DeepCopyInto(out *EscalationAction) {
 	}
 }
 
-// DeepCopy 建立 EscalationAction 的副本
+// DeepCopy creates a copy of EscalationAction.
 func (in *EscalationAction) DeepCopy() *EscalationAction {
 	if in == nil {
 		return nil
@@ -330,7 +330,7 @@ func (in *EscalationAction) DeepCopy() *EscalationAction {
 	return out
 }
 
-// DeepCopyInto 深度複製 Assignee
+// DeepCopyInto deep copies Assignee.
 func (in *Assignee) DeepCopyInto(out *Assignee) {
 	*out = *in
 	if in.Channels != nil {
@@ -339,7 +339,7 @@ func (in *Assignee) DeepCopyInto(out *Assignee) {
 	}
 }
 
-// DeepCopy 建立 Assignee 的副本
+// DeepCopy creates a copy of Assignee.
 func (in *Assignee) DeepCopy() *Assignee {
 	if in == nil {
 		return nil
@@ -349,7 +349,7 @@ func (in *Assignee) DeepCopy() *Assignee {
 	return out
 }
 
-// DeepCopyInto 深度複製 EscalationChainStatus
+// DeepCopyInto deep copies EscalationChainStatus.
 func (in *EscalationChainStatus) DeepCopyInto(out *EscalationChainStatus) {
 	*out = *in
 	if in.Conditions != nil {
@@ -365,7 +365,7 @@ func (in *EscalationChainStatus) DeepCopyInto(out *EscalationChainStatus) {
 	}
 }
 
-// DeepCopy 建立 EscalationChainStatus 的副本
+// DeepCopy creates a copy of EscalationChainStatus.
 func (in *EscalationChainStatus) DeepCopy() *EscalationChainStatus {
 	if in == nil {
 		return nil

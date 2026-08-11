@@ -34,87 +34,85 @@ type NamespaceThresholdList struct {
 	Items           []NamespaceThreshold `json:"items"`
 }
 
-// NamespaceThresholdSpec 定義 namespace 級別的資源限制
+// NamespaceThresholdSpec defines namespace-level resource limits.
 type NamespaceThresholdSpec struct {
-	// NamespaceSelector 適用的 namespace 標籤選擇器
-	// 空選擇器表示適用所有 namespace
+	// NamespaceSelector label selector for applicable namespaces.
+	// Empty selector applies to all namespaces.
 	// +kubebuilder:validation:Optional
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
 
-	// ActivePlansLimit 單個 namespace 最多活躍的 RemediationPlan 數
-	// 0 表示無限制
+	// ActivePlansLimit maximum number of active RemediationPlans per namespace.
+	// 0 means unlimited.
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:default=100
 	ActivePlansLimit int32 `json:"activePlansLimit,omitempty"`
 
-	// PendingApprovalsLimit 最多待審批的 action 數
-	// 0 表示無限制
+	// PendingApprovalsLimit maximum number of pending approval actions.
+	// 0 means unlimited.
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:default=50
 	PendingApprovalsLimit int32 `json:"pendingApprovalsLimit,omitempty"`
 
-	// DefaultTTLSeconds 此 namespace 中資源的預設 TTL（秒）
-	// 0 表示無預設值
+	// DefaultTTLSeconds default TTL in seconds for resources in this namespace.
+	// 0 means no default.
 	// +kubebuilder:validation:Minimum=0
 	DefaultTTLSeconds int64 `json:"defaultTTLSeconds,omitempty"`
 
-	// DefaultApprovalTimeoutSeconds 預設審批超時（秒）
-	// 0 表示無預設值
+	// DefaultApprovalTimeoutSeconds default approval timeout in seconds.
+	// 0 means no default.
 	// +kubebuilder:validation:Minimum=0
 	DefaultApprovalTimeoutSeconds int64 `json:"defaultApprovalTimeoutSeconds,omitempty"`
 
-	// ProtectionLevel 保護級別: standard/strict/permissive
-	// - standard: 預設行為
-	// - strict: 更嚴格的驗證和限制
-	// - permissive: 更寬鬆的策略
+	// ProtectionLevel protection level: standard/strict/permissive.
+	// standard: default behavior; strict: stricter validation; permissive: relaxed policies.
 	// +kubebuilder:validation:Enum=standard;strict;permissive
 	// +kubebuilder:default=standard
 	ProtectionLevel string `json:"protectionLevel,omitempty"`
 
-	// Priority 優先級（數字越大優先級越高）
-	// 解決多個 NamespaceThreshold 匹配同一 namespace 的衝突
+	// Priority priority level; higher values take precedence.
+	// Resolves conflicts when multiple NamespaceThresholds match the same namespace.
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:default=0
 	Priority int32 `json:"priority,omitempty"`
 
-	// Enabled 是否啟用此 threshold 配置
+	// Enabled indicates if this threshold configuration is enabled.
 	// +kubebuilder:default=true
 	Enabled bool `json:"enabled,omitempty"`
 }
 
-// NamespaceThresholdStatus 表示 NamespaceThreshold 的狀態
+// NamespaceThresholdStatus represents the status of a NamespaceThreshold.
 type NamespaceThresholdStatus struct {
-	// Phase 配置狀態: Pending/Valid/Invalid/Disabled
+	// Phase configuration status: Pending/Valid/Invalid/Disabled.
 	// +kubebuilder:validation:Enum=Pending;Valid;Invalid;Disabled
 	// +kubebuilder:default=Pending
 	Phase string `json:"phase,omitempty"`
 
-	// EnforcedNamespaces 此 threshold 正在執行的 namespace 清單
+	// EnforcedNamespaces list of namespaces where this threshold is being enforced.
 	// +kubebuilder:validation:Optional
 	EnforcedNamespaces []string `json:"enforcedNamespaces,omitempty"`
 
-	// Conditions 詳細狀態條件
+	// Conditions detailed status conditions.
 	// +kubebuilder:validation:Optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// UpdatedAt 上次更新時間
+	// UpdatedAt last update time.
 	// +kubebuilder:validation:Optional
 	UpdatedAt *metav1.Time `json:"updatedAt,omitempty"`
 
-	// ValidationErrors 驗證錯誤信息
+	// ValidationErrors validation error messages.
 	// +kubebuilder:validation:Optional
 	ValidationErrors []string `json:"validationErrors,omitempty"`
 
-	// LastAppliedGeneration 上次成功應用的 generation
+	// LastAppliedGeneration last successfully applied generation.
 	// +kubebuilder:validation:Optional
 	LastAppliedGeneration int64 `json:"lastAppliedGeneration,omitempty"`
 
-	// TotalEnforcedCount 當前強制執行的 namespace 總數
+	// TotalEnforcedCount total number of namespaces currently being enforced.
 	// +kubebuilder:validation:Minimum=0
 	TotalEnforcedCount int32 `json:"totalEnforcedCount,omitempty"`
 }
 
-// DeepCopyInto 深度複製 NamespaceThreshold
+// DeepCopyInto deep copies NamespaceThreshold.
 func (in *NamespaceThreshold) DeepCopyInto(out *NamespaceThreshold) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
@@ -123,7 +121,7 @@ func (in *NamespaceThreshold) DeepCopyInto(out *NamespaceThreshold) {
 	in.Status.DeepCopyInto(&out.Status)
 }
 
-// DeepCopy 建立 NamespaceThreshold 的副本
+// DeepCopy creates a copy of NamespaceThreshold.
 func (in *NamespaceThreshold) DeepCopy() *NamespaceThreshold {
 	if in == nil {
 		return nil
@@ -133,12 +131,12 @@ func (in *NamespaceThreshold) DeepCopy() *NamespaceThreshold {
 	return out
 }
 
-// DeepCopyObject 實現 runtime.Object 界面
+// DeepCopyObject implements runtime.Object interface.
 func (in *NamespaceThreshold) DeepCopyObject() runtime.Object {
 	return in.DeepCopy()
 }
 
-// DeepCopyInto 深度複製 NamespaceThresholdList
+// DeepCopyInto deep copies NamespaceThresholdList.
 func (in *NamespaceThresholdList) DeepCopyInto(out *NamespaceThresholdList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
@@ -151,7 +149,7 @@ func (in *NamespaceThresholdList) DeepCopyInto(out *NamespaceThresholdList) {
 	}
 }
 
-// DeepCopy 建立 NamespaceThresholdList 的副本
+// DeepCopy creates a copy of NamespaceThresholdList.
 func (in *NamespaceThresholdList) DeepCopy() *NamespaceThresholdList {
 	if in == nil {
 		return nil
@@ -161,12 +159,12 @@ func (in *NamespaceThresholdList) DeepCopy() *NamespaceThresholdList {
 	return out
 }
 
-// DeepCopyObject 實現 runtime.Object 界面
+// DeepCopyObject implements runtime.Object interface.
 func (in *NamespaceThresholdList) DeepCopyObject() runtime.Object {
 	return in.DeepCopy()
 }
 
-// DeepCopyInto 深度複製 NamespaceThresholdSpec
+// DeepCopyInto deep copies NamespaceThresholdSpec.
 func (in *NamespaceThresholdSpec) DeepCopyInto(out *NamespaceThresholdSpec) {
 	*out = *in
 	if in.NamespaceSelector != nil {
@@ -174,7 +172,7 @@ func (in *NamespaceThresholdSpec) DeepCopyInto(out *NamespaceThresholdSpec) {
 	}
 }
 
-// DeepCopy 建立 NamespaceThresholdSpec 的副本
+// DeepCopy creates a copy of NamespaceThresholdSpec.
 func (in *NamespaceThresholdSpec) DeepCopy() *NamespaceThresholdSpec {
 	if in == nil {
 		return nil
@@ -184,7 +182,7 @@ func (in *NamespaceThresholdSpec) DeepCopy() *NamespaceThresholdSpec {
 	return out
 }
 
-// DeepCopyInto 深度複製 NamespaceThresholdStatus
+// DeepCopyInto deep copies NamespaceThresholdStatus.
 func (in *NamespaceThresholdStatus) DeepCopyInto(out *NamespaceThresholdStatus) {
 	*out = *in
 	if in.EnforcedNamespaces != nil {
@@ -204,7 +202,7 @@ func (in *NamespaceThresholdStatus) DeepCopyInto(out *NamespaceThresholdStatus) 
 	}
 }
 
-// DeepCopy 建立 NamespaceThresholdStatus 的副本
+// DeepCopy creates a copy of NamespaceThresholdStatus.
 func (in *NamespaceThresholdStatus) DeepCopy() *NamespaceThresholdStatus {
 	if in == nil {
 		return nil
