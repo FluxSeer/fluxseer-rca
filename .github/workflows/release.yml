@@ -307,9 +307,13 @@ jobs:
           set -euo pipefail
           chart_ref="oci://${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/charts"
           chart_version="${{ steps.release.outputs.chart_version }}"
-          helm_digest="$(helm show chart "$chart_ref/${CHART_NAME}" --version "$chart_version" 2>&1 >/dev/null | sed -nE 's/.*Digest:[[:space:]]*(sha256:[[:xdigit:]]+).*/\1/p' | tail -n1)"
+          metadata_file="$(mktemp)"
+          trap 'rm -f "$metadata_file"' EXIT
+          helm show chart "$chart_ref/${CHART_NAME}" --version "$chart_version" >/dev/null 2>"$metadata_file"
+          helm_digest="$(sed -nE 's/.*Digest:[[:space:]]*(sha256:[[:xdigit:]]+).*/\1/p' "$metadata_file" | tail -n1)"
           if [ -z "$helm_digest" ]; then
             echo "failed to resolve existing Helm chart digest" >&2
+            cat "$metadata_file" >&2
             exit 1
           fi
           echo "helm_digest=$helm_digest" >> "$GITHUB_OUTPUT"
@@ -343,7 +347,7 @@ jobs:
 
           - ${CHART_NAME}-$chart_version.tgz
           - SHA256: ${{ steps.chart.outputs.sha256 }}
-          - OCI digest: ${{ steps.helm-push.outputs.helm_digest }}
+          - OCI digest: ${{ steps.helm-push.outputs.helm_digest || steps.existing-chart.outputs.helm_digest }}
 
           ## Provenance
 
