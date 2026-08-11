@@ -594,6 +594,48 @@ func TestServiceCollectEvidenceRequiresConfiguredSnapshotStore(t *testing.T) {
 	}
 }
 
+func TestServiceCollectEvidenceReportsSnapshotWriteFailure(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				records:   []map[string]any{{"metric": "http_requests_total", "value": "0.95"}},
+			},
+		),
+		EvidenceStore: evidencepkg.UnsupportedStore{StoreName: "failing-store"},
+	}
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		EvidenceRetention: v1alpha1.EvidenceRetentionPolicy{
+			Mode: v1alpha1.EvidenceRetentionModeNormalizedSnapshot,
+			StorageRef: v1alpha1.LocalObjectReference{
+				Name: "failing-store",
+			},
+		},
+	}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Labels: map[string]string{"app": "open-api"},
+		CollectionPlan: []CollectionStep{
+			{Name: "prometheus", DatasourceName: "prometheus", QueryType: domain.QueryTypeMetric, Query: "metric-query"},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "EvidenceRetentionWriteFailed" {
+		t.Fatalf("expected EvidenceRetentionWriteFailed issue, got %#v", result.Issue)
+	}
+	if !strings.Contains(result.Issue.Message, "failing-store") {
+		t.Fatalf("expected bounded store identity in failure message, got %q", result.Issue.Message)
+	}
+	if len(result.Observations) != 1 || len(result.EvidenceRefs) != 1 {
+		t.Fatalf("expected normalized evidence to remain available after snapshot failure, got observations=%d refs=%d", len(result.Observations), len(result.EvidenceRefs))
+	}
+	if result.EvidenceRefs[0].PayloadRef != nil {
+		t.Fatalf("expected no payload reference after snapshot failure, got %#v", result.EvidenceRefs[0].PayloadRef)
+	}
+}
+
 func TestServiceCollectEvidenceRejectsCumulativeResponseBudget(t *testing.T) {
 	service := &Service{
 		Registry: datasource.NewRegistry(
@@ -1186,6 +1228,46 @@ func TestServiceCollectEvidencePreservesDatasourceQueryReason(t *testing.T) {
 	}
 	if result.Issue == nil || result.Issue.Reason != "DatasourceAuthFailed" {
 		t.Fatalf("expected DatasourceAuthFailed issue, got %#v", result.Issue)
+	}
+}
+
+func TestServiceCollectEvidenceClassifiesUnspecifiedDatasourceError(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				queryErr:  fmt.Errorf("unexpected datasource failure"),
+			},
+		),
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target: domain.ResourceRef{
+			Namespace: "prod",
+			Name:      "open-api",
+			Kind:      "Deployment",
+			Service:   "open-api",
+		},
+		Labels:          map[string]string{"app": "open-api"},
+		DatasourceNames: []string{"prometheus"},
+		CollectionPlan: []CollectionStep{
+			{
+				Name:           "prometheus",
+				DatasourceName: "prometheus",
+				QueryType:      domain.QueryTypeMetric,
+				Query:          "metric-query",
+			},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "DatasourceQueryFailed" {
+		t.Fatalf("expected DatasourceQueryFailed issue, got %#v", result.Issue)
+	}
+	if len(result.Observations) != 0 || len(result.EvidenceRefs) != 0 {
+		t.Fatalf("expected no evidence after datasource failure, got observations=%#v refs=%#v", result.Observations, result.EvidenceRefs)
 	}
 }
 

@@ -116,6 +116,7 @@ Product positioning:
 
 Current planning:
 
+- [Backlog execution ledger](backlog/README.md)
 - [v0.4 workload target coverage gate](backlog/v0.4-workload-target-coverage.md)
 - [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [v0.3 product direction](backlog/v0.3-product-direction.md)
