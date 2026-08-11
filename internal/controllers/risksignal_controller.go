@@ -58,6 +58,7 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		plan.Spec.Confidence = riskSignal.Spec.Confidence
 		plan.Spec.DryRun = riskSignal.Spec.DryRun
 		plan.Spec.TTLSeconds = riskSignal.Spec.TTLSeconds
+		plan.Spec.ApprovalTimeoutSeconds = riskSignal.Spec.ApprovalTimeoutSeconds
 		plan.Spec.Summary = fmt.Sprintf("Derived remediation plan for %s", riskSignal.Spec.ActionType)
 		plan.Spec.RollbackPlan = defaultRollbackPlan(riskSignal.Spec.ActionType)
 		plan.Spec.References = evidenceSummaries(riskSignal.Spec.Evidence)

@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RELEASE_VERSION: v0.3.0-beta.3
+  RELEASE_VERSION: v0.4.0-beta.2
   TARGET_PLATFORM: linux/amd64
 
 jobs:
@@ -89,6 +89,9 @@ jobs:
 
       - name: Verify v0.3 beta hardening gate
         run: make verify-v0.3-beta-hardening
+
+      - name: Verify v0.4 approval lifecycle gate
+        run: make verify-v0.4-approval-lifecycle
 
       - name: Verify packaging consistency
         run: |

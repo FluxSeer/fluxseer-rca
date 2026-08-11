@@ -24,6 +24,7 @@ const (
 	PhaseRecommendation   = "Recommendation"
 	PhaseReadyForApproval = "ReadyForApproval"
 	PhaseCompleted        = "Completed"
+	PhaseEscalated        = "Escalated"
 )
 
 type TargetRef struct {
@@ -138,17 +139,18 @@ type RiskSignalStatus struct {
 }
 
 type RiskSignalSpec struct {
-	Target           TargetRef                  `json:"target"`
-	SignalType       string                     `json:"signalType"`
-	FindingIdentity  *FindingIdentity           `json:"findingIdentity,omitempty"`
-	InvestigationRef *NamespacedObjectReference `json:"investigationRef,omitempty"`
-	ActionType       string                     `json:"actionType,omitempty"`
-	Severity         string                     `json:"severity"`
-	Confidence       int                        `json:"confidence"`
-	DryRun           bool                       `json:"dryRun"`
-	TTLSeconds       int64                      `json:"ttlSeconds,omitempty"`
-	Evidence         []EvidenceRef              `json:"evidence,omitempty"`
-	Parameters       map[string]string          `json:"parameters,omitempty"`
+	Target                 TargetRef                  `json:"target"`
+	SignalType             string                     `json:"signalType"`
+	FindingIdentity        *FindingIdentity           `json:"findingIdentity,omitempty"`
+	InvestigationRef       *NamespacedObjectReference `json:"investigationRef,omitempty"`
+	ActionType             string                     `json:"actionType,omitempty"`
+	Severity               string                     `json:"severity"`
+	Confidence             int                        `json:"confidence"`
+	DryRun                 bool                       `json:"dryRun"`
+	TTLSeconds             int64                      `json:"ttlSeconds,omitempty"`
+	Evidence               []EvidenceRef              `json:"evidence,omitempty"`
+	Parameters             map[string]string          `json:"parameters,omitempty"`
+	ApprovalTimeoutSeconds int64                      `json:"approvalTimeoutSeconds,omitempty"`
 }
 
 type RemediationStep struct {
@@ -159,26 +161,33 @@ type RemediationStep struct {
 }
 
 type RemediationPlanSpec struct {
-	Target        TargetRef         `json:"target"`
-	RecommendedBy string            `json:"recommendedBy,omitempty"`
-	Severity      string            `json:"severity"`
-	Confidence    int               `json:"confidence"`
-	DryRun        bool              `json:"dryRun"`
-	TTLSeconds    int64             `json:"ttlSeconds,omitempty"`
-	Summary       string            `json:"summary,omitempty"`
-	RollbackPlan  []string          `json:"rollbackPlan,omitempty"`
-	References    []string          `json:"references,omitempty"`
-	Steps         []RemediationStep `json:"steps,omitempty"`
+	Target                 TargetRef         `json:"target"`
+	RecommendedBy          string            `json:"recommendedBy,omitempty"`
+	Severity               string            `json:"severity"`
+	Confidence             int               `json:"confidence"`
+	DryRun                 bool              `json:"dryRun"`
+	TTLSeconds             int64             `json:"ttlSeconds,omitempty"`
+	ApprovalTimeoutSeconds int64             `json:"approvalTimeoutSeconds,omitempty"`
+	Summary                string            `json:"summary,omitempty"`
+	RollbackPlan           []string          `json:"rollbackPlan,omitempty"`
+	References             []string          `json:"references,omitempty"`
+	Steps                  []RemediationStep `json:"steps,omitempty"`
+}
+
+type RemediationPlanStatus struct {
+	ResourceStatus `json:",inline"`
+	FinishedAt     *metav1.Time `json:"finishedAt,omitempty"`
 }
 
 type AgentActionSpec struct {
-	Target       TargetRef         `json:"target"`
-	ActionType   string            `json:"actionType"`
-	Parameters   map[string]string `json:"parameters,omitempty"`
-	ApprovedBy   string            `json:"approvedBy,omitempty"`
-	DryRunResult string            `json:"dryRunResult,omitempty"`
-	TTLSeconds   int64             `json:"ttlSeconds,omitempty"`
-	RollbackPlan []string          `json:"rollbackPlan,omitempty"`
+	Target                 TargetRef         `json:"target"`
+	ActionType             string            `json:"actionType"`
+	Parameters             map[string]string `json:"parameters,omitempty"`
+	ApprovedBy             string            `json:"approvedBy,omitempty"`
+	DryRunResult           string            `json:"dryRunResult,omitempty"`
+	TTLSeconds             int64             `json:"ttlSeconds,omitempty"`
+	ApprovalTimeoutSeconds int64             `json:"approvalTimeoutSeconds,omitempty"`
+	RollbackPlan           []string          `json:"rollbackPlan,omitempty"`
 }
 
 type AgentActionApprovalStatus struct {
@@ -188,6 +197,15 @@ type AgentActionApprovalStatus struct {
 	ActionDigest       string       `json:"actionDigest,omitempty"`
 	ApprovedGeneration int64        `json:"approvedGeneration,omitempty"`
 	ApprovedAt         *metav1.Time `json:"approvedAt,omitempty"`
+	EscalatedAt        *metav1.Time `json:"escalatedAt,omitempty"`
+	DecidedAt          *metav1.Time `json:"decidedAt,omitempty"`
+	DecidedBy          string       `json:"decidedBy,omitempty"`
+}
+
+type AgentActionNotificationStatus struct {
+	LastAttemptAt *metav1.Time `json:"lastAttemptAt,omitempty"`
+	RetryCount    int32        `json:"retryCount,omitempty"`
+	LastError     string       `json:"lastError,omitempty"`
 }
 
 type AgentActionDryRunStatus struct {
@@ -210,7 +228,9 @@ type AgentActionEffectivenessStatus struct {
 
 type AgentActionStatus struct {
 	ResourceStatus `json:",inline"`
+	FinishedAt     *metav1.Time                    `json:"finishedAt,omitempty"`
 	Approval       *AgentActionApprovalStatus      `json:"approval,omitempty"`
+	Notification   *AgentActionNotificationStatus  `json:"notification,omitempty"`
 	DryRunResult   *AgentActionDryRunStatus        `json:"dryRunResult,omitempty"`
 	Execution      *AgentActionExecutionStatus     `json:"execution,omitempty"`
 	Effectiveness  *AgentActionEffectivenessStatus `json:"effectiveness,omitempty"`
@@ -234,8 +254,8 @@ type RemediationPlan struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   RemediationPlanSpec `json:"spec,omitempty"`
-	Status ResourceStatus      `json:"status,omitempty"`
+	Spec   RemediationPlanSpec   `json:"spec,omitempty"`
+	Status RemediationPlanStatus `json:"status,omitempty"`
 }
 
 type RemediationPlanList struct {
@@ -385,6 +405,9 @@ func (in *RemediationPlan) DeepCopyInto(out *RemediationPlan) {
 			}
 		}
 	}
+	if in.Status.FinishedAt != nil {
+		out.Status.FinishedAt = in.Status.FinishedAt.DeepCopy()
+	}
 }
 
 func (in *RemediationPlan) DeepCopy() *RemediationPlan {
@@ -438,12 +461,28 @@ func (in *AgentAction) DeepCopyInto(out *AgentAction) {
 	if in.Spec.RollbackPlan != nil {
 		out.Spec.RollbackPlan = append([]string(nil), in.Spec.RollbackPlan...)
 	}
+	if in.Status.FinishedAt != nil {
+		out.Status.FinishedAt = in.Status.FinishedAt.DeepCopy()
+	}
 	if in.Status.Approval != nil {
 		approval := *in.Status.Approval
 		if in.Status.Approval.ApprovedAt != nil {
 			approval.ApprovedAt = in.Status.Approval.ApprovedAt.DeepCopy()
 		}
+		if in.Status.Approval.EscalatedAt != nil {
+			approval.EscalatedAt = in.Status.Approval.EscalatedAt.DeepCopy()
+		}
+		if in.Status.Approval.DecidedAt != nil {
+			approval.DecidedAt = in.Status.Approval.DecidedAt.DeepCopy()
+		}
 		out.Status.Approval = &approval
+	}
+	if in.Status.Notification != nil {
+		notification := *in.Status.Notification
+		if in.Status.Notification.LastAttemptAt != nil {
+			notification.LastAttemptAt = in.Status.Notification.LastAttemptAt.DeepCopy()
+		}
+		out.Status.Notification = &notification
 	}
 	if in.Status.DryRunResult != nil {
 		dryRun := *in.Status.DryRunResult

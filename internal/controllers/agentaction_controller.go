@@ -2,23 +2,91 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
 	"github.com/FluxSeer/fluxseer-rca/internal/executor"
+	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
+
+// phaseTransitionEvent describes an AgentAction phase transition.
+// Returns (eventType, reason, message) if phase changed, or (empty, empty, empty) if no change.
+func phaseTransitionEvent(originalPhase, newPhase string) (string, string, string) {
+	if originalPhase == newPhase {
+		return "", "", ""
+	}
+
+	eventType := corev1.EventTypeNormal
+	reason := ""
+	message := ""
+
+	// Map transitions to event reason and message
+	transition := fmt.Sprintf("%s→%s", originalPhase, newPhase)
+	switch transition {
+	case "→WaitingApproval":
+		reason = "ApprovalRequired"
+		message = "AgentAction is waiting for approval"
+	case "→Approved":
+		reason = "ApprovalGranted"
+		message = "AgentAction has been approved"
+	case "→Rejected":
+		reason = "ApprovalDenied"
+		message = "AgentAction was rejected by guardrails"
+		eventType = corev1.EventTypeWarning
+	case "Approved→Executing", "WaitingApproval→Executing":
+		reason = "ExecutionStarted"
+		message = "AgentAction is now executing"
+	case "WaitingApproval→Escalated":
+		reason = "EscalationTriggered"
+		message = "AgentAction approval timeout reached; escalating for review"
+		eventType = corev1.EventTypeWarning
+	case "Executing→Succeeded":
+		reason = "ExecutionSucceeded"
+		message = "AgentAction execution completed successfully"
+	case "Executing→Failed":
+		reason = "ExecutionFailed"
+		message = "AgentAction execution failed"
+		eventType = corev1.EventTypeWarning
+	}
+
+	if reason == "" {
+		// Unknown transition; record it generically
+		reason = "PhaseTransition"
+		message = fmt.Sprintf("phase changed from %q to %q", originalPhase, newPhase)
+	}
+
+	return eventType, reason, message
+}
+
+// recordPhaseTransition is a nil-safe helper to emit Kubernetes Events for phase transitions.
+// It checks if recorder is nil (test/unconfigured scenarios) before attempting to emit.
+func recordPhaseTransition(recorder record.EventRecorder, object runtime.Object, fromPhase, toPhase string) {
+	if recorder == nil || fromPhase == toPhase {
+		return
+	}
+
+	eventType, reason, message := phaseTransitionEvent(fromPhase, toPhase)
+	if reason != "" {
+		recorder.Event(object, eventType, reason, message)
+	}
+}
 
 type AgentActionReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Executor *executor.Router
-	Now      func() time.Time
+	Scheme        *runtime.Scheme
+	Executor      *executor.Router
+	Notifier      notifier.Notifier
+	EventRecorder record.EventRecorder
+	Now           func() time.Time
 }
 
 func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -33,32 +101,20 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if action.Status.Phase == v1alpha1.PhaseSucceeded || action.Status.Phase == v1alpha1.PhaseFailed || action.Status.Phase == v1alpha1.PhaseRejected {
-		return ctrl.Result{}, nil
+		return r.reconcileTerminalStateTTL(ctx, &action, now())
 	}
 
 	if !isAgentActionApproved(&action) {
-		original := action.DeepCopy()
-		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseWaitingApproval, "waiting for human approval", action.Generation, now())
-		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
-			Approved:           false,
-			Source:             "Pending",
-			ActionDigest:       agentActionSpecDigest(&action),
-			ApprovedGeneration: action.Generation,
-		}
-		if statusChangedAction(original, &action) {
-			if err := r.Status().Update(ctx, &action); err != nil {
-				recordStatusUpdateConflict("AgentAction", err)
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
+		return r.reconcilePending(ctx, &action, now())
 	}
 
 	original := action.DeepCopy()
 	startedAt := metav1.NewTime(now())
 	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseExecuting, "approved action is executing", action.Generation, startedAt.Time)
+	approval := action.Status.Approval
 	approvedBy := action.Status.Approval.ApprovedBy
 	source := action.Status.Approval.Source
+	approvedAt := approval.ApprovedAt
 	if !action.Status.Approval.Approved {
 		// Manual-approval path: guardrails already evaluated this exact
 		// action content (proven by the digest match in
@@ -67,6 +123,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// spec.approvedBy, so we can now treat it as approved.
 		approvedBy = action.Spec.ApprovedBy
 		source = "ManualApprovalConfirmed"
+		approvedAt = &startedAt
 	}
 	action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
 		Approved:           true,
@@ -74,7 +131,10 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		Source:             source,
 		ActionDigest:       agentActionSpecDigest(&action),
 		ApprovedGeneration: action.Generation,
-		ApprovedAt:         &startedAt,
+		ApprovedAt:         approvedAt,
+		DecidedAt:          approval.DecidedAt,
+		DecidedBy:          approval.DecidedBy,
+		EscalatedAt:        approval.EscalatedAt,
 	}
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 		Phase: "Executing",
@@ -84,6 +144,8 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			recordStatusUpdateConflict("AgentAction", err)
 			return ctrl.Result{}, err
 		}
+		// Emit Event only after successful status update
+		recordPhaseTransition(r.EventRecorder, &action, original.Status.Phase, action.Status.Phase)
 	}
 
 	result, err := r.Executor.Execute(ctx, executor.ApprovedAction{
@@ -100,6 +162,8 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		finishedAt := metav1.NewTime(now())
 		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseFailed, err.Error(), action.Generation, finishedAt.Time)
+		originalExecution := action.Status.Phase
+		action.Status.FinishedAt = &finishedAt
 		action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 			Phase:      "Failed",
 			Summary:    err.Error(),
@@ -109,14 +173,18 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			recordStatusUpdateConflict("AgentAction", updateErr)
 			return ctrl.Result{}, updateErr
 		}
+		// Emit Event only after successful status update
+		recordPhaseTransition(r.EventRecorder, &action, originalExecution, action.Status.Phase)
 		return ctrl.Result{}, err
 	}
 
 	if err := r.Get(ctx, req.NamespacedName, &action); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	originalPhase := action.Status.Phase
 	finishedAt := metav1.NewTime(now())
 	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, finishedAt.Time)
+	action.Status.FinishedAt = &finishedAt
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 		Phase:      "Succeeded",
 		Executor:   result.Executor,
@@ -131,7 +199,131 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		recordStatusUpdateConflict("AgentAction", err)
 		return ctrl.Result{}, err
 	}
+	// Emit Event only after successful status update
+	recordPhaseTransition(r.EventRecorder, &action, originalPhase, action.Status.Phase)
 
+	return ctrl.Result{}, nil
+}
+
+// reconcilePending handles an AgentAction that isAgentActionApproved has
+// rejected. It distinguishes two cases that must not be treated the same
+// way. An action that guardrails never validly evaluated (no approval record
+// yet, or the digest no longer matches the current spec because the action
+// was created directly or edited after approval was requested) is reset to a
+// fresh Pending/WaitingApproval state, same as before this method existed.
+// An action that guardrails did evaluate and correctly left waiting on a
+// human must NOT be reset the same way: isAgentActionApproved only honors
+// spec.approvedBy once status.approval.source is still
+// "ManualApprovalRequired", so overwriting that source to "Pending" on every
+// reconcile -- which the previous, single-branch version of this code did --
+// would permanently strip the action's ability to ever be approved as soon
+// as anything (a resync, the timeout check below) reconciles it again before
+// a human acts. That case instead only advances the approval timeout.
+func (r *AgentActionReconciler) reconcilePending(ctx context.Context, action *v1alpha1.AgentAction, now time.Time) (ctrl.Result, error) {
+	digest := agentActionSpecDigest(action)
+	if action.Status.Approval == nil || action.Status.Approval.ActionDigest != digest {
+		original := action.DeepCopy()
+		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseWaitingApproval, "waiting for human approval", action.Generation, now)
+		action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{
+			Approved:           false,
+			Source:             "Pending",
+			ActionDigest:       digest,
+			ApprovedGeneration: action.Generation,
+		}
+		if statusChangedAction(original, action) {
+			if err := r.Status().Update(ctx, action); err != nil {
+				recordStatusUpdateConflict("AgentAction", err)
+				return ctrl.Result{}, err
+			}
+			// Emit Event only after successful status update
+			recordPhaseTransition(r.EventRecorder, action, original.Status.Phase, action.Status.Phase)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	return r.reconcileApprovalTimeout(ctx, action, now)
+}
+
+// reconcileApprovalTimeout escalates an AgentAction that has been validly
+// WaitingApproval for longer than spec.approvalTimeoutSeconds. It anchors
+// the wait window to status.updatedAt -- the timestamp already recorded when
+// the action first entered WaitingApproval -- and, as long as the deadline
+// has not passed, returns a RequeueAfter without writing any status at all.
+// Writing status on every pass (even "no change" writes that only refresh a
+// timestamp) would slide status.updatedAt forward each time and the timeout
+// would never trip.
+func (r *AgentActionReconciler) reconcileApprovalTimeout(ctx context.Context, action *v1alpha1.AgentAction, now time.Time) (ctrl.Result, error) {
+	if action.Status.Phase == v1alpha1.PhaseEscalated || action.Spec.ApprovalTimeoutSeconds <= 0 || action.Status.UpdatedAt.IsZero() {
+		return ctrl.Result{}, nil
+	}
+
+	deadline := action.Status.UpdatedAt.Add(time.Duration(action.Spec.ApprovalTimeoutSeconds) * time.Second)
+	if now.Before(deadline) {
+		return ctrl.Result{RequeueAfter: deadline.Sub(now)}, nil
+	}
+
+	if r.Notifier != nil {
+		// Notify before persisting Escalated, mirroring
+		// RiskSignalNotificationReconciler's notify-then-mark-done ordering:
+		// a failed delivery leaves the phase as WaitingApproval so the next
+		// reconcile retries the notification instead of losing it silently.
+		attemptAt := metav1.NewTime(now)
+		attemptCount := int32(1)
+		if action.Status.Notification != nil {
+			attemptCount = action.Status.Notification.RetryCount + 1
+		}
+		action.Status.Notification = &v1alpha1.AgentActionNotificationStatus{
+			LastAttemptAt: &attemptAt,
+			RetryCount:    attemptCount,
+		}
+		if err := r.Status().Update(ctx, action); err != nil {
+			recordStatusUpdateConflict("AgentAction", err)
+			return ctrl.Result{}, err
+		}
+
+		notifyErr := r.Notifier.Notify(ctx, notifier.Message{
+			Title:   "FluxSeer RCA approval escalation",
+			Summary: fmt.Sprintf("%s exceeded its %ds approval timeout", targetRefString(action.Spec.Target), action.Spec.ApprovalTimeoutSeconds),
+			Body:    action.Status.Message,
+			Fields: map[string]any{
+				"namespace":  action.Namespace,
+				"name":       action.Name,
+				"actionType": action.Spec.ActionType,
+			},
+		})
+		if notifyErr != nil {
+			action.Status.Notification.LastError = notifyErr.Error()
+			if updateErr := r.Status().Update(ctx, action); updateErr != nil {
+				recordStatusUpdateConflict("AgentAction", updateErr)
+				return ctrl.Result{}, updateErr
+			}
+			if r.EventRecorder != nil {
+				r.EventRecorder.Eventf(
+					action,
+					corev1.EventTypeWarning,
+					"NotificationRetryFailed",
+					"escalation notification attempt %d failed: %v",
+					attemptCount,
+					notifyErr,
+				)
+			}
+			return ctrl.Result{}, notifyErr
+		}
+		action.Status.Notification.LastError = ""
+	}
+
+	original := action.DeepCopy()
+	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseEscalated, "approval timeout exceeded, escalation notified", action.Generation, now)
+	escalatedAt := metav1.NewTime(now)
+	action.Status.Approval.EscalatedAt = &escalatedAt
+	if statusChangedAction(original, action) {
+		if err := r.Status().Update(ctx, action); err != nil {
+			recordStatusUpdateConflict("AgentAction", err)
+			return ctrl.Result{}, err
+		}
+		// Emit Event only after successful status update
+		recordPhaseTransition(r.EventRecorder, action, original.Status.Phase, action.Status.Phase)
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -180,6 +372,44 @@ func agentActionSpecDigest(action *v1alpha1.AgentAction) string {
 	spec := action.Spec
 	spec.ApprovedBy = ""
 	return canonicaldigest.String(canonicaldigest.RCAJSONV1, spec)
+}
+
+// reconcileTerminalStateTTL handles TTL-based deletion for terminal AgentActions.
+// Terminal phases are Succeeded, Failed, and Rejected.
+// Returns a requeue result if the action should be kept (not yet expired),
+// or deletes the action and returns empty result if it has expired.
+func (r *AgentActionReconciler) reconcileTerminalStateTTL(ctx context.Context, action *v1alpha1.AgentAction, now time.Time) (ctrl.Result, error) {
+	// TTL is disabled if not set or zero
+	if action.Spec.TTLSeconds == 0 {
+		return ctrl.Result{}, nil
+	}
+
+	// Check for retain annotation - if present, never delete
+	if action.ObjectMeta.Annotations != nil {
+		if _, ok := action.ObjectMeta.Annotations["fluxseer-rca.aiops.platform/retain"]; ok {
+			return ctrl.Result{}, nil
+		}
+	}
+
+	// Need finishedAt to calculate expiration. If missing, don't delete (conservative).
+	if action.Status.FinishedAt == nil {
+		return ctrl.Result{}, nil
+	}
+
+	// Calculate when this action should expire
+	expireTime := action.Status.FinishedAt.Add(time.Duration(action.Spec.TTLSeconds) * time.Second)
+
+	if now.After(expireTime) {
+		// TTL expired, delete the action
+		if err := r.Delete(ctx, action); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Not yet expired, requeue after the remaining time
+	remainingTTL := expireTime.Sub(now)
+	return ctrl.Result{RequeueAfter: remainingTTL}, nil
 }
 
 func (r *AgentActionReconciler) SetupWithManager(mgr ctrl.Manager) error {

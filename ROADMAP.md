@@ -79,6 +79,12 @@ Target outcomes:
 - richer audit persistence and status transitions
 - safer handoff from remediation planning to approved action intent
 
+Current v0.4 beta implementation includes policy decision timestamps,
+human-approval and escalation timestamps, notification retry status, and
+Kubernetes Events for the guarded approval timeline. Kubernetes Events are an
+operational timeline only; the durable approval timestamps remain in
+`AgentAction.status.approval`.
+
 ### `v0.5`
 
 Focus:

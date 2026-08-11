@@ -26,6 +26,7 @@ Represent a proposed mitigation strategy with summary, references, rollback inst
 | `spec.confidence` | integer | yes | Confidence score from `0` to `100`, inherited from the upstream risk. |
 | `spec.dryRun` | boolean | yes | Whether this plan remains in review-first mode. |
 | `spec.ttlSeconds` | integer | no | Lifecycle hint copied into downstream actions. |
+| `spec.approvalTimeoutSeconds` | integer | no | Optional human-approval timeout copied into downstream `AgentAction` objects. |
 | `spec.summary` | string | no | Human-readable remediation summary. |
 | `spec.rollbackPlan` | array | no | Ordered rollback instructions. |
 | `spec.references` | array | no | Supporting references such as runbooks or docs. |
@@ -87,6 +88,14 @@ Whether the plan should still be handled in guarded or simulation-first mode.
 ### `spec.ttlSeconds`
 
 Time-to-live hint copied into downstream action objects.
+
+### `spec.approvalTimeoutSeconds`
+
+Optional timeout copied into the generated `AgentAction`. Zero or unset keeps
+the action pending without timeout escalation. A positive value allows the
+`AgentActionReconciler` to transition an unapproved action to `Escalated` and
+notify through the configured notifier; it does not auto-reject or
+auto-execute the action.
 
 ### `spec.summary`
 

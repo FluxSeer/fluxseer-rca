@@ -193,10 +193,12 @@ func buildRemediationPlan(input domain.IngestionOutput, reasoning domain.Reasoni
 				},
 			},
 		},
-		Status: v1alpha1.ResourceStatus{
-			Phase:     v1alpha1.PhaseReadyForApproval,
-			Message:   "plan created from reasoning output",
-			UpdatedAt: metav1.NewTime(now),
+		Status: v1alpha1.RemediationPlanStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{
+				Phase:     v1alpha1.PhaseReadyForApproval,
+				Message:   "plan created from reasoning output",
+				UpdatedAt: metav1.NewTime(now),
+			},
 		},
 	}
 }

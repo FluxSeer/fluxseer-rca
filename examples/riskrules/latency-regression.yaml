@@ -46,6 +46,9 @@ spec:
       threshold:
         operator: count_gt
         value: 0
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true
   ai:
     rcaEnabled: true
     providerRef:

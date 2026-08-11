@@ -26,6 +26,7 @@ Represent one executable action after policy review and, when required, human ap
 | `spec.approvedBy` | string | no | Approval identity supplied by a human reviewer. On its own this does not authorize execution; see [`spec.approvedBy`](#specapprovedby) below. |
 | `spec.dryRunResult` | string | no | Pre-execution validation or policy result. |
 | `spec.ttlSeconds` | integer | no | Lifecycle hint. |
+| `spec.approvalTimeoutSeconds` | integer | no | Optional timeout for human approval; a positive value enables escalation. |
 | `spec.rollbackPlan` | array | no | Rollback steps attached for auditability. |
 
 ### `spec.target`
@@ -47,7 +48,8 @@ Represent one executable action after policy review and, when required, human ap
 | `status.message` | string | no | Human-readable execution summary or error. |
 | `status.observedGeneration` | integer | no | Last generation observed by the controller. |
 | `status.updatedAt` | string | no | Timestamp of the latest status update. |
-| `status.approval` | object | no | Controller-observed approval state, including source, generation, and action digest. |
+| `status.approval` | object | no | Controller-observed approval state, including decision, approval, escalation, timestamps, source, generation, and action digest. |
+| `status.notification` | object | no | Escalation notification attempt state. |
 | `status.dryRunResult` | object | no | Controller-owned dry-run or guardrail result. |
 | `status.execution` | object | no | Executor phase, executor name, summary, and finish time. |
 | `status.effectiveness` | object | no | Post-action effectiveness status. `NotVerified` means execution succeeded but remediation impact was not verified. |
@@ -93,6 +95,49 @@ This field remains a compatibility projection. Controller-owned dry-run observat
 
 Lifecycle hint copied from the plan.
 
+### `spec.approvalTimeoutSeconds`
+
+Optional human-approval timeout copied from the remediation plan. Zero or
+unset preserves the legacy behavior and does not schedule escalation. A
+positive value causes a still-pending action to transition to `Escalated`
+after the deadline. Escalation notifies through the configured notifier but
+does not auto-reject or auto-execute the action.
+
+### `status.approval`
+
+The approval status is controller-owned and digest-bound to the action spec.
+
+| Field | Meaning |
+| --- | --- |
+| `decidedAt` | Time at which the policy engine made the initial decision. |
+| `decidedBy` | Policy actor, currently `fluxseer-rca-policy-engine`. |
+| `source` | Decision source such as `GuardrailsAutoApproval` or `ManualApprovalRequired`. |
+| `approvedBy` | Human or policy identity associated with approval. |
+| `approvedAt` | Time at which approval was accepted. |
+| `escalatedAt` | Time at which the pending approval entered `Escalated`. |
+
+For a timed-out action, the durable audit sequence is:
+
+```text
+status.approval.decidedAt
+  -> status.approval.escalatedAt
+  -> status.approval.approvedAt       # only if a human later approves
+```
+
+`DecidedAt` and `DecidedBy` are not rewritten during escalation or later
+approval.
+
+### `status.notification`
+
+| Field | Meaning |
+| --- | --- |
+| `lastAttemptAt` | Most recent notification attempt, successful or failed. |
+| `retryCount` | Total number of notification attempts. |
+| `lastError` | Most recent failed error; cleared after a successful attempt. |
+
+Failed attempts emit a Kubernetes `Warning` Event with reason
+`NotificationRetryFailed`. There is currently no retry-exhausted limit.
+
 ### `spec.rollbackPlan`
 
 Rollback instructions attached to the action for auditability.
@@ -101,6 +146,7 @@ Typical phases:
 
 - `WaitingApproval`
 - `Approved`
+- `Escalated`
 - `Executing`
 - `Succeeded`
 - `Failed`
@@ -118,6 +164,18 @@ status.effectiveness.phase=NotVerified
 ```
 
 `Succeeded` means the executor completed the requested action. It does not mean the underlying incident was resolved.
+
+## Kubernetes Events
+
+Events are emitted only after a phase status update succeeds and only when
+the phase actually changes. Main lifecycle reasons include
+`ApprovalRequired`, `ApprovalGranted`, `EscalationTriggered`,
+`ApprovalDenied`, `ExecutionStarted`, `ExecutionSucceeded`, and
+`ExecutionFailed`.
+
+Events provide an operational timeline and are not permanent audit storage;
+cluster retention policies may remove them. Approval timestamps in
+`status.approval` are the durable contract.
 
 ## Sample
 

@@ -8,7 +8,7 @@ Product positioning:
 Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
 ```
 
-Current release scope is narrower than a general AI SRE platform: `v0.3.0-beta.3` is a beta hardening prerelease focused on read-only RCA workflows, canonical preflight semantics, evidence gating, runtime default hardening, and least-privilege RBAC defaults.
+Current release scope is narrower than a general AI SRE platform: `v0.4.0-beta.1` introduces approval lifecycle, escalation handling, and production governance for guarded remediation, while maintaining read-only RCA as the default path and canonical preflight semantics, evidence gating, runtime default hardening, and least-privilege RBAC defaults.
 
 The current runnable default path is read-only RCA: evaluate explicit `RiskRule` or `InvestigationRequest` resources, collect bounded evidence, write canonical RCA status, and optionally materialize a `RiskSignal` without mutating the target workload.
 
@@ -512,4 +512,4 @@ It should not yet be described as:
 
 That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.
 
-The conservative release label is `v0.3.0-beta.3 RCA beta hardening`.
+The conservative release label is `v0.4.0-beta.1 approval lifecycle and guardrails`.

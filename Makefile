@@ -7,6 +7,10 @@ V0_3_RELEASE_VERSION ?= v0.3.0-beta.3
 V0_3_PREVIOUS_RELEASE_VERSION ?= v0.3.0-beta.2
 V0_3_PUBLISHED_CHART_OCI ?= oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca
 V0_3_PUBLISHED_IMAGE_REPOSITORY ?= ghcr.io/fluxseer/fluxseer-rca/operator
+V0_4_RELEASE_VERSION ?= v0.4.0-beta.3
+V0_4_PREVIOUS_RELEASE_VERSION ?= v0.4.0-beta.2
+V0_4_PUBLISHED_CHART_OCI ?= oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca
+V0_4_PUBLISHED_IMAGE_REPOSITORY ?= ghcr.io/fluxseer/fluxseer-rca/operator
 GIT_COMMIT := $(shell git rev-parse HEAD)
 GIT_DIRTY := $(shell test -z "$$(git status --porcelain)" && echo false || echo true)
 SOURCE_DATE_EPOCH := $(shell git show -s --format=%ct HEAD)
@@ -24,7 +28,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
+.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -156,6 +160,9 @@ verify-v0.3-schema-freeze:
 
 verify-v0.3-beta-hardening:
 	bash hack/verify-v0.3-beta-hardening.sh
+
+verify-v0.4-approval-lifecycle:
+	bash hack/verify-v0.4-approval-lifecycle.sh
 
 verify-rbac-profiles:
 	bash hack/verify-rbac-profiles.sh
