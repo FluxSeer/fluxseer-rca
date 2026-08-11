@@ -32,3 +32,8 @@ machine-readable envelope. Suite-specific metrics may be added under
 
 Markdown reports should follow [`report.template.md`](report.template.md) and
 must include a scenario comparison table. JSON remains the source of truth.
+
+The separate [`riskrule-report.schema.json`](riskrule-report.schema.json)
+defines the user-facing `fluxseer-riskrule-report/v1` envelope. Runtime suites
+embed exact outputs of `fluxseer report riskrule`; they must not substitute a
+test-only representation for the public CRs visible to users.

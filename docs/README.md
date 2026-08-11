@@ -90,6 +90,7 @@ Adapter references:
 Operations and packaging:
 
 - [Runtime modes](runtime-modes.md)
+- [RiskRule anomaly reports](riskrule-reports.md)
 - [Helm rule packs](helm-rulepacks.md)
 - [Metrics](metrics.md)
 - [Kubernetes ecosystem integration contract](ecosystem-integration-contract.md)

@@ -85,4 +85,11 @@ Typical degraded reasons:
 ```bash
 kubectl get riskrule -A
 kubectl describe riskrule <name> -n <namespace>
+fluxseer report riskrule <name> -n <namespace> -o json > riskrule-report.json
 ```
+
+The report command exports the selected `RiskRule` together with its public
+`InvestigationRequest` and `RiskSignal` objects. See
+[RiskRule anomaly reports](../riskrule-reports.md) for the stable report
+contract, RBAC requirements, and the distinction between user reports and
+maintainer-only runtime test artifacts.

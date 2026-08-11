@@ -4,6 +4,12 @@
 ignored by Git; durable summaries that need review history belong under
 `docs/backlog/artifacts/`.
 
+This directory is not a product-side archive of user incidents. A user obtains
+the current public-API report with `fluxseer report riskrule <name> -n
+<namespace> -o json`; see [RiskRule anomaly
+reports](../docs/riskrule-reports.md). Runtime suites may save that exact output
+under `incidents/`, then wrap it with test-only expected/actual comparisons.
+
 New reports use the shared [`fluxseer-test-report/v1`](../test/reporting/README.md)
 contract:
 
@@ -37,6 +43,7 @@ Current adopted entrypoints:
 - `make verify-rca-quality-baseline`
 - `make verify-runtime-canonical-workloads-cluster`
 - `make verify-runtime-matrix-cluster`
+- `make verify-runtime-riskrule-incidents-cluster`
 
 Directories created before `fluxseer-test-report/v1` are historical legacy
 evidence and may not have per-scenario expected/actual comparisons. Do not use
