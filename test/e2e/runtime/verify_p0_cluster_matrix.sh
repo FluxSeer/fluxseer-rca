@@ -42,6 +42,9 @@ mkdir -p "${report_dir}"
 
 cleanup() {
   kubectl delete investigationrequest "${requests[@]}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  while IFS= read -r signal_name; do
+    [[ -z "${signal_name}" ]] || kubectl delete risksignal "${signal_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  done < <(kubectl get risksignal -n "${namespace}" -o json 2>/dev/null | jq -r '.items[] | select((.spec.investigationRef.name // "") | startswith("runtime-p0-") or startswith("runtime-provider-")) | .metadata.name' 2>/dev/null || true)
   kubectl delete modelprovider runtime-p0-invalid-provider -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete datasource runtime-p0-prometheus runtime-p0-policy-events -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete secret runtime-p0-provider-secret -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
@@ -85,8 +88,7 @@ assert_request() {
     .status.observedGeneration == $generation and
     (.status.conditions | length > 0) and
     all(.status.conditions[]; .observedGeneration == $generation) and
-    (if $failure == "" then (.status.failure == null) else .status.failure.code == $failure end) and
-    ((.status.linkedRiskSignalRef.name // "") == "")
+    (if $failure == "" then (.status.failure == null) else .status.failure.code == $failure end)
   ' <<<"${request_json}" >/dev/null; then
     echo "${request_name} terminal contract mismatch" >&2
     jq '{generation: .metadata.generation, status: .status}' <<<"${request_json}" >&2
@@ -244,6 +246,7 @@ kubectl rollout status "deployment/${target_name}" -n "${namespace}" --timeout="
 kubectl exec -n "${namespace}" "deployment/${mock_name}" -- wget -qO- http://127.0.0.1:8080/control >/dev/null
 
 target_uid="$(kubectl get deployment "${target_name}" -n "${namespace}" -o jsonpath='{.metadata.uid}')"
+mock_service_ip="$(kubectl get service "${mock_name}" -n "${namespace}" -o jsonpath='{.spec.clusterIP}')"
 now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 kubectl apply -n "${namespace}" -f - <<EOF
 apiVersion: v1
@@ -291,6 +294,8 @@ metadata:
 spec:
   type: prometheus
   endpoint: http://${mock_name}:8080
+  networkPolicy:
+    allowedCIDRs: [${mock_service_ip}/32]
   queryPolicy:
     mode: LegacyUnrestricted
 ---
@@ -506,18 +511,6 @@ spec:
   loopPolicy: {maxDepth: 1}
   modelProviderRef: {name: heuristic-provider}
   dataSources: [{name: kubernetes-events}]
----
-apiVersion: aiops.platform/v1alpha1
-kind: InvestigationRequest
-metadata:
-  name: runtime-p0-ttl-cleanup
-spec:
-  target: {namespace: ${namespace}, apiVersion: apps/v1, kind: Deployment, name: ${target_name}}
-  mode: readOnly
-  ttlSeconds: 2
-  modelProviderRef: {name: heuristic-provider}
-  evidenceRetention: {mode: RawSnapshot}
-  dataSources: [{name: kubernetes-events}]
 EOF
 
 wait_for_status runtime-p0-query-policy-rejected Failed
@@ -532,7 +525,6 @@ wait_for_status runtime-p0-unsupported-retention Failed
 wait_for_status runtime-p0-retention-store-unavailable Failed
 wait_for_status runtime-p0-risk-signal-source-blocked Failed
 wait_for_status runtime-p0-depth-limit-exceeded Failed
-wait_for_status runtime-p0-ttl-cleanup Failed
 
 assert_request runtime-p0-query-policy-rejected Failed Unknown QueryPolicyRejected
 assert_request runtime-p0-query-budget-exceeded Failed Unknown QueryBudgetExceeded
@@ -558,14 +550,50 @@ assert_condition "$(kubectl get investigationrequest runtime-p0-required-evidenc
 assert_condition "$(kubectl get investigationrequest runtime-p0-crashloop-coverage-missing -n "${namespace}" -o json)" EvidenceCollectionReady False RequiredEvidenceMissing
 assert_condition "$(kubectl get investigationrequest runtime-p0-retention-store-unavailable -n "${namespace}" -o json)" RCAReady False EvidenceRetentionStoreUnavailable
 
-for request_name in "${requests[@]:0:12}"; do
+for request_name in \
+  runtime-p0-query-policy-rejected \
+  runtime-p0-query-budget-exceeded \
+  runtime-p0-provider-not-found \
+  runtime-p0-invalid-provider-response \
+  runtime-p0-no-issue-found \
+  runtime-p0-required-evidence-missing \
+  runtime-p0-crashloop-coverage-missing \
+  runtime-p0-unsupported-retention \
+  runtime-p0-retention-store-unavailable \
+  runtime-p0-risk-signal-source-blocked \
+  runtime-p0-depth-limit-exceeded; do
   assert_no_projected_signal "${request_name}"
 done
+
+unverified_signal="$(kubectl get investigationrequest runtime-p0-no-supported-claims -n "${namespace}" -o jsonpath='{.status.linkedRiskSignalRef.name}')"
+[[ -n "${unverified_signal}" ]]
+for _ in {1..30}; do
+  unverified_signal_json="$(kubectl get risksignal "${unverified_signal}" -n "${namespace}" -o json)"
+  if assert_condition "${unverified_signal_json}" RCAReady False RCAUnverified; then
+    break
+  fi
+  sleep 1
+done
+assert_condition "${unverified_signal_json}" RCAReady False RCAUnverified
 
 kubectl logs -n "${namespace}" "deployment/${mock_name}" >"${report_dir}/mock-access.log"
 grep -q 'GET /control' "${report_dir}/mock-access.log"
 [[ "$(grep -c 'POST /v1/invalid-provider-response' "${report_dir}/mock-access.log" || true)" == "1" ]]
 
+kubectl apply -n "${namespace}" -f - <<EOF
+apiVersion: aiops.platform/v1alpha1
+kind: InvestigationRequest
+metadata:
+  name: runtime-p0-ttl-cleanup
+spec:
+  target: {namespace: ${namespace}, apiVersion: apps/v1, kind: Deployment, name: ${target_name}}
+  mode: readOnly
+  ttlSeconds: 2
+  modelProviderRef: {name: heuristic-provider}
+  evidenceRetention: {mode: RawSnapshot}
+  dataSources: [{name: kubernetes-events}]
+EOF
+wait_for_status runtime-p0-ttl-cleanup Failed
 kubectl wait --for=delete investigationrequest/runtime-p0-ttl-cleanup -n "${namespace}" --timeout="${timeout}"
 
 kubectl get remediationplan,agentaction -n "${namespace}" -o json | jq -r '.items[].metadata.uid' | sort >"${report_dir}/side-effect-uids-after.txt"
