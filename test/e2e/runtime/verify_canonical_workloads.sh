@@ -88,7 +88,7 @@ metadata:
   name: runtime-canonical-provider-nginx
 data:
   imagepull.json: |
-    {"id":"runtime-imagepull-001","choices":[{"message":{"content":"{\"riskTitle\":\"ImagePullBackOff on runtime pod\",\"riskSummary\":\"The pod cannot pull the configured image.\",\"severity\":\"medium\",\"confidenceScore\":80,\"rationale\":\"event evidence reports ErrImagePull\",\"rcaHypothesis\":\"The pod image pull is failing because the image reference is unavailable.\",\"rcaCauses\":[\"ErrImagePull events were observed\"],\"actionType\":\"notification.sendSlack\"}"}}]}
+    {"id":"runtime-imagepull-001","choices":[{"message":{"content":"{\"riskTitle\":\"ImagePullBackOff on runtime pod\",\"riskSummary\":\"The pod cannot pull the configured image.\",\"severity\":\"medium\",\"confidenceScore\":80,\"rationale\":\"event evidence reports ErrImagePull\",\"rcaHypothesis\":\"The pod image pull is failing because the image reference is unavailable.\",\"rcaCauses\":[\"ErrImagePull events were observed\"],\"actionType\":\"notification.sendSlack\"}"}}],"usage":{"prompt_tokens":321,"completion_tokens":87}}
   default.conf: |
     server {
       listen 8080;
@@ -102,6 +102,7 @@ data:
       location = /imagepull-static {
         default_type application/json;
         root /usr/share/nginx/html;
+        limit_rate 256;
       }
       location = /v1/oom-unexpected {
         default_type application/json;
@@ -394,6 +395,9 @@ jq -e '
   (.status.evidenceRefs[0].contentDigest | startswith("sha256:")) and
   (.status.claims | any(.verification == "Supported" and (.evidenceRefs | length > 0))) and
   .status.execution.attemptCount == 1 and
+  .status.execution.durationSeconds >= 1 and
+  .status.execution.inputTokens == 321 and
+  .status.execution.outputTokens == 87 and
   (.status.execution.providerResult.digest.value | startswith("sha256:")) and
   ((.status.linkedRiskSignalRef.name // "") != "")
 ' <<<"${image_json}" >/dev/null
@@ -436,7 +440,10 @@ jq -n \
   --arg context "$(kubectl config current-context)" \
   --arg namespace "${namespace}" \
   --arg controllerImage "${controller_image}" \
-  '{runID:$runID, sourceCommit:$sourceCommit, kubernetesContext:$context, namespace:$namespace, controllerImage:$controllerImage, result:"PASS", scenarioCount:2, oomProviderRequests:0, imagePullProviderRequests:1, unexpectedSideEffects:0}' \
+  --argjson imagePullDurationSeconds "$(jq '.status.execution.durationSeconds' <<<"${image_json}")" \
+  --argjson imagePullInputTokens "$(jq '.status.execution.inputTokens' <<<"${image_json}")" \
+  --argjson imagePullOutputTokens "$(jq '.status.execution.outputTokens' <<<"${image_json}")" \
+  '{runID:$runID, sourceCommit:$sourceCommit, kubernetesContext:$context, namespace:$namespace, controllerImage:$controllerImage, result:"PASS", scenarioCount:2, oomProviderRequests:0, imagePullProviderRequests:1, imagePullDurationSeconds:$imagePullDurationSeconds, imagePullInputTokens:$imagePullInputTokens, imagePullOutputTokens:$imagePullOutputTokens, unexpectedSideEffects:0}' \
   >"${report_dir}/summary.json"
 
 cat >"${report_dir}/runtime-canonical-workloads-report.md" <<EOF
@@ -455,7 +462,11 @@ OOMKilled event-only completed Inconclusive with event coverage present,
 ImagePullBackOff completed Confirmed with root cause \`ImagePullFailure\`, one
 retained \`ErrImagePull\` evidence record, one supported structured claim, one
 provider request, and a verified RiskSignal projection. Neither scenario
-created a RemediationPlan or AgentAction.
+created a RemediationPlan or AgentAction. The successful provider path recorded
+$(jq '.status.execution.durationSeconds' <<<"${image_json}") seconds of runtime
+latency and provider-reported token usage of
+$(jq '.status.execution.inputTokens' <<<"${image_json}") input /
+$(jq '.status.execution.outputTokens' <<<"${image_json}") output tokens.
 EOF
 
 echo "runtime canonical workload evidence passed"
