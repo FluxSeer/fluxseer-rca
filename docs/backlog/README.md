@@ -53,9 +53,13 @@ Local and mock-runtime completion checkpoint:
   artifact is
   `reports/runtime/fluxseer-rca-runtime-access-log-20260811T031721Z/`.
 
-The remaining cluster validation work is to rerun the complete current P0
-matrix and record terminal condition sets plus `observedGeneration` for every
-scenario. The provider-policy access-log portion is complete.
+The complete current P0 cluster matrix was rerun against immutable image
+`runtime-p0-4c64b5e` and passed 15/15 scenarios. The durable summary is
+[`artifacts/runtime-p0-matrix-20260811T034237Z/report.md`](artifacts/runtime-p0-matrix-20260811T034237Z/report.md);
+raw YAML, JSON, pod snapshots, and access logs remain under the ignored
+`reports/runtime/fluxseer-rca-runtime-p0-matrix-20260811T034237Z/` directory.
+The next cluster-runtime targets are the canonical OOMKilled and
+ImagePullBackOff structured-evidence cases.
 
 Every validation ticket must record both expected state and forbidden side
 effects. At minimum, reports should cover provider requests, datasource
