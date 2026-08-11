@@ -48,4 +48,9 @@ fluxseer report riskrule <riskrule-name> \
 
 其中 `incidents/*.json` 必須能由上面的 `fluxseer report riskrule` 指令重新取得；`summary.json` 與 `scenario-comparison.md` 則只用來證明測試案例是否符合契約。
 
+使用者不需要閱讀 `reports/runtime/` 中的合成 Event、不完整證據、故意錯誤
+設定或 mock provider failure。那些是維護者驗證工件；使用者只需取得
+RiskRule 公開異常報告，或直接查詢自己的 `InvestigationRequest` 與
+`RiskSignal` CR。
+
 機器可讀契約定義於 [`test/reporting/riskrule-report.schema.json`](../test/reporting/riskrule-report.schema.json)。

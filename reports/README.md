@@ -10,6 +10,10 @@ the current public-API report with `fluxseer report riskrule <name> -n
 reports](../docs/riskrule-reports.md). Runtime suites may save that exact output
 under `incidents/`, then wrap it with test-only expected/actual comparisons.
 
+Only RiskRule incident exports are user-facing. Synthetic Events, incomplete
+evidence, invalid configuration, mock provider failures, coverage checks, and
+aggregate matrix reports are maintainer-only validation artifacts.
+
 New test reports use the shared [`fluxseer-test-report/v1`](../test/reporting/README.md)
 contract. User incident exports use the separate
 `fluxseer-riskrule-report/v1` contract. Use `bash hack/verify-report.sh` to

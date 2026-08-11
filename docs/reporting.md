@@ -53,3 +53,18 @@ bash hack/verify-report.sh path/to/report.json
 - `reports/runtime/` 與 `reports/evaluation/`：本機、可重建、被 Git 忽略的原始工件。
 - `docs/backlog/artifacts/`：需要長期審查的精簡 durable summary。
 - Kubernetes CR：產品實際的使用者事件狀態；使用者報告由公開 CR 即時匯出，不把 `reports/` 當成事件資料庫。
+
+## 使用者與維護者的邊界
+
+使用者目前需要的報告類型只有 `fluxseer-riskrule-report/v1`。它描述實際
+RiskRule 產生的公開異常物件，適合交給 AI 或下游系統。
+
+以下內容只服務維護者，不應放入使用者報告目錄或提供給一般使用者：
+
+- 合成 Event 與不完整證據案例；
+- 故意錯誤設定與 validation failure；
+- mock provider、Secret 與 egress policy failure；
+- workload coverage、contract matrix 與 P0 aggregate gate。
+
+這些案例仍可保留在 `reports/runtime/` 作為測試證據，但它們不是產品的
+使用者報告類別。
