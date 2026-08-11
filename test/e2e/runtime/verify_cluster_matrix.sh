@@ -13,13 +13,17 @@ denied_provider="runtime-openai-policy-denied"
 rejected_provider="runtime-openai-policy-rejected"
 denied_request="runtime-provider-policy-denied"
 rejected_request="runtime-provider-policy-rejected"
+denied_rule="runtime-provider-policy-denied"
+rejected_rule="runtime-provider-policy-rejected"
+cli_dir=""
+cli_bin=""
 
 if [[ -z "${KUBECONFIG:-}" ]]; then
   echo "KUBECONFIG must point to the explicitly authorized test cluster" >&2
   exit 1
 fi
 
-for command_name in kubectl jq git; do
+for command_name in kubectl jq git go; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "required command not found: ${command_name}" >&2
     exit 1
@@ -29,13 +33,16 @@ done
 mkdir -p "${report_dir}"
 
 cleanup() {
-  kubectl delete investigationrequest "${denied_request}" "${rejected_request}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete riskrule "${denied_rule}" "${rejected_rule}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete investigationrequest -n "${namespace}" -l "fluxseer-rca.aiops.platform/risk-rule in (${denied_rule},${rejected_rule})" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete modelprovider "${denied_provider}" "${rejected_provider}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete secret runtime-matrix-openai-secret -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete event runtime-matrix-backoff -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete deployment "${target_name}" "${mock_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete service "${mock_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete configmap runtime-provider-mock-nginx -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  if [[ -n "${cli_bin}" ]]; then rm -f "${cli_bin}"; fi
+  if [[ -n "${cli_dir}" ]]; then rmdir "${cli_dir}" 2>/dev/null || true; fi
 }
 trap cleanup EXIT INT TERM
 
@@ -43,6 +50,21 @@ wait_for_phase() {
   local request_name="$1"
   local expected="$2"
   kubectl wait --for="jsonpath={.status.phase}=${expected}" --timeout="${timeout}" "investigationrequest/${request_name}" -n "${namespace}"
+}
+
+wait_for_rule_request() {
+  local rule_name="$1"
+  local request_name=""
+  for _ in $(seq 1 60); do
+    request_name="$(kubectl get investigationrequest -n "${namespace}" -l "fluxseer-rca.aiops.platform/risk-rule=${rule_name}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+    if [[ -n "${request_name}" ]]; then
+      printf '%s\n' "${request_name}"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "no InvestigationRequest was created for RiskRule ${rule_name}" >&2
+  return 1
 }
 
 assert_condition() {
@@ -73,6 +95,9 @@ assert_terminal_contract() {
 }
 
 cleanup
+cli_dir="$(mktemp -d)"
+cli_bin="${cli_dir}/fluxseer"
+(cd "${repo_root}" && GOWORK=off go build -o "${cli_bin}" ./cmd/fluxseer)
 
 kubectl get namespace "${namespace}" >/dev/null
 kubectl get deployment fluxseer-rca-controller-manager -n "${namespace}" -o yaml >"${report_dir}/controller-deployment.yaml"
@@ -244,59 +269,70 @@ spec:
     key: api-key
 ---
 apiVersion: aiops.platform/v1alpha1
-kind: InvestigationRequest
+kind: RiskRule
 metadata:
-  name: ${denied_request}
+  name: ${denied_rule}
 spec:
-  target:
-    namespace: ${namespace}
-    apiVersion: apps/v1
-    kind: Deployment
-    name: ${target_name}
-  mode: readOnly
-  modelProviderRef:
-    name: ${denied_provider}
-  queries:
+  targetSelector:
+    namespaceSelector: {matchNames: [${namespace}]}
+    workloadSelector:
+      matchLabels: {app: ${target_name}}
+      kinds: [Deployment]
+  interval: 5s
+  window: 10m
+  severity: warning
+  signals:
     - name: synthetic-backoff
       datasourceRef:
         name: kubernetes-events
       queryType: event
       reasons: [BackOff]
-      queryTemplate: recent-events
-  question: Verify hosted provider egress denial before request
-  createRiskSignal: true
+      threshold: {operator: count_gt, value: 0}
+  ai:
+    rcaEnabled: true
+    providerRef: {name: ${denied_provider}}
+  investigationPolicy: {mode: CreateRequest, createRiskSignal: true}
 ---
 apiVersion: aiops.platform/v1alpha1
-kind: InvestigationRequest
+kind: RiskRule
 metadata:
-  name: ${rejected_request}
+  name: ${rejected_rule}
 spec:
-  target:
-    namespace: ${namespace}
-    apiVersion: apps/v1
-    kind: Deployment
-    name: ${target_name}
-  mode: readOnly
-  modelProviderRef:
-    name: ${rejected_provider}
-  queries:
+  targetSelector:
+    namespaceSelector: {matchNames: [${namespace}]}
+    workloadSelector:
+      matchLabels: {app: ${target_name}}
+      kinds: [Deployment]
+  interval: 5s
+  window: 10m
+  severity: warning
+  signals:
     - name: synthetic-backoff
       datasourceRef:
         name: kubernetes-events
       queryType: event
       reasons: [BackOff]
-      queryTemplate: recent-events
-  question: Verify classification rejection before provider request
-  createRiskSignal: true
+      threshold: {operator: count_gt, value: 0}
+  ai:
+    rcaEnabled: true
+    providerRef: {name: ${rejected_provider}}
+  investigationPolicy: {mode: CreateRequest, createRiskSignal: true}
 EOF
 
+denied_request="$(wait_for_rule_request "${denied_rule}")"
+rejected_request="$(wait_for_rule_request "${rejected_rule}")"
 wait_for_phase "${denied_request}" Failed
 wait_for_phase "${rejected_request}" Failed
 
 denied_json="$(kubectl get investigationrequest "${denied_request}" -n "${namespace}" -o json)"
 rejected_json="$(kubectl get investigationrequest "${rejected_request}" -n "${namespace}" -o json)"
-jq . <<<"${denied_json}" >"${report_dir}/provider-data-policy-denied.json"
-jq . <<<"${rejected_json}" >"${report_dir}/provider-data-policy-rejected.json"
+jq . <<<"${denied_json}" >"${report_dir}/provider-data-policy-denied-investigationrequest.json"
+jq . <<<"${rejected_json}" >"${report_dir}/provider-data-policy-rejected-investigationrequest.json"
+
+"${cli_bin}" report riskrule "${denied_rule}" -n "${namespace}" -o json >"${report_dir}/provider-policy-denied.json"
+"${cli_bin}" report riskrule "${rejected_rule}" -n "${namespace}" -o json >"${report_dir}/provider-policy-rejected.json"
+bash "${repo_root}/hack/verify-riskrule-report.sh" "${report_dir}/provider-policy-denied.json"
+bash "${repo_root}/hack/verify-riskrule-report.sh" "${report_dir}/provider-policy-rejected.json"
 
 if ! assert_terminal_contract "${denied_json}" ProviderDataPolicyDenied; then
   echo "ProviderDataPolicyDenied terminal contract mismatch" >&2
@@ -322,8 +358,8 @@ if grep -q '/v1/policy-rejected' "${report_dir}/provider-access.log"; then
   exit 1
 fi
 
-kubectl get investigationrequest "${denied_request}" -n "${namespace}" -o yaml >"${report_dir}/provider-data-policy-denied.yaml"
-kubectl get investigationrequest "${rejected_request}" -n "${namespace}" -o yaml >"${report_dir}/provider-data-policy-rejected.yaml"
+kubectl get investigationrequest "${denied_request}" -n "${namespace}" -o yaml >"${report_dir}/provider-data-policy-denied-investigationrequest.yaml"
+kubectl get investigationrequest "${rejected_request}" -n "${namespace}" -o yaml >"${report_dir}/provider-data-policy-rejected-investigationrequest.yaml"
 kubectl get event runtime-matrix-backoff -n "${namespace}" -o yaml >"${report_dir}/synthetic-evidence-event.yaml"
 
 controller_image="$(kubectl get deployment fluxseer-rca-controller-manager -n "${namespace}" -o jsonpath='{.spec.template.spec.containers[?(@.name=="manager")].image}')"
