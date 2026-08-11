@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "fluxseer-rca-quality-baseline-v1",
+  "corpus": "canonical-five-v1",
+  "sourceCommit": "959fec2d1a531e6a5cbf777bd7ef1a867b764244",
+  "result": "PASS",
+  "scenarioCount": 5,
+  "rootCauseTypeAccuracy": 1,
+  "rootCauseEntityAccuracy": 1,
+  "evidencePrecision": 1,
+  "evidenceRecall": 1,
+  "unsupportedClaimRate": 0.125,
+  "unsafeNoIssueFoundRate": 0,
+  "checkpointReuseRate": 1,
+  "totalQueries": 7,
+  "totalProviderRequests": 4,
+  "tokenUsageAvailableScenarios": 0,
+  "scenarios": [
+    {"name": "CrashLoopBackOff", "outcome": "Confirmed", "rootCauseType": "CrashLoop", "queries": 1, "providerRequests": 1, "unsupportedClaimRate": 0},
+    {"name": "NormalLatencyNoIssue", "outcome": "NoIssueFound", "rootCauseType": "", "queries": 1, "providerRequests": 0, "unsupportedClaimRate": 0},
+    {"name": "DeploymentRolloutLatencyRegression", "outcome": "Confirmed", "rootCauseType": "LatencyRegression", "queries": 2, "providerRequests": 1, "unsupportedClaimRate": 0},
+    {"name": "ImagePullBackOff", "outcome": "Confirmed", "rootCauseType": "ImagePullFailure", "queries": 1, "providerRequests": 1, "unsupportedClaimRate": 0.5},
+    {"name": "OOMKilled", "outcome": "Confirmed", "rootCauseType": "ResourcePressure", "queries": 2, "providerRequests": 1, "unsupportedClaimRate": 0}
+  ]
+}

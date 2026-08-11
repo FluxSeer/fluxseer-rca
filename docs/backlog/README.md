@@ -65,8 +65,15 @@ with full raw output retained under the ignored `reports/runtime/` path. The
 Phase 3c Policy Pack, including the 3c-2 Policy Engine and subsequent
 controller integration, is already implemented on this branch and its focused
 Policy, Threshold, Escalation, and controller tests pass. The next active
-backlog target is the beta-stabilization dogfooding replay baseline and its
-quality/cost metrics.
+backlog target is the next beta-stabilization corpus expansion.
+
+The first deterministic dogfooding baseline now covers five canonical cases
+and records diagnosis, evidence, claim verification, query/provider cost, and
+checkpoint reuse. Durable summary:
+[`artifacts/rca-quality-baseline-20260811-959fec2/report.md`](artifacts/rca-quality-baseline-20260811-959fec2/report.md).
+The next corpus batch should add readiness mismatch, dependency unavailable,
+partial datasource failure, and contradictory evidence, then collect runtime
+latency and provider token usage where those measurements are available.
 
 Every validation ticket must record both expected state and forbidden side
 effects. At minimum, reports should cover provider requests, datasource
