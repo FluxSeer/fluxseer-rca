@@ -115,6 +115,10 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 				} `json:"parts"`
 			} `json:"content"`
 		} `json:"candidates"`
+		UsageMetadata struct {
+			PromptTokenCount     int64 `json:"promptTokenCount"`
+			CandidatesTokenCount int64 `json:"candidatesTokenCount"`
+		} `json:"usageMetadata"`
 	}
 	if err := json.Unmarshal(httpResp.Body, &decoded); err != nil {
 		return domain.ModelResponse{}, &model.ProviderError{
@@ -134,7 +138,8 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 			if err != nil {
 				return domain.ModelResponse{}, err
 			}
-			return model.WithProviderRequestID(resp, httpResp.RequestID), nil
+			resp = model.WithProviderRequestID(resp, httpResp.RequestID)
+			return model.WithTokenUsage(resp, decoded.UsageMetadata.PromptTokenCount, decoded.UsageMetadata.CandidatesTokenCount), nil
 		}
 	}
 	return domain.ModelResponse{}, &model.ProviderError{

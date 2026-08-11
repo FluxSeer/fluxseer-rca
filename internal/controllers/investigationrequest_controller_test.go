@@ -2405,7 +2405,12 @@ func TestInvestigationRequestReconcilerReusesProviderCompletedCheckpoint(t *test
 	request.Status.Lineage = lineageFromAnnotations(request.Annotations)
 	executionID := investigationExecutionID(request, preflight, evidence)
 	reasoning := checkpointReasoningOutput()
+	reasoning.InputTokens = 233
+	reasoning.OutputTokens = 77
 	request.Status.Execution = buildRCAExecution(request, preflight, evidence, investigation.RCAResult{Reasoning: &reasoning}, executionID, executionStateProviderCompleted, now)
+	if request.Status.Execution.InputTokens != 233 || request.Status.Execution.OutputTokens != 77 {
+		t.Fatalf("expected execution token usage 233/77, got %d/%d", request.Status.Execution.InputTokens, request.Status.Execution.OutputTokens)
+	}
 	request.Status.ResourceStatus = v1alpha1.ResourceStatus{
 		Phase:              v1alpha1.PhaseReasoning,
 		Message:            "provider result persisted for RCA verification",

@@ -34,8 +34,14 @@ type rawToFinalFixture struct {
 	Target           fixtureTarget         `json:"target"`
 	Datasources      []fixtureDatasource   `json:"datasources"`
 	ProviderResponse map[string]any        `json:"providerResponse"`
+	ProviderUsage    fixtureProviderUsage  `json:"providerUsage,omitempty"`
 	Expected         rawToFinalExpectation `json:"expected"`
 	Baseline         *fixtureBaseline      `json:"baseline,omitempty"`
+}
+
+type fixtureProviderUsage struct {
+	InputTokens  int64 `json:"inputTokens,omitempty"`
+	OutputTokens int64 `json:"outputTokens,omitempty"`
 }
 
 type fixtureTarget struct {
@@ -134,6 +140,7 @@ type fixtureBaselineReport struct {
 
 type fixtureRCAProvider struct {
 	output map[string]any
+	usage  fixtureProviderUsage
 	calls  int
 }
 
@@ -144,10 +151,12 @@ func (p *fixtureRCAProvider) Name() string {
 func (p *fixtureRCAProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
 	p.calls++
 	return domain.ModelResponse{
-		Provider:   p.Name(),
-		Model:      "fixture-model",
-		Structured: true,
-		Output:     p.output,
+		Provider:     p.Name(),
+		Model:        "fixture-model",
+		Structured:   true,
+		Output:       p.output,
+		InputTokens:  p.usage.InputTokens,
+		OutputTokens: p.usage.OutputTokens,
 	}, nil
 }
 
@@ -225,8 +234,8 @@ func TestRawToFinalE2EFixtureReplay(t *testing.T) {
 			}
 		})
 	}
-	if len(baselineResults) != 9 {
-		t.Fatalf("expected nine baseline fixtures, got %d", len(baselineResults))
+	if len(baselineResults) != 12 {
+		t.Fatalf("expected twelve baseline fixtures, got %d", len(baselineResults))
 	}
 	report := aggregateFixtureBaseline(baselineResults)
 	if reportPath := os.Getenv("FLUXSEER_RCA_EVALUATION_REPORT"); reportPath != "" {
@@ -275,7 +284,7 @@ func fixtureReconciler(t *testing.T, fixture rawToFinalFixture) (*InvestigationR
 		WithStatusSubresource(&v1alpha1.InvestigationRequest{}, &v1alpha1.RiskSignal{}).
 		WithObjects(append(fixtureTargetObjects(target), request, providerObj)...).
 		Build()
-	provider := &fixtureRCAProvider{output: fixture.ProviderResponse}
+	provider := &fixtureRCAProvider{output: fixture.ProviderResponse, usage: fixture.ProviderUsage}
 	queryCounter := &fixtureQueryCounter{}
 	return &InvestigationRequestReconciler{
 		Client: client,
@@ -583,8 +592,8 @@ func aggregateFixtureBaseline(results []fixtureBaselineResult) fixtureBaselineRe
 		}
 	}
 	return fixtureBaselineReport{
-		SchemaVersion:                "fluxseer-rca-quality-baseline-v2",
-		Corpus:                       "boundary-nine-v2",
+		SchemaVersion:                "fluxseer-rca-quality-baseline-v3",
+		Corpus:                       "operations-twelve-v3",
 		Result:                       "PASS",
 		ScenarioCount:                len(results),
 		RootCauseTypeAccuracy:        ratio(rootCauseTypeCorrect, len(results)),

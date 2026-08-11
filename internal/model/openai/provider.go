@@ -98,6 +98,10 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
+		Usage struct {
+			PromptTokens     int64 `json:"prompt_tokens"`
+			CompletionTokens int64 `json:"completion_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(httpResp.Body, &decoded); err != nil {
 		return domain.ModelResponse{}, &model.ProviderError{
@@ -115,7 +119,8 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 	if err != nil {
 		return domain.ModelResponse{}, err
 	}
-	return model.WithProviderRequestID(resp, firstNonEmpty(httpResp.RequestID, decoded.ID)), nil
+	resp = model.WithProviderRequestID(resp, firstNonEmpty(httpResp.RequestID, decoded.ID))
+	return model.WithTokenUsage(resp, decoded.Usage.PromptTokens, decoded.Usage.CompletionTokens), nil
 }
 
 func maxTokens(value int) int {

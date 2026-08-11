@@ -54,6 +54,16 @@ func WithProviderRequestID(resp domain.ModelResponse, requestID string) domain.M
 	return resp
 }
 
+func WithTokenUsage(resp domain.ModelResponse, inputTokens, outputTokens int64) domain.ModelResponse {
+	if inputTokens > 0 {
+		resp.InputTokens = inputTokens
+	}
+	if outputTokens > 0 {
+		resp.OutputTokens = outputTokens
+	}
+	return resp
+}
+
 func ValidateModelResponse(resp domain.ModelResponse) error {
 	if !resp.Structured {
 		return &ProviderError{

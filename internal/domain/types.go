@@ -195,6 +195,8 @@ type ReasoningOutput struct {
 	ServiceDocs       []string    `json:"serviceDocs"`
 	Provider          string      `json:"provider"`
 	ProviderRequestID string      `json:"providerRequestID,omitempty"`
+	InputTokens       int64       `json:"inputTokens,omitempty"`
+	OutputTokens      int64       `json:"outputTokens,omitempty"`
 }
 
 type ApprovalAction string
@@ -236,6 +238,8 @@ type ModelResponse struct {
 	Provider          string         `json:"provider"`
 	Model             string         `json:"model"`
 	ProviderRequestID string         `json:"providerRequestID,omitempty"`
+	InputTokens       int64          `json:"inputTokens,omitempty"`
+	OutputTokens      int64          `json:"outputTokens,omitempty"`
 	Output            map[string]any `json:"output,omitempty"`
 	RawText           string         `json:"rawText,omitempty"`
 	Structured        bool           `json:"structured"`
