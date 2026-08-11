@@ -611,7 +611,7 @@ jq -n \
   --arg context "$(kubectl config current-context)" \
   --arg namespace "${namespace}" \
   --arg controllerImage "${controller_image}" \
-  '{runID:$runID, sourceCommit:$sourceCommit, kubernetesContext:$context, namespace:$namespace, controllerImage:$controllerImage, result:"PASS", scenarioCount:15, providerPolicyScenarios:2, directScenarios:12, ttlCleanupScenarios:1, unexpectedSideEffects:0}' \
+  '{runID:$runID, sourceCommit:$sourceCommit, kubernetesContext:$context, namespace:$namespace, controllerImage:$controllerImage, result:"PASS", scenarioCount:15, providerPolicyScenarios:2, directScenarios:12, ttlCleanupScenarios:1, blockedOrAbsentRiskSignalScenarios:14, boundedUnverifiedRiskSignals:1, unexpectedSideEffects:0}' \
   >"${report_dir}/summary.json"
 
 cat >"${report_dir}/runtime-p0-matrix-report.md" <<EOF
@@ -628,9 +628,10 @@ cat >"${report_dir}/runtime-p0-matrix-report.md" <<EOF
 The matrix passed 15 P0 scenarios: two provider-policy access-log cases,
 twelve direct public-CRD terminal cases, and TTL cleanup. Every retained
 terminal request used the current metadata generation for status and all
-conditions. No scenario projected a RiskSignal, and no new RemediationPlan or
-AgentAction objects were observed. The only hosted-provider request was the
-single expected malformed-response call.
+conditions. Fourteen scenarios produced no RiskSignal; the unverified-RCA case
+linked one bounded signal with \`RCAReady=False/RCAUnverified\`. No new
+RemediationPlan or AgentAction objects were observed. The only hosted-provider
+request was the single expected malformed-response call.
 EOF
 
 echo "runtime P0 cluster matrix passed"
