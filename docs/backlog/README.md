@@ -62,6 +62,12 @@ The canonical OOMKilled event-only and ImagePullBackOff structured-evidence
 cases also passed 2/2. Their durable summary is
 [`artifacts/runtime-canonical-workloads-20260811T-final-a77adfb/report.md`](artifacts/runtime-canonical-workloads-20260811T-final-a77adfb/report.md),
 with full raw output retained under the ignored `reports/runtime/` path. The
+RiskRule user-report anomaly matrix passed 5/5 across Kubernetes events,
+deployment conditions, Prometheus, Loki, and the canonical investigation
+projection path. Its durable summary is
+[`artifacts/runtime-riskrule-incidents-20260811T071150Z/report.md`](artifacts/runtime-riskrule-incidents-20260811T071150Z/report.md),
+with exact user-retrievable `fluxseer-riskrule-report/v1` objects retained
+under the ignored `reports/runtime/` path. The
 Phase 3c Policy Pack, including the 3c-2 Policy Engine and subsequent
 controller integration, is already implemented on this branch and its focused
 Policy, Threshold, Escalation, and controller tests pass.
