@@ -41,5 +41,14 @@
     "rootCauseType": "LatencyRegression",
     "claimVerification": "Supported",
     "providerCalls": 1
+  },
+  "baseline": {
+    "scenario": "DeploymentRolloutLatencyRegression",
+    "expectedDiagnosis": "The checkout rollout is correlated with a measurable p95 latency regression.",
+    "expectedEvidence": [
+      {"kind": "metric", "source": "prometheus"},
+      {"kind": "event", "source": "kubernetes-events", "reason": "DeploymentUpdated"}
+    ],
+    "humanJudgment": "Correct when the latency root cause is supported by metric evidence and rollout context."
   }
 }

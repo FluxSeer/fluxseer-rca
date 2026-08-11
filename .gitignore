@@ -28,3 +28,4 @@ kubeconfig*
 
 # Reports
 reports/runtime/
+reports/evaluation/
