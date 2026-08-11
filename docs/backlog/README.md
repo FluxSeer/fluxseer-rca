@@ -51,13 +51,13 @@ Local and mock-runtime completion checkpoint:
   runtime evidence that records terminal conditions, `observedGeneration`,
   rejected egress audits, and zero mock-provider access-log matches. The
   artifact is
-  `reports/runtime/internal/fluxseer-rca-runtime-access-log-20260811T031721Z/`.
+  `reports/runtime/internal/cluster/access-log/fluxseer-rca-runtime-access-log-20260811T031721Z/`.
 
 The complete current P0 cluster matrix was rerun against immutable image
 `runtime-p0-4c64b5e` and passed 15/15 scenarios. The durable summary is
 [`artifacts/runtime-p0-matrix-20260811T034237Z/report.md`](artifacts/runtime-p0-matrix-20260811T034237Z/report.md);
 raw YAML, JSON, pod snapshots, and access logs remain under the ignored
-`reports/runtime/internal/fluxseer-rca-runtime-p0-matrix-20260811T034237Z/` directory.
+`reports/runtime/internal/cluster/p0-matrix/fluxseer-rca-runtime-p0-matrix-20260811T034237Z/` directory.
 The canonical OOMKilled event-only and ImagePullBackOff structured-evidence
 cases also passed 2/2. Their durable summary is
 [`artifacts/runtime-canonical-workloads-20260811T-final-a77adfb/report.md`](artifacts/runtime-canonical-workloads-20260811T-final-a77adfb/report.md),

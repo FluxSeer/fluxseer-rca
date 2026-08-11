@@ -30,4 +30,4 @@ side-effect object was created.
 
 Full status JSON/YAML, provider access log, controller snapshots, and side
 effect UID diff remain under the ignored path
-`reports/runtime/internal/fluxseer-rca-runtime-canonical-workloads-efficiency-20260811-65a166d/`.
+`reports/runtime/internal/cluster/canonical-workloads/fluxseer-rca-runtime-canonical-workloads-efficiency-20260811-65a166d/`.

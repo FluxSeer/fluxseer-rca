@@ -1,9 +1,9 @@
 # RiskRule User-Report Runtime Evidence
 
-- Run ID: `20260811T071150Z`
+- Run ID: `20260811T160000Z`
 - Result: `PASS` (5/5)
-- Source commit: `c4edc5e245c7a1e06db19004328abe6583102d40`
-- Source dirty: `false`
+- Source commit: `76838241c44afa1bc6adb12d6e2f285bb1c12e8a`
+- Source dirty: `true`
 - Kubernetes context: `admin@homelab-test`
 - Control namespace: `fluxseer-rca-test`
 - Target namespace: `database-test`
@@ -16,7 +16,7 @@
 | Kubernetes BackOff event | `DirectRiskSignal` | 1 `RiskSignal`; 0 `InvestigationRequest` | `Confirmed` | `EventBackOffObserved` |
 | Deployment unavailable condition | `DirectRiskSignal` | 1 `RiskSignal`; 0 `InvestigationRequest` | `Confirmed` | `DeploymentconditionMinimumreplicasunavailableObserved` |
 | Prometheus unavailable replicas | `DirectRiskSignal` | 1 `RiskSignal`; 0 `InvestigationRequest` | `Confirmed` | `MetricObserved` |
-| Loki error logs | `DirectRiskSignal` | 2 `RiskSignal`; 0 `InvestigationRequest` | both `Confirmed` | `LogObserved` |
+| Loki error logs | `DirectRiskSignal` | 6 `RiskSignal`; 0 `InvestigationRequest` | all `Confirmed` | `LogObserved` |
 | Canonical BackOff investigation | `CreateRequest` with projection | 1 `InvestigationRequest`; 1 linked `RiskSignal` | request `Completed/Inconclusive`; signal `Inconclusive` | public linked projection present |
 
 Every incident artifact was produced by the user-facing command
@@ -39,7 +39,7 @@ pre-existing baseline RiskRules remained present.
 The complete user-visible JSON reports, test summary, rendered comparison,
 datasource snapshot, controller snapshot, rule definitions, targets, and
 synthetic Event remain in the ignored local directory
-`reports/runtime/internal/fluxseer-rca-riskrule-incidents-20260811T071150Z/` for
+`reports/runtime/internal/riskrule/fluxseer-rca-riskrule-incidents-20260811T160000Z/` for
 the test envelope and
-`reports/runtime/user-facing/fluxseer-rca-riskrule-incidents-20260811T071150Z/`
+`reports/runtime/user-facing/fluxseer-rca-riskrule-incidents-20260811T160000Z/`
 for the user-facing JSON exports.

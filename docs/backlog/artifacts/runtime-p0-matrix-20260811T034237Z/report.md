@@ -39,4 +39,4 @@ and the controller Deployment was restored to its original image after the run.
 
 Raw YAML, JSON, pod snapshots, and access logs remain in the ignored local
 artifact directory:
-`reports/runtime/internal/fluxseer-rca-runtime-p0-matrix-20260811T034237Z/`.
+`reports/runtime/internal/cluster/p0-matrix/fluxseer-rca-runtime-p0-matrix-20260811T034237Z/`.
