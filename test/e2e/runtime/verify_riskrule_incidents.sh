@@ -33,6 +33,9 @@ scenario_results="${report_dir}/scenarios.jsonl"
 : >"${scenario_results}"
 
 cleanup() {
+  # Stop reconciliation before deleting generated outputs so the controller
+  # cannot recreate a RiskSignal between the report-driven cleanup steps.
+  kubectl delete riskrule "${rules[@]}" -n "${control_namespace}" --ignore-not-found >/dev/null 2>&1 || true
   for report in "${report_dir}"/incidents/*.json; do
     [[ -f "${report}" ]] || continue
     while IFS=$'\t' read -r namespace name; do
@@ -42,7 +45,10 @@ cleanup() {
       [[ -z "${name}" ]] || kubectl delete investigationrequest "${name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
     done < <(jq -r '.investigationRequests[] | [.metadata.namespace,.metadata.name] | @tsv' "${report}" 2>/dev/null || true)
   done
-  kubectl delete riskrule "${rules[@]}" -n "${control_namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  for rule in "${rules[@]}"; do
+    kubectl delete risksignal -A -l "fluxseer-rca.aiops.platform/risk-rule=${rule}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+    kubectl delete investigationrequest -n "${control_namespace}" -l "fluxseer-rca.aiops.platform/risk-rule=${rule}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  done
   kubectl delete event runtime-anomaly-backoff -n "${target_namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete deployment runtime-anomaly-unavailable runtime-anomaly-logs -n "${target_namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   if [[ -n "${cli_bin}" ]]; then rm -f "${cli_bin}"; fi
