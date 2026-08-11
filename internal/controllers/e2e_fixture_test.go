@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,6 +49,7 @@ type fixtureDatasource struct {
 	Name      string           `json:"name"`
 	QueryType string           `json:"queryType"`
 	Records   []map[string]any `json:"records"`
+	Error     string           `json:"error,omitempty"`
 }
 
 type rawToFinalExpectation struct {
@@ -56,6 +58,7 @@ type rawToFinalExpectation struct {
 	RootCauseType     string `json:"rootCauseType"`
 	ClaimVerification string `json:"claimVerification"`
 	ProviderCalls     int    `json:"providerCalls"`
+	FailureReason     string `json:"failureReason,omitempty"`
 }
 
 type fixtureBaseline struct {
@@ -63,6 +66,7 @@ type fixtureBaseline struct {
 	ExpectedDiagnosis string                       `json:"expectedDiagnosis"`
 	ExpectedEvidence  []fixtureEvidenceExpectation `json:"expectedEvidence"`
 	HumanJudgment     string                       `json:"humanJudgment"`
+	ExpectedIncident  bool                         `json:"expectedIncident,omitempty"`
 }
 
 type fixtureEvidenceExpectation struct {
@@ -72,31 +76,39 @@ type fixtureEvidenceExpectation struct {
 }
 
 type fixtureBaselineResult struct {
-	Fixture                  string         `json:"fixture"`
-	Scenario                 string         `json:"scenario"`
-	ExpectedDiagnosis        string         `json:"expectedDiagnosis"`
-	ActualOutcome            string         `json:"actualOutcome"`
-	ActualRootCauseType      string         `json:"actualRootCauseType,omitempty"`
-	ExpectedIncident         bool           `json:"expectedIncident"`
-	RootCauseTypeCorrect     bool           `json:"rootCauseTypeCorrect"`
-	RootCauseEntityCorrect   bool           `json:"rootCauseEntityCorrect"`
-	EvidencePrecision        float64        `json:"evidencePrecision"`
-	EvidenceRecall           float64        `json:"evidenceRecall"`
-	ClaimVerification        map[string]int `json:"claimVerification"`
-	UnsupportedClaimRate     float64        `json:"unsupportedClaimRate"`
-	UnsafeNoIssueFound       bool           `json:"unsafeNoIssueFound"`
-	QueryCount               int            `json:"queryCount"`
-	ProviderRequestCount     int            `json:"providerRequestCount"`
-	CheckpointReused         bool           `json:"checkpointReused"`
-	DurationSeconds          int64          `json:"durationSeconds"`
-	InputTokens              int64          `json:"inputTokens"`
-	OutputTokens             int64          `json:"outputTokens"`
-	TokenUsageAvailable      bool           `json:"tokenUsageAvailable"`
-	HumanJudgment            string         `json:"humanJudgment"`
-	ExpectedEvidenceCount    int            `json:"expectedEvidenceCount"`
-	MatchedExpectedEvidence  int            `json:"matchedExpectedEvidence"`
-	CollectedEvidenceCount   int            `json:"collectedEvidenceCount"`
-	MatchedCollectedEvidence int            `json:"matchedCollectedEvidence"`
+	Fixture                     string         `json:"fixture"`
+	Scenario                    string         `json:"scenario"`
+	ExpectedDiagnosis           string         `json:"expectedDiagnosis"`
+	ExpectedPhase               string         `json:"expectedPhase"`
+	ActualPhase                 string         `json:"actualPhase"`
+	ExpectedOutcome             string         `json:"expectedOutcome"`
+	ActualOutcome               string         `json:"actualOutcome"`
+	ActualRootCauseType         string         `json:"actualRootCauseType,omitempty"`
+	ExpectedFailureReason       string         `json:"expectedFailureReason,omitempty"`
+	ActualFailureReason         string         `json:"actualFailureReason,omitempty"`
+	FailureReasonCorrect        bool           `json:"failureReasonCorrect"`
+	ExpectedIncident            bool           `json:"expectedIncident"`
+	RootCauseTypeCorrect        bool           `json:"rootCauseTypeCorrect"`
+	RootCauseEntityCorrect      bool           `json:"rootCauseEntityCorrect"`
+	RootCauseEntityEvaluated    bool           `json:"rootCauseEntityEvaluated"`
+	EvidencePrecision           float64        `json:"evidencePrecision"`
+	EvidenceRecall              float64        `json:"evidenceRecall"`
+	EvidenceEvaluationAvailable bool           `json:"evidenceEvaluationAvailable"`
+	ClaimVerification           map[string]int `json:"claimVerification"`
+	UnsupportedClaimRate        float64        `json:"unsupportedClaimRate"`
+	UnsafeNoIssueFound          bool           `json:"unsafeNoIssueFound"`
+	QueryCount                  int            `json:"queryCount"`
+	ProviderRequestCount        int            `json:"providerRequestCount"`
+	CheckpointReused            bool           `json:"checkpointReused"`
+	DurationSeconds             int64          `json:"durationSeconds"`
+	InputTokens                 int64          `json:"inputTokens"`
+	OutputTokens                int64          `json:"outputTokens"`
+	TokenUsageAvailable         bool           `json:"tokenUsageAvailable"`
+	HumanJudgment               string         `json:"humanJudgment"`
+	ExpectedEvidenceCount       int            `json:"expectedEvidenceCount"`
+	MatchedExpectedEvidence     int            `json:"matchedExpectedEvidence"`
+	CollectedEvidenceCount      int            `json:"collectedEvidenceCount"`
+	MatchedCollectedEvidence    int            `json:"matchedCollectedEvidence"`
 }
 
 type fixtureBaselineReport struct {
@@ -108,8 +120,11 @@ type fixtureBaselineReport struct {
 	RootCauseEntityAccuracy      float64                 `json:"rootCauseEntityAccuracy"`
 	EvidencePrecision            float64                 `json:"evidencePrecision"`
 	EvidenceRecall               float64                 `json:"evidenceRecall"`
+	ClaimVerification            map[string]int          `json:"claimVerification"`
 	UnsupportedClaimRate         float64                 `json:"unsupportedClaimRate"`
+	ContradictedClaimRate        float64                 `json:"contradictedClaimRate"`
 	UnsafeNoIssueFoundRate       float64                 `json:"unsafeNoIssueFoundRate"`
+	FailureContractAccuracy      float64                 `json:"failureContractAccuracy"`
 	CheckpointReuseRate          float64                 `json:"checkpointReuseRate"`
 	TotalQueries                 int                     `json:"totalQueries"`
 	TotalProviderRequests        int                     `json:"totalProviderRequests"`
@@ -169,7 +184,11 @@ func TestRawToFinalE2EFixtureReplay(t *testing.T) {
 			if stored.Status.Phase != fixture.Expected.Phase || stored.Status.Outcome != fixture.Expected.Outcome {
 				t.Fatalf("expected phase=%s outcome=%s, got phase=%s outcome=%s", fixture.Expected.Phase, fixture.Expected.Outcome, stored.Status.Phase, stored.Status.Outcome)
 			}
-			if stored.Status.Verdict == nil || stored.Status.Verdict.RootCauseType != fixture.Expected.RootCauseType {
+			if fixture.Expected.FailureReason != "" {
+				if stored.Status.Failure == nil || stored.Status.Failure.Code != fixture.Expected.FailureReason {
+					t.Fatalf("expected failureReason=%s, got %#v", fixture.Expected.FailureReason, stored.Status.Failure)
+				}
+			} else if stored.Status.Verdict == nil || stored.Status.Verdict.RootCauseType != fixture.Expected.RootCauseType {
 				t.Fatalf("expected rootCauseType=%s, got %#v", fixture.Expected.RootCauseType, stored.Status.Verdict)
 			}
 			if !hasClaimVerification(stored.Status.Claims, fixture.Expected.ClaimVerification) {
@@ -193,18 +212,21 @@ func TestRawToFinalE2EFixtureReplay(t *testing.T) {
 
 			if fixture.Baseline != nil {
 				result := evaluateFixtureBaseline(fixture, stored, queryCalls, providerCalls, checkpointReused)
-				if result.MatchedExpectedEvidence != result.ExpectedEvidenceCount {
+				if result.EvidenceEvaluationAvailable && result.MatchedExpectedEvidence != result.ExpectedEvidenceCount {
 					t.Fatalf("expected all baseline evidence to be retained, got %d/%d", result.MatchedExpectedEvidence, result.ExpectedEvidenceCount)
 				}
-				if !result.RootCauseTypeCorrect || !result.RootCauseEntityCorrect || result.UnsafeNoIssueFound {
+				if !result.EvidenceEvaluationAvailable && result.CollectedEvidenceCount != 0 {
+					t.Fatalf("expected no retained evidence for non-evidence baseline, got %d", result.CollectedEvidenceCount)
+				}
+				if !result.RootCauseTypeCorrect || !result.RootCauseEntityCorrect || !result.FailureReasonCorrect || result.UnsafeNoIssueFound {
 					t.Fatalf("baseline diagnosis mismatch: %#v", result)
 				}
 				baselineResults = append(baselineResults, result)
 			}
 		})
 	}
-	if len(baselineResults) != 5 {
-		t.Fatalf("expected five baseline fixtures, got %d", len(baselineResults))
+	if len(baselineResults) != 9 {
+		t.Fatalf("expected nine baseline fixtures, got %d", len(baselineResults))
 	}
 	report := aggregateFixtureBaseline(baselineResults)
 	if reportPath := os.Getenv("FLUXSEER_RCA_EVALUATION_REPORT"); reportPath != "" {
@@ -327,7 +349,14 @@ func fixtureTargetObjects(target fixtureTarget) []client.Object {
 			},
 		}
 	default:
-		return []client.Object{evidenceRequirementDeployment()}
+		return []client.Object{
+			&appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: target.Name, Namespace: target.Namespace, Labels: map[string]string{"app": target.Name}},
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": target.Name}}},
+				},
+			},
+		}
 	}
 }
 
@@ -345,11 +374,15 @@ type fixtureQueryCounter struct {
 
 type countingFixtureDataSource struct {
 	fakeInvestigationDataSource
-	counter *fixtureQueryCounter
+	counter    *fixtureQueryCounter
+	queryError string
 }
 
 func (f countingFixtureDataSource) Query(ctx context.Context, request datasource.QueryRequest) (*datasource.QueryResult, error) {
 	f.counter.calls++
+	if f.queryError != "" {
+		return nil, errors.New(f.queryError)
+	}
 	return f.fakeInvestigationDataSource.Query(ctx, request)
 }
 
@@ -362,7 +395,8 @@ func fixtureDataSources(items []fixtureDatasource, counter *fixtureQueryCounter)
 				queryType: domain.QueryType(item.QueryType),
 				records:   item.Records,
 			},
-			counter: counter,
+			counter:    counter,
+			queryError: item.Error,
 		})
 	}
 	return sources
@@ -382,16 +416,22 @@ func hasClaimVerification(claims []v1alpha1.RCAClaim, verification string) bool 
 
 func evaluateFixtureBaseline(fixture rawToFinalFixture, request v1alpha1.InvestigationRequest, queryCalls, providerCalls int, checkpointReused bool) fixtureBaselineResult {
 	actualRootCauseType := ""
+	actualFailureReason := ""
 	actualEntity := v1alpha1.TargetRef{}
 	if request.Status.Verdict != nil {
 		actualRootCauseType = request.Status.Verdict.RootCauseType
 		actualEntity = request.Status.Verdict.RootCauseEntity
 	}
+	if request.Status.Failure != nil {
+		actualFailureReason = request.Status.Failure.Code
+	}
 	target := fixtureTargetOrDefault(fixture.Target)
-	rootCauseEntityCorrect := actualEntity.Name == "" && fixture.Expected.RootCauseType == ""
-	if fixture.Expected.RootCauseType != "" {
+	rootCauseEntityEvaluated := fixture.Expected.Outcome == v1alpha1.InvestigationOutcomeConfirmed
+	rootCauseEntityCorrect := true
+	if rootCauseEntityEvaluated {
 		rootCauseEntityCorrect = actualEntity.Kind == target.Kind && actualEntity.Namespace == target.Namespace && actualEntity.Name == target.Name
 	}
+	evidenceEvaluationAvailable := len(fixture.Baseline.ExpectedEvidence) > 0
 
 	matchedExpected := 0
 	for _, expected := range fixture.Baseline.ExpectedEvidence {
@@ -429,31 +469,39 @@ func evaluateFixtureBaseline(fixture rawToFinalFixture, request v1alpha1.Investi
 	}
 
 	return fixtureBaselineResult{
-		Fixture:                  fixture.Name,
-		Scenario:                 fixture.Baseline.Scenario,
-		ExpectedDiagnosis:        fixture.Baseline.ExpectedDiagnosis,
-		ActualOutcome:            request.Status.Outcome,
-		ActualRootCauseType:      actualRootCauseType,
-		ExpectedIncident:         fixture.Expected.RootCauseType != "",
-		RootCauseTypeCorrect:     actualRootCauseType == fixture.Expected.RootCauseType,
-		RootCauseEntityCorrect:   rootCauseEntityCorrect,
-		EvidencePrecision:        ratio(matchedActual, len(request.Status.EvidenceRefs)),
-		EvidenceRecall:           ratio(matchedExpected, len(fixture.Baseline.ExpectedEvidence)),
-		ClaimVerification:        verification,
-		UnsupportedClaimRate:     ratio(unsupported, len(request.Status.Claims)),
-		UnsafeNoIssueFound:       request.Status.Outcome == v1alpha1.InvestigationOutcomeNoIssueFound && fixture.Expected.Outcome != v1alpha1.InvestigationOutcomeNoIssueFound,
-		QueryCount:               queryCalls,
-		ProviderRequestCount:     providerCalls,
-		CheckpointReused:         checkpointReused,
-		DurationSeconds:          durationSeconds,
-		InputTokens:              inputTokens,
-		OutputTokens:             outputTokens,
-		TokenUsageAvailable:      inputTokens > 0 || outputTokens > 0,
-		HumanJudgment:            fixture.Baseline.HumanJudgment,
-		ExpectedEvidenceCount:    len(fixture.Baseline.ExpectedEvidence),
-		MatchedExpectedEvidence:  matchedExpected,
-		CollectedEvidenceCount:   len(request.Status.EvidenceRefs),
-		MatchedCollectedEvidence: matchedActual,
+		Fixture:                     fixture.Name,
+		Scenario:                    fixture.Baseline.Scenario,
+		ExpectedDiagnosis:           fixture.Baseline.ExpectedDiagnosis,
+		ExpectedPhase:               fixture.Expected.Phase,
+		ActualPhase:                 request.Status.Phase,
+		ExpectedOutcome:             fixture.Expected.Outcome,
+		ActualOutcome:               request.Status.Outcome,
+		ActualRootCauseType:         actualRootCauseType,
+		ExpectedFailureReason:       fixture.Expected.FailureReason,
+		ActualFailureReason:         actualFailureReason,
+		FailureReasonCorrect:        actualFailureReason == fixture.Expected.FailureReason,
+		ExpectedIncident:            fixture.Baseline.ExpectedIncident || fixture.Expected.RootCauseType != "",
+		RootCauseTypeCorrect:        actualRootCauseType == fixture.Expected.RootCauseType,
+		RootCauseEntityCorrect:      rootCauseEntityCorrect,
+		RootCauseEntityEvaluated:    rootCauseEntityEvaluated,
+		EvidencePrecision:           ratio(matchedActual, len(request.Status.EvidenceRefs)),
+		EvidenceRecall:              ratio(matchedExpected, len(fixture.Baseline.ExpectedEvidence)),
+		EvidenceEvaluationAvailable: evidenceEvaluationAvailable,
+		ClaimVerification:           verification,
+		UnsupportedClaimRate:        ratio(unsupported, len(request.Status.Claims)),
+		UnsafeNoIssueFound:          request.Status.Outcome == v1alpha1.InvestigationOutcomeNoIssueFound && fixture.Expected.Outcome != v1alpha1.InvestigationOutcomeNoIssueFound,
+		QueryCount:                  queryCalls,
+		ProviderRequestCount:        providerCalls,
+		CheckpointReused:            checkpointReused,
+		DurationSeconds:             durationSeconds,
+		InputTokens:                 inputTokens,
+		OutputTokens:                outputTokens,
+		TokenUsageAvailable:         inputTokens > 0 || outputTokens > 0,
+		HumanJudgment:               fixture.Baseline.HumanJudgment,
+		ExpectedEvidenceCount:       len(fixture.Baseline.ExpectedEvidence),
+		MatchedExpectedEvidence:     matchedExpected,
+		CollectedEvidenceCount:      len(request.Status.EvidenceRefs),
+		MatchedCollectedEvidence:    matchedActual,
 	}
 }
 
@@ -478,10 +526,12 @@ func evidenceRefExpected(actual v1alpha1.EvidenceRef, expected []fixtureEvidence
 func aggregateFixtureBaseline(results []fixtureBaselineResult) fixtureBaselineReport {
 	rootCauseTypeCorrect := 0
 	rootCauseEntityCorrect := 0
+	rootCauseEntityEvaluated := 0
 	matchedEvidence := 0
 	expectedEvidence := 0
 	collectedEvidence := 0
 	unsupportedClaims := 0
+	contradictedClaims := 0
 	totalClaims := 0
 	unsafeNoIssueFound := 0
 	incidentScenarios := 0
@@ -489,19 +539,33 @@ func aggregateFixtureBaseline(results []fixtureBaselineResult) fixtureBaselineRe
 	totalQueries := 0
 	totalProviderRequests := 0
 	tokenUsageAvailable := 0
+	failureContracts := 0
+	failureContractsCorrect := 0
+	claimVerification := map[string]int{}
 	for _, result := range results {
 		if result.RootCauseTypeCorrect {
 			rootCauseTypeCorrect++
 		}
-		if result.RootCauseEntityCorrect {
-			rootCauseEntityCorrect++
+		if result.RootCauseEntityEvaluated {
+			rootCauseEntityEvaluated++
+			if result.RootCauseEntityCorrect {
+				rootCauseEntityCorrect++
+			}
 		}
 		matchedEvidence += result.MatchedCollectedEvidence
 		expectedEvidence += result.ExpectedEvidenceCount
 		collectedEvidence += result.CollectedEvidenceCount
 		unsupportedClaims += result.ClaimVerification["Unsupported"]
-		for _, count := range result.ClaimVerification {
+		contradictedClaims += result.ClaimVerification["Contradicted"]
+		for status, count := range result.ClaimVerification {
 			totalClaims += count
+			claimVerification[status] += count
+		}
+		if result.ExpectedFailureReason != "" {
+			failureContracts++
+			if result.FailureReasonCorrect {
+				failureContractsCorrect++
+			}
 		}
 		if result.ExpectedIncident {
 			incidentScenarios++
@@ -519,16 +583,19 @@ func aggregateFixtureBaseline(results []fixtureBaselineResult) fixtureBaselineRe
 		}
 	}
 	return fixtureBaselineReport{
-		SchemaVersion:                "fluxseer-rca-quality-baseline-v1",
-		Corpus:                       "canonical-five-v1",
+		SchemaVersion:                "fluxseer-rca-quality-baseline-v2",
+		Corpus:                       "boundary-nine-v2",
 		Result:                       "PASS",
 		ScenarioCount:                len(results),
 		RootCauseTypeAccuracy:        ratio(rootCauseTypeCorrect, len(results)),
-		RootCauseEntityAccuracy:      ratio(rootCauseEntityCorrect, len(results)),
+		RootCauseEntityAccuracy:      ratio(rootCauseEntityCorrect, rootCauseEntityEvaluated),
 		EvidencePrecision:            ratio(matchedEvidence, collectedEvidence),
 		EvidenceRecall:               ratio(matchedEvidence, expectedEvidence),
+		ClaimVerification:            claimVerification,
 		UnsupportedClaimRate:         ratio(unsupportedClaims, totalClaims),
+		ContradictedClaimRate:        ratio(contradictedClaims, totalClaims),
 		UnsafeNoIssueFoundRate:       ratio(unsafeNoIssueFound, incidentScenarios),
+		FailureContractAccuracy:      ratio(failureContractsCorrect, failureContracts),
 		CheckpointReuseRate:          ratio(checkpointReused, len(results)),
 		TotalQueries:                 totalQueries,
 		TotalProviderRequests:        totalProviderRequests,

@@ -1,0 +1,50 @@
+{
+  "name": "partial-datasource-failure",
+  "target": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "namespace": "prod",
+    "name": "checkout-api"
+  },
+  "datasources": [
+    {
+      "name": "kubernetes-events",
+      "queryType": "event",
+      "records": [
+        {
+          "reason": "DeploymentUpdated",
+          "message": "checkout-api rollout completed"
+        }
+      ]
+    },
+    {
+      "name": "loki",
+      "queryType": "log",
+      "error": "fixture datasource unavailable"
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Must not be called",
+    "riskSummary": "Partial datasource failure must stop before provider reasoning.",
+    "severity": "low",
+    "confidenceScore": 1,
+    "rationale": "unexpected provider call",
+    "rcaHypothesis": "unexpected",
+    "rcaCauses": ["unexpected"],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Failed",
+    "outcome": "Unknown",
+    "rootCauseType": "",
+    "claimVerification": "",
+    "providerCalls": 0,
+    "failureReason": "DatasourceQueryFailed"
+  },
+  "baseline": {
+    "scenario": "PartialDatasourceFailure",
+    "expectedDiagnosis": "Evidence collection fails safely when one required datasource is unavailable.",
+    "expectedEvidence": [],
+    "humanJudgment": "Correct when no partial evidence reaches the provider and the terminal reason is DatasourceQueryFailed."
+  }
+}

@@ -179,8 +179,14 @@ func containsContradictionMarker(text string) bool {
 		return true
 	}
 	tokens := tokenSet(text)
-	for _, marker := range []string{"normal", "healthy", "ready", "available"} {
-		if tokens[marker] {
+	markers := map[string][]string{
+		"normal":    {"not normal"},
+		"healthy":   {"not healthy"},
+		"ready":     {"not ready", "never ready"},
+		"available": {"not available"},
+	}
+	for marker, negations := range markers {
+		if tokens[marker] && !containsAny(text, negations...) {
 			return true
 		}
 	}

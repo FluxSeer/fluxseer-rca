@@ -1,0 +1,49 @@
+{
+  "name": "readiness-mismatch",
+  "target": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "namespace": "prod",
+    "name": "checkout-api"
+  },
+  "datasources": [
+    {
+      "name": "kubernetes-events",
+      "queryType": "event",
+      "records": [
+        {
+          "reason": "Unhealthy",
+          "message": "readiness probe failed and the checkout-api pod is not ready"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Checkout readiness mismatch",
+    "riskSummary": "The checkout-api pod is not ready.",
+    "severity": "high",
+    "confidenceScore": 82,
+    "rationale": "Unhealthy event evidence reports a failed readiness probe.",
+    "rcaHypothesis": "The workload is unavailable because its readiness probe is failing.",
+    "rcaCauses": [
+      "Readiness probe failed and the checkout-api pod is not ready"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "WorkloadDegradation",
+    "claimVerification": "Supported",
+    "providerCalls": 1
+  },
+  "baseline": {
+    "scenario": "ReadinessMismatch",
+    "expectedDiagnosis": "The Deployment is unavailable because its pod readiness probe is failing.",
+    "expectedEvidence": [
+      {"kind": "event", "source": "kubernetes-events", "reason": "Unhealthy"}
+    ],
+    "expectedIncident": true,
+    "humanJudgment": "Correct when the readiness diagnosis is linked to the Unhealthy probe event."
+  }
+}
