@@ -22,4 +22,4 @@ runtime-canonical resources remained after cleanup.
 
 Full raw JSON, YAML, controller snapshots, provider access log, and UID side
 effect diff remain in the ignored directory
-`reports/runtime/fluxseer-rca-runtime-canonical-workloads-20260811T-final-a77adfb/`.
+`reports/runtime/internal/fluxseer-rca-runtime-canonical-workloads-20260811T-final-a77adfb/`.

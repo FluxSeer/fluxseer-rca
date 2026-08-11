@@ -19,8 +19,9 @@ The local runtime views are grouped under:
 - `reports/runtime/user-facing/`: simulated user-obtainable RiskRule JSON;
 - `reports/runtime/internal/`: maintainer-only experiment reports.
 
-These are symbolic-link views over the original report paths, so existing
-backlog references remain valid and no report data is duplicated.
+These are direct directory views. Existing report paths were migrated into
+the category directories; backlog references are updated where the path is
+part of the current maintained documentation.
 
 New test reports use the shared [`fluxseer-test-report/v1`](../test/reporting/README.md)
 contract. User incident exports use the separate

@@ -39,4 +39,7 @@ pre-existing baseline RiskRules remained present.
 The complete user-visible JSON reports, test summary, rendered comparison,
 datasource snapshot, controller snapshot, rule definitions, targets, and
 synthetic Event remain in the ignored local directory
-`reports/runtime/fluxseer-rca-riskrule-incidents-20260811T071150Z/`.
+`reports/runtime/internal/fluxseer-rca-riskrule-incidents-20260811T071150Z/` for
+the test envelope and
+`reports/runtime/user-facing/fluxseer-rca-riskrule-incidents-20260811T071150Z/`
+for the user-facing JSON exports.

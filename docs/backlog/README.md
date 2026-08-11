@@ -51,13 +51,13 @@ Local and mock-runtime completion checkpoint:
   runtime evidence that records terminal conditions, `observedGeneration`,
   rejected egress audits, and zero mock-provider access-log matches. The
   artifact is
-  `reports/runtime/fluxseer-rca-runtime-access-log-20260811T031721Z/`.
+  `reports/runtime/internal/fluxseer-rca-runtime-access-log-20260811T031721Z/`.
 
 The complete current P0 cluster matrix was rerun against immutable image
 `runtime-p0-4c64b5e` and passed 15/15 scenarios. The durable summary is
 [`artifacts/runtime-p0-matrix-20260811T034237Z/report.md`](artifacts/runtime-p0-matrix-20260811T034237Z/report.md);
 raw YAML, JSON, pod snapshots, and access logs remain under the ignored
-`reports/runtime/fluxseer-rca-runtime-p0-matrix-20260811T034237Z/` directory.
+`reports/runtime/internal/fluxseer-rca-runtime-p0-matrix-20260811T034237Z/` directory.
 The canonical OOMKilled event-only and ImagePullBackOff structured-evidence
 cases also passed 2/2. Their durable summary is
 [`artifacts/runtime-canonical-workloads-20260811T-final-a77adfb/report.md`](artifacts/runtime-canonical-workloads-20260811T-final-a77adfb/report.md),
@@ -67,7 +67,8 @@ deployment conditions, Prometheus, Loki, and the canonical investigation
 projection path. Its durable summary is
 [`artifacts/runtime-riskrule-incidents-20260811T071150Z/report.md`](artifacts/runtime-riskrule-incidents-20260811T071150Z/report.md),
 with exact user-retrievable `fluxseer-riskrule-report/v1` objects retained
-under the ignored `reports/runtime/` path. The
+under `reports/runtime/user-facing/`; the test envelope remains under
+`reports/runtime/internal/`. The
 Phase 3c Policy Pack, including the 3c-2 Policy Engine and subsequent
 controller integration, is already implemented on this branch and its focused
 Policy, Threshold, Escalation, and controller tests pass.
