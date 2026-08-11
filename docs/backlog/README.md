@@ -62,7 +62,11 @@ The canonical OOMKilled event-only and ImagePullBackOff structured-evidence
 cases also passed 2/2. Their durable summary is
 [`artifacts/runtime-canonical-workloads-20260811T-final-a77adfb/report.md`](artifacts/runtime-canonical-workloads-20260811T-final-a77adfb/report.md),
 with full raw output retained under the ignored `reports/runtime/` path. The
-next approved implementation stream is 3c-2 Policy Engine refinement.
+Phase 3c Policy Pack, including the 3c-2 Policy Engine and subsequent
+controller integration, is already implemented on this branch and its focused
+Policy, Threshold, Escalation, and controller tests pass. The next active
+backlog target is the beta-stabilization dogfooding replay baseline and its
+quality/cost metrics.
 
 Every validation ticket must record both expected state and forbidden side
 effects. At minimum, reports should cover provider requests, datasource
