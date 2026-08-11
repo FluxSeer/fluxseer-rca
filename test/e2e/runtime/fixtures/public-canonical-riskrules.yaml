@@ -21,7 +21,10 @@ spec:
   ai:
     rcaEnabled: true
     providerRef: {name: runtime-canonical-oom-provider}
-  investigationPolicy: {mode: CreateRequest, createRiskSignal: true}
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true
+    evidenceRequirements: {profile: OOMKilled}
 ---
 apiVersion: aiops.platform/v1alpha1
 kind: RiskRule
@@ -46,4 +49,7 @@ spec:
   ai:
     rcaEnabled: true
     providerRef: {name: runtime-canonical-image-provider}
-  investigationPolicy: {mode: CreateRequest, createRiskSignal: true}
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true
+    evidenceRequirements: {profile: ImagePullBackOff}

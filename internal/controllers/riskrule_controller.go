@@ -409,6 +409,7 @@ func (r *RiskRuleReconciler) upsertInvestigationRequest(ctx context.Context, ris
 		request.Spec.ModelProviderRef = riskRule.Spec.AI.ProviderRef
 		request.Spec.Mode = v1alpha1.InvestigationModeReadOnly
 		request.Spec.CreateRiskSignal = riskRule.Spec.InvestigationPolicy.CreateRiskSignal
+		request.Spec.EvidenceRequirements = riskRule.Spec.InvestigationPolicy.EvidenceRequirements
 		return nil
 	})
 	return err
