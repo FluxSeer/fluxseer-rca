@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "fluxseer-rca-quality-baseline-v2",
+  "corpus": "boundary-nine-v2",
+  "sourceCommit": "4ab75da67c9f1c0708b15e8f5bbbf8d59a86e9b1",
+  "result": "PASS",
+  "scenarioCount": 9,
+  "rootCauseTypeAccuracy": 1,
+  "rootCauseEntityAccuracy": 1,
+  "evidencePrecision": 1,
+  "evidenceRecall": 1,
+  "claimVerification": {"Supported": 11, "Unsupported": 1, "Contradicted": 2},
+  "unsupportedClaimRate": 0.07142857142857142,
+  "contradictedClaimRate": 0.14285714285714285,
+  "unsafeNoIssueFoundRate": 0,
+  "failureContractAccuracy": 1,
+  "checkpointReuseRate": 1,
+  "totalQueries": 12,
+  "totalProviderRequests": 7,
+  "tokenUsageAvailableScenarios": 0,
+  "addedScenarios": [
+    {"name": "ReadinessMismatch", "phase": "Completed", "outcome": "Confirmed", "rootCauseType": "WorkloadDegradation", "providerRequests": 1},
+    {"name": "DependencyUnavailable", "phase": "Completed", "outcome": "Confirmed", "rootCauseType": "WorkloadDegradation", "providerRequests": 1},
+    {"name": "PartialDatasourceFailure", "phase": "Failed", "outcome": "Unknown", "failureReason": "DatasourceQueryFailed", "providerRequests": 0},
+    {"name": "ContradictoryEvidence", "phase": "Completed", "outcome": "Inconclusive", "contradictedClaims": 2, "providerRequests": 1}
+  ]
+}

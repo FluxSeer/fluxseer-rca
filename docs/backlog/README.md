@@ -64,16 +64,19 @@ cases also passed 2/2. Their durable summary is
 with full raw output retained under the ignored `reports/runtime/` path. The
 Phase 3c Policy Pack, including the 3c-2 Policy Engine and subsequent
 controller integration, is already implemented on this branch and its focused
-Policy, Threshold, Escalation, and controller tests pass. The next active
-backlog target is the next beta-stabilization corpus expansion.
+Policy, Threshold, Escalation, and controller tests pass.
 
 The first deterministic dogfooding baseline now covers five canonical cases
 and records diagnosis, evidence, claim verification, query/provider cost, and
 checkpoint reuse. Durable summary:
 [`artifacts/rca-quality-baseline-20260811-959fec2/report.md`](artifacts/rca-quality-baseline-20260811-959fec2/report.md).
-The next corpus batch should add readiness mismatch, dependency unavailable,
-partial datasource failure, and contradictory evidence, then collect runtime
-latency and provider token usage where those measurements are available.
+The second corpus batch expands this to nine cases with readiness mismatch,
+dependency unavailable, partial datasource failure, and contradictory
+evidence. Durable summary:
+[`artifacts/rca-quality-baseline-boundary-nine-20260811-4ab75da/report.md`](artifacts/rca-quality-baseline-boundary-nine-20260811-4ab75da/report.md).
+The next measurement target is runtime latency and provider token usage where
+those values are actually available, followed by the remaining dogfooding
+cases such as Service port mismatch and full Prometheus/Loki outage.
 
 Every validation ticket must record both expected state and forbidden side
 effects. At minimum, reports should cover provider requests, datasource
