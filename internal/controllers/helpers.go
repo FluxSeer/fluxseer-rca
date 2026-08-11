@@ -33,6 +33,7 @@ const (
 	annotationTargetGeneration   = "fluxseer-rca.aiops.platform/target-generation"
 	annotationInvestigationDepth = "fluxseer-rca.aiops.platform/investigation-depth"
 	annotationWindowBucket       = "fluxseer-rca.aiops.platform/window-bucket"
+	annotationEscalationChainRef = "fluxseer-rca.aiops.platform/escalation-chain-ref"
 	conditionReady               = "Ready"
 	conditionDegraded            = "Degraded"
 	conditionTargetResolved      = "TargetResolved"

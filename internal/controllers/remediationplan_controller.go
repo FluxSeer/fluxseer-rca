@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -14,19 +15,24 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 	"github.com/FluxSeer/fluxseer-rca/internal/guardrails"
+	"github.com/FluxSeer/fluxseer-rca/internal/thresholds"
 )
 
 type RemediationPlanReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	Guardrails    *guardrails.Engine
-	PolicyEngine  *guardrails.PolicyEngine
-	EventRecorder record.EventRecorder
-	Now           func() time.Time
+	Scheme            *runtime.Scheme
+	Guardrails        *guardrails.Engine
+	PolicyEngine      *guardrails.PolicyEngine
+	Thresholds        *thresholds.Enforcer
+	PolicyPackEnabled bool
+	EventRecorder     record.EventRecorder
+	Now               func() time.Time
 }
 
 const approvalDecisionActor = "fluxseer-rca-policy-engine"
@@ -53,6 +59,31 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		now = r.Now
 	}
 
+	targetNamespace := plan.Spec.Target.Namespace
+	if targetNamespace == "" {
+		targetNamespace = plan.Namespace
+	}
+	if r.Thresholds != nil {
+		namespaceLabels, err := r.namespaceLabels(ctx, targetNamespace)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		usage, err := r.namespaceUsage(ctx, targetNamespace)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		result, err := r.Thresholds.Enforce(ctx, thresholds.ResolveRequest{
+			Namespace:       targetNamespace,
+			NamespaceLabels: namespaceLabels,
+		}, usage)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if !result.Allowed {
+			return r.rejectForThreshold(ctx, &plan, result, now())
+		}
+	}
+
 	evaluation, err := r.evaluatePolicy(ctx, &plan)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -72,6 +103,13 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		step := remediationFromPlan(&plan)
+		action.Labels = copyStringMap(plan.Labels)
+		if action.Annotations == nil {
+			action.Annotations = map[string]string{}
+		}
+		if evaluation.Escalation != nil && evaluation.Escalation.EscalationChainRef != "" {
+			action.Annotations[annotationEscalationChainRef] = evaluation.Escalation.EscalationChainRef
+		}
 		action.Spec.Target = plan.Spec.Target
 		action.Spec.ActionType = step.ActionType
 		action.Spec.Parameters = step.Parameters
@@ -201,6 +239,74 @@ func (r *RemediationPlanReconciler) evaluatePolicy(ctx context.Context, plan *v1
 	return r.PolicyEngine.Evaluate(ctx, input)
 }
 
+func (r *RemediationPlanReconciler) namespaceLabels(ctx context.Context, namespaceName string) (map[string]string, error) {
+	if namespaceName == "" {
+		return nil, nil
+	}
+	var namespace corev1.Namespace
+	err := r.Get(ctx, client.ObjectKey{Name: namespaceName}, &namespace)
+	if apierrors.IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get target namespace %q: %w", namespaceName, err)
+	}
+	return copyStringMap(namespace.Labels), nil
+}
+
+func (r *RemediationPlanReconciler) namespaceUsage(ctx context.Context, namespaceName string) (thresholds.Usage, error) {
+	var plans v1alpha1.RemediationPlanList
+	if err := r.List(ctx, &plans, client.InNamespace(namespaceName)); err != nil {
+		return thresholds.Usage{}, fmt.Errorf("list remediation plans in namespace %q: %w", namespaceName, err)
+	}
+	usage := thresholds.Usage{}
+	for _, plan := range plans.Items {
+		switch plan.Status.Phase {
+		case v1alpha1.PhaseSucceeded, v1alpha1.PhaseFailed, v1alpha1.PhaseRejected, v1alpha1.PhaseCompleted:
+			continue
+		default:
+			usage.ActivePlans++
+		}
+	}
+
+	var actions v1alpha1.AgentActionList
+	if err := r.List(ctx, &actions, client.InNamespace(namespaceName)); err != nil {
+		return thresholds.Usage{}, fmt.Errorf("list agent actions in namespace %q: %w", namespaceName, err)
+	}
+	for _, action := range actions.Items {
+		if action.Status.Phase == v1alpha1.PhaseWaitingApproval || action.Status.Phase == v1alpha1.PhaseEscalated {
+			usage.PendingApprovals++
+		}
+	}
+	return usage, nil
+}
+
+func (r *RemediationPlanReconciler) rejectForThreshold(ctx context.Context, plan *v1alpha1.RemediationPlan, result thresholds.EnforcementResult, now time.Time) (ctrl.Result, error) {
+	parts := make([]string, 0, len(result.Violations))
+	for _, violation := range result.Violations {
+		parts = append(parts, fmt.Sprintf("%s=%d exceeds limit=%d", violation.Resource, violation.Current, violation.Limit))
+	}
+	message := "namespace threshold exceeded"
+	if result.Resolution != nil {
+		ref := result.Resolution.Reference
+		message = fmt.Sprintf("namespace threshold %s/%s@%s exceeded", ref.Namespace, ref.Name, ref.Version)
+	}
+	original := plan.DeepCopy()
+	setResourceStatus(&plan.Status.ResourceStatus, v1alpha1.PhaseRejected, message+": "+strings.Join(parts, "; "), plan.Generation, now)
+	finishedAt := metav1.NewTime(now)
+	plan.Status.FinishedAt = &finishedAt
+	if !statusChangedPlan(original, plan) {
+		return ctrl.Result{}, nil
+	}
+	if err := r.Status().Update(ctx, plan); err != nil && !recordStatusUpdateConflict("RemediationPlan", err) {
+		return ctrl.Result{}, err
+	}
+	if r.EventRecorder != nil {
+		r.EventRecorder.Event(plan, corev1.EventTypeWarning, "NamespaceThresholdExceeded", plan.Status.Message)
+	}
+	return ctrl.Result{}, nil
+}
+
 func approvalSource(evaluation guardrails.PolicyEvaluation, fallback string) string {
 	if evaluation.Policy == nil {
 		return fallback
@@ -209,10 +315,31 @@ func approvalSource(evaluation guardrails.PolicyEvaluation, fallback string) str
 }
 
 func (r *RemediationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.RemediationPlan{}).
-		Owns(&v1alpha1.AgentAction{}).
-		Complete(r)
+		Owns(&v1alpha1.AgentAction{})
+	if r.PolicyPackEnabled {
+		builder = builder.
+			Watches(&v1alpha1.ApprovalPolicy{}, handler.EnqueueRequestsFromMapFunc(r.mapPendingPolicyPlans)).
+			Watches(&v1alpha1.NamespaceThreshold{}, handler.EnqueueRequestsFromMapFunc(r.mapPendingPolicyPlans))
+	}
+	return builder.Complete(r)
+}
+
+// mapPendingPolicyPlans requeues only plans that have not received an initial decision.
+// Terminal and in-flight decisions remain immutable after reconciliation.
+func (r *RemediationPlanReconciler) mapPendingPolicyPlans(ctx context.Context, _ client.Object) []reconcile.Request {
+	var plans v1alpha1.RemediationPlanList
+	if err := r.List(ctx, &plans); err != nil {
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(plans.Items))
+	for i := range plans.Items {
+		if plans.Items[i].Status.Phase == "" {
+			requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&plans.Items[i])})
+		}
+	}
+	return requests
 }
 
 func statusChangedPlan(before, after *v1alpha1.RemediationPlan) bool {

@@ -96,10 +96,10 @@ assert_not_contains "${default_clusterrole}" 'resources: ["jobs"]' "Job mutation
 assert_not_contains "${default_clusterrole}" 'resources: ["configmaps"]' "ConfigMap mutation in default ClusterRole"
 assert_not_contains "${default_clusterrole}" 'resources: ["remediationplans", "agentactions"]' "remediation write permissions in default ClusterRole"
 assert_not_contains "${default_clusterrole}" 'resources: ["remediationplans/status", "agentactions/status"]' "remediation status permissions in default ClusterRole"
-assert_not_contains "${default_clusterrole}" 'resources: ["approvalpolicies"]' "policy pack read permissions in default ClusterRole"
+assert_not_contains "${default_clusterrole}" 'resources: ["approvalpolicies", "namespacethresholds", "escalationchains"]' "policy pack read permissions in default ClusterRole"
 
 assert_contains "${policy_render}" "--enable-policy-pack=true" "policy pack opt-in"
-assert_contains "${policy_clusterrole}" 'resources: ["approvalpolicies"]' "policy pack ApprovalPolicy read permissions"
+assert_contains "${policy_clusterrole}" 'resources: ["approvalpolicies", "namespacethresholds", "escalationchains"]' "policy pack read permissions"
 
 assert_contains "${legacy_render}" "--enable-legacy-deployment-risk=true" "legacy deployment watcher opt-in"
 assert_contains "${legacy_render}" "--enable-remediation=false" "remediation remains disabled for legacy-only opt-in"

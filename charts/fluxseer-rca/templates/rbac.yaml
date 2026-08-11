@@ -20,7 +20,7 @@ rules:
     verbs: ["get", "list", "watch"]
   {{- if or .Values.controller.enablePolicyPack .Values.features.policyPack.enabled }}
   - apiGroups: ["aiops.platform"]
-    resources: ["approvalpolicies"]
+    resources: ["approvalpolicies", "namespacethresholds", "escalationchains"]
     verbs: ["get", "list", "watch"]
   {{- end }}
   - apiGroups: ["aiops.platform"]
