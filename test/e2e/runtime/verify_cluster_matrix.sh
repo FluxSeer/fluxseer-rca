@@ -235,7 +235,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: ${target_name}
-  mode: ReadOnly
+  mode: readOnly
   modelProviderRef:
     name: ${denied_provider}
   queries:
@@ -258,7 +258,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: ${target_name}
-  mode: ReadOnly
+  mode: readOnly
   modelProviderRef:
     name: ${rejected_provider}
   queries:
@@ -277,8 +277,19 @@ wait_for_phase "${rejected_request}" Failed
 
 denied_json="$(kubectl get investigationrequest "${denied_request}" -n "${namespace}" -o json)"
 rejected_json="$(kubectl get investigationrequest "${rejected_request}" -n "${namespace}" -o json)"
-assert_terminal_contract "${denied_json}" ProviderDataPolicyDenied
-assert_terminal_contract "${rejected_json}" ProviderDataPolicyRejected
+jq . <<<"${denied_json}" >"${report_dir}/provider-data-policy-denied.json"
+jq . <<<"${rejected_json}" >"${report_dir}/provider-data-policy-rejected.json"
+
+if ! assert_terminal_contract "${denied_json}" ProviderDataPolicyDenied; then
+  echo "ProviderDataPolicyDenied terminal contract mismatch" >&2
+  jq '{generation: .metadata.generation, status: .status}' <<<"${denied_json}" >&2
+  exit 1
+fi
+if ! assert_terminal_contract "${rejected_json}" ProviderDataPolicyRejected; then
+  echo "ProviderDataPolicyRejected terminal contract mismatch" >&2
+  jq '{generation: .metadata.generation, status: .status}' <<<"${rejected_json}" >&2
+  exit 1
+fi
 jq -e '.status.execution.egressAudit.reason == "ExternalTransmissionDisabled"' <<<"${denied_json}" >/dev/null
 jq -e '.status.execution.egressAudit.reason == "ClassificationExceeded"' <<<"${rejected_json}" >/dev/null
 
@@ -319,9 +330,9 @@ cat >"${report_dir}/runtime-access-log-report.md" <<EOF
 | ProviderDataPolicyRejected | Failed | Unknown | ClassificationExceeded | 0 | PASS |
 
 Both scenarios verified that every terminal condition uses the current
-`metadata.generation`, no `RiskSignal` was linked, the egress audit decision
-was `Rejected`, and the provider endpoint was not reached. The `/control`
-request in `provider-access.log` proves that access logging was operational.
+\`metadata.generation\`, no \`RiskSignal\` was linked, the egress audit decision
+was \`Rejected\`, and the provider endpoint was not reached. The \`/control\`
+request in \`provider-access.log\` proves that access logging was operational.
 EOF
 
 echo "runtime access-log matrix passed"
