@@ -165,9 +165,10 @@ verify-v0.4-approval-lifecycle:
 	bash hack/verify-v0.4-approval-lifecycle.sh
 
 verify-runtime-failure-paths:
-	$(GO) test ./internal/investigation -run 'TestServiceCollectEvidence(ClassifiesUnspecifiedDatasourceError|ReportsSnapshotWriteFailure|PreservesDatasourceQueryReason|RequiresConfiguredSnapshotStore)$$'
-	$(GO) test ./internal/modelgateway -run 'TestGatewayBlocksHostedProviderBeforeHTTPRequestWhenExternalTransmissionDenied$$'
-	$(GO) test ./internal/controllers -run 'TestInvestigationRequestReconcilerPersistsRejectedProviderDataPolicyAudit$$'
+	$(GO) test ./internal/investigation -run 'TestService(CollectEvidence(ClassifiesUnspecifiedDatasourceError|ReportsSnapshotWriteFailure|PreservesDatasourceQueryReason|RequiresConfiguredSnapshotStore)|GenerateRCARecordsProviderRequestFailure)$$'
+	$(GO) test ./internal/modelgateway -run 'TestGateway(BlocksHostedProviderBeforeHTTPRequestWhenExternalTransmissionDenied|TraceSummarizesUntypedProviderRequestFailure|SecretReaderFailuresDoNotCallHostedProvider)$$'
+	$(GO) test ./internal/controllers -run 'TestInvestigationRequestReconcilerPersists(RejectedProviderDataPolicyAudit|ProviderRequestFailure|SecretReaderFailuresWithoutProviderRequest)$$'
+	$(GO) test ./internal/datasourceconfig -run 'TestRegisterFromResourcesSkipsNetworkPolicyDeniedDatasource$$'
 
 verify-rbac-profiles:
 	bash hack/verify-rbac-profiles.sh

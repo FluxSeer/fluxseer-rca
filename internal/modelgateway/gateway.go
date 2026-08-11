@@ -173,7 +173,10 @@ func (g *Gateway) analyzeSingleProvider(ctx context.Context, provider *v1alpha1.
 				Message: providerErr.Message,
 			}
 		}
-		return domain.ReasoningOutput{}, err
+		return domain.ReasoningOutput{}, &AnalyzeError{
+			Reason:  "ProviderRequestFailed",
+			Message: fmt.Sprintf("model provider %q request failed", provider.Name),
+		}
 	}
 	return result, nil
 }

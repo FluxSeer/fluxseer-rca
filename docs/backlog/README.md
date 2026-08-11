@@ -35,6 +35,23 @@ The first runtime-validation batch is:
 5. keep internal dependency-injection reasons at unit or envtest tier unless a
    public runtime path exists.
 
+Local and mock-runtime completion checkpoint:
+
+- `ProviderRequestFailed` now persists stable `Failed/Unknown` status and a
+  bounded execution attempt instead of returning an unclassified reconcile
+  error.
+- `SecretReaderUnavailable` and `SecretReadFailed` persist terminal status and
+  prove that the hosted provider request count remains zero.
+- resource-backed datasource loading rejects a network-policy-denied endpoint,
+  leaves it out of the active registry, and continues registering valid
+  resources.
+- `DatasourceQueryFailed` and `EvidenceRetentionWriteFailed` have direct
+  regression coverage.
+
+The next validation batch requires cluster runtime evidence: rerun the current
+matrix, capture mock-provider access logs for policy denial/rejection, and
+record terminal condition sets plus `observedGeneration` in the report.
+
 Every validation ticket must record both expected state and forbidden side
 effects. At minimum, reports should cover provider requests, datasource
 queries, evidence, projected `RiskSignal` objects, remediation objects, and

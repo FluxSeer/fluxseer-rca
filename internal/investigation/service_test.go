@@ -1538,6 +1538,41 @@ func TestServiceGenerateRCAReturnsReasoningOutput(t *testing.T) {
 	}
 }
 
+func TestServiceGenerateRCARecordsProviderRequestFailure(t *testing.T) {
+	providerRuntime := &untypedFailingModelProvider{name: "raw-failure"}
+	service := &Service{
+		Gateway: &modelgateway.Gateway{
+			Base:      knowledge.NewBase(),
+			Providers: model.NewRegistry(providerRuntime),
+		},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "raw-failure", Namespace: "fluxseer-rca-system", Generation: 3},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: providerRuntime.name},
+	}
+
+	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target:   domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Provider: provider,
+	}, EvidenceCollectionResult{Summary: "provider request failure fixture"}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("generate RCA returned an unstable error: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "ProviderRequestFailed" {
+		t.Fatalf("expected ProviderRequestFailed issue, got %#v", result.Issue)
+	}
+	if providerRuntime.requests != 1 {
+		t.Fatalf("expected exactly one provider request, got %d", providerRuntime.requests)
+	}
+	if len(result.EgressAttempts) != 1 {
+		t.Fatalf("expected one provider attempt summary, got %#v", result.EgressAttempts)
+	}
+	attempt := result.EgressAttempts[0]
+	if attempt.ProviderRef == nil || attempt.ProviderRef.Name != provider.Name || attempt.ProviderGeneration != provider.Generation || attempt.Result != "ProviderRequestFailed" || attempt.Reason != "ProviderRequestFailed" {
+		t.Fatalf("expected stable ProviderRequestFailed attempt metadata, got %#v", attempt)
+	}
+}
+
 func TestServiceGenerateRCABlocksHostedProviderWithoutExternalTransmission(t *testing.T) {
 	hosted := &capturingModelProvider{name: "openai"}
 	service := &Service{
@@ -1935,6 +1970,18 @@ func (p failingModelProvider) Complete(context.Context, domain.ModelRequest) (do
 		Reason:  reason,
 		Message: "provider is unavailable",
 	}
+}
+
+type untypedFailingModelProvider struct {
+	name     string
+	requests int
+}
+
+func (p *untypedFailingModelProvider) Name() string { return p.name }
+
+func (p *untypedFailingModelProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	p.requests++
+	return domain.ModelResponse{}, fmt.Errorf("provider request failed without a typed reason")
 }
 
 type serviceResolverStub struct {

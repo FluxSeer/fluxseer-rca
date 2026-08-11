@@ -2,6 +2,7 @@ package modelgateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,7 +10,12 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
@@ -82,6 +88,129 @@ type staticSecretResolver struct {
 
 func (r staticSecretResolver) ResolveAPIKey(context.Context, *v1alpha1.ModelProvider) (string, error) {
 	return r.apiKey, nil
+}
+
+type rawFailingProvider struct {
+	requests int
+}
+
+func (p *rawFailingProvider) Name() string {
+	return "raw-failure"
+}
+
+func (p *rawFailingProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	p.requests++
+	return domain.ModelResponse{}, errors.New("provider transport failed without a typed reason")
+}
+
+func TestGatewayTraceSummarizesUntypedProviderRequestFailure(t *testing.T) {
+	providerRuntime := &rawFailingProvider{}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "raw-failure", Namespace: "fluxseer-rca-system"},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: providerRuntime.Name()},
+	}
+	gateway := &Gateway{
+		Base:      knowledge.NewBase(),
+		Providers: model.NewRegistry(providerRuntime),
+	}
+
+	_, trace, err := gateway.AnalyzeIngestionWithTrace(context.Background(), provider, domain.IngestionOutput{
+		Context: domain.IncidentContext{
+			Resource: domain.ResourceRef{Namespace: "prod", Name: "payments-api", Kind: "Deployment"},
+			Summary:  "provider transport failure fixture",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected provider request failure")
+	}
+	analyzeErr, ok := err.(*AnalyzeError)
+	if !ok || analyzeErr.Reason != "ProviderRequestFailed" {
+		t.Fatalf("expected stable ProviderRequestFailed error, got %T %#v", err, err)
+	}
+	if providerRuntime.requests != 1 {
+		t.Fatalf("expected exactly one provider request, got %d", providerRuntime.requests)
+	}
+	if len(trace.Attempts) != 1 {
+		t.Fatalf("expected one bounded gateway attempt, got %#v", trace.Attempts)
+	}
+	attempt := trace.Attempts[0]
+	if attempt.Provider != provider || attempt.Result != "ProviderRequestFailed" || attempt.Reason != "ProviderRequestFailed" {
+		t.Fatalf("expected ProviderRequestFailed gateway summary, got %#v", attempt)
+	}
+}
+
+func TestGatewaySecretReaderFailuresDoNotCallHostedProvider(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	readFailureClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+				return errors.New("simulated Kubernetes API read failure")
+			},
+		}).
+		Build()
+
+	tests := []struct {
+		name       string
+		secrets    SecretResolver
+		wantReason string
+	}{
+		{name: "reader unavailable", secrets: nil, wantReason: "SecretReaderUnavailable"},
+		{name: "read failed", secrets: KubeSecretResolver{Client: readFailureClient}, wantReason: "SecretReadFailed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			providerRequests := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				providerRequests++
+				_ = r.Body.Close()
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer server.Close()
+
+			provider := &v1alpha1.ModelProvider{
+				ObjectMeta: metav1.ObjectMeta{Name: "openai-secret-failure", Namespace: "fluxseer-rca-system"},
+				Spec: v1alpha1.ModelProviderSpec{
+					Provider: "openai",
+					Model:    "gpt-test",
+					Endpoint: server.URL,
+					APIKeySecretRef: &v1alpha1.SecretKeyRef{
+						Name: "openai-secret",
+						Key:  "api-key",
+					},
+					DataPolicy: v1alpha1.ModelProviderDataPolicy{AllowExternalTransmission: true},
+				},
+			}
+			gateway := &Gateway{
+				Base:      knowledge.NewBase(),
+				Providers: model.NewRegistry(openai.Provider{Client: server.Client()}),
+				Secrets:   tc.secrets,
+			}
+
+			_, trace, err := gateway.AnalyzeIngestionWithTrace(context.Background(), provider, domain.IngestionOutput{
+				Context: domain.IncidentContext{
+					Resource: domain.ResourceRef{Namespace: "prod", Name: "payments-api", Kind: "Deployment"},
+					Summary:  "secret dependency failure fixture",
+				},
+			})
+			if err == nil {
+				t.Fatalf("expected %s", tc.wantReason)
+			}
+			analyzeErr, ok := err.(*AnalyzeError)
+			if !ok || analyzeErr.Reason != tc.wantReason {
+				t.Fatalf("expected %s, got %T %#v", tc.wantReason, err, err)
+			}
+			if providerRequests != 0 {
+				t.Fatalf("expected providerRequestCount=0, got %d", providerRequests)
+			}
+			if len(trace.Attempts) != 1 || trace.Attempts[0].Reason != tc.wantReason {
+				t.Fatalf("expected one %s gateway attempt, got %#v", tc.wantReason, trace.Attempts)
+			}
+		})
+	}
 }
 
 func TestGatewayBlocksHostedProviderBeforeHTTPRequestWhenExternalTransmissionDenied(t *testing.T) {
