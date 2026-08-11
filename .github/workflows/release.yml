@@ -110,17 +110,6 @@ jobs:
           echo "source_date_epoch=$source_date_epoch" >> "$GITHUB_OUTPUT"
           echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
 
-      - name: Verify release token configuration
-        shell: bash
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "$RELEASE_TOKEN" ]; then
-            echo "Repository secret RELEASE_TOKEN is required to create GitHub releases." >&2
-            exit 1
-          fi
-
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
@@ -376,7 +365,6 @@ jobs:
       - name: Create GitHub prerelease and upload assets
         uses: actions/github-script@v8
         with:
-          github-token: ${{ secrets.RELEASE_TOKEN }}
           script: |
             const fs = require('fs');
             const path = require('path');
