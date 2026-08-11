@@ -12,13 +12,15 @@ oom_target="runtime-canonical-oom"
 image_target="runtime-canonical-imagepull"
 oom_request="runtime-canonical-oom-event-only"
 image_request="runtime-canonical-imagepull"
+cli_dir=""
+cli_bin=""
 
 if [[ -z "${KUBECONFIG:-}" ]]; then
   echo "KUBECONFIG must point to the explicitly authorized test cluster" >&2
   exit 1
 fi
 
-for command_name in kubectl jq git sort comm; do
+for command_name in kubectl jq git go sort comm; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "required command not found: ${command_name}" >&2
     exit 1
@@ -28,6 +30,7 @@ done
 mkdir -p "${report_dir}"
 
 cleanup() {
+  kubectl delete riskrule "${oom_request}" "${image_request}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete investigationrequest "${oom_request}" "${image_request}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   while IFS= read -r signal_name; do
     [[ -z "${signal_name}" ]] || kubectl delete risksignal "${signal_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
@@ -42,6 +45,8 @@ cleanup() {
   kubectl delete configmap runtime-canonical-provider-nginx -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl wait --for=delete "pod/${image_target}" "pod/${oom_target}-0" -n "${namespace}" --timeout=60s >/dev/null 2>&1 || true
   kubectl wait --for=delete pod -l app=runtime-canonical-provider-mock -n "${namespace}" --timeout=60s >/dev/null 2>&1 || true
+  if [[ -n "${cli_bin}" ]]; then rm -f "${cli_bin}"; fi
+  if [[ -n "${cli_dir}" ]]; then rmdir "${cli_dir}" 2>/dev/null || true; fi
   while IFS= read -r event_name; do
     [[ -z "${event_name}" ]] || kubectl delete event "${event_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   done < <(kubectl get events -n "${namespace}" -o json 2>/dev/null | jq -r '.items[] | select((.involvedObject.name // "") | startswith("runtime-canonical-")) | .metadata.name' 2>/dev/null || true)
@@ -52,6 +57,18 @@ wait_for_phase() {
   local request_name="$1"
   local phase="$2"
   kubectl wait --for="jsonpath={.status.phase}=${phase}" --timeout="${timeout}" "investigationrequest/${request_name}" -n "${namespace}"
+}
+
+wait_for_rule_request() {
+  local rule_name="$1"
+  local request_name=""
+  for _ in $(seq 1 60); do
+    request_name="$(kubectl get investigationrequest -n "${namespace}" -l "fluxseer-rca.aiops.platform/risk-rule=${rule_name}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+    if [[ -n "${request_name}" ]]; then printf '%s\n' "${request_name}"; return 0; fi
+    sleep 2
+  done
+  echo "no InvestigationRequest was created for RiskRule ${rule_name}" >&2
+  return 1
 }
 
 assert_condition() {
@@ -75,6 +92,9 @@ assert_generation_contract() {
 }
 
 cleanup
+cli_dir="$(mktemp -d)"
+cli_bin="${cli_dir}/fluxseer"
+(cd "${repo_root}" && GOWORK=off go build -o "${cli_bin}" ./cmd/fluxseer)
 
 kubectl get namespace "${namespace}" >/dev/null
 kubectl get deployment fluxseer-rca-controller-manager -n "${namespace}" -o yaml >"${report_dir}/controller-deployment.yaml"
@@ -308,46 +328,62 @@ spec:
     key: api-key
 ---
 apiVersion: aiops.platform/v1alpha1
-kind: InvestigationRequest
+kind: RiskRule
 metadata:
   name: ${oom_request}
 spec:
-  target:
-    namespace: ${namespace}
-    apiVersion: apps/v1
-    kind: StatefulSet
-    name: ${oom_target}
-  mode: readOnly
-  createRiskSignal: true
-  modelProviderRef: {name: runtime-canonical-oom-provider}
-  evidenceRequirements: {profile: OOMKilled}
-  queries:
+  targetSelector:
+    namespaceSelector: {matchNames: [${namespace}]}
+    workloadSelector:
+      matchLabels: {app: ${oom_target}}
+      kinds: [StatefulSet]
+  interval: 5s
+  window: 10m
+  severity: warning
+  signals:
     - name: oom-event
       datasourceRef: {name: kubernetes-events}
       queryType: event
       reasons: [OOMKilled]
+      threshold: {operator: count_gt, value: 0}
+  ai:
+    rcaEnabled: true
+    providerRef: {name: runtime-canonical-oom-provider}
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true
+    evidenceRequirements: {profile: OOMKilled}
 ---
 apiVersion: aiops.platform/v1alpha1
-kind: InvestigationRequest
+kind: RiskRule
 metadata:
   name: ${image_request}
 spec:
-  target:
-    namespace: ${namespace}
-    apiVersion: v1
-    kind: Pod
-    name: ${image_target}
-  mode: readOnly
-  createRiskSignal: true
-  modelProviderRef: {name: runtime-canonical-image-provider}
-  evidenceRequirements: {profile: ImagePullBackOff}
-  queries:
+  targetSelector:
+    namespaceSelector: {matchNames: [${namespace}]}
+    workloadSelector:
+      matchLabels: {app: ${image_target}}
+      kinds: [Pod]
+  interval: 5s
+  window: 10m
+  severity: warning
+  signals:
     - name: image-pull-event
       datasourceRef: {name: kubernetes-events}
       queryType: event
       reasons: [ErrImagePull]
+      threshold: {operator: count_gt, value: 0}
+  ai:
+    rcaEnabled: true
+    providerRef: {name: runtime-canonical-image-provider}
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true
+    evidenceRequirements: {profile: ImagePullBackOff}
 EOF
 
+oom_request="$(wait_for_rule_request "${oom_request}")"
+image_request="$(wait_for_rule_request "${image_request}")"
 wait_for_phase "${oom_request}" Completed
 wait_for_phase "${image_request}" Completed
 
@@ -355,6 +391,10 @@ oom_json="$(kubectl get investigationrequest "${oom_request}" -n "${namespace}" 
 image_json="$(kubectl get investigationrequest "${image_request}" -n "${namespace}" -o json)"
 jq . <<<"${oom_json}" >"${report_dir}/oomkilled-event-only.json"
 jq . <<<"${image_json}" >"${report_dir}/imagepullbackoff.json"
+"${cli_bin}" report riskrule runtime-canonical-oom-event-only -n "${namespace}" -o json >"${report_dir}/oomkilled-event-only-riskrule.json"
+"${cli_bin}" report riskrule runtime-canonical-imagepull -n "${namespace}" -o json >"${report_dir}/imagepullbackoff-riskrule.json"
+bash "${repo_root}/hack/verify-riskrule-report.sh" "${report_dir}/oomkilled-event-only-riskrule.json"
+bash "${repo_root}/hack/verify-riskrule-report.sh" "${report_dir}/imagepullbackoff-riskrule.json"
 kubectl get investigationrequest "${oom_request}" -n "${namespace}" -o yaml >"${report_dir}/oomkilled-event-only.yaml"
 kubectl get investigationrequest "${image_request}" -n "${namespace}" -o yaml >"${report_dir}/imagepullbackoff.yaml"
 kubectl get event runtime-canonical-oom-event runtime-canonical-image-event -n "${namespace}" -o yaml >"${report_dir}/synthetic-events.yaml"
