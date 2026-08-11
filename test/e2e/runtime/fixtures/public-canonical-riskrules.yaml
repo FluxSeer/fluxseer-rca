@@ -1,0 +1,49 @@
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: runtime-canonical-oom-event-only
+  namespace: fluxseer-rca-test
+spec:
+  targetSelector:
+    namespaceSelector: {matchNames: [fluxseer-rca-test]}
+    workloadSelector:
+      matchLabels: {app: runtime-canonical-oom}
+      kinds: [StatefulSet]
+  interval: 5s
+  window: 10m
+  severity: warning
+  signals:
+    - name: oom-event
+      datasourceRef: {name: kubernetes-events}
+      queryType: event
+      reasons: [OOMKilled]
+      threshold: {operator: count_gt, value: 0}
+  ai:
+    rcaEnabled: true
+    providerRef: {name: runtime-canonical-oom-provider}
+  investigationPolicy: {mode: CreateRequest, createRiskSignal: true}
+---
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: runtime-canonical-imagepull
+  namespace: fluxseer-rca-test
+spec:
+  targetSelector:
+    namespaceSelector: {matchNames: [fluxseer-rca-test]}
+    workloadSelector:
+      matchLabels: {app: runtime-canonical-imagepull}
+      kinds: [Pod]
+  interval: 5s
+  window: 10m
+  severity: warning
+  signals:
+    - name: image-pull-event
+      datasourceRef: {name: kubernetes-events}
+      queryType: event
+      reasons: [ErrImagePull]
+      threshold: {operator: count_gt, value: 0}
+  ai:
+    rcaEnabled: true
+    providerRef: {name: runtime-canonical-image-provider}
+  investigationPolicy: {mode: CreateRequest, createRiskSignal: true}
