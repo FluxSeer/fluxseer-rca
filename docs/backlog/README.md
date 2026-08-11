@@ -88,6 +88,14 @@ effects. At minimum, reports should cover provider requests, datasource
 queries, evidence, projected `RiskSignal` objects, remediation objects, and
 execution identity where applicable.
 
+Generated reports now use the shared `fluxseer-test-report/v1` contract. Every
+scenario must expose expected output, actual output, named assertions, exact
+field-path differences, and raw artifact links; aggregate-only summaries are
+not accepted for new runs. The schema, JSON/Markdown templates, validator, and
+adoption instructions are under [`test/reporting/`](../../test/reporting/README.md).
+The quality baseline, canonical workload runtime, and P0 cluster matrix
+entrypoints validate this contract before reporting success.
+
 The local regression entrypoint for the first failure-path batch is:
 
 ```sh

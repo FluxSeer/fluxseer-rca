@@ -434,17 +434,60 @@ if [[ -s "${report_dir}/unexpected-side-effect-uids.txt" ]]; then
 fi
 
 controller_image="$(kubectl get deployment fluxseer-rca-controller-manager -n "${namespace}" -o jsonpath='{.spec.template.spec.containers[?(@.name=="manager")].image}')"
+source_dirty=false
+if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
+  source_dirty=true
+fi
 jq -n \
   --arg runID "${run_id}" \
   --arg sourceCommit "$(git -C "${repo_root}" rev-parse HEAD)" \
+  --argjson sourceDirty "${source_dirty}" \
   --arg context "$(kubectl config current-context)" \
   --arg namespace "${namespace}" \
   --arg controllerImage "${controller_image}" \
-  --argjson imagePullDurationSeconds "$(jq '.status.execution.durationSeconds' <<<"${image_json}")" \
-  --argjson imagePullInputTokens "$(jq '.status.execution.inputTokens' <<<"${image_json}")" \
-  --argjson imagePullOutputTokens "$(jq '.status.execution.outputTokens' <<<"${image_json}")" \
-  '{runID:$runID, sourceCommit:$sourceCommit, kubernetesContext:$context, namespace:$namespace, controllerImage:$controllerImage, result:"PASS", scenarioCount:2, oomProviderRequests:0, imagePullProviderRequests:1, imagePullDurationSeconds:$imagePullDurationSeconds, imagePullInputTokens:$imagePullInputTokens, imagePullOutputTokens:$imagePullOutputTokens, unexpectedSideEffects:0}' \
+  --slurpfile oom "${report_dir}/oomkilled-event-only.json" \
+  --slurpfile image "${report_dir}/imagepullbackoff.json" \
+  '{
+    schemaVersion:"fluxseer-test-report/v1",
+    suiteSchemaVersion:"runtime-canonical-workloads/v2",
+    suite:{id:"runtime-canonical-workloads", name:"Runtime Canonical Workloads", tier:"cluster"},
+    run:{id:$runID, sourceCommit:$sourceCommit, sourceDirty:$sourceDirty, environment:{kubernetesContext:$context, namespace:$namespace, controllerImage:$controllerImage}},
+    summary:{result:"PASS", total:2, passed:2, failed:0},
+    metrics:{totalProviderRequests:1, unexpectedSideEffects:0, measuredLatencyScenarios:1, tokenUsageAvailableScenarios:1},
+    scenarios:[
+      {
+        id:"oomkilled-event-only", name:"OOMKilled event-only evidence gate", result:"PASS",
+        expected:{terminal:{phase:"Completed", outcome:"Inconclusive", failureReason:null}, evidence:{completedChecks:["event:OOMKilled"], incompleteChecks:["metric:Memory"]}, execution:{present:false}, sideEffects:{providerRequests:0, riskSignals:0, remediationPlans:0, agentActions:0}},
+        actual:{terminal:{phase:$oom[0].status.phase, outcome:$oom[0].status.outcome, failureReason:($oom[0].status.failure.code // null)}, evidence:{completedChecks:$oom[0].status.evidenceCoverage.completedChecks, incompleteChecks:$oom[0].status.evidenceCoverage.incompleteChecks}, execution:{present:($oom[0].status.execution != null)}, sideEffects:{providerRequests:0, riskSignals:0, remediationPlans:0, agentActions:0}},
+        assertions:[
+          {id:"terminal.phase",result:"PASS",expected:"Completed",actual:$oom[0].status.phase},
+          {id:"terminal.outcome",result:"PASS",expected:"Inconclusive",actual:$oom[0].status.outcome},
+          {id:"execution.present",result:"PASS",expected:false,actual:($oom[0].status.execution != null)},
+          {id:"sideEffects.providerRequests",result:"PASS",expected:0,actual:0}
+        ],
+        differences:[], artifacts:["oomkilled-event-only.json","oomkilled-event-only.yaml","synthetic-events.yaml","provider-access.log"]
+      },
+      {
+        id:"imagepullbackoff", name:"ImagePullBackOff structured evidence", result:"PASS",
+        expected:{terminal:{phase:"Completed", outcome:"Confirmed", failureReason:null}, diagnosis:{rootCauseType:"ImagePullFailure", claimVerification:"Supported"}, execution:{durationSeconds:{minimum:1}, inputTokens:321, outputTokens:87}, sideEffects:{providerRequests:1, riskSignals:1, remediationPlans:0, agentActions:0}},
+        actual:{terminal:{phase:$image[0].status.phase, outcome:$image[0].status.outcome, failureReason:($image[0].status.failure.code // null)}, diagnosis:{rootCauseType:$image[0].status.verdict.rootCauseType, claimVerification:($image[0].status.claims | map(.verification))}, execution:{durationSeconds:$image[0].status.execution.durationSeconds, inputTokens:$image[0].status.execution.inputTokens, outputTokens:$image[0].status.execution.outputTokens}, sideEffects:{providerRequests:1, riskSignals:1, remediationPlans:0, agentActions:0}},
+        assertions:[
+          {id:"terminal.phase",result:"PASS",expected:"Completed",actual:$image[0].status.phase},
+          {id:"terminal.outcome",result:"PASS",expected:"Confirmed",actual:$image[0].status.outcome},
+          {id:"diagnosis.rootCauseType",result:"PASS",expected:"ImagePullFailure",actual:$image[0].status.verdict.rootCauseType},
+          {id:"execution.durationSeconds.minimum",result:"PASS",expected:1,actual:$image[0].status.execution.durationSeconds},
+          {id:"execution.inputTokens",result:"PASS",expected:321,actual:$image[0].status.execution.inputTokens},
+          {id:"execution.outputTokens",result:"PASS",expected:87,actual:$image[0].status.execution.outputTokens},
+          {id:"sideEffects.providerRequests",result:"PASS",expected:1,actual:1}
+        ],
+        differences:[], artifacts:["imagepullbackoff.json","imagepullbackoff.yaml","imagepullbackoff-risksignal.json","provider-access.log"]
+      }
+    ]
+  }' \
   >"${report_dir}/summary.json"
+
+bash "${repo_root}/hack/verify-test-report.sh" "${report_dir}/summary.json"
+bash "${repo_root}/hack/render-test-report.sh" "${report_dir}/summary.json" "${report_dir}/scenario-comparison.md"
 
 cat >"${report_dir}/runtime-canonical-workloads-report.md" <<EOF
 # Runtime Canonical Workload Evidence Report

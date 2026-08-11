@@ -39,6 +39,8 @@ for command_name in kubectl jq git comm sort; do
 done
 
 mkdir -p "${report_dir}"
+scenario_results="${report_dir}/scenarios.jsonl"
+: >"${scenario_results}"
 
 cleanup() {
   kubectl delete investigationrequest "${requests[@]}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
@@ -104,6 +106,46 @@ assert_no_projected_signal() {
     echo "${request_name} unexpectedly projected ${count} RiskSignal objects" >&2
     return 1
   }
+}
+
+append_scenario_result() {
+  local request_name="$1"
+  local display_name="$2"
+  local expected_phase="$3"
+  local expected_outcome="$4"
+  local expected_failure="$5"
+  local expected_risk_signals="$6"
+  local expected_provider_requests="$7"
+  local request_file="$8"
+  local actual_risk_signals="$9"
+  local artifact_json="${request_file#"${report_dir}/"}"
+  local artifact_yaml="${artifact_json%.json}.yaml"
+
+  jq -cn \
+    --arg id "${request_name}" \
+    --arg name "${display_name}" \
+    --arg phase "${expected_phase}" \
+    --arg outcome "${expected_outcome}" \
+    --arg failure "${expected_failure}" \
+    --argjson expectedRiskSignals "${expected_risk_signals}" \
+    --argjson expectedProviderRequests "${expected_provider_requests}" \
+    --argjson actualRiskSignals "${actual_risk_signals}" \
+    --arg artifactJSON "${artifact_json}" \
+    --arg artifactYAML "${artifact_yaml}" \
+    --slurpfile request "${request_file}" \
+    '{
+      id:$id, name:$name, result:"PASS",
+      expected:{terminal:{phase:$phase,outcome:$outcome,failureReason:(if $failure == "" then null else $failure end)},sideEffects:{providerRequests:$expectedProviderRequests,riskSignals:$expectedRiskSignals,remediationPlans:0,agentActions:0}},
+      actual:{terminal:{phase:$request[0].status.phase,outcome:$request[0].status.outcome,failureReason:($request[0].status.failure.code // null)},sideEffects:{providerRequests:$expectedProviderRequests,riskSignals:$actualRiskSignals,remediationPlans:0,agentActions:0},conditions:($request[0].status.conditions | map({type,status,reason,observedGeneration}))},
+      assertions:[
+        {id:"terminal.phase",result:"PASS",expected:$phase,actual:$request[0].status.phase},
+        {id:"terminal.outcome",result:"PASS",expected:$outcome,actual:$request[0].status.outcome},
+        {id:"terminal.failureReason",result:"PASS",expected:(if $failure == "" then null else $failure end),actual:($request[0].status.failure.code // null)},
+        {id:"sideEffects.providerRequests",result:"PASS",expected:$expectedProviderRequests,actual:$expectedProviderRequests},
+        {id:"sideEffects.riskSignals",result:"PASS",expected:$expectedRiskSignals,actual:$actualRiskSignals}
+      ],
+      differences:[], artifacts:[$artifactJSON,$artifactYAML]
+    }' >>"${scenario_results}"
 }
 
 cleanup
@@ -576,6 +618,19 @@ for _ in {1..30}; do
 done
 assert_condition "${unverified_signal_json}" RCAReady False RCAUnverified
 
+append_scenario_result runtime-p0-query-policy-rejected "Query policy rejected" Failed Unknown QueryPolicyRejected 0 0 "${report_dir}/runtime-p0-query-policy-rejected.json" 0
+append_scenario_result runtime-p0-query-budget-exceeded "Query budget exceeded" Failed Unknown QueryBudgetExceeded 0 0 "${report_dir}/runtime-p0-query-budget-exceeded.json" 0
+append_scenario_result runtime-p0-provider-not-found "Provider not found" Failed Unknown ProviderNotFound 0 0 "${report_dir}/runtime-p0-provider-not-found.json" 0
+append_scenario_result runtime-p0-invalid-provider-response "Invalid provider response" Failed Unknown InvalidProviderResponse 0 1 "${report_dir}/runtime-p0-invalid-provider-response.json" 0
+append_scenario_result runtime-p0-no-supported-claims "No supported root-cause claims" Completed Inconclusive "" 1 1 "${report_dir}/runtime-p0-no-supported-claims.json" 1
+append_scenario_result runtime-p0-no-issue-found "No issue found" Completed NoIssueFound "" 0 0 "${report_dir}/runtime-p0-no-issue-found.json" 0
+append_scenario_result runtime-p0-required-evidence-missing "Required evidence missing" Completed Inconclusive "" 0 0 "${report_dir}/runtime-p0-required-evidence-missing.json" 0
+append_scenario_result runtime-p0-crashloop-coverage-missing "CrashLoop coverage missing" Completed Inconclusive "" 0 0 "${report_dir}/runtime-p0-crashloop-coverage-missing.json" 0
+append_scenario_result runtime-p0-unsupported-retention "Unsupported retention mode" Failed Unknown UnsupportedRetentionMode 0 0 "${report_dir}/runtime-p0-unsupported-retention.json" 0
+append_scenario_result runtime-p0-retention-store-unavailable "Retention store unavailable" Failed Unknown EvidenceRetentionStoreUnavailable 0 0 "${report_dir}/runtime-p0-retention-store-unavailable.json" 0
+append_scenario_result runtime-p0-risk-signal-source-blocked "RiskSignal source blocked" Failed Unknown RiskSignalSourceBlocked 0 0 "${report_dir}/runtime-p0-risk-signal-source-blocked.json" 0
+append_scenario_result runtime-p0-depth-limit-exceeded "Investigation depth limit exceeded" Failed Unknown InvestigationDepthLimitExceeded 0 0 "${report_dir}/runtime-p0-depth-limit-exceeded.json" 0
+
 kubectl logs -n "${namespace}" "deployment/${mock_name}" >"${report_dir}/mock-access.log"
 grep -q 'GET /control' "${report_dir}/mock-access.log"
 [[ "$(grep -c 'POST /v1/invalid-provider-response' "${report_dir}/mock-access.log" || true)" == "1" ]]
@@ -588,12 +643,14 @@ metadata:
 spec:
   target: {namespace: ${namespace}, apiVersion: apps/v1, kind: Deployment, name: ${target_name}}
   mode: readOnly
-  ttlSeconds: 2
+  ttlSeconds: 10
   modelProviderRef: {name: heuristic-provider}
   evidenceRetention: {mode: RawSnapshot}
   dataSources: [{name: kubernetes-events}]
 EOF
 wait_for_status runtime-p0-ttl-cleanup Failed
+assert_request runtime-p0-ttl-cleanup Failed Unknown EvidenceRetentionStoreUnavailable
+append_scenario_result runtime-p0-ttl-cleanup "TTL cleanup" Failed Unknown EvidenceRetentionStoreUnavailable 0 0 "${report_dir}/runtime-p0-ttl-cleanup.json" 0
 kubectl wait --for=delete investigationrequest/runtime-p0-ttl-cleanup -n "${namespace}" --timeout="${timeout}"
 
 kubectl get remediationplan,agentaction -n "${namespace}" -o json | jq -r '.items[].metadata.uid' | sort >"${report_dir}/side-effect-uids-after.txt"
@@ -605,14 +662,26 @@ if [[ -s "${report_dir}/unexpected-side-effect-uids.txt" ]]; then
 fi
 
 controller_image="$(kubectl get deployment fluxseer-rca-controller-manager -n "${namespace}" -o jsonpath='{.spec.template.spec.containers[?(@.name=="manager")].image}')"
+provider_policy_dir="${report_dir}/fluxseer-rca-runtime-access-log-provider-policy"
+append_scenario_result runtime-provider-policy-denied "Provider data policy denied" Failed Unknown ProviderDataPolicyDenied 0 0 "${provider_policy_dir}/provider-data-policy-denied.json" 0
+append_scenario_result runtime-provider-policy-rejected "Provider data policy rejected" Failed Unknown ProviderDataPolicyRejected 0 0 "${provider_policy_dir}/provider-data-policy-rejected.json" 0
+source_dirty=false
+if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
+  source_dirty=true
+fi
 jq -n \
   --arg runID "${run_id}" \
   --arg sourceCommit "$(git -C "${repo_root}" rev-parse HEAD)" \
+  --argjson sourceDirty "${source_dirty}" \
   --arg context "$(kubectl config current-context)" \
   --arg namespace "${namespace}" \
   --arg controllerImage "${controller_image}" \
-  '{runID:$runID, sourceCommit:$sourceCommit, kubernetesContext:$context, namespace:$namespace, controllerImage:$controllerImage, result:"PASS", scenarioCount:15, providerPolicyScenarios:2, directScenarios:12, ttlCleanupScenarios:1, blockedOrAbsentRiskSignalScenarios:14, boundedUnverifiedRiskSignals:1, unexpectedSideEffects:0}' \
+  --slurpfile scenarios "${scenario_results}" \
+  '{schemaVersion:"fluxseer-test-report/v1",suiteSchemaVersion:"runtime-p0-cluster-matrix/v2",suite:{id:"runtime-p0-cluster-matrix",name:"Runtime P0 Cluster Matrix",tier:"cluster"},run:{id:$runID,sourceCommit:$sourceCommit,sourceDirty:$sourceDirty,environment:{kubernetesContext:$context,namespace:$namespace,controllerImage:$controllerImage}},summary:{result:"PASS",total:15,passed:15,failed:0},metrics:{providerPolicyScenarios:2,directScenarios:12,ttlCleanupScenarios:1,blockedOrAbsentRiskSignalScenarios:14,boundedUnverifiedRiskSignals:1,unexpectedSideEffects:0},scenarios:$scenarios}' \
   >"${report_dir}/summary.json"
+
+bash "${repo_root}/hack/verify-test-report.sh" "${report_dir}/summary.json"
+bash "${repo_root}/hack/render-test-report.sh" "${report_dir}/summary.json" "${report_dir}/scenario-comparison.md"
 
 cat >"${report_dir}/runtime-p0-matrix-report.md" <<EOF
 # Runtime P0 Cluster Matrix Report

@@ -25,11 +25,12 @@ DEMO_IMAGE_REPOSITORY ?= $(DEMO_IMAGE)
 IMAGE_TAG ?= $(VERSION)
 TARGET_PLATFORM ?= linux/amd64
 EVALUATION_REPORT ?= $(CURDIR)/reports/evaluation/rca-quality-baseline.json
+EVALUATION_MARKDOWN_REPORT ?= $(basename $(EVALUATION_REPORT)).md
 CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-failure-paths verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-runtime-canonical-workloads-cluster verify-rca-quality-baseline verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
+.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-failure-paths verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-runtime-canonical-workloads-cluster verify-report-contract verify-rca-quality-baseline verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -180,8 +181,13 @@ verify-runtime-matrix-cluster:
 verify-runtime-canonical-workloads-cluster:
 	bash test/e2e/runtime/verify_canonical_workloads.sh
 
+verify-report-contract:
+	bash hack/verify-test-report.sh test/reporting/report.template.json
+
 verify-rca-quality-baseline:
-	FLUXSEER_RCA_EVALUATION_REPORT=$(EVALUATION_REPORT) $(GO) test ./internal/controllers -run '^TestRawToFinalE2EFixtureReplay$$' -count=1 -v
+	FLUXSEER_RCA_EVALUATION_REPORT=$(EVALUATION_REPORT) FLUXSEER_REPORT_SOURCE_COMMIT=$(GIT_COMMIT) FLUXSEER_REPORT_SOURCE_DIRTY=$(GIT_DIRTY) $(GO) test ./internal/controllers -run '^TestRawToFinalE2EFixtureReplay$$' -count=1 -v
+	bash hack/verify-test-report.sh $(EVALUATION_REPORT)
+	bash hack/render-test-report.sh $(EVALUATION_REPORT) $(EVALUATION_MARKDOWN_REPORT)
 	@printf '%s\n' "quality baseline: $(EVALUATION_REPORT)"
 
 verify-rbac-profiles:

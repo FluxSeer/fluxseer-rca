@@ -82,43 +82,89 @@ type fixtureEvidenceExpectation struct {
 }
 
 type fixtureBaselineResult struct {
-	Fixture                     string         `json:"fixture"`
-	Scenario                    string         `json:"scenario"`
-	ExpectedDiagnosis           string         `json:"expectedDiagnosis"`
-	ExpectedPhase               string         `json:"expectedPhase"`
-	ActualPhase                 string         `json:"actualPhase"`
-	ExpectedOutcome             string         `json:"expectedOutcome"`
-	ActualOutcome               string         `json:"actualOutcome"`
-	ActualRootCauseType         string         `json:"actualRootCauseType,omitempty"`
-	ExpectedFailureReason       string         `json:"expectedFailureReason,omitempty"`
-	ActualFailureReason         string         `json:"actualFailureReason,omitempty"`
-	FailureReasonCorrect        bool           `json:"failureReasonCorrect"`
-	ExpectedIncident            bool           `json:"expectedIncident"`
-	RootCauseTypeCorrect        bool           `json:"rootCauseTypeCorrect"`
-	RootCauseEntityCorrect      bool           `json:"rootCauseEntityCorrect"`
-	RootCauseEntityEvaluated    bool           `json:"rootCauseEntityEvaluated"`
-	EvidencePrecision           float64        `json:"evidencePrecision"`
-	EvidenceRecall              float64        `json:"evidenceRecall"`
-	EvidenceEvaluationAvailable bool           `json:"evidenceEvaluationAvailable"`
-	ClaimVerification           map[string]int `json:"claimVerification"`
-	UnsupportedClaimRate        float64        `json:"unsupportedClaimRate"`
-	UnsafeNoIssueFound          bool           `json:"unsafeNoIssueFound"`
-	QueryCount                  int            `json:"queryCount"`
-	ProviderRequestCount        int            `json:"providerRequestCount"`
-	CheckpointReused            bool           `json:"checkpointReused"`
-	DurationSeconds             int64          `json:"durationSeconds"`
-	InputTokens                 int64          `json:"inputTokens"`
-	OutputTokens                int64          `json:"outputTokens"`
-	TokenUsageAvailable         bool           `json:"tokenUsageAvailable"`
-	HumanJudgment               string         `json:"humanJudgment"`
-	ExpectedEvidenceCount       int            `json:"expectedEvidenceCount"`
-	MatchedExpectedEvidence     int            `json:"matchedExpectedEvidence"`
-	CollectedEvidenceCount      int            `json:"collectedEvidenceCount"`
-	MatchedCollectedEvidence    int            `json:"matchedCollectedEvidence"`
+	ID                          string              `json:"id"`
+	Name                        string              `json:"name"`
+	Result                      string              `json:"result"`
+	Expected                    map[string]any      `json:"expected"`
+	Actual                      map[string]any      `json:"actual"`
+	Assertions                  []fixtureAssertion  `json:"assertions"`
+	Differences                 []fixtureDifference `json:"differences"`
+	Artifacts                   []string            `json:"artifacts"`
+	Fixture                     string              `json:"fixture"`
+	Scenario                    string              `json:"scenario"`
+	ExpectedDiagnosis           string              `json:"expectedDiagnosis"`
+	ExpectedPhase               string              `json:"expectedPhase"`
+	ActualPhase                 string              `json:"actualPhase"`
+	ExpectedOutcome             string              `json:"expectedOutcome"`
+	ActualOutcome               string              `json:"actualOutcome"`
+	ActualRootCauseType         string              `json:"actualRootCauseType,omitempty"`
+	ExpectedFailureReason       string              `json:"expectedFailureReason,omitempty"`
+	ActualFailureReason         string              `json:"actualFailureReason,omitempty"`
+	FailureReasonCorrect        bool                `json:"failureReasonCorrect"`
+	ExpectedIncident            bool                `json:"expectedIncident"`
+	RootCauseTypeCorrect        bool                `json:"rootCauseTypeCorrect"`
+	RootCauseEntityCorrect      bool                `json:"rootCauseEntityCorrect"`
+	RootCauseEntityEvaluated    bool                `json:"rootCauseEntityEvaluated"`
+	EvidencePrecision           float64             `json:"evidencePrecision"`
+	EvidenceRecall              float64             `json:"evidenceRecall"`
+	EvidenceEvaluationAvailable bool                `json:"evidenceEvaluationAvailable"`
+	ClaimVerification           map[string]int      `json:"claimVerification"`
+	UnsupportedClaimRate        float64             `json:"unsupportedClaimRate"`
+	UnsafeNoIssueFound          bool                `json:"unsafeNoIssueFound"`
+	QueryCount                  int                 `json:"queryCount"`
+	ProviderRequestCount        int                 `json:"providerRequestCount"`
+	CheckpointReused            bool                `json:"checkpointReused"`
+	DurationSeconds             int64               `json:"durationSeconds"`
+	InputTokens                 int64               `json:"inputTokens"`
+	OutputTokens                int64               `json:"outputTokens"`
+	TokenUsageAvailable         bool                `json:"tokenUsageAvailable"`
+	HumanJudgment               string              `json:"humanJudgment"`
+	ExpectedEvidenceCount       int                 `json:"expectedEvidenceCount"`
+	MatchedExpectedEvidence     int                 `json:"matchedExpectedEvidence"`
+	CollectedEvidenceCount      int                 `json:"collectedEvidenceCount"`
+	MatchedCollectedEvidence    int                 `json:"matchedCollectedEvidence"`
+}
+
+type fixtureAssertion struct {
+	ID       string `json:"id"`
+	Result   string `json:"result"`
+	Expected any    `json:"expected"`
+	Actual   any    `json:"actual"`
+}
+
+type fixtureDifference struct {
+	Path     string `json:"path"`
+	Expected any    `json:"expected"`
+	Actual   any    `json:"actual"`
+}
+
+type fixtureReportSuite struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Tier string `json:"tier"`
+}
+
+type fixtureReportRun struct {
+	ID           string         `json:"id"`
+	SourceCommit string         `json:"sourceCommit"`
+	SourceDirty  bool           `json:"sourceDirty"`
+	Environment  map[string]any `json:"environment"`
+}
+
+type fixtureReportSummary struct {
+	Result string `json:"result"`
+	Total  int    `json:"total"`
+	Passed int    `json:"passed"`
+	Failed int    `json:"failed"`
 }
 
 type fixtureBaselineReport struct {
 	SchemaVersion                string                  `json:"schemaVersion"`
+	SuiteSchemaVersion           string                  `json:"suiteSchemaVersion"`
+	Suite                        fixtureReportSuite      `json:"suite"`
+	Run                          fixtureReportRun        `json:"run"`
+	Summary                      fixtureReportSummary    `json:"summary"`
+	Metrics                      map[string]any          `json:"metrics"`
 	Corpus                       string                  `json:"corpus"`
 	Result                       string                  `json:"result"`
 	ScenarioCount                int                     `json:"scenarioCount"`
@@ -190,20 +236,20 @@ func TestRawToFinalE2EFixtureReplay(t *testing.T) {
 			if err := reconciler.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
 				t.Fatalf("get stored request: %v", err)
 			}
-			if stored.Status.Phase != fixture.Expected.Phase || stored.Status.Outcome != fixture.Expected.Outcome {
+			if fixture.Baseline == nil && (stored.Status.Phase != fixture.Expected.Phase || stored.Status.Outcome != fixture.Expected.Outcome) {
 				t.Fatalf("expected phase=%s outcome=%s, got phase=%s outcome=%s", fixture.Expected.Phase, fixture.Expected.Outcome, stored.Status.Phase, stored.Status.Outcome)
 			}
-			if fixture.Expected.FailureReason != "" {
+			if fixture.Baseline == nil && fixture.Expected.FailureReason != "" {
 				if stored.Status.Failure == nil || stored.Status.Failure.Code != fixture.Expected.FailureReason {
 					t.Fatalf("expected failureReason=%s, got %#v", fixture.Expected.FailureReason, stored.Status.Failure)
 				}
-			} else if stored.Status.Verdict == nil || stored.Status.Verdict.RootCauseType != fixture.Expected.RootCauseType {
+			} else if fixture.Baseline == nil && (stored.Status.Verdict == nil || stored.Status.Verdict.RootCauseType != fixture.Expected.RootCauseType) {
 				t.Fatalf("expected rootCauseType=%s, got %#v", fixture.Expected.RootCauseType, stored.Status.Verdict)
 			}
-			if !hasClaimVerification(stored.Status.Claims, fixture.Expected.ClaimVerification) {
+			if fixture.Baseline == nil && !hasClaimVerification(stored.Status.Claims, fixture.Expected.ClaimVerification) {
 				t.Fatalf("expected claim verification %s, got %#v", fixture.Expected.ClaimVerification, stored.Status.Claims)
 			}
-			if provider.calls != fixture.Expected.ProviderCalls {
+			if fixture.Baseline == nil && provider.calls != fixture.Expected.ProviderCalls {
 				t.Fatalf("expected provider to be called %d times, got %d", fixture.Expected.ProviderCalls, provider.calls)
 			}
 
@@ -221,16 +267,10 @@ func TestRawToFinalE2EFixtureReplay(t *testing.T) {
 
 			if fixture.Baseline != nil {
 				result := evaluateFixtureBaseline(fixture, stored, queryCalls, providerCalls, checkpointReused)
-				if result.EvidenceEvaluationAvailable && result.MatchedExpectedEvidence != result.ExpectedEvidenceCount {
-					t.Fatalf("expected all baseline evidence to be retained, got %d/%d", result.MatchedExpectedEvidence, result.ExpectedEvidenceCount)
-				}
-				if !result.EvidenceEvaluationAvailable && result.CollectedEvidenceCount != 0 {
-					t.Fatalf("expected no retained evidence for non-evidence baseline, got %d", result.CollectedEvidenceCount)
-				}
-				if !result.RootCauseTypeCorrect || !result.RootCauseEntityCorrect || !result.FailureReasonCorrect || result.UnsafeNoIssueFound {
-					t.Fatalf("baseline diagnosis mismatch: %#v", result)
-				}
 				baselineResults = append(baselineResults, result)
+				if len(result.Differences) > 0 {
+					t.Errorf("baseline output differs from expected contract: %#v", result.Differences)
+				}
 			}
 		})
 	}
@@ -477,7 +517,10 @@ func evaluateFixtureBaseline(fixture rawToFinalFixture, request v1alpha1.Investi
 		outputTokens = request.Status.Execution.OutputTokens
 	}
 
-	return fixtureBaselineResult{
+	result := fixtureBaselineResult{
+		ID:                          fixture.Name,
+		Name:                        fixture.Baseline.Scenario,
+		Differences:                 []fixtureDifference{},
 		Fixture:                     fixture.Name,
 		Scenario:                    fixture.Baseline.Scenario,
 		ExpectedDiagnosis:           fixture.Baseline.ExpectedDiagnosis,
@@ -511,7 +554,61 @@ func evaluateFixtureBaseline(fixture rawToFinalFixture, request v1alpha1.Investi
 		MatchedExpectedEvidence:     matchedExpected,
 		CollectedEvidenceCount:      len(request.Status.EvidenceRefs),
 		MatchedCollectedEvidence:    matchedActual,
+		Artifacts:                   []string{filepath.Join("internal", "controllers", "testdata", "e2e", fixture.Name+".json")},
 	}
+	expectedEntity := any(nil)
+	actualEntityValue := any(nil)
+	if rootCauseEntityEvaluated {
+		expectedEntity = map[string]string{"kind": target.Kind, "namespace": target.Namespace, "name": target.Name}
+		actualEntityValue = map[string]string{"kind": actualEntity.Kind, "namespace": actualEntity.Namespace, "name": actualEntity.Name}
+	}
+	result.Expected = map[string]any{
+		"terminal":    map[string]any{"phase": fixture.Expected.Phase, "outcome": fixture.Expected.Outcome, "failureReason": nullableString(fixture.Expected.FailureReason)},
+		"diagnosis":   map[string]any{"rootCauseType": nullableString(fixture.Expected.RootCauseType), "rootCauseEntity": expectedEntity, "requiredClaimVerification": nullableString(fixture.Expected.ClaimVerification)},
+		"evidence":    map[string]any{"retainedCount": len(fixture.Baseline.ExpectedEvidence)},
+		"efficiency":  map[string]any{"queryCount": len(fixture.Datasources), "providerRequestCount": fixture.Expected.ProviderCalls, "checkpointReused": true},
+		"sideEffects": map[string]any{"unsafeNoIssueFound": false},
+	}
+	result.Actual = map[string]any{
+		"terminal":    map[string]any{"phase": request.Status.Phase, "outcome": request.Status.Outcome, "failureReason": nullableString(actualFailureReason)},
+		"diagnosis":   map[string]any{"rootCauseType": nullableString(actualRootCauseType), "rootCauseEntity": actualEntityValue, "claimVerification": verification},
+		"evidence":    map[string]any{"retainedCount": len(request.Status.EvidenceRefs), "matchedExpectedCount": matchedExpected},
+		"efficiency":  map[string]any{"queryCount": queryCalls, "providerRequestCount": providerCalls, "checkpointReused": checkpointReused, "durationSeconds": durationSeconds, "inputTokens": inputTokens, "outputTokens": outputTokens},
+		"sideEffects": map[string]any{"unsafeNoIssueFound": result.UnsafeNoIssueFound},
+	}
+	addFixtureAssertion(&result, "terminal.phase", fixture.Expected.Phase, request.Status.Phase, fixture.Expected.Phase == request.Status.Phase)
+	addFixtureAssertion(&result, "terminal.outcome", fixture.Expected.Outcome, request.Status.Outcome, fixture.Expected.Outcome == request.Status.Outcome)
+	addFixtureAssertion(&result, "terminal.failureReason", nullableString(fixture.Expected.FailureReason), nullableString(actualFailureReason), result.FailureReasonCorrect)
+	addFixtureAssertion(&result, "diagnosis.rootCauseType", nullableString(fixture.Expected.RootCauseType), nullableString(actualRootCauseType), result.RootCauseTypeCorrect)
+	addFixtureAssertion(&result, "diagnosis.rootCauseEntity", expectedEntity, actualEntityValue, result.RootCauseEntityCorrect)
+	addFixtureAssertion(&result, "diagnosis.requiredClaimVerification", nullableString(fixture.Expected.ClaimVerification), verification, hasClaimVerification(request.Status.Claims, fixture.Expected.ClaimVerification))
+	evidenceMatches := matchedExpected == len(fixture.Baseline.ExpectedEvidence) && (evidenceEvaluationAvailable || len(request.Status.EvidenceRefs) == 0)
+	addFixtureAssertion(&result, "evidence.expectedRecords", len(fixture.Baseline.ExpectedEvidence), len(request.Status.EvidenceRefs), evidenceMatches)
+	addFixtureAssertion(&result, "efficiency.queryCount", len(fixture.Datasources), queryCalls, len(fixture.Datasources) == queryCalls)
+	addFixtureAssertion(&result, "efficiency.providerRequestCount", fixture.Expected.ProviderCalls, providerCalls, fixture.Expected.ProviderCalls == providerCalls)
+	addFixtureAssertion(&result, "efficiency.checkpointReused", true, checkpointReused, checkpointReused)
+	addFixtureAssertion(&result, "sideEffects.unsafeNoIssueFound", false, result.UnsafeNoIssueFound, !result.UnsafeNoIssueFound)
+	result.Result = "PASS"
+	if len(result.Differences) > 0 {
+		result.Result = "FAIL"
+	}
+	return result
+}
+
+func nullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
+
+func addFixtureAssertion(result *fixtureBaselineResult, id string, expected, actual any, passed bool) {
+	assertionResult := "PASS"
+	if !passed {
+		assertionResult = "FAIL"
+		result.Differences = append(result.Differences, fixtureDifference{Path: id, Expected: expected, Actual: actual})
+	}
+	result.Assertions = append(result.Assertions, fixtureAssertion{ID: id, Result: assertionResult, Expected: expected, Actual: actual})
 }
 
 func evidenceExpectationPresent(expected fixtureEvidenceExpectation, actual []v1alpha1.EvidenceRef) bool {
@@ -550,8 +647,12 @@ func aggregateFixtureBaseline(results []fixtureBaselineResult) fixtureBaselineRe
 	tokenUsageAvailable := 0
 	failureContracts := 0
 	failureContractsCorrect := 0
+	passedScenarios := 0
 	claimVerification := map[string]int{}
 	for _, result := range results {
+		if result.Result == "PASS" {
+			passedScenarios++
+		}
 		if result.RootCauseTypeCorrect {
 			rootCauseTypeCorrect++
 		}
@@ -591,10 +692,29 @@ func aggregateFixtureBaseline(results []fixtureBaselineResult) fixtureBaselineRe
 			tokenUsageAvailable++
 		}
 	}
+	reportResult := "PASS"
+	if passedScenarios != len(results) {
+		reportResult = "FAIL"
+	}
 	return fixtureBaselineReport{
-		SchemaVersion:                "fluxseer-rca-quality-baseline-v3",
+		SchemaVersion:      "fluxseer-test-report/v1",
+		SuiteSchemaVersion: "fluxseer-rca-quality-baseline/v3",
+		Suite:              fixtureReportSuite{ID: "rca-quality-baseline", Name: "RCA Quality Baseline", Tier: "replay"},
+		Run:                fixtureReportRun{ID: "operations-twelve-v3", SourceCommit: reportSourceCommit(), SourceDirty: os.Getenv("FLUXSEER_REPORT_SOURCE_DIRTY") == "true", Environment: map[string]any{"runtime": "controller-runtime-fake-client", "hostedProvider": false}},
+		Summary:            fixtureReportSummary{Result: reportResult, Total: len(results), Passed: passedScenarios, Failed: len(results) - passedScenarios},
+		Metrics: map[string]any{
+			"rootCauseTypeAccuracy":        ratio(rootCauseTypeCorrect, len(results)),
+			"rootCauseEntityAccuracy":      ratio(rootCauseEntityCorrect, rootCauseEntityEvaluated),
+			"evidencePrecision":            ratio(matchedEvidence, collectedEvidence),
+			"evidenceRecall":               ratio(matchedEvidence, expectedEvidence),
+			"failureContractAccuracy":      ratio(failureContractsCorrect, failureContracts),
+			"checkpointReuseRate":          ratio(checkpointReused, len(results)),
+			"totalQueries":                 totalQueries,
+			"totalProviderRequests":        totalProviderRequests,
+			"tokenUsageAvailableScenarios": tokenUsageAvailable,
+		},
 		Corpus:                       "operations-twelve-v3",
-		Result:                       "PASS",
+		Result:                       reportResult,
 		ScenarioCount:                len(results),
 		RootCauseTypeAccuracy:        ratio(rootCauseTypeCorrect, len(results)),
 		RootCauseEntityAccuracy:      ratio(rootCauseEntityCorrect, rootCauseEntityEvaluated),
@@ -611,6 +731,13 @@ func aggregateFixtureBaseline(results []fixtureBaselineResult) fixtureBaselineRe
 		TokenUsageAvailableScenarios: tokenUsageAvailable,
 		Scenarios:                    results,
 	}
+}
+
+func reportSourceCommit() string {
+	if value := os.Getenv("FLUXSEER_REPORT_SOURCE_COMMIT"); value != "" {
+		return value
+	}
+	return "unknown"
 }
 
 func writeFixtureBaselineReport(t *testing.T, path string, report fixtureBaselineReport) {
