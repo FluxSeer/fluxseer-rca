@@ -106,6 +106,44 @@ func TestRouterRejectsMissingExplicitReference(t *testing.T) {
 	}
 }
 
+func TestRouterNilResourceSelectorMatchesAllResources(t *testing.T) {
+	// Contract test: a nil ResourceSelector in EscalationChain matches all resources.
+	router := newRouter(t,
+		&v1alpha1.EscalationChain{
+			ObjectMeta: metav1.ObjectMeta{Name: "default-chain", Namespace: "prod"},
+			Spec: v1alpha1.EscalationChainSpec{
+				Enabled:  true,
+				Priority: 0,
+				// No ResourceSelector (nil) = applies to all resources
+				Stages: []v1alpha1.EscalationStage{{Name: "default-stage"}},
+			},
+		},
+	)
+
+	// Should match any resource labels (or none).
+	route, err := router.Resolve(context.Background(), ResolveRequest{
+		Namespace:      "prod",
+		ResourceLabels: map[string]string{"app": "checkout"},
+	})
+	if err != nil {
+		t.Fatalf("resolve with nil selector: %v", err)
+	}
+	if route == nil || route.Chain.Name != "default-chain" {
+		t.Fatalf("expected nil selector to match all resources, got %#v", route)
+	}
+
+	// Also match when no resource labels provided.
+	route, err = router.Resolve(context.Background(), ResolveRequest{
+		Namespace: "prod",
+	})
+	if err != nil {
+		t.Fatalf("resolve with nil selector (no labels): %v", err)
+	}
+	if route == nil || route.Chain.Name != "default-chain" {
+		t.Fatalf("expected nil selector to match with empty labels, got %#v", route)
+	}
+}
+
 func newRouter(t *testing.T, chains ...*v1alpha1.EscalationChain) *Router {
 	t.Helper()
 	scheme := runtime.NewScheme()

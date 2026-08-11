@@ -37,7 +37,8 @@ type NamespaceThresholdList struct {
 // NamespaceThresholdSpec defines namespace-level resource limits.
 type NamespaceThresholdSpec struct {
 	// NamespaceSelector label selector for applicable namespaces.
-	// Empty selector applies to all namespaces.
+	// Omitted selector applies to the threshold's own namespace only (safe default).
+	// Explicit empty selector {} applies to all namespaces.
 	// +kubebuilder:validation:Optional
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
 

@@ -175,6 +175,61 @@ func TestPolicyEngineSkipsDisabledPolicies(t *testing.T) {
 	}
 }
 
+func TestPolicyEngineNilResourceSelectorDoesNotMatch(t *testing.T) {
+	// Contract test: a nil ResourceSelector does not match when requesting a different namespace.
+	// The policy may still match via cluster scope or namespace selector.
+	engine := newPolicyEngine(t,
+		&v1alpha1.ApprovalPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "action-only", Namespace: "prod"},
+			Spec: v1alpha1.ApprovalPolicySpec{
+				Enabled: true,
+				// No ResourceSelector (nil), no Scope (defaults to namespace-scoped)
+				ActionTypeRules: []v1alpha1.ActionTypeRule{{
+					ActionType: "kubernetes.scaleDeployment",
+					Action:     v1alpha1.ApprovalActionManual,
+				}},
+			},
+		},
+	)
+
+	// Even though action type matches, nil ResourceSelector + different namespace means policy does not apply.
+	evaluation, err := engine.Evaluate(context.Background(), policyInput("dev", "kubernetes.scaleDeployment", domain.SeverityLow, map[string]string{"app": "checkout"}))
+	if err != nil {
+		t.Fatalf("evaluate nil selector: %v", err)
+	}
+	// Should fallback to legacy since policy doesn't match
+	if evaluation.Source != PolicySourceLegacy {
+		t.Fatalf("expected fallback to legacy with nil ResourceSelector on different namespace, got %#v", evaluation)
+	}
+}
+
+func TestPolicyEngineClusterScopeMatchesWithoutSelectors(t *testing.T) {
+	// Contract test: Cluster scope matches without ResourceSelector.
+	engine := newPolicyEngine(t,
+		&v1alpha1.ApprovalPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster-default", Namespace: "policy-system"},
+			Spec: v1alpha1.ApprovalPolicySpec{
+				Scope:   "Cluster",
+				Enabled: true,
+				// No ResourceSelector (nil)
+				ActionTypeRules: []v1alpha1.ActionTypeRule{{
+					ActionType: "kubernetes.scaleDeployment",
+					Action:     v1alpha1.ApprovalActionAuto,
+				}},
+			},
+		},
+	)
+
+	// Cluster scope should match even without ResourceSelector.
+	evaluation, err := engine.Evaluate(context.Background(), policyInput("prod", "kubernetes.scaleDeployment", domain.SeverityLow, nil))
+	if err != nil {
+		t.Fatalf("evaluate cluster scope: %v", err)
+	}
+	if evaluation.Decision.Action != domain.ApprovalAuto || evaluation.Policy == nil || evaluation.Policy.MatchLevel != PolicyMatchCluster {
+		t.Fatalf("expected cluster scope match, got %#v", evaluation)
+	}
+}
+
 func newPolicyEngine(t *testing.T, policies ...*v1alpha1.ApprovalPolicy) *PolicyEngine {
 	t.Helper()
 	return NewPolicyEngine(newPolicyClient(t, policies...), nil, true)

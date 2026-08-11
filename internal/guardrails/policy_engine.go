@@ -182,6 +182,8 @@ func matchApprovalPolicy(policy *v1alpha1.ApprovalPolicy, input PolicyReviewInpu
 }
 
 func selectorMatches(selector *metav1.LabelSelector, values map[string]string) (bool, error) {
+	// Note: A nil selector in PolicyEngine means this selector condition does not apply.
+	// It does not mean the policy is excluded; the policy may still match via namespace or cluster scope.
 	if selector == nil {
 		return false, nil
 	}

@@ -167,6 +167,8 @@ type thresholdMatch struct {
 }
 
 func matchThreshold(threshold *v1alpha1.NamespaceThreshold, request ResolveRequest) (string, bool, error) {
+	// Omitted NamespaceSelector: only matches the threshold's own namespace (safe default).
+	// Explicit NamespaceSelector (even if empty): uses label matching (may apply cross-namespace).
 	if threshold.Spec.NamespaceSelector == nil {
 		return ThresholdMatchDirect, threshold.Namespace == request.Namespace, nil
 	}

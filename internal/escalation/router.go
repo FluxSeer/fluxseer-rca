@@ -145,6 +145,8 @@ func routeForChain(chain *v1alpha1.EscalationChain) *Route {
 }
 
 func selectorMatches(selector *metav1.LabelSelector, values map[string]string) (bool, error) {
+	// A nil ResourceSelector in EscalationChain means the chain applies to all resources.
+	// This differs from PolicyEngine's nil selector contract (which means no match).
 	if selector == nil {
 		return true, nil
 	}

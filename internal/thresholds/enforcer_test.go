@@ -159,6 +159,71 @@ func TestEnforcerSkipsDisabledThreshold(t *testing.T) {
 	}
 }
 
+func TestEnforcerNilSelectorOnlyMatchesOwnNamespace(t *testing.T) {
+	// Contract test: a nil NamespaceSelector only matches the threshold's own namespace (safe default).
+	enforcer := newEnforcer(t,
+		&v1alpha1.NamespaceThreshold{
+			ObjectMeta: metav1.ObjectMeta{Name: "prod-only", Namespace: "prod"},
+			Spec: v1alpha1.NamespaceThresholdSpec{
+				Enabled:          true,
+				ActivePlansLimit: 5,
+				// No NamespaceSelector (nil) = only applies to this namespace
+			},
+		},
+	)
+
+	// Should match when requesting the same namespace.
+	resolution, err := enforcer.Resolve(context.Background(), ResolveRequest{Namespace: "prod"})
+	if err != nil {
+		t.Fatalf("resolve same namespace: %v", err)
+	}
+	if resolution == nil || resolution.Threshold.Name != "prod-only" {
+		t.Fatalf("expected nil selector to match same namespace, got %#v", resolution)
+	}
+
+	// Should NOT match a different namespace.
+	resolution, err = enforcer.Resolve(context.Background(), ResolveRequest{Namespace: "dev"})
+	if err != nil {
+		t.Fatalf("resolve different namespace: %v", err)
+	}
+	if resolution != nil {
+		t.Fatalf("expected nil selector to NOT match different namespace, got %#v", resolution)
+	}
+}
+
+func TestEnforcerExplicitEmptySelectorMatchesAllNamespaces(t *testing.T) {
+	// Contract test: an explicit empty NamespaceSelector matches all namespaces.
+	enforcer := newEnforcer(t,
+		&v1alpha1.NamespaceThreshold{
+			ObjectMeta: metav1.ObjectMeta{Name: "global-limit", Namespace: "policy-system"},
+			Spec: v1alpha1.NamespaceThresholdSpec{
+				Enabled:          true,
+				ActivePlansLimit: 100,
+				// Explicit empty selector = applies to all namespaces
+				NamespaceSelector: &metav1.LabelSelector{},
+			},
+		},
+	)
+
+	// Should match any namespace.
+	resolution, err := enforcer.Resolve(context.Background(), ResolveRequest{Namespace: "prod"})
+	if err != nil {
+		t.Fatalf("resolve with empty selector: %v", err)
+	}
+	if resolution == nil || resolution.Threshold.Name != "global-limit" {
+		t.Fatalf("expected empty selector to match all namespaces, got %#v", resolution)
+	}
+
+	// Should also match another namespace.
+	resolution, err = enforcer.Resolve(context.Background(), ResolveRequest{Namespace: "dev"})
+	if err != nil {
+		t.Fatalf("resolve different namespace with empty selector: %v", err)
+	}
+	if resolution == nil || resolution.Threshold.Name != "global-limit" {
+		t.Fatalf("expected empty selector to match dev namespace, got %#v", resolution)
+	}
+}
+
 func newEnforcer(t *testing.T, thresholds ...*v1alpha1.NamespaceThreshold) *Enforcer {
 	t.Helper()
 	scheme := runtime.NewScheme()
