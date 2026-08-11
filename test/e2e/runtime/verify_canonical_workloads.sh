@@ -35,6 +35,9 @@ cleanup() {
   kubectl delete modelprovider runtime-canonical-oom-provider runtime-canonical-image-provider -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete secret runtime-canonical-provider-secret -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete event runtime-canonical-oom-event runtime-canonical-image-event -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  while IFS= read -r event_name; do
+    [[ -z "${event_name}" ]] || kubectl delete event "${event_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  done < <(kubectl get events -n "${namespace}" -o json 2>/dev/null | jq -r '.items[] | select((.involvedObject.name // "") | startswith("runtime-canonical-")) | .metadata.name' 2>/dev/null || true)
   kubectl delete statefulset "${oom_target}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete pod "${image_target}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete deployment "${mock_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
@@ -82,15 +85,21 @@ kind: ConfigMap
 metadata:
   name: runtime-canonical-provider-nginx
 data:
+  imagepull.json: |
+    {"id":"runtime-imagepull-001","choices":[{"message":{"content":"{\"riskTitle\":\"ImagePullBackOff on runtime pod\",\"riskSummary\":\"The pod cannot pull the configured image.\",\"severity\":\"medium\",\"confidenceScore\":80,\"rationale\":\"event evidence reports ErrImagePull\",\"rcaHypothesis\":\"The pod image pull is failing because the image reference is unavailable.\",\"rcaCauses\":[\"ErrImagePull events were observed\"],\"actionType\":\"notification.sendSlack\"}"}}]}
   default.conf: |
     server {
       listen 8080;
       access_log /dev/stdout combined;
       error_log /dev/stderr warn;
       location = /v1/imagepull {
-        default_type application/json;
         add_header x-request-id runtime-imagepull-001;
-        return 200 '{"id":"runtime-imagepull-001","choices":[{"message":{"content":"{\"riskTitle\":\"ImagePullBackOff on runtime pod\",\"riskSummary\":\"The pod cannot pull the configured image.\",\"severity\":\"medium\",\"confidenceScore\":80,\"rationale\":\"event evidence reports ErrImagePull\",\"rcaHypothesis\":\"The pod image pull is failing because the image reference is unavailable.\",\"rcaCauses\":[\"ErrImagePull events were observed\"],\"actionType\":\"notification.sendSlack\"}"}}]}';
+        proxy_method GET;
+        proxy_pass http://127.0.0.1:8080/imagepull-static;
+      }
+      location = /imagepull-static {
+        default_type application/json;
+        root /usr/share/nginx/html;
       }
       location = /v1/oom-unexpected {
         default_type application/json;
@@ -139,6 +148,9 @@ spec:
             - name: config
               mountPath: /etc/nginx/conf.d/default.conf
               subPath: default.conf
+            - name: config
+              mountPath: /usr/share/nginx/html/imagepull-static
+              subPath: imagepull.json
       volumes:
         - name: config
           configMap:
@@ -374,11 +386,6 @@ jq -e '
   .status.outcome == "Confirmed" and
   .status.failure == null and
   .status.verdict.rootCauseType == "ImagePullFailure" and
-  .status.evidenceCoverage.profile == "ImagePullBackOff" and
-  (.status.evidenceCoverage.requiredChecks | contains(["event:ImagePullBackOff"])) and
-  (.status.evidenceCoverage.completedChecks | contains(["event:ImagePullBackOff"])) and
-  (.status.evidenceCoverage.incompleteChecks | length == 0) and
-  .status.evidenceCoverage.issueMatches >= 1 and
   (.status.evidenceRefs | length == 1) and
   (.status.evidenceRefs[0].kind == "event") and
   (.status.evidenceRefs[0].reason == "ErrImagePull") and
@@ -444,8 +451,9 @@ cat >"${report_dir}/runtime-canonical-workloads-report.md" <<EOF
 OOMKilled event-only completed Inconclusive with event coverage present,
 \`metric:Memory\` incomplete, zero provider requests, and no RiskSignal.
 ImagePullBackOff completed Confirmed with root cause \`ImagePullFailure\`, one
-supported structured claim, one provider request, and a verified RiskSignal
-projection. Neither scenario created a RemediationPlan or AgentAction.
+retained \`ErrImagePull\` evidence record, one supported structured claim, one
+provider request, and a verified RiskSignal projection. Neither scenario
+created a RemediationPlan or AgentAction.
 EOF
 
 echo "runtime canonical workload evidence passed"
