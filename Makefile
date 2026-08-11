@@ -28,7 +28,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-failure-paths verify-runtime-matrix-cluster verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
+.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-failure-paths verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -170,8 +170,11 @@ verify-runtime-failure-paths:
 	$(GO) test ./internal/controllers -run 'TestInvestigationRequestReconcilerPersists(RejectedProviderDataPolicyAudit|ProviderRequestFailure|SecretReaderFailuresWithoutProviderRequest)$$'
 	$(GO) test ./internal/datasourceconfig -run 'TestRegisterFromResourcesSkipsNetworkPolicyDeniedDatasource$$'
 
-verify-runtime-matrix-cluster:
+verify-runtime-provider-policy-cluster:
 	bash test/e2e/runtime/verify_cluster_matrix.sh
+
+verify-runtime-matrix-cluster:
+	bash test/e2e/runtime/verify_p0_cluster_matrix.sh
 
 verify-rbac-profiles:
 	bash hack/verify-rbac-profiles.sh
