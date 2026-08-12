@@ -40,6 +40,11 @@ spec:
           sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m]))
           > bool {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.minimumCurrentRate }}
         )
+        *
+        (
+          sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m] offset {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.comparisonOffset }}))
+          > bool {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.baselineEpsilon }}
+        )
       threshold:
         operator: ">"
         value: {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.increaseRatio }}

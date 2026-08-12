@@ -97,6 +97,7 @@ When `defaultTargetSelector.namespaceSelector.matchNames` is omitted, the chart 
 | `rulePacks.prometheusBaseline.trafficAnomaly.comparisonOffset` | `30m` | Offset used to compare current request rate against a previous baseline window. |
 | `rulePacks.prometheusBaseline.trafficAnomaly.increaseRatio` | `3` | Current/request baseline ratio required for the request-rate-surge signal. |
 | `rulePacks.prometheusBaseline.trafficAnomaly.minimumCurrentRate` | `10` | Minimum current request rate before request-rate-surge can trigger. |
+| `rulePacks.prometheusBaseline.trafficAnomaly.baselineEpsilon` | `0.001` | Minimum usable historical request rate. Baselines at or below this value suppress ratio evaluation instead of being treated as a surge. |
 | `rulePacks.prometheusBaseline.resourceThresholds.cpuUsageCores` | `0.8` | CPU usage cores threshold for the cpu-saturation signal. |
 | `rulePacks.prometheusBaseline.resourceThresholds.cpuThrottlingRatio` | `0.2` | CPU throttled-period ratio threshold. |
 | `rulePacks.prometheusBaseline.resourceThresholds.memoryWorkingSetBytes` | `1073741824` | Absolute memory working set fallback threshold. |
@@ -286,19 +287,23 @@ rulePacks:
               value: 100
 ```
 
-Traffic anomaly detection should compare a current window against a baseline window and include a minimum-volume guard:
+Traffic anomaly detection compares a current window against a baseline window and includes both minimum-volume and baseline-quality guards:
 
 ```yaml
 rulePacks:
-  trafficAnomaly:
-    anomaly:
-      evaluationWindow: 10m
-      comparisonWindow: 30m
+  prometheusBaseline:
+    trafficAnomaly:
+      comparisonOffset: 30m
       increaseRatio: 3.0
       minimumCurrentRate: 10
+      baselineEpsilon: 0.001
 ```
 
-This avoids treating low-volume noise as an operational incident just because the relative ratio is high.
+A high ratio alone does not constitute a request-rate surge when current
+traffic is below `minimumCurrentRate`. A historical rate at or below
+`baselineEpsilon` is an insufficient baseline: evaluation is suppressed and no
+incident is created. Traffic onset from an absent baseline is a separate
+detection semantic and is not folded into `request-rate-surge`.
 
 ## Verification
 

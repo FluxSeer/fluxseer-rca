@@ -75,6 +75,7 @@ require_not_contains "$default_render" "name: fluxseer-rca-loki-baseline"
 require_contains "$all_render" "name: fluxseer-rca-prometheus-baseline"
 require_contains "$all_render" "aiops.platform/rule-pack: prometheus-baseline"
 require_contains "$all_render" "name: high-error-rate"
+require_contains "$all_render" "name: request-rate-surge"
 require_contains "$all_render" "name: high-latency"
 require_contains "$all_render" "name: pod-restart-rate"
 require_contains "$all_render" "name: cpu-saturation"
@@ -89,6 +90,9 @@ require_contains "$all_render" "name: connection-refused"
 require_contains "$all_render" '{{ .namespace }}'
 require_contains "$all_render" '{{ .app }}'
 require_contains "$all_render" '{{ .name }}'
+require_contains "$all_render" '> bool 10'
+require_contains "$all_render" '> bool 0.001'
+require_contains "$all_render" 'offset 30m'
 
 if grep -F "kind: DataSource" "$all_render"; then
   echo "rule packs must not install external DataSource resources" >&2

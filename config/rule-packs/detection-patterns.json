@@ -108,7 +108,7 @@
       "enabledByDefault": false,
       "requiresExternalBackend": true,
       "workloadKinds": ["Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "Pod"],
-      "detectionEvidence": ["Current request rate exceeds offset baseline ratio and minimum-volume guard"],
+      "detectionEvidence": ["Current request rate exceeds offset baseline ratio, minimum-volume guard, and baseline-quality guard"],
       "maximumCausalClaim": "RequestRateSurge",
       "evidenceProfile": null,
       "runtimeReportCase": null

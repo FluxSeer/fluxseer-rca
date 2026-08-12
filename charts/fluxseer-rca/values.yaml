@@ -85,6 +85,7 @@ rulePacks:
       comparisonOffset: 30m
       increaseRatio: 3
       minimumCurrentRate: 10
+      baselineEpsilon: 0.001
     resourceThresholds:
       cpuUsageCores: 0.8
       cpuThrottlingRatio: 0.2
