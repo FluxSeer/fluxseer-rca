@@ -98,8 +98,8 @@ metadata:
 data:
   default.conf: |
     map $arg_query $traffic_fixture_value {
-      ~*app=.surge-valid. 4;
-      ~*app=.no-surge. 1;
+      ~*surge-valid 4;
+      ~*no-surge 1;
       default 0;
     }
     server {
