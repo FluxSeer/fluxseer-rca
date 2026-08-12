@@ -49,6 +49,22 @@ verification, so a detected incident is not automatically treated as a
 confirmed RCA. See the [product and API glossary](docs/glossary.md) for the
 normative terminology.
 
+Reporting uses two deliberately separate contracts: a **User-facing Report**
+(`fluxseer-riskrule-report/v1`) is the product output containing the selected
+`RiskRule`, its `InvestigationRequest` objects, and `RiskSignal` projections;
+an **Internal Validation Report** (`fluxseer-test-report/v1`) proves expected
+versus actual behavior, assertions, differences, and forbidden side effects.
+See [Reporting Architecture And Contracts](docs/reporting.md).
+
+These coverage numbers are intentionally not interchangeable:
+
+| Number | Meaning |
+| --- | --- |
+| **21** | Built-in RulePack Detection Patterns |
+| **15/15** | Internal P0 runtime validation scenarios passed |
+| **15** | User-facing RiskRule Report catalog examples |
+| **2/2** | Internal canonical workload validation scenarios passed |
+
 ## Why FluxSeer RCA
 
 RCA often starts as an urgent, one-off investigation and ends as an ephemeral answer in Slack, a dashboard screenshot, a terminal command history, or one responder's memory. After the incident, teams may not know which evidence was checked, which model produced the answer, which claims were supported, which data left the cluster, or whether a later model version would produce a worse conclusion.

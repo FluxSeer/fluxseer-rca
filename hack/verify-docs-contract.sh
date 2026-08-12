@@ -42,7 +42,9 @@ for heading in \
   "## Evidence Profile" \
   "## Evidence Sufficiency" \
   "## Verification" \
-  "## Verdict And Outcome"; do
+  "## Verdict And Outcome" \
+  "## User-facing Report" \
+  "## Internal Validation Report"; do
   grep -Fq "${heading}" "${glossary}" || {
     echo "glossary heading missing: ${heading}" >&2
     exit 1
@@ -52,6 +54,26 @@ grep -Fq "Detection success does not imply RCA confirmation." "${glossary}"
 grep -Fq "The RCA verdict MUST NOT be more specific than the strongest" "${glossary}"
 grep -Fq "Condition and failure reasons are not outcomes." "${glossary}"
 grep -Fq "parameterized signal templates" "${root}/docs/helm-rulepacks.md"
+
+reporting="${root}/docs/reporting.md"
+grep -Fq "Internal Validation Report = test the product." "${reporting}"
+grep -Fq "User-facing Report = product output." "${reporting}"
+grep -Fq 'User-facing Report — `fluxseer-riskrule-report/v1`' "${reporting}"
+grep -Fq 'Internal Validation Report — `fluxseer-test-report/v1`' "${reporting}"
+for coverage_contract in \
+  "Built-in RulePack Detection Patterns" \
+  "Internal P0 runtime validation scenarios passed" \
+  "User-facing RiskRule Report catalog examples" \
+  "Internal canonical workload validation scenarios passed"; do
+  grep -Fq "${coverage_contract}" "${root}/README.md" || {
+    echo "README reporting coverage contract missing: ${coverage_contract}" >&2
+    exit 1
+  }
+  grep -Fq "${coverage_contract}" "${reporting}" || {
+    echo "reporting coverage contract missing: ${coverage_contract}" >&2
+    exit 1
+  }
+done
 
 if grep -Eq 'InvestigationOutcome[A-Za-z0-9_]*[[:space:]]*=.*RequiredEvidenceMissing' "${root}/api/v1alpha1/investigationrequest_types.go"; then
   echo "RequiredEvidenceMissing must remain a reason, not an InvestigationOutcome" >&2
@@ -63,7 +85,10 @@ documents=(
   CONTRIBUTING.md
   docs/README.md
   docs/glossary.md
+  docs/reporting.md
+  docs/riskrule-reports.md
   docs/product-requirements.md
+  docs/architecture/overview.md
   docs/architecture/investigation-flow.md
   docs/helm-rulepacks.md
   docs/crd-reference/investigationrequest.md

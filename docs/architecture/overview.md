@@ -8,7 +8,12 @@ Product positioning:
 Kubernetes-native, evidence-first SRE investigation and risk analysis control plane.
 ```
 
-Current release scope is narrower than a general AI SRE platform: `v0.4.0-beta.1` introduces approval lifecycle, escalation handling, and production governance for guarded remediation, while maintaining read-only RCA as the default path and canonical preflight semantics, evidence gating, runtime default hardening, and least-privilege RBAC defaults.
+Current release scope is narrower than a general AI SRE platform:
+`v0.4.0-beta.3` includes approval lifecycle, escalation handling,
+terminal-state TTL cleanup, and production governance for guarded remediation,
+while maintaining read-only RCA as the default path and canonical preflight
+semantics, evidence gating, runtime default hardening, and least-privilege RBAC
+defaults.
 
 The current runnable default path is read-only RCA: evaluate explicit `RiskRule` or `InvestigationRequest` resources, collect bounded evidence, write canonical RCA status, and optionally materialize a `RiskSignal` without mutating the target workload.
 
@@ -40,6 +45,26 @@ That distinction matters because the project goal is integration without structu
 See [../product-requirements.md](../product-requirements.md) for the product positioning, release-scope, CRD contract, graceful-degradation, evidence-storage, and release-freeze baseline.
 
 See [mermaid-diagrams.md](mermaid-diagrams.md) for maintained Mermaid architecture, relationship, sequence, class, deployment, and release diagrams.
+
+## Reporting Boundary
+
+Runtime execution has two separate consumers and contracts:
+
+```text
+Runtime execution
+  ├─ User-facing Report (`fluxseer-riskrule-report/v1`)
+  │    └─ public RiskRule, InvestigationRequest, RiskSignal, evidence and verdict
+  └─ Internal Validation Report (`fluxseer-test-report/v1`)
+       └─ expected/actual, assertions, differences and side-effect checks
+```
+
+The first answers what FluxSeer observed and concluded for a user or AI. The
+second answers whether the implementation behaved correctly for maintainers
+and CI. Validation expectations and PASS/FAIL never become product RCA state.
+Conversely, a valid product report for policy rejection or insufficient
+evidence is not a new Detection Pattern merely because it appears in the
+user-facing catalog. See [../reporting.md](../reporting.md) for the normative
+reporting terminology and contract details.
 
 ## High-level Architecture
 

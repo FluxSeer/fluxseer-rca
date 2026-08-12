@@ -73,6 +73,12 @@ Phase 3c Policy Pack, including the 3c-2 Policy Engine and subsequent
 controller integration, is already implemented on this branch and its focused
 Policy, Threshold, Escalation, and controller tests pass.
 
+Terminology note: the P0 `15/15` and canonical `2/2` figures are Internal
+Validation Report results using `fluxseer-test-report/v1`. The separate
+user-facing catalog contains 15 `fluxseer-riskrule-report/v1` product-output
+examples assembled with provenance from validated runs. Those 15 examples are
+not a 15/15 test result and are not the 21 built-in Detection Patterns.
+
 The first deterministic dogfooding baseline now covers five canonical cases
 and records diagnosis, evidence, claim verification, query/provider cost, and
 checkpoint reuse. Durable summary:

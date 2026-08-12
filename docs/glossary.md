@@ -60,6 +60,25 @@ Condition and failure reasons are not outcomes. For example,
 `RequiredEvidenceMissing` describes why evidence was insufficient, while the
 corresponding outcome is `Inconclusive`.
 
+## User-facing Report
+
+The product output returned by `fluxseer report riskrule`. It uses
+`fluxseer-riskrule-report/v1` and contains the selected `RiskRule`, matching
+`InvestigationRequest` objects, and direct or linked `RiskSignal` objects. It
+answers what FluxSeer observed and concluded. It does not contain test
+expectations, assertions, differences, or PASS/FAIL.
+
+## Internal Validation Report
+
+Maintainer and CI evidence that tests whether FluxSeer behaved according to a
+defined runtime contract. It uses `fluxseer-test-report/v1` and contains suite
+and run identity, expected and actual values, named assertions, differences,
+artifacts, and side-effect checks. It is not a user incident report.
+
+The number of User-facing Report catalog examples is not the number of
+Detection Patterns, and an Internal Validation Report result such as P0 15/15
+is not the size or PASS status of the user-facing catalog.
+
 ## Product Invariants
 
 > Detection success does not imply RCA confirmation.
