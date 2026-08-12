@@ -10,6 +10,14 @@ release history and track direction.
 
 ## [Unreleased]
 
+## [v0.4.0-beta.3]
+
+Lifecycle cleanup release with terminal timestamps and bounded TTL deletion for
+`AgentAction` and `RemediationPlan`. Terminal remediation plans own their
+actions so Kubernetes garbage collection removes the completed action graph
+when the plan expires. Release verification derives version identity from the
+packaged chart instead of maintaining a separate lifecycle-gate constant.
+
 ## [v0.4.0-beta.2]
 
 Approval audit consolidation with durable timestamps, notification retry tracking,

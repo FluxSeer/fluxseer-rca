@@ -6,16 +6,15 @@
 
 Kubernetes-native RCA control plane for platform and security/compliance-governance teams that need explicit, auditable, and security-first AI-assisted investigation — not a general-purpose on-call chat assistant.
 
-Current release: `v0.3.0-beta.3`
+Current release: `v0.4.0-beta.3`
 
-Status: `v0.3.0-beta.3 published, canonical RCA runtime semantics verified, provenance verified`
+Status: `v0.4.0-beta.3 published, lifecycle cleanup and canonical RCA runtime semantics verified`
 
 FluxSeer RCA is the project's product name. Source code, binaries, Helm
 artifacts, CRDs, metrics, and Kubernetes resource naming were renamed from the
 earlier `fluxagent` identity to `fluxseer` / `fluxseer-rca` ahead of the next
-release. The most recently published release, `v0.3.0-beta.3`, was built
-under the `fluxagent` name; existing installs from that release remain a
-compatibility reference until a dedicated rename release is published.
+release. The current `v0.4.0-beta.3` release uses the FluxSeer RCA identity;
+older `fluxagent` releases remain compatibility and migration references.
 
 FluxSeer RCA turns production signals and operator questions into governed, evidence-verifiable RCA workflows with replay-oriented audit artifacts in Kubernetes.
 

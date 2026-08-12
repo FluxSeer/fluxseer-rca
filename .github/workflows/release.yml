@@ -9,7 +9,7 @@ on:
       version:
         description: "Existing annotated tag to publish"
         required: true
-        default: "v0.2.0-beta.1"
+        default: "v0.4.0-beta.3"
         type: string
       release_only:
         description: "Skip immutable artifact publication and create the GitHub release from existing artifacts"

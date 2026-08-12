@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RELEASE_VERSION: v0.4.0-beta.2
+  RELEASE_VERSION: v0.4.0-beta.3
   TARGET_PLATFORM: linux/amd64
 
 jobs:
