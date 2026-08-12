@@ -309,8 +309,22 @@ detection semantic and is not folded into `request-rate-surge`.
 
 ```sh
 make verify-rule-packs
+make verify-traffic-pattern-promql
 make verify-rule-packs-kind
 ```
+
+Run the retained cluster conformance suite against an explicitly authorized
+cluster with:
+
+```sh
+KUBECONFIG=/path/to/test-kubeconfig \
+  make verify-runtime-traffic-pattern-conformance-cluster
+```
+
+The `request-rate-surge` slice retains five Internal Validation cases and one
+User-facing Report for the matched case. Negative cases do not create product
+incidents, and the main 15-example User-facing Report catalog remains
+unchanged.
 
 `verify-rule-packs` checks rendered Helm output. `verify-rule-packs-kind` verifies Kubernetes Events, Prometheus, and Loki baselines in a real kind cluster with fake observability.
 

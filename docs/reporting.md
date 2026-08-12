@@ -69,6 +69,7 @@ It is validation evidence, not an incident report for users.
 | **15/15** | Internal P0 runtime validation scenarios passed |
 | **15** | User-facing RiskRule Report catalog examples |
 | **2/2** | Internal canonical workload validation scenarios passed |
+| **5/5** | Internal request-rate-surge Traffic Pattern Conformance cases passed |
 
 The 15 User-facing Reports are not 15 Detection Patterns. Policy rejection,
 budget exhaustion, missing providers, insufficient evidence, NoIssueFound, and
@@ -78,6 +79,15 @@ anomaly-detection knowledge.
 The local 15-case catalog may consolidate exact reports from several PASS
 runtime baselines. Its provenance manifest must identify each source artifact
 and digest; “15 cases” must not imply one 15-scenario wall-clock test run.
+
+Runtime validation is split by contract dimension. The P0 matrix remains a
+15-case control-plane, policy, and failure-path contract; canonical workloads
+remain a 2-case workload/evidence-profile contract. Traffic Pattern
+Conformance is independently counted and validates Prometheus pattern
+semantics. Its first slice covers `request-rate-surge` with five cases. Only the
+matched case produces a User-facing Report in the separate
+`user-facing/traffic-pattern-conformance/` corpus; it does not change the main
+15-example catalog.
 
 ## 驗證入口
 

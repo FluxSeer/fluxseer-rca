@@ -111,6 +111,7 @@ jobs:
       - name: Verify detection catalog and documentation contract
         run: |
           make verify-detection-pattern-catalog
+          make verify-traffic-pattern-promql
           make verify-docs-contract
 
       - name: Helm lint

@@ -64,6 +64,7 @@ These coverage numbers are intentionally not interchangeable:
 | **15/15** | Internal P0 runtime validation scenarios passed |
 | **15** | User-facing RiskRule Report catalog examples |
 | **2/2** | Internal canonical workload validation scenarios passed |
+| **5/5** | Internal request-rate-surge Traffic Pattern Conformance cases passed |
 
 ## Why FluxSeer RCA
 
