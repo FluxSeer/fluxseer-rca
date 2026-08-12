@@ -55,6 +55,30 @@ grep -Fq "The RCA verdict MUST NOT be more specific than the strongest" "${gloss
 grep -Fq "Condition and failure reasons are not outcomes." "${glossary}"
 grep -Fq "parameterized signal templates" "${root}/docs/helm-rulepacks.md"
 
+rulepack_docs="${root}/docs/helm-rulepacks.md"
+for tuning_contract in \
+  "## Request-rate Surge Tuning Guide" \
+  "### Parameters And Units" \
+  "Requests per second" \
+  'current / max(baseline, baselineEpsilon) > increaseRatio' \
+  'baselineEpsilon` is the single source' \
+  "### Match Examples" \
+  'internal reason `InsufficientBaseline`' \
+  "### Choose And Apply Values" \
+  "traffic-tuning.yaml" \
+  "helm upgrade fluxseer-rca charts/fluxseer-rca" \
+  "### Inspect The Rendered RiskRule" \
+  "helm get manifest fluxseer-rca" \
+  "clamp_min(..., 0.01)" \
+  "helm rollback fluxseer-rca PREVIOUS_REVISION"; do
+  grep -Fq "${tuning_contract}" "${rulepack_docs}" || {
+    echo "request-rate-surge tuning contract missing: ${tuning_contract}" >&2
+    exit 1
+  }
+done
+grep -Fq 'do not change `high-error-rate` or' "${rulepack_docs}"
+grep -Fq '`high-latency`.' "${rulepack_docs}"
+
 reporting="${root}/docs/reporting.md"
 grep -Fq "Internal Validation Report = test the product." "${reporting}"
 grep -Fq "User-facing Report = product output." "${reporting}"

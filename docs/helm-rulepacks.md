@@ -54,6 +54,7 @@ rulePacks:
       comparisonOffset: 30m
       increaseRatio: 3
       minimumCurrentRate: 10
+      baselineEpsilon: 0.001
     resourceThresholds:
       cpuUsageCores: 0.8
       cpuThrottlingRatio: 0.2
@@ -287,7 +288,34 @@ rulePacks:
               value: 100
 ```
 
-Traffic anomaly detection compares a current window against a baseline window and includes both minimum-volume and baseline-quality guards:
+## Request-rate Surge Tuning Guide
+
+The `trafficAnomaly` values currently tune only the built-in
+`request-rate-surge` Detection Pattern. They do not change `high-error-rate` or
+`high-latency`.
+
+The pattern compares the current HTTP request rate with the same query at a
+historical offset. All three conditions must pass:
+
+```text
+current / max(baseline, baselineEpsilon) > increaseRatio
+current > minimumCurrentRate
+baseline > baselineEpsilon
+```
+
+`baselineEpsilon` is the single source for both the denominator floor and the
+baseline-validity guard.
+
+### Parameters And Units
+
+| Parameter | Meaning | Unit |
+| --- | --- | --- |
+| `comparisonOffset` | Historical distance used for the baseline comparison. | Prometheus duration, such as `30m` or `1h` |
+| `increaseRatio` | Ratio that `current / baseline` must exceed. A value of `3` means current traffic must be greater than three times the baseline; it does not mean a 3% increase. | Ratio; dimensionless |
+| `minimumCurrentRate` | Minimum absolute current traffic required to prevent low-volume ratio amplification. | Requests per second |
+| `baselineEpsilon` | Minimum usable historical rate and the denominator floor. A baseline at or below this value suppresses evaluation. | Requests per second |
+
+The defaults are:
 
 ```yaml
 rulePacks:
@@ -304,6 +332,99 @@ traffic is below `minimumCurrentRate`. A historical rate at or below
 `baselineEpsilon` is an insufficient baseline: evaluation is suppressed and no
 incident is created. Traffic onset from an absent baseline is a separate
 detection semantic and is not folded into `request-rate-surge`.
+
+### Match Examples
+
+With the defaults above:
+
+| Example | Baseline | Current | Evaluation | Result |
+| --- | ---: | ---: | --- | --- |
+| Valid surge | 20 req/s | 80 req/s | Ratio `4 > 3`, current `80 > 10`, baseline `20 > 0.001` | `Matched` |
+| Low-volume ratio spike | 1 req/s | 4 req/s | Ratio passes, but current `4 <= 10` | `NotMatched` |
+| Missing baseline | 0 req/s | 100 req/s | Baseline `0 <= 0.001`; ratio evaluation is suppressed | `NotMatched`; internal reason `InsufficientBaseline` |
+
+The missing-baseline case is not traffic-onset detection. The
+`request-rate-surge` pattern deliberately does not create an incident without
+a usable historical baseline.
+
+### Choose And Apply Values
+
+Prefer a version-controlled values file so the tuning decision is reviewable.
+For example, save this as `traffic-tuning.yaml`:
+
+```yaml
+rulePacks:
+  prometheusBaseline:
+    trafficAnomaly:
+      comparisonOffset: 1h
+      increaseRatio: 5
+      minimumCurrentRate: 50
+      baselineEpsilon: 0.01
+```
+
+Apply it to an existing release, substituting the actual release name,
+namespace, and chart reference when they differ:
+
+```sh
+helm upgrade fluxseer-rca charts/fluxseer-rca \
+  --namespace fluxseer-rca-system \
+  --reuse-values \
+  -f traffic-tuning.yaml
+```
+
+For a one-off experiment, the equivalent command is:
+
+```sh
+helm upgrade fluxseer-rca charts/fluxseer-rca \
+  --namespace fluxseer-rca-system \
+  --reuse-values \
+  --set rulePacks.prometheusBaseline.trafficAnomaly.comparisonOffset=1h \
+  --set rulePacks.prometheusBaseline.trafficAnomaly.increaseRatio=5 \
+  --set rulePacks.prometheusBaseline.trafficAnomaly.minimumCurrentRate=50 \
+  --set rulePacks.prometheusBaseline.trafficAnomaly.baselineEpsilon=0.01
+```
+
+### Inspect The Rendered RiskRule
+
+After upgrading, inspect the live Helm manifest:
+
+```sh
+helm get manifest fluxseer-rca \
+  --namespace fluxseer-rca-system |
+  sed -n '/name: request-rate-surge/,/name: high-latency/p'
+```
+
+For the example values, confirm that the block contains:
+
+```text
+offset 1h
+threshold value = 5
+current-rate guard = 50
+clamp_min(..., 0.01)
+baseline guard = 0.01
+```
+
+The configured epsilon must appear in both `clamp_min` and the baseline
+validity guard. You can also inspect the live resource and resulting product
+objects:
+
+```sh
+kubectl get riskrule fluxseer-rca-prometheus-baseline \
+  --namespace fluxseer-rca-system -o yaml
+kubectl get investigationrequest,risksignal \
+  --namespace fluxseer-rca-system \
+  --selector fluxseer-rca.aiops.platform/risk-rule=fluxseer-rca-prometheus-baseline
+```
+
+Observe at least one full `comparisonOffset` period when practical before
+tightening the values again. To revert a problematic tuning change, select the
+previous revision and roll it back:
+
+```sh
+helm history fluxseer-rca --namespace fluxseer-rca-system
+helm rollback fluxseer-rca PREVIOUS_REVISION \
+  --namespace fluxseer-rca-system
+```
 
 ## Verification
 
