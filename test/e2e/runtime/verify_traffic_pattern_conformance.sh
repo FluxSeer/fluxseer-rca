@@ -97,19 +97,18 @@ metadata:
   name: traffic-conformance-mock-nginx
 data:
   default.conf: |
+    map $arg_query $traffic_fixture_value {
+      ~*app=.surge-valid. 4;
+      ~*app=.no-surge. 1;
+      default 0;
+    }
     server {
       listen 8080;
       access_log /dev/stdout combined;
       error_log /dev/stderr warn;
       location = /api/v1/query_range {
         default_type application/json;
-        if ($arg_query ~* "app=.surge-valid.") {
-          return 200 '{"status":"success","data":{"resultType":"scalar","result":[1786420800,"4"]}}';
-        }
-        if ($arg_query ~* "app=.no-surge.") {
-          return 200 '{"status":"success","data":{"resultType":"scalar","result":[1786420800,"1"]}}';
-        }
-        return 200 '{"status":"success","data":{"resultType":"scalar","result":[1786420800,"0"]}}';
+        return 200 '{"status":"success","data":{"resultType":"scalar","result":[1786420800,"$traffic_fixture_value"]}}';
       }
       location = /failure/api/v1/query_range {
         default_type application/json;
