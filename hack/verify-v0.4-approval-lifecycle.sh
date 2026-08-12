@@ -46,8 +46,8 @@ grep -q 'escalatedAt:' "${root}/config/crd/bases/aiops.platform_agentactions.yam
 echo "==> v0.4 approval lifecycle: Helm and example routing"
 helm lint "${chart}"
 helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system >"${tmpdir}/helm-default.yaml"
-grep -q 'version: 0.4.0-beta.1' "${chart}/Chart.yaml"
-grep -q 'appVersion: "v0.4.0-beta.1"' "${chart}/Chart.yaml"
+grep -q 'version: 0.4.0-beta.2' "${chart}/Chart.yaml"
+grep -q 'appVersion: "v0.4.0-beta.2"' "${chart}/Chart.yaml"
 grep -q 'mode: CreateRequest' "${root}/examples/riskrules/latency-regression.yaml"
 grep -q 'mode: CreateRequest' "${tmpdir}/helm-default.yaml"
 
