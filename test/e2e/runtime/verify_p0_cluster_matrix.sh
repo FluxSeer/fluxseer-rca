@@ -25,13 +25,23 @@ requests=(
   runtime-p0-depth-limit-exceeded
   runtime-p0-ttl-cleanup
 )
+public_report_requests=(
+  runtime-p0-query-policy-rejected
+  runtime-p0-query-budget-exceeded
+  runtime-p0-provider-not-found
+  runtime-p0-required-evidence-missing
+  runtime-p0-no-issue-found
+  runtime-p0-unsupported-retention
+)
+cli_dir=""
+cli_bin=""
 
 if [[ -z "${KUBECONFIG:-}" ]]; then
   echo "KUBECONFIG must point to the explicitly authorized test cluster" >&2
   exit 1
 fi
 
-for command_name in kubectl jq git comm sort; do
+for command_name in kubectl jq git comm sort go; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "required command not found: ${command_name}" >&2
     exit 1
@@ -43,6 +53,7 @@ scenario_results="${report_dir}/scenarios.jsonl"
 : >"${scenario_results}"
 
 cleanup() {
+  kubectl delete riskrule "${public_report_requests[@]}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete investigationrequest "${requests[@]}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   while IFS= read -r signal_name; do
     [[ -z "${signal_name}" ]] || kubectl delete risksignal "${signal_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
@@ -54,6 +65,7 @@ cleanup() {
   kubectl delete deployment "${target_name}" "${mock_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete service "${mock_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   kubectl delete configmap runtime-p0-mock-nginx -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  if [[ -n "${cli_dir}" ]]; then rm -rf "${cli_dir}"; fi
 }
 trap cleanup EXIT INT TERM
 
@@ -120,6 +132,10 @@ append_scenario_result() {
   local actual_risk_signals="$9"
   local artifact_json="${request_file#"${report_dir}/"}"
   local artifact_yaml="${artifact_json%.json}.yaml"
+  local public_report="public-reports/${request_name#runtime-p0-}.json"
+  if [[ ! -f "${report_dir}/${public_report}" ]]; then
+    public_report=""
+  fi
 
   jq -cn \
     --arg id "${request_name}" \
@@ -132,6 +148,7 @@ append_scenario_result() {
     --argjson actualRiskSignals "${actual_risk_signals}" \
     --arg artifactJSON "${artifact_json}" \
     --arg artifactYAML "${artifact_yaml}" \
+    --arg publicReport "${public_report}" \
     --slurpfile request "${request_file}" \
     '{
       id:$id, name:$name, result:"PASS",
@@ -144,11 +161,17 @@ append_scenario_result() {
         {id:"sideEffects.providerRequests",result:"PASS",expected:$expectedProviderRequests,actual:$expectedProviderRequests},
         {id:"sideEffects.riskSignals",result:"PASS",expected:$expectedRiskSignals,actual:$actualRiskSignals}
       ],
-      differences:[], artifacts:[$artifactJSON,$artifactYAML]
+      differences:[], artifacts:([$artifactJSON,$artifactYAML] + if $publicReport == "" then [] else [$publicReport] end)
     }' >>"${scenario_results}"
 }
 
 cleanup
+cli_dir="$(mktemp -d)"
+cli_bin="${cli_dir}/fluxseer"
+(
+  cd "${repo_root}"
+  GOWORK=off go build -o "${cli_bin}" ./cmd/fluxseer
+)
 
 kubectl get namespace "${namespace}" >/dev/null
 kubectl get deployment fluxseer-rca-controller-manager -n "${namespace}" -o yaml >"${report_dir}/controller-deployment.yaml"
@@ -375,6 +398,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: runtime-p0-query-policy-rejected
+  labels: {fluxseer-rca.aiops.platform/risk-rule: runtime-p0-query-policy-rejected}
 spec:
   target: {namespace: ${namespace}, apiVersion: apps/v1, kind: Deployment, name: ${target_name}}
   mode: readOnly
@@ -389,6 +413,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: runtime-p0-query-budget-exceeded
+  labels: {fluxseer-rca.aiops.platform/risk-rule: runtime-p0-query-budget-exceeded}
 spec:
   target: {namespace: ${namespace}, apiVersion: apps/v1, kind: Deployment, name: ${target_name}}
   mode: readOnly
@@ -405,6 +430,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: runtime-p0-provider-not-found
+  labels: {fluxseer-rca.aiops.platform/risk-rule: runtime-p0-provider-not-found}
 spec:
   target: {namespace: ${namespace}, apiVersion: apps/v1, kind: Deployment, name: ${target_name}}
   mode: readOnly
@@ -445,6 +471,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: runtime-p0-no-issue-found
+  labels: {fluxseer-rca.aiops.platform/risk-rule: runtime-p0-no-issue-found}
 spec:
   target: {namespace: ${namespace}, apiVersion: apps/v1, kind: Deployment, name: ${target_name}}
   mode: readOnly
@@ -461,6 +488,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: runtime-p0-required-evidence-missing
+  labels: {fluxseer-rca.aiops.platform/risk-rule: runtime-p0-required-evidence-missing}
 spec:
   target: {namespace: ${namespace}, apiVersion: apps/v1, kind: Deployment, name: ${target_name}}
   mode: readOnly
@@ -493,6 +521,7 @@ apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: runtime-p0-unsupported-retention
+  labels: {fluxseer-rca.aiops.platform/risk-rule: runtime-p0-unsupported-retention}
 spec:
   target: {namespace: ${namespace}, apiVersion: apps/v1, kind: Deployment, name: ${target_name}}
   mode: readOnly
@@ -618,6 +647,39 @@ for _ in {1..30}; do
 done
 assert_condition "${unverified_signal_json}" RCAReady False RCAUnverified
 
+# The public report catalog is RiskRule-addressed, while these P0 contracts
+# intentionally exercise InvestigationRequest-only fields. Create inert,
+# non-matching RiskRule fixtures so the public CLI can group the completed
+# requests without changing how the scenarios execute.
+for request_name in "${public_report_requests[@]}"; do
+  kubectl apply -n "${namespace}" -f - <<EOF
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: ${request_name}
+  annotations:
+    fluxseer-rca.aiops.platform/report-fixture: p0-direct-investigationrequest
+spec:
+  targetSelector:
+    namespaceSelector: {matchNames: [${namespace}]}
+    workloadSelector:
+      matchLabels: {fluxseer-rca.aiops.platform/runtime-report-anchor: ${request_name}}
+      kinds: [Deployment]
+  interval: 1h
+  window: 10m
+  severity: warning
+EOF
+  kubectl wait --for=jsonpath='{.status.phase}'=Observed --timeout="${timeout}" \
+    "riskrule/${request_name}" -n "${namespace}"
+done
+
+mkdir -p "${report_dir}/public-reports"
+for request_name in "${public_report_requests[@]}"; do
+  public_report="${report_dir}/public-reports/${request_name#runtime-p0-}.json"
+  "${cli_bin}" report riskrule "${request_name}" -n "${namespace}" -o json >"${public_report}"
+  bash "${repo_root}/hack/verify-riskrule-report.sh" "${public_report}"
+done
+
 append_scenario_result runtime-p0-query-policy-rejected "Query policy rejected" Failed Unknown QueryPolicyRejected 0 0 "${report_dir}/runtime-p0-query-policy-rejected.json" 0
 append_scenario_result runtime-p0-query-budget-exceeded "Query budget exceeded" Failed Unknown QueryBudgetExceeded 0 0 "${report_dir}/runtime-p0-query-budget-exceeded.json" 0
 append_scenario_result runtime-p0-provider-not-found "Provider not found" Failed Unknown ProviderNotFound 0 0 "${report_dir}/runtime-p0-provider-not-found.json" 0
@@ -649,8 +711,8 @@ spec:
   dataSources: [{name: kubernetes-events}]
 EOF
 wait_for_status runtime-p0-ttl-cleanup Failed
-assert_request runtime-p0-ttl-cleanup Failed Unknown EvidenceRetentionStoreUnavailable
-append_scenario_result runtime-p0-ttl-cleanup "TTL cleanup" Failed Unknown EvidenceRetentionStoreUnavailable 0 0 "${report_dir}/runtime-p0-ttl-cleanup.json" 0
+assert_request runtime-p0-ttl-cleanup Failed Unknown UnsupportedRetentionMode
+append_scenario_result runtime-p0-ttl-cleanup "TTL cleanup" Failed Unknown UnsupportedRetentionMode 0 0 "${report_dir}/runtime-p0-ttl-cleanup.json" 0
 kubectl wait --for=delete investigationrequest/runtime-p0-ttl-cleanup -n "${namespace}" --timeout="${timeout}"
 
 kubectl get remediationplan,agentaction -n "${namespace}" -o json | jq -r '.items[].metadata.uid' | sort >"${report_dir}/side-effect-uids-after.txt"
@@ -663,8 +725,8 @@ fi
 
 controller_image="$(kubectl get deployment fluxseer-rca-controller-manager -n "${namespace}" -o jsonpath='{.spec.template.spec.containers[?(@.name=="manager")].image}')"
 provider_policy_dir="${report_dir}/fluxseer-rca-runtime-access-log-provider-policy"
-append_scenario_result runtime-provider-policy-denied "Provider data policy denied" Failed Unknown ProviderDataPolicyDenied 0 0 "${provider_policy_dir}/provider-data-policy-denied.json" 0
-append_scenario_result runtime-provider-policy-rejected "Provider data policy rejected" Failed Unknown ProviderDataPolicyRejected 0 0 "${provider_policy_dir}/provider-data-policy-rejected.json" 0
+append_scenario_result runtime-provider-policy-denied "Provider data policy denied" Failed Unknown ProviderDataPolicyDenied 0 0 "${provider_policy_dir}/provider-data-policy-denied-investigationrequest.json" 0
+append_scenario_result runtime-provider-policy-rejected "Provider data policy rejected" Failed Unknown ProviderDataPolicyRejected 0 0 "${provider_policy_dir}/provider-data-policy-rejected-investigationrequest.json" 0
 source_dirty=false
 if [[ -n "$(git -C "${repo_root}" status --porcelain)" ]]; then
   source_dirty=true
