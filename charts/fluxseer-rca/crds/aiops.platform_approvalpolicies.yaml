@@ -1,0 +1,190 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: approvalpolicies.aiops.platform
+spec:
+  group: aiops.platform
+  scope: Namespaced
+  names:
+    plural: approvalpolicies
+    singular: approvalpolicy
+    kind: ApprovalPolicy
+    categories:
+      - fluxseer
+      - policies
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                scope:
+                  type: string
+                  enum: ["Cluster", ""]
+                  default: ""
+                resourceSelector:
+                  type: object
+                  properties:
+                    matchLabels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    matchExpressions:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          key: {type: string}
+                          operator: {type: string}
+                          values:
+                            type: array
+                            items:
+                              type: string
+                namespaceSelector:
+                  type: object
+                  properties:
+                    matchLabels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    matchExpressions:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          key: {type: string}
+                          operator: {type: string}
+                          values:
+                            type: array
+                            items:
+                              type: string
+                actionTypeRules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      actionType: {type: string, minLength: 1}
+                      action:
+                        type: string
+                        enum: ["auto", "manual", "reject"]
+                        default: "manual"
+                      reason: {type: string}
+                severityRules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      minSeverity:
+                        type: string
+                        enum: ["Critical", "High", "Medium", "Low", "Info"]
+                      maxSeverity:
+                        type: string
+                        enum: ["Critical", "High", "Medium", "Low", "Info"]
+                      action:
+                        type: string
+                        enum: ["auto", "manual", "reject"]
+                        default: "manual"
+                      reason: {type: string}
+                      timeoutSec: {type: integer, format: int64, minimum: 0}
+                defaultApprovalTimeout:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  default: 3600
+                escalation:
+                  type: object
+                  properties:
+                    escalationChainRef: {type: string}
+                    rules:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          trigger:
+                            type: string
+                            enum: ["timeout", "approval_count", "manual"]
+                          condition: {type: integer, format: int64, minimum: 0}
+                          action: {type: string, minLength: 1}
+                          targets:
+                            type: array
+                            items:
+                              type: string
+                          notificationTemplate: {type: string}
+                    notificationChannels:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                            enum: ["webhook", "slack", "email", "pagerduty"]
+                          url: {type: string}
+                          headers:
+                            type: object
+                            additionalProperties:
+                              type: string
+                          slackTeams:
+                            type: array
+                            items:
+                              type: string
+                          emailAddresses:
+                            type: array
+                            items:
+                              type: string
+                          pagerDutyKey: {type: string}
+                          enabled:
+                            type: boolean
+                            default: true
+                priority:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                enabled:
+                  type: boolean
+                  default: true
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Valid", "Invalid", "Disabled"]
+                  default: "Pending"
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type: {type: string}
+                      status:
+                        type: string
+                        enum: ["True", "False", "Unknown"]
+                      observedGeneration: {type: integer, format: int64}
+                      lastTransitionTime: {type: string, format: date-time}
+                      reason: {type: string}
+                      message: {type: string}
+                updatedAt: {type: string, format: date-time}
+                validationErrors:
+                  type: array
+                  items:
+                    type: string
+                lastAppliedGeneration: {type: integer, format: int64}
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Enabled
+          type: boolean
+          jsonPath: .spec.enabled
+        - name: Priority
+          type: integer
+          jsonPath: .spec.priority
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

@@ -90,6 +90,8 @@ Adapter references:
 Operations and packaging:
 
 - [Runtime modes](runtime-modes.md)
+- [Report contracts and migration](reporting.md)
+- [RiskRule anomaly reports](riskrule-reports.md)
 - [Helm rule packs](helm-rulepacks.md)
 - [Metrics](metrics.md)
 - [Kubernetes ecosystem integration contract](ecosystem-integration-contract.md)
@@ -116,6 +118,7 @@ Product positioning:
 
 Current planning:
 
+- [Backlog execution ledger](backlog/README.md)
 - [v0.4 workload target coverage gate](backlog/v0.4-workload-target-coverage.md)
 - [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [v0.3 product direction](backlog/v0.3-product-direction.md)

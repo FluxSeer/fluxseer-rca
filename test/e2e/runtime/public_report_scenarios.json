@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "fluxseer-public-report-scenarios/v1",
+  "targetKind": "Deployment",
+  "namespace": "database-test",
+  "scenarios": [
+    {"caseId":"event-direct","riskRule":"runtime-anomaly-event-direct","source":"kubernetes-events","output":"event-direct.json"},
+    {"caseId":"condition-direct","riskRule":"runtime-anomaly-condition-direct","source":"kubernetes-events","output":"condition-direct.json"},
+    {"caseId":"prometheus-direct","riskRule":"runtime-anomaly-prometheus-direct","source":"prometheus","output":"prometheus-direct.json"},
+    {"caseId":"loki-direct","riskRule":"runtime-anomaly-loki-direct","source":"loki","output":"loki-direct.json"},
+    {"caseId":"event-canonical","riskRule":"runtime-anomaly-event-canonical","source":"kubernetes-events","output":"event-canonical.json"},
+    {"caseId":"oomkilled-event-only","riskRule":"runtime-canonical-oom-event-only","source":"kubernetes-events","output":"oomkilled-event-only.json"},
+    {"caseId":"imagepullbackoff","riskRule":"runtime-canonical-imagepull","source":"kubernetes-events","output":"imagepullbackoff.json"},
+    {"caseId":"provider-policy-denied","riskRule":"runtime-provider-policy-denied","source":"provider-policy","output":"provider-policy-denied.json"},
+    {"caseId":"provider-policy-rejected","riskRule":"runtime-provider-policy-rejected","source":"provider-policy","output":"provider-policy-rejected.json"},
+    {"caseId":"query-policy-rejected","riskRule":"runtime-p0-query-policy-rejected","source":"datasource-policy","output":"query-policy-rejected.json"},
+    {"caseId":"query-budget-exceeded","riskRule":"runtime-p0-query-budget-exceeded","source":"datasource-policy","output":"query-budget-exceeded.json"},
+    {"caseId":"provider-not-found","riskRule":"runtime-p0-provider-not-found","source":"provider-resolution","output":"provider-not-found.json"},
+    {"caseId":"required-evidence-missing","riskRule":"runtime-p0-required-evidence-missing","source":"evidence","output":"required-evidence-missing.json"},
+    {"caseId":"no-issue-found","riskRule":"runtime-p0-no-issue-found","source":"evidence","output":"no-issue-found.json"},
+    {"caseId":"unsupported-retention","riskRule":"runtime-p0-unsupported-retention","source":"validation","output":"unsupported-retention.json"}
+  ]
+}

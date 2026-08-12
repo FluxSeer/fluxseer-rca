@@ -44,6 +44,8 @@ func (p requestIDProvider) Complete(context.Context, domain.ModelRequest) (domai
 		Provider:          p.Name(),
 		Model:             "request-id-test",
 		ProviderRequestID: "provider-request-abc",
+		InputTokens:       144,
+		OutputTokens:      55,
 		Structured:        true,
 		Output: map[string]any{
 			"riskTitle":       "Latency regression",
@@ -94,5 +96,8 @@ func TestEngineCarriesProviderRequestID(t *testing.T) {
 	}
 	if result.ProviderRequestID != "provider-request-abc" {
 		t.Fatalf("expected provider request id, got %q", result.ProviderRequestID)
+	}
+	if result.InputTokens != 144 || result.OutputTokens != 55 {
+		t.Fatalf("expected token usage 144/55, got %d/%d", result.InputTokens, result.OutputTokens)
 	}
 }

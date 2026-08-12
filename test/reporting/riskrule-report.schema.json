@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluxseer.com/schemas/riskrule-report-v1.json",
+  "title": "FluxSeer RiskRule Report",
+  "type": "object",
+  "required": ["schemaVersion", "selection", "riskRule", "investigationRequests", "riskSignals"],
+  "properties": {
+    "schemaVersion": {"const": "fluxseer-riskrule-report/v1"},
+    "selection": {
+      "type": "object",
+      "required": ["namespace", "riskRule"],
+      "properties": {
+        "namespace": {"type": "string", "minLength": 1},
+        "riskRule": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "riskRule": {"$ref": "#/$defs/riskRule"},
+    "investigationRequests": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/investigationRequest"}
+    },
+    "riskSignals": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/riskSignal"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "resource": {
+      "type": "object",
+      "required": ["apiVersion", "kind", "metadata"],
+      "properties": {
+        "apiVersion": {"const": "aiops.platform/v1alpha1"},
+        "metadata": {
+          "type": "object",
+          "required": ["name", "namespace"],
+          "properties": {
+            "name": {"type": "string", "minLength": 1},
+            "namespace": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "riskRule": {
+      "allOf": [
+        {"$ref": "#/$defs/resource"},
+        {"properties": {"kind": {"const": "RiskRule"}}}
+      ]
+    },
+    "investigationRequest": {
+      "allOf": [
+        {"$ref": "#/$defs/resource"},
+        {"properties": {"kind": {"const": "InvestigationRequest"}}}
+      ]
+    },
+    "riskSignal": {
+      "allOf": [
+        {"$ref": "#/$defs/resource"},
+        {"properties": {"kind": {"const": "RiskSignal"}}}
+      ]
+    }
+  }
+}

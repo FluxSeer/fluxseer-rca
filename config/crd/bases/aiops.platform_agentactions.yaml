@@ -52,6 +52,7 @@ spec:
                 message: {type: string}
                 observedGeneration: {type: integer, format: int64}
                 updatedAt: {type: string, format: date-time}
+                finishedAt: {type: string, format: date-time}
                 approval:
                   type: object
                   properties:

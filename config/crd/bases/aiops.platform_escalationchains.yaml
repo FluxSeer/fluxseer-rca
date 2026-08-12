@@ -1,0 +1,161 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: escalationchains.aiops.platform
+spec:
+  group: aiops.platform
+  scope: Namespaced
+  names:
+    plural: escalationchains
+    singular: escalationchain
+    kind: EscalationChain
+    categories:
+      - fluxseer
+      - policies
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: ["stages"]
+              properties:
+                resourceSelector:
+                  type: object
+                  properties:
+                    matchLabels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    matchExpressions:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          key: {type: string}
+                          operator: {type: string}
+                          values:
+                            type: array
+                            items:
+                              type: string
+                priority:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                stages:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                        maxLength: 63
+                      delay:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                        default: 0
+                      condition:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                            enum: ["pending_time", "approval_count", "severity", "manual"]
+                          threshold: {type: integer, format: int64, minimum: 0}
+                          severityMin:
+                            type: string
+                            enum: ["Critical", "High", "Medium", "Low", "Info"]
+                          severityMax:
+                            type: string
+                            enum: ["Critical", "High", "Medium", "Low", "Info"]
+                      actions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            type:
+                              type: string
+                              enum: ["notify", "reassign", "auto_reject", "force_execute"]
+                            details:
+                              type: object
+                              additionalProperties:
+                                type: string
+                            enabled:
+                              type: boolean
+                              default: true
+                      assignees:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            type:
+                              type: string
+                              enum: ["user", "team", "role"]
+                            name:
+                              type: string
+                              minLength: 1
+                            channels:
+                              type: array
+                              items:
+                                type: string
+                            enabled:
+                              type: boolean
+                              default: true
+                      notificationTemplate: {type: string}
+                      timeout:
+                        type: integer
+                        format: int64
+                        minimum: 0
+                enabled:
+                  type: boolean
+                  default: true
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Valid", "Invalid", "Disabled"]
+                  default: "Pending"
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type: {type: string}
+                      status:
+                        type: string
+                        enum: ["True", "False", "Unknown"]
+                      observedGeneration: {type: integer, format: int64}
+                      lastTransitionTime: {type: string, format: date-time}
+                      reason: {type: string}
+                      message: {type: string}
+                updatedAt: {type: string, format: date-time}
+                validationErrors:
+                  type: array
+                  items:
+                    type: string
+                lastAppliedGeneration: {type: integer, format: int64}
+                totalStages:
+                  type: integer
+                  minimum: 0
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Priority
+          type: integer
+          jsonPath: .spec.priority
+        - name: Stages
+          type: integer
+          jsonPath: ".spec.stages | length"
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

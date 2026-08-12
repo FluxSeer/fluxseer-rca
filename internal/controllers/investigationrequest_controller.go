@@ -1497,8 +1497,24 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 			},
 		},
 		DurationSeconds: investigationDurationSeconds(request, now),
+		InputTokens:     reasoningInputTokens(rca),
+		OutputTokens:    reasoningOutputTokens(rca),
 		ProviderResult:  providerResult,
 	}
+}
+
+func reasoningInputTokens(rca investigation.RCAResult) int64 {
+	if rca.Reasoning == nil {
+		return 0
+	}
+	return rca.Reasoning.InputTokens
+}
+
+func reasoningOutputTokens(rca investigation.RCAResult) int64 {
+	if rca.Reasoning == nil {
+		return 0
+	}
+	return rca.Reasoning.OutputTokens
 }
 
 func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, audit *v1alpha1.ProviderEgressAudit, attempts []v1alpha1.ProviderEgressAttempt, executionID string, now time.Time) *v1alpha1.RCAExecution {

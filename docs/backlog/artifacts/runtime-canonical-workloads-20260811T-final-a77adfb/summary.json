@@ -1,0 +1,35 @@
+{
+  "runID": "20260811T-final-a77adfb",
+  "sourceCommit": "a77adfbc63a0777056c3b2de62e3e07aa8243fdf",
+  "kubernetesContext": "admin@homelab-test",
+  "namespace": "fluxseer-rca-test",
+  "controllerImage": "test-harbor.fluxseer.com/fluxseer/fluxseer-rca/operator:runtime-canonical-a77adfb",
+  "controllerImageDigest": "sha256:dba5ff8f1f8dd95cd55b554da54a3fbd48dd33eafd3b121f8992e6fd247e46b3",
+  "result": "PASS",
+  "scenarioCount": 2,
+  "scenarios": [
+    {
+      "name": "OOMKilledEventOnly",
+      "phase": "Completed",
+      "outcome": "Inconclusive",
+      "completedChecks": ["event:OOMKilled"],
+      "incompleteChecks": ["metric:Memory"],
+      "providerRequests": 0,
+      "riskSignals": 0
+    },
+    {
+      "name": "ImagePullBackOffStructuredEvidence",
+      "phase": "Completed",
+      "outcome": "Confirmed",
+      "rootCauseType": "ImagePullFailure",
+      "evidenceReason": "ErrImagePull",
+      "providerRequests": 1,
+      "verifiedRiskSignals": 1
+    }
+  ],
+  "unexpectedSideEffects": {
+    "remediationPlans": 0,
+    "agentActions": 0
+  },
+  "clusterRestored": true
+}

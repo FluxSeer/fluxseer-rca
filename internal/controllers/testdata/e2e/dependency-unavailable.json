@@ -1,0 +1,48 @@
+{
+  "name": "dependency-unavailable",
+  "target": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "namespace": "prod",
+    "name": "payments-api"
+  },
+  "datasources": [
+    {
+      "name": "loki",
+      "queryType": "log",
+      "records": [
+        {
+          "line": "payments-api upstream dependency payments-db connection refused and unavailable"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Payments dependency unavailable",
+    "riskSummary": "The payments API cannot reach its database dependency.",
+    "severity": "high",
+    "confidenceScore": 84,
+    "rationale": "Application logs report a refused database connection.",
+    "rcaHypothesis": "The workload is degraded because payments-db is unavailable.",
+    "rcaCauses": [
+      "Upstream dependency payments-db connection refused and unavailable"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "WorkloadDegradation",
+    "claimVerification": "Supported",
+    "providerCalls": 1
+  },
+  "baseline": {
+    "scenario": "DependencyUnavailable",
+    "expectedDiagnosis": "The workload is degraded because its database dependency is unavailable.",
+    "expectedEvidence": [
+      {"kind": "log", "source": "loki"}
+    ],
+    "expectedIncident": true,
+    "humanJudgment": "Correct when the dependency diagnosis cites the refused-connection log."
+  }
+}

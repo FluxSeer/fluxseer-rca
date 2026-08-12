@@ -11,9 +11,12 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
+	"github.com/FluxSeer/fluxseer-rca/internal/escalation"
 	"github.com/FluxSeer/fluxseer-rca/internal/executor"
 	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
@@ -82,11 +85,13 @@ func recordPhaseTransition(recorder record.EventRecorder, object runtime.Object,
 
 type AgentActionReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	Executor      *executor.Router
-	Notifier      notifier.Notifier
-	EventRecorder record.EventRecorder
-	Now           func() time.Time
+	Scheme            *runtime.Scheme
+	Executor          *executor.Router
+	EscalationRouter  *escalation.Router
+	PolicyPackEnabled bool
+	Notifier          notifier.Notifier
+	EventRecorder     record.EventRecorder
+	Now               func() time.Time
 }
 
 func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -101,7 +106,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if action.Status.Phase == v1alpha1.PhaseSucceeded || action.Status.Phase == v1alpha1.PhaseFailed || action.Status.Phase == v1alpha1.PhaseRejected {
-		return ctrl.Result{}, nil
+		return r.reconcileTerminalStateTTL(ctx, &action, now())
 	}
 
 	if !isAgentActionApproved(&action) {
@@ -163,6 +168,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		finishedAt := metav1.NewTime(now())
 		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseFailed, err.Error(), action.Generation, finishedAt.Time)
 		originalExecution := action.Status.Phase
+		action.Status.FinishedAt = &finishedAt
 		action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 			Phase:      "Failed",
 			Summary:    err.Error(),
@@ -183,6 +189,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	originalPhase := action.Status.Phase
 	finishedAt := metav1.NewTime(now())
 	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, finishedAt.Time)
+	action.Status.FinishedAt = &finishedAt
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 		Phase:      "Succeeded",
 		Executor:   result.Executor,
@@ -260,6 +267,19 @@ func (r *AgentActionReconciler) reconcileApprovalTimeout(ctx context.Context, ac
 		return ctrl.Result{RequeueAfter: deadline.Sub(now)}, nil
 	}
 
+	var route *escalation.Route
+	if r.Notifier != nil && r.EscalationRouter != nil {
+		resolved, err := r.EscalationRouter.Resolve(ctx, escalation.ResolveRequest{
+			Namespace:          action.Namespace,
+			EscalationChainRef: action.Annotations[annotationEscalationChainRef],
+			ResourceLabels:     action.Labels,
+		})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		route = resolved
+	}
+
 	if r.Notifier != nil {
 		// Notify before persisting Escalated, mirroring
 		// RiskSignalNotificationReconciler's notify-then-mark-done ordering:
@@ -279,15 +299,21 @@ func (r *AgentActionReconciler) reconcileApprovalTimeout(ctx context.Context, ac
 			return ctrl.Result{}, err
 		}
 
+		fields := map[string]any{
+			"namespace":  action.Namespace,
+			"name":       action.Name,
+			"actionType": action.Spec.ActionType,
+		}
+		if route != nil {
+			fields["escalationChain"] = route.Reference.Name
+			fields["escalationChainVersion"] = route.Reference.Version
+			fields["escalationStageCount"] = len(route.Chain.Spec.Stages)
+		}
 		notifyErr := r.Notifier.Notify(ctx, notifier.Message{
 			Title:   "FluxSeer RCA approval escalation",
 			Summary: fmt.Sprintf("%s exceeded its %ds approval timeout", targetRefString(action.Spec.Target), action.Spec.ApprovalTimeoutSeconds),
 			Body:    action.Status.Message,
-			Fields: map[string]any{
-				"namespace":  action.Namespace,
-				"name":       action.Name,
-				"actionType": action.Spec.ActionType,
-			},
+			Fields:  fields,
 		})
 		if notifyErr != nil {
 			action.Status.Notification.LastError = notifyErr.Error()
@@ -372,8 +398,69 @@ func agentActionSpecDigest(action *v1alpha1.AgentAction) string {
 	return canonicaldigest.String(canonicaldigest.RCAJSONV1, spec)
 }
 
+// reconcileTerminalStateTTL handles TTL-based deletion for terminal AgentActions.
+// Terminal phases are Succeeded, Failed, and Rejected.
+// Returns a requeue result if the action should be kept (not yet expired),
+// or deletes the action and returns empty result if it has expired.
+func (r *AgentActionReconciler) reconcileTerminalStateTTL(ctx context.Context, action *v1alpha1.AgentAction, now time.Time) (ctrl.Result, error) {
+	// TTL is disabled if not set or zero
+	if action.Spec.TTLSeconds == 0 {
+		return ctrl.Result{}, nil
+	}
+
+	// Check for retain annotation - if present, never delete
+	if action.Annotations != nil {
+		if _, ok := action.Annotations["fluxseer-rca.aiops.platform/retain"]; ok {
+			return ctrl.Result{}, nil
+		}
+	}
+
+	// Need finishedAt to calculate expiration. If missing, don't delete (conservative).
+	if action.Status.FinishedAt == nil {
+		return ctrl.Result{}, nil
+	}
+
+	// Calculate when this action should expire
+	expireTime := action.Status.FinishedAt.Add(time.Duration(action.Spec.TTLSeconds) * time.Second)
+
+	if now.After(expireTime) {
+		// TTL expired, delete the action
+		if err := r.Delete(ctx, action); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Not yet expired, requeue after the remaining time
+	remainingTTL := expireTime.Sub(now)
+	return ctrl.Result{RequeueAfter: remainingTTL}, nil
+}
+
 func (r *AgentActionReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.AgentAction{}).
-		Complete(r)
+	builder := ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.AgentAction{})
+	if r.PolicyPackEnabled {
+		builder = builder.Watches(&v1alpha1.EscalationChain{}, handler.EnqueueRequestsFromMapFunc(r.mapPendingEscalationActions))
+	}
+	return builder.Complete(r)
+}
+
+// mapPendingEscalationActions requeues waiting actions affected by a chain change.
+func (r *AgentActionReconciler) mapPendingEscalationActions(ctx context.Context, chain client.Object) []reconcile.Request {
+	var actions v1alpha1.AgentActionList
+	if err := r.List(ctx, &actions, client.InNamespace(chain.GetNamespace())); err != nil {
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(actions.Items))
+	for i := range actions.Items {
+		action := &actions.Items[i]
+		if action.Status.Phase != v1alpha1.PhaseWaitingApproval {
+			continue
+		}
+		if ref := action.Annotations[annotationEscalationChainRef]; ref != "" && ref != chain.GetName() {
+			continue
+		}
+		requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(action)})
+	}
+	return requests
 }

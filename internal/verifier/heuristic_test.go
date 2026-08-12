@@ -131,6 +131,28 @@ func TestVerifyClaimsDoesNotTreatUnhealthyAsHealthyContradiction(t *testing.T) {
 	}
 }
 
+func TestVerifyClaimsDoesNotTreatNegativeHealthStatesAsContradictions(t *testing.T) {
+	tests := []struct {
+		name      string
+		statement string
+		summary   string
+	}{
+		{name: "not ready", statement: "checkout-api pod is not ready", summary: "readiness probe failed and checkout-api pod is not ready"},
+		{name: "not available", statement: "payments service is not available", summary: "payments service is not available after a refused connection"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := VerifyClaims(
+				[]Claim{{ID: "claim-001", Statement: tt.statement}},
+				[]EvidenceRef{{ID: "evidence-001", Kind: "event", Summary: tt.summary}},
+			)
+			if result.Claims[0].Verification != VerificationSupported {
+				t.Fatalf("expected negative health state to support rather than contradict the claim, got %#v", result.Claims[0])
+			}
+		})
+	}
+}
+
 func TestVerifyClaimsWithoutEvidenceIsUnverified(t *testing.T) {
 	result := VerifyClaims([]Claim{{ID: "claim-001", Statement: "Pods are restarting"}}, nil)
 

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluxseer.com/schemas/test-report-v1.json",
+  "title": "FluxSeer Test Report",
+  "type": "object",
+  "required": ["schemaVersion", "suite", "run", "summary", "scenarios"],
+  "properties": {
+    "schemaVersion": {"const": "fluxseer-test-report/v1"},
+    "suiteSchemaVersion": {"type": "string"},
+    "suite": {
+      "type": "object",
+      "required": ["id", "name", "tier"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "tier": {"enum": ["unit", "integration", "envtest", "mock-runtime", "cluster", "replay"]}
+      },
+      "additionalProperties": true
+    },
+    "run": {
+      "type": "object",
+      "required": ["id", "sourceCommit", "sourceDirty", "environment"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "sourceCommit": {"type": "string", "minLength": 1},
+        "sourceDirty": {"type": "boolean"},
+        "environment": {"type": "object"}
+      },
+      "additionalProperties": true
+    },
+    "summary": {
+      "type": "object",
+      "required": ["result", "total", "passed", "failed"],
+      "properties": {
+        "result": {"enum": ["PASS", "FAIL"]},
+        "total": {"type": "integer", "minimum": 0},
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "metrics": {"type": "object"},
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "result", "expected", "actual", "assertions", "differences", "artifacts"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "result": {"enum": ["PASS", "FAIL"]},
+          "expected": {"type": "object"},
+          "actual": {"type": "object"},
+          "assertions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "result", "expected", "actual"],
+              "properties": {
+                "id": {"type": "string", "minLength": 1},
+                "result": {"enum": ["PASS", "FAIL"]}
+              },
+              "additionalProperties": true
+            }
+          },
+          "differences": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "expected", "actual"],
+              "properties": {"path": {"type": "string", "minLength": 1}},
+              "additionalProperties": true
+            }
+          },
+          "artifacts": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,55 @@
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: runtime-provider-policy-denied
+  namespace: fluxseer-rca-test
+spec:
+  targetSelector:
+    namespaceSelector:
+      matchNames: [fluxseer-rca-test]
+    workloadSelector:
+      matchLabels: {app: runtime-matrix-target}
+      kinds: [Deployment]
+  interval: 5s
+  window: 10m
+  severity: warning
+  signals:
+    - name: backoff
+      datasourceRef: {name: kubernetes-events}
+      queryType: event
+      reasons: [BackOff]
+      threshold: {operator: count_gt, value: 0}
+  ai:
+    rcaEnabled: true
+    providerRef: {name: runtime-openai-policy-denied}
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true
+---
+apiVersion: aiops.platform/v1alpha1
+kind: RiskRule
+metadata:
+  name: runtime-provider-policy-rejected
+  namespace: fluxseer-rca-test
+spec:
+  targetSelector:
+    namespaceSelector:
+      matchNames: [fluxseer-rca-test]
+    workloadSelector:
+      matchLabels: {app: runtime-matrix-target}
+      kinds: [Deployment]
+  interval: 5s
+  window: 10m
+  severity: warning
+  signals:
+    - name: backoff
+      datasourceRef: {name: kubernetes-events}
+      queryType: event
+      reasons: [BackOff]
+      threshold: {operator: count_gt, value: 0}
+  ai:
+    rcaEnabled: true
+    providerRef: {name: runtime-openai-policy-rejected}
+  investigationPolicy:
+    mode: CreateRequest
+    createRiskSignal: true

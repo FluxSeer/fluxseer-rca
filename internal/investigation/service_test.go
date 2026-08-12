@@ -594,6 +594,48 @@ func TestServiceCollectEvidenceRequiresConfiguredSnapshotStore(t *testing.T) {
 	}
 }
 
+func TestServiceCollectEvidenceReportsSnapshotWriteFailure(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				records:   []map[string]any{{"metric": "http_requests_total", "value": "0.95"}},
+			},
+		),
+		EvidenceStore: evidencepkg.UnsupportedStore{StoreName: "failing-store"},
+	}
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		EvidenceRetention: v1alpha1.EvidenceRetentionPolicy{
+			Mode: v1alpha1.EvidenceRetentionModeNormalizedSnapshot,
+			StorageRef: v1alpha1.LocalObjectReference{
+				Name: "failing-store",
+			},
+		},
+	}, PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Labels: map[string]string{"app": "open-api"},
+		CollectionPlan: []CollectionStep{
+			{Name: "prometheus", DatasourceName: "prometheus", QueryType: domain.QueryTypeMetric, Query: "metric-query"},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "EvidenceRetentionWriteFailed" {
+		t.Fatalf("expected EvidenceRetentionWriteFailed issue, got %#v", result.Issue)
+	}
+	if !strings.Contains(result.Issue.Message, "failing-store") {
+		t.Fatalf("expected bounded store identity in failure message, got %q", result.Issue.Message)
+	}
+	if len(result.Observations) != 1 || len(result.EvidenceRefs) != 1 {
+		t.Fatalf("expected normalized evidence to remain available after snapshot failure, got observations=%d refs=%d", len(result.Observations), len(result.EvidenceRefs))
+	}
+	if result.EvidenceRefs[0].PayloadRef != nil {
+		t.Fatalf("expected no payload reference after snapshot failure, got %#v", result.EvidenceRefs[0].PayloadRef)
+	}
+}
+
 func TestServiceCollectEvidenceRejectsCumulativeResponseBudget(t *testing.T) {
 	service := &Service{
 		Registry: datasource.NewRegistry(
@@ -1189,6 +1231,46 @@ func TestServiceCollectEvidencePreservesDatasourceQueryReason(t *testing.T) {
 	}
 }
 
+func TestServiceCollectEvidenceClassifiesUnspecifiedDatasourceError(t *testing.T) {
+	service := &Service{
+		Registry: datasource.NewRegistry(
+			fakeDataSource{
+				name:      "prometheus",
+				queryType: domain.QueryTypeMetric,
+				queryErr:  fmt.Errorf("unexpected datasource failure"),
+			},
+		),
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target: domain.ResourceRef{
+			Namespace: "prod",
+			Name:      "open-api",
+			Kind:      "Deployment",
+			Service:   "open-api",
+		},
+		Labels:          map[string]string{"app": "open-api"},
+		DatasourceNames: []string{"prometheus"},
+		CollectionPlan: []CollectionStep{
+			{
+				Name:           "prometheus",
+				DatasourceName: "prometheus",
+				QueryType:      domain.QueryTypeMetric,
+				Query:          "metric-query",
+			},
+		},
+	}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "DatasourceQueryFailed" {
+		t.Fatalf("expected DatasourceQueryFailed issue, got %#v", result.Issue)
+	}
+	if len(result.Observations) != 0 || len(result.EvidenceRefs) != 0 {
+		t.Fatalf("expected no evidence after datasource failure, got observations=%#v refs=%#v", result.Observations, result.EvidenceRefs)
+	}
+}
+
 func TestServiceCollectEvidenceUsesConfiguredQueryPlan(t *testing.T) {
 	const configuredQuery = `sum(rate(custom_metric_total{namespace="prod"}[2m]))`
 	prom := &capturingDataSource{
@@ -1453,6 +1535,41 @@ func TestServiceGenerateRCAReturnsReasoningOutput(t *testing.T) {
 	}
 	if reasoning.Reasoning.Confidence.Score <= 0 {
 		t.Fatalf("expected positive confidence, got %#v", reasoning.Reasoning.Confidence)
+	}
+}
+
+func TestServiceGenerateRCARecordsProviderRequestFailure(t *testing.T) {
+	providerRuntime := &untypedFailingModelProvider{name: "raw-failure"}
+	service := &Service{
+		Gateway: &modelgateway.Gateway{
+			Base:      knowledge.NewBase(),
+			Providers: model.NewRegistry(providerRuntime),
+		},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "raw-failure", Namespace: "fluxseer-rca-system", Generation: 3},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: providerRuntime.name},
+	}
+
+	result, err := service.GenerateRCA(context.Background(), v1alpha1.InvestigationRequestSpec{}, PreflightResult{
+		Target:   domain.ResourceRef{Namespace: "prod", Name: "open-api", Kind: "Deployment"},
+		Provider: provider,
+	}, EvidenceCollectionResult{Summary: "provider request failure fixture"}, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("generate RCA returned an unstable error: %v", err)
+	}
+	if result.Issue == nil || result.Issue.Reason != "ProviderRequestFailed" {
+		t.Fatalf("expected ProviderRequestFailed issue, got %#v", result.Issue)
+	}
+	if providerRuntime.requests != 1 {
+		t.Fatalf("expected exactly one provider request, got %d", providerRuntime.requests)
+	}
+	if len(result.EgressAttempts) != 1 {
+		t.Fatalf("expected one provider attempt summary, got %#v", result.EgressAttempts)
+	}
+	attempt := result.EgressAttempts[0]
+	if attempt.ProviderRef == nil || attempt.ProviderRef.Name != provider.Name || attempt.ProviderGeneration != provider.Generation || attempt.Result != "ProviderRequestFailed" || attempt.Reason != "ProviderRequestFailed" {
+		t.Fatalf("expected stable ProviderRequestFailed attempt metadata, got %#v", attempt)
 	}
 }
 
@@ -1853,6 +1970,18 @@ func (p failingModelProvider) Complete(context.Context, domain.ModelRequest) (do
 		Reason:  reason,
 		Message: "provider is unavailable",
 	}
+}
+
+type untypedFailingModelProvider struct {
+	name     string
+	requests int
+}
+
+func (p *untypedFailingModelProvider) Name() string { return p.name }
+
+func (p *untypedFailingModelProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	p.requests++
+	return domain.ModelResponse{}, fmt.Errorf("provider request failed without a typed reason")
 }
 
 type serviceResolverStub struct {

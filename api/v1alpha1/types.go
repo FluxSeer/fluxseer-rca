@@ -174,6 +174,11 @@ type RemediationPlanSpec struct {
 	Steps                  []RemediationStep `json:"steps,omitempty"`
 }
 
+type RemediationPlanStatus struct {
+	ResourceStatus `json:",inline"`
+	FinishedAt     *metav1.Time `json:"finishedAt,omitempty"`
+}
+
 type AgentActionSpec struct {
 	Target                 TargetRef         `json:"target"`
 	ActionType             string            `json:"actionType"`
@@ -223,6 +228,7 @@ type AgentActionEffectivenessStatus struct {
 
 type AgentActionStatus struct {
 	ResourceStatus `json:",inline"`
+	FinishedAt     *metav1.Time                    `json:"finishedAt,omitempty"`
 	Approval       *AgentActionApprovalStatus      `json:"approval,omitempty"`
 	Notification   *AgentActionNotificationStatus  `json:"notification,omitempty"`
 	DryRunResult   *AgentActionDryRunStatus        `json:"dryRunResult,omitempty"`
@@ -248,8 +254,8 @@ type RemediationPlan struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   RemediationPlanSpec `json:"spec,omitempty"`
-	Status ResourceStatus      `json:"status,omitempty"`
+	Spec   RemediationPlanSpec   `json:"spec,omitempty"`
+	Status RemediationPlanStatus `json:"status,omitempty"`
 }
 
 type RemediationPlanList struct {
@@ -399,6 +405,9 @@ func (in *RemediationPlan) DeepCopyInto(out *RemediationPlan) {
 			}
 		}
 	}
+	if in.Status.FinishedAt != nil {
+		out.Status.FinishedAt = in.Status.FinishedAt.DeepCopy()
+	}
 }
 
 func (in *RemediationPlan) DeepCopy() *RemediationPlan {
@@ -451,6 +460,9 @@ func (in *AgentAction) DeepCopyInto(out *AgentAction) {
 	}
 	if in.Spec.RollbackPlan != nil {
 		out.Spec.RollbackPlan = append([]string(nil), in.Spec.RollbackPlan...)
+	}
+	if in.Status.FinishedAt != nil {
+		out.Status.FinishedAt = in.Status.FinishedAt.DeepCopy()
 	}
 	if in.Status.Approval != nil {
 		approval := *in.Status.Approval

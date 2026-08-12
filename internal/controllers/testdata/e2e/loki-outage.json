@@ -1,0 +1,41 @@
+{
+  "name": "loki-outage",
+  "target": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "namespace": "prod",
+    "name": "checkout-api"
+  },
+  "datasources": [
+    {
+      "name": "loki",
+      "queryType": "log",
+      "error": "loki endpoint unavailable"
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Must not be called",
+    "riskSummary": "A full Loki outage must stop before provider reasoning.",
+    "severity": "low",
+    "confidenceScore": 1,
+    "rationale": "unexpected provider call",
+    "rcaHypothesis": "unexpected",
+    "rcaCauses": ["unexpected"],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Failed",
+    "outcome": "Unknown",
+    "rootCauseType": "",
+    "claimVerification": "",
+    "providerCalls": 0,
+    "failureReason": "DatasourceQueryFailed"
+  },
+  "baseline": {
+    "scenario": "LokiOutage",
+    "expectedDiagnosis": "Evidence collection fails safely when Loki is entirely unavailable.",
+    "expectedEvidence": [],
+    "expectedIncident": true,
+    "humanJudgment": "Correct when the request terminates with DatasourceQueryFailed and makes no provider request."
+  }
+}

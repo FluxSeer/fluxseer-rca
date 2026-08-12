@@ -31,5 +31,13 @@
     "rootCauseType": "",
     "claimVerification": "",
     "providerCalls": 0
+  },
+  "baseline": {
+    "scenario": "NormalLatencyNoIssue",
+    "expectedDiagnosis": "No latency regression is present and hosted reasoning is unnecessary.",
+    "expectedEvidence": [
+      {"kind": "metric", "source": "prometheus"}
+    ],
+    "humanJudgment": "Correct only when the normal metric produces NoIssueFound without a provider call."
   }
 }
