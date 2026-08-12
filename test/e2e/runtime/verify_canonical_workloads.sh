@@ -12,6 +12,8 @@ oom_target="runtime-canonical-oom"
 image_target="runtime-canonical-imagepull"
 oom_request="runtime-canonical-oom-event-only"
 image_request="runtime-canonical-imagepull"
+oom_rule="${oom_request}"
+image_rule="${image_request}"
 cli_dir=""
 cli_bin=""
 
@@ -30,8 +32,9 @@ done
 mkdir -p "${report_dir}"
 
 cleanup() {
-  kubectl delete riskrule "${oom_request}" "${image_request}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
-  kubectl delete investigationrequest "${oom_request}" "${image_request}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete riskrule "${oom_rule}" "${image_rule}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl delete investigationrequest -n "${namespace}" -l "fluxseer-rca.aiops.platform/risk-rule in (${oom_rule},${image_rule})" --ignore-not-found --wait=true >/dev/null 2>&1 || true
+  kubectl delete investigationrequest "${oom_rule}" "${image_rule}" -n "${namespace}" --ignore-not-found --wait=true >/dev/null 2>&1 || true
   while IFS= read -r signal_name; do
     [[ -z "${signal_name}" ]] || kubectl delete risksignal "${signal_name}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   done < <(kubectl get risksignal -n "${namespace}" -o json 2>/dev/null | jq -r '.items[] | select((.spec.investigationRef.name // "") | startswith("runtime-canonical-")) | .metadata.name' 2>/dev/null || true)
