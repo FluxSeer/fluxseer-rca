@@ -220,6 +220,14 @@ func domainSupportEvidenceIDs(statement string, evidence []EvidenceRef) ([]strin
 func domainProfile(statement string) string {
 	statement = normalizeText(statement)
 	switch {
+	case containsAny(statement, "image", "registry", "pull") && containsAny(statement, "missing image", "missing container image", "image is missing", "image does not exist", "image not found", "repository does not exist", "manifest unknown"):
+		return "imagepullmissing"
+	case containsAny(statement, "image", "registry", "pull") && containsAny(statement, "authentication", "unauthorized", "access denied", "pull access denied", "credential"):
+		return "registryauth"
+	case containsAny(statement, "image", "registry", "pull") && containsAny(statement, "dns", "name resolution", "no such host", "host lookup"):
+		return "registrydns"
+	case containsAny(statement, "image", "registry", "pull") && containsAny(statement, "registry unavailable", "registry is unavailable", "registry was unavailable", "registry outage", "registry is down", "registry timeout", "registry connection refused"):
+		return "registryunavailable"
 	case containsAny(statement, "imagepullbackoff", "errimagepull", "image pull", "pull image", "failed to pull"):
 		return "imagepullbackoff"
 	case containsAny(statement, "crashloopbackoff", "crash loop", "crashloop", "backoff", "restarting", "restart"):
@@ -237,7 +245,7 @@ func domainProfile(statement string) string {
 
 func requiredDomainKinds(profile string) []string {
 	switch profile {
-	case "imagepullbackoff", "crashloopbackoff":
+	case "imagepullbackoff", "imagepullmissing", "registryauth", "registrydns", "registryunavailable", "crashloopbackoff":
 		return []string{"event"}
 	case "memorypressure":
 		return []string{"event", "metric"}
@@ -256,6 +264,14 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 	switch profile {
 	case "imagepullbackoff":
 		return kind == "event" && containsAny(text, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
+	case "imagepullmissing":
+		return kind == "event" && containsAny(text, "manifest unknown", "image not found", "image does not exist", "repository does not exist", "no such image")
+	case "registryauth":
+		return kind == "event" && containsAny(text, "pull access denied", "unauthorized", "authentication required", "access denied", "denied: requested access")
+	case "registrydns":
+		return kind == "event" && containsAny(text, "no such host", "dns", "name resolution", "temporary failure in name resolution", "host lookup")
+	case "registryunavailable":
+		return kind == "event" && containsAny(text, "connection refused", "i/o timeout", "registry unavailable", "service unavailable", "registry timeout")
 	case "crashloopbackoff":
 		return kind == "event" && containsAny(text, "crashloopbackoff", "backoff", "back off", "container crashed", "restarting failed container")
 	case "memorypressure":

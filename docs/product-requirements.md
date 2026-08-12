@@ -66,6 +66,12 @@ The long-term product positioning is intentionally narrower than a general AI SR
 - graceful degradation for optional integrations
 - guarded remediation as an opt-in secondary path
 - stable status and condition reasons for CLI, dashboard, alerting, and GitOps consumers
+- detection success does not imply RCA confirmation
+- the RCA verdict must not be more specific than the strongest evidence-supported causal claim
+
+The maintained terminology for detection patterns, signal templates, evidence
+profiles, evidence sufficiency, verification, and verdict/outcome is defined in
+the [product and API glossary](glossary.md).
 
 ## Product Boundaries
 
@@ -272,6 +278,19 @@ The current scope includes the frozen v0.3 structured `InvestigationRequest.stat
 
 ## Baseline Rule Pack Contract
 
+The official Helm rule packs contain 21 built-in detection patterns:
+
+- 6 Kubernetes-native workload patterns available without an additional
+  observability backend;
+- 8 Prometheus metric patterns requiring a configured Prometheus `DataSource`;
+- 7 Loki log patterns requiring a configured Loki `DataSource`.
+
+These counts describe maintained defaults, not the limit of the generic
+`RiskRule` engine. Application Profile entries are parameterized signal
+templates and are not counted as additional built-in detection patterns.
+The maintained identities and capability boundaries live in the
+[machine-readable detection pattern catalog](../config/rule-packs/detection-patterns.json).
+
 FluxSeer RCA should not require users to hand-write every initial `RiskRule`, but built-in rules must remain explicit, bounded, and secondary to the RCA workflow.
 
 Rule pack principles:
@@ -421,10 +440,19 @@ FluxSeer RCA now includes the frozen v0.3 structured RCA status contract for `In
 The contract should make this relationship explicit:
 
 ```text
-Claim
--> Evidence reference
+Detection or explicit trigger
+-> Evidence collection
+-> Evidence sufficiency
+-> RCA hypothesis
+-> Evidence-linked claims
 -> Verification status
+-> Bounded verdict/outcome
 ```
+
+A detected incident must remain distinguishable from a confirmed RCA. Missing
+required evidence must produce an abstaining outcome, and verification must
+prevent provider specificity from exceeding the strongest supported causal
+claim.
 
 Compatibility status projections:
 

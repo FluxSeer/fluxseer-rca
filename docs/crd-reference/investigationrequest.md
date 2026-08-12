@@ -165,13 +165,27 @@ When an evidence requirements profile is configured, FluxSeer RCA checks require
 
 Current required evidence profiles:
 
-| Profile | Required Evidence |
-| --- | --- |
-| `ImagePullBackOff` | Kubernetes event evidence |
-| `CrashLoopBackOff` | Kubernetes event evidence |
-| `OOMKilled` | Kubernetes event evidence and metric evidence |
-| `LatencyRegression` | Metric evidence |
-| `RolloutLatencyRegression` | Metric evidence and deployment condition evidence |
+| Profile | Required Evidence | Strongest profile-level conclusion |
+| --- | --- | --- |
+| `ImagePullBackOff` | Kubernetes event evidence | Image pull failure |
+| `CrashLoopBackOff` | Kubernetes event evidence | Repeated container start or restart failure |
+| `OOMKilled` | Kubernetes event evidence and metric evidence | Memory-related termination supported by memory evidence |
+| `LatencyRegression` | Metric evidence | Latency regression |
+| `RolloutLatencyRegression` | Metric evidence and deployment condition evidence | Rollout-associated latency regression |
+
+An evidence profile defines minimum sufficiency and an abstraction boundary;
+it does not authorize a more specific causal claim than the evidence supports.
+For example, `ErrImagePull` supports `ImagePullFailure`, but by itself cannot
+distinguish `ImageNotFound`, registry authentication failure, DNS failure, or
+registry unavailability. A provider claim at one of those more specific levels
+must reference additional supporting evidence or remain unverified.
+
+Detection and evidence sufficiency are independent. An `OOMKilled` Event can
+successfully trigger a `RiskRule`, while the `OOMKilled` profile remains
+incomplete when memory metrics are unavailable. In that case the incident
+detection remains valid, but the request completes with
+`phase: Completed`, `outcome: Inconclusive`, and reason
+`RequiredEvidenceMissing` before provider execution.
 
 If required evidence is complete and profile-specific checks find no matching abnormal signal, FluxSeer RCA completes the request with `phase: Completed`, `outcome: NoIssueFound`, and does not call the model provider. `NoIssueFound` is only valid after required evidence is complete; inability to collect required evidence remains `Inconclusive`.
 
@@ -256,6 +270,12 @@ These fields are the v0.3 target contract. New integrations should check the gen
 - `rootCauseType`: coarse category such as `CrashLoop`, `LatencyRegression`, `ResourcePressure`, `ConfigurationMismatch`, or `WorkloadDegradation`
 - `confidence`: compatibility normalized score from `0.0` to `1.0`; this is a ranking score, not a calibrated probability
 - `confidenceDetail`: provider, verifier, confidence band, and scoring-method metadata
+
+Verdict is the product-level conclusion; `outcome` is its machine-readable API
+result. `RequiredEvidenceMissing` and similar values are condition or failure
+reasons, not additional outcomes. The final verdict must not be more specific
+than the strongest evidence-supported causal claim. See the [product and API
+glossary](../glossary.md) for the shared terminology.
 
 > **Scale note:** this `0.0`-`1.0` score is not the same scale as `RiskSignal.spec.confidence`, `RiskSignal.status.rcaCauses[].confidence`, or `RemediationPlan.spec.confidence`, which are integers from `0` to `100`. Converting between them requires an explicit `score * 100` (or `/ 100`) conversion; do not compare the raw values.
 

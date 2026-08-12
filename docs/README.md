@@ -31,9 +31,15 @@ dashboard screenshots, terminal history, or individual responder memory.
 - `RemediationPlan` and `AgentAction` remain guarded experimental expansion paths.
 - Hosted model integrations are limited to OpenAI API, Claude API, and Gemini API; heuristic remains the no-secret default.
 - Prometheus, Loki, and Kubernetes Events are supported adapters. Prometheus and Loki remain optional integrations.
+- Official Helm rule packs contain 21 built-in detection patterns: 6
+  Kubernetes-native patterns enabled out of the box, plus 8 Prometheus and 7
+  Loki patterns that require their corresponding optional DataSources.
+- Detection success is distinct from evidence sufficiency and root-cause
+  verification; a matched incident is not automatically a confirmed RCA.
 
 ## Start Here
 
+- [Product and API glossary](glossary.md)
 - [Product requirements](product-requirements.md)
 - [Architecture overview](architecture/overview.md)
 - [Mermaid architecture diagrams](architecture/mermaid-diagrams.md)
@@ -93,12 +99,14 @@ Operations and packaging:
 - [Report contracts and migration](reporting.md)
 - [RiskRule anomaly reports](riskrule-reports.md)
 - [Helm rule packs](helm-rulepacks.md)
+- [Detection pattern catalog](../config/rule-packs/detection-patterns.json)
 - [Metrics](metrics.md)
 - [Kubernetes ecosystem integration contract](ecosystem-integration-contract.md)
 - [GitHub repository setup](github-repo.md)
 
 Product positioning:
 
+- [Product and API glossary](glossary.md)
 - [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [Open source positioning](open-source-positioning.md)
 - [Competitive positioning](competitive-positioning.md)

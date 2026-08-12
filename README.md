@@ -36,6 +36,19 @@ FluxSeer RCA is the Kubernetes control plane and audit contract around RCA. It i
 
 FluxSeer RCA does not grant reasoning providers unrestricted cluster access. It sends only bounded, normalized, and redacted evidence collected through declared investigation policies and datasource capabilities.
 
+FluxSeer RCA includes 21 built-in detection patterns: 6 Kubernetes-native
+patterns available out of the box, plus 8 Prometheus and 7 Loki patterns that
+require their corresponding `DataSource` integrations and explicit enablement.
+These maintained rule-pack defaults are extensible through declarative
+`RiskRule` resources; they are not the product capability ceiling. See the
+[detection pattern catalog](config/rule-packs/detection-patterns.json) for the
+machine-readable inventory and causal boundaries.
+
+FluxSeer separates anomaly detection from evidence sufficiency and root-cause
+verification, so a detected incident is not automatically treated as a
+confirmed RCA. See the [product and API glossary](docs/glossary.md) for the
+normative terminology.
+
 ## Why FluxSeer RCA
 
 RCA often starts as an urgent, one-off investigation and ends as an ephemeral answer in Slack, a dashboard screenshot, a terminal command history, or one responder's memory. After the incident, teams may not know which evidence was checked, which model produced the answer, which claims were supported, which data left the cluster, or whether a later model version would produce a worse conclusion.
@@ -69,16 +82,23 @@ flowchart LR
     Signal[Alert / Event / Webhook / Manual Question]
     IR[InvestigationRequest]
     Evidence[Bounded Evidence Collection]
+    Sufficiency[Evidence Sufficiency]
     Reasoning[Reasoning Provider]
     Verify["Claim Verification"]
-    RCA[Structured RCA Status]
+    RCA[Bounded Verdict / Outcome]
 
     Signal --> IR
     IR --> Evidence
-    Evidence --> Reasoning
+    Evidence --> Sufficiency
+    Sufficiency --> Reasoning
     Reasoning --> Verify
     Verify --> RCA
 ```
+
+A rule match or external trigger starts an investigation; it does not confirm
+the RCA. Insufficient required evidence terminates safely as
+`outcome: Inconclusive` with a reason such as `RequiredEvidenceMissing`, before
+unsupported provider claims can become a confirmed verdict.
 
 The current `v0.3` beta supports the operator-first RCA path:
 
@@ -300,7 +320,11 @@ The longer-form design constraints are documented in [docs/architecture/dependen
 
 ### Bootstrap Rule Packs
 
-FluxSeer RCA includes an optional Kubernetes Events rule pack for first-run bootstrap. It helps a new install surface common workload failure events without requiring users to write their first `RiskRule` by hand, but it is not intended to replace Alertmanager or a production detection platform.
+FluxSeer RCA includes 21 built-in detection patterns across its Helm rule
+packs. The 6 Kubernetes-native patterns are enabled by default and require no
+additional observability backend. The 8 Prometheus and 7 Loki patterns require
+their corresponding `DataSource` integrations and explicit enablement. It is
+not intended to replace Alertmanager or a production detection platform.
 
 See [docs/helm-rulepacks.md](docs/helm-rulepacks.md) for configuration and supported rules.
 
@@ -617,6 +641,7 @@ Operational gaps:
 ## Documentation
 
 - [docs/README.md](docs/README.md)
+- [docs/glossary.md](docs/glossary.md)
 - [docs/architecture/overview.md](docs/architecture/overview.md)
 - [docs/architecture/dependency-neutrality.md](docs/architecture/dependency-neutrality.md)
 - [docs/architecture/read-only-flow.md](docs/architecture/read-only-flow.md)

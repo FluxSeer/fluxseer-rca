@@ -15,8 +15,11 @@ on:
       - "hack/**"
       - "internal/**"
       - "test/**"
+      - "CHANGELOG.md"
+      - "CONTRIBUTING.md"
       - "Dockerfile"
       - "Makefile"
+      - "README.md"
       - "go.mod"
       - "go.sum"
       - ".github/workflows/**"
@@ -104,6 +107,11 @@ jobs:
 
       - name: Verify rule packs
         run: make verify-rule-packs
+
+      - name: Verify detection catalog and documentation contract
+        run: |
+          make verify-detection-pattern-catalog
+          make verify-docs-contract
 
       - name: Helm lint
         run: helm lint charts/fluxseer-rca

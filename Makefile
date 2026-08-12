@@ -28,7 +28,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-runtime-canonical-workloads-cluster verify-runtime-riskrule-incidents-cluster verify-runtime-public-report-catalog export-runtime-public-reports verify-rbac-profiles verify-rule-packs verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
+.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-runtime-canonical-workloads-cluster verify-runtime-riskrule-incidents-cluster verify-runtime-public-report-catalog export-runtime-public-reports verify-rbac-profiles verify-rule-packs verify-detection-pattern-catalog verify-docs-contract verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -187,6 +187,12 @@ verify-rbac-profiles:
 
 verify-rule-packs:
 	bash hack/verify-rule-packs.sh
+
+verify-detection-pattern-catalog:
+	bash hack/verify-detection-pattern-catalog.sh
+
+verify-docs-contract:
+	bash hack/verify-docs-contract.sh
 
 verify-rule-packs-kind:
 	VERSION=$(VERSION) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) bash test/e2e/kind/verify_rule_packs_kind.sh

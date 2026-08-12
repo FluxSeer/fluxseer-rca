@@ -6,6 +6,20 @@
 
 Use `RiskRule` to select workloads, query datasources, and turn matching evidence into a direct `RiskSignal` or an `InvestigationRequest`.
 
+A **detection pattern** is a maintained detector shipped in an official rule
+pack. A **signal template** is a parameterized query and threshold used to
+define application-specific detection. FluxSeer RCA includes 21 built-in
+detection patterns, but declarative `RiskRule` resources can extend Kubernetes
+Event, Deployment condition, PromQL, and LogQL detection beyond those defaults.
+
+A RiskRule match answers whether a configured abnormal condition was observed.
+It does not assert that the later RCA is confirmed:
+
+> Detection success does not imply RCA confirmation.
+
+Evidence sufficiency and root-cause claim verification belong to the routed
+`InvestigationRequest`. See the [product and API glossary](../glossary.md).
+
 ## Signal Shape
 
 Current preferred signal fields:
@@ -24,6 +38,12 @@ Supported query types include:
 - `log`
 - `event`
 - `deploymentCondition`
+
+Target discovery supports `Deployment`, `StatefulSet`, `DaemonSet`, `Job`,
+`CronJob`, and `Pod`. Pod owner chains are canonicalized to their supported
+workload controller when possible. `deploymentCondition` evaluation remains
+specific to Deployment status; other workload kinds can use event, metric, or
+log signals.
 
 ## Investigation Routing
 

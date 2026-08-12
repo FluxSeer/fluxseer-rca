@@ -6,6 +6,25 @@ Rule packs are explicit configuration. They do not install Prometheus, Loki, hos
 
 Rule packs are bootstrap detection inputs, not the canonical RCA workflow. Long-term RCA orchestration should flow through `InvestigationRequest`, with generated `RiskSignal` resources acting as materialized risks and optional investigation triggers.
 
+## Built-in Detection Patterns
+
+FluxSeer RCA currently maintains 21 built-in detection patterns:
+
+| Rule pack | Patterns | Availability |
+| --- | ---: | --- |
+| Kubernetes baseline | 6 | Enabled by default; no additional observability backend required |
+| Prometheus baseline | 8 | Disabled by default; requires a configured Prometheus `DataSource` |
+| Loki baseline | 7 | Disabled by default; requires a configured Loki `DataSource` |
+
+The 21 patterns are official rule-pack defaults, not the capability ceiling of
+the generic `RiskRule` engine. Application Profile request-rate, error-rate,
+p95-latency, and queue-depth entries are parameterized signal templates and
+are not counted as four additional detection patterns.
+
+The detailed terminology is defined in the [product and API
+glossary](glossary.md). The machine-readable source of truth is the
+[detection pattern catalog](../config/rule-packs/detection-patterns.json).
+
 ## Defaults
 
 ```yaml
@@ -61,7 +80,7 @@ When `defaultTargetSelector.namespaceSelector.matchNames` is omitted, the chart 
 | Value | Default | Description |
 | --- | --- | --- |
 | `rulePacks.defaultTargetSelector.namespaceSelector.matchNames` | release namespace | Namespaces scanned by generated rule packs. Use `[]` only when cluster-wide scanning is intended. |
-| `rulePacks.defaultTargetSelector.workloadSelector.kinds` | `["Deployment"]` | Workload kinds discovered by generated rules. Current rule evaluation supports Deployment targets. |
+| `rulePacks.defaultTargetSelector.workloadSelector.kinds` | `["Deployment"]` | Workload kinds discovered by generated rules. Rule evaluation supports `Deployment`, `StatefulSet`, `DaemonSet`, `Job`, `CronJob`, and `Pod`; Pod owner chains are canonicalized when possible. The default remains `Deployment`. |
 | `rulePacks.defaultTargetSelector.workloadSelector.matchLabels` | `{}` | Optional labels that target workloads must match. |
 | `rulePacks.kubernetesBaseline.enabled` | `true` | Creates `fluxseer-rca-kubernetes-baseline`. |
 | `rulePacks.kubernetesBaseline.interval` | `2m` | Rule reconciliation interval. |
@@ -99,6 +118,15 @@ When application profiles are enabled, each profile must enable at least one sig
 
 The Kubernetes baseline combines Kubernetes Events with `deploymentCondition` checks, so it can detect an unavailable Deployment even when the relevant Event stream is incomplete.
 
+The six Kubernetes-native patterns are:
+
+- CrashLoopBackOff or container restart backoff;
+- image pull failure;
+- failed scheduling;
+- OOMKilled;
+- unhealthy readiness or liveness probes;
+- unavailable or failed Deployment rollout conditions.
+
 The Prometheus baseline includes portable traffic and resource signals:
 
 - 5xx rate
@@ -112,7 +140,9 @@ The Prometheus baseline includes portable traffic and resource signals:
 
 The Loki baseline includes common log symptoms:
 
-- panic, fatal, and exception
+- panic
+- fatal
+- exception
 - timeout
 - retry
 - rate-limit / 429
