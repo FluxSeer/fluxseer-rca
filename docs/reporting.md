@@ -89,6 +89,21 @@ matched case produces a User-facing Report in the separate
 `user-facing/traffic-pattern-conformance/` corpus; it does not change the main
 15-example catalog.
 
+### Runtime baseline provenance
+
+Formal cluster baselines are immutable evidence, not an implicit claim about
+every later branch commit. Each selected baseline records its authoritative
+`sourceCommit`, `sourceDirty` flag, and tested `controllerImage` in
+`reports/runtime/BASELINES.json`. A baseline proves the behavior of that
+recorded source identity; it must not be described as a complete cluster rerun
+of the current `HEAD` unless the source commit matches the current `HEAD`.
+
+The current branch may still pass source, packaging, and contract CI while its
+formal cluster artifacts intentionally point to earlier immutable commits.
+When a release or public status page needs a current-HEAD runtime claim, rerun
+the relevant cluster gate and update the baseline manifest with the new source
+identity and artifact provenance.
+
 ## 驗證入口
 
 新的 JSON 報告統一使用：

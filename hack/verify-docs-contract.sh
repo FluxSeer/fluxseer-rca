@@ -84,6 +84,9 @@ grep -Fq "Internal Validation Report = test the product." "${reporting}"
 grep -Fq "User-facing Report = product output." "${reporting}"
 grep -Fq 'User-facing Report — `fluxseer-riskrule-report/v1`' "${reporting}"
 grep -Fq 'Internal Validation Report — `fluxseer-test-report/v1`' "${reporting}"
+grep -Fq "Formal cluster baselines are immutable evidence" "${reporting}"
+grep -Fq '`sourceCommit`, `sourceDirty` flag' "${reporting}"
+grep -Fq 'of the current `HEAD`' "${reporting}"
 for coverage_contract in \
   "Built-in RulePack Detection Patterns" \
   "Internal P0 runtime validation scenarios passed" \
