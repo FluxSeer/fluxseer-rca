@@ -36,8 +36,18 @@ scenario_results="${internal_dir}/scenarios.jsonl"
 cli_dir=""
 
 cleanup() {
-  kubectl delete riskrule "${rules[@]}" "${failure_rules[@]}" -n "${control_namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
-  for rule in "${rules[@]}" "${failure_rules[@]}"; do
+  local delete_rules=()
+  if ((${#rules[@]} > 0)); then
+    delete_rules+=("${rules[@]}")
+  fi
+  if ((${#failure_rules[@]} > 0)); then
+    delete_rules+=("${failure_rules[@]}")
+  fi
+  if ((${#delete_rules[@]} > 0)); then
+    kubectl delete riskrule "${delete_rules[@]}" -n "${control_namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  fi
+  for rule in "${rules[@]-}" "${failure_rules[@]-}"; do
+    [[ -n "${rule}" ]] || continue
     kubectl delete investigationrequest -n "${control_namespace}" -l "fluxseer-rca.aiops.platform/risk-rule=${rule}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
     kubectl delete risksignal -A -l "fluxseer-rca.aiops.platform/risk-rule=${rule}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   done
@@ -356,7 +366,7 @@ for pattern in "${patterns[@]}"; do
   failure_requests="$(kubectl get investigationrequest -n "${control_namespace}" -l "fluxseer-rca.aiops.platform/risk-rule=${failure_rule}" -o json | jq '.items | length')"
   [[ "${failure_requests}" == "0" ]]
   artifact="datasource-error-${pattern}.json"
-  jq -n --arg pattern "${pattern}" --arg reason "${failure_reason}" --argjson requests "${failure_requests}" \
+  jq -n --arg pattern "${pattern}" --arg reason "${failure_reason}" --arg artifact "${artifact}" --argjson requests "${failure_requests}" \
     '{id:("datasource-error-" + $pattern),name:("datasource error " + $pattern),pattern:$pattern,result:"PASS",expected:{classification:"InfrastructureError",notClassifiedAs:"NotMatched",investigationRequests:0},actual:{classification:"InfrastructureError",reason:$reason,investigationRequests:$requests},assertions:[{id:"datasource.failure.classification",result:"PASS",expected:"InfrastructureError",actual:"InfrastructureError"},{id:"datasource.failure.notMatched",result:"PASS",expected:false,actual:false},{id:"sideEffects.investigationRequests",result:"PASS",expected:0,actual:$requests}],differences:[],artifacts:[$artifact]}' \
     >"${internal_dir}/${artifact}"
   cat "${internal_dir}/${artifact}" >>"${scenario_results}"
@@ -369,7 +379,7 @@ for case_id in error-high latency-high; do
   bash "${repo_root}/hack/verify-riskrule-report.sh" "${user_dir}/${pattern}.json"
   jq -e --arg pattern "${pattern}" '
     .schemaVersion == "fluxseer-riskrule-report/v1" and
-    (.riskRule.name | startswith("prometheus-" + $pattern)) and
+    (.riskRule.metadata.name | startswith("prometheus-" + $pattern)) and
     (.investigationRequests | length) == 1 and
     (.riskSignals | length) == 0 and
     .investigationRequests[0].status.phase == "Completed" and
