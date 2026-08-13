@@ -431,6 +431,7 @@ helm rollback fluxseer-rca PREVIOUS_REVISION \
 ```sh
 make verify-rule-packs
 make verify-traffic-pattern-promql
+make verify-prometheus-pattern-promql
 make verify-rule-packs-kind
 ```
 
@@ -446,6 +447,18 @@ The `request-rate-surge` slice retains five Internal Validation cases and one
 User-facing Report for the matched case. Negative cases do not create product
 incidents, and the main 15-example User-facing Report catalog remains
 unchanged.
+
+The first two additional Prometheus pattern checks are available locally:
+`high-error-rate` and `high-latency`. Their cluster runner covers matched,
+boundary/negative, side-effect, and datasource failure controls:
+
+```sh
+KUBECONFIG=/path/to/test-kubeconfig \
+  make verify-runtime-prometheus-pattern-conformance-cluster
+```
+
+Until that command produces a retained summary, these two patterns remain
+catalog/render validated rather than runtime-conformant.
 
 `verify-rule-packs` checks rendered Helm output. `verify-rule-packs-kind` verifies Kubernetes Events, Prometheus, and Loki baselines in a real kind cluster with fake observability.
 

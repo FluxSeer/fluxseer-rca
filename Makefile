@@ -28,7 +28,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-runtime-canonical-workloads-cluster verify-runtime-riskrule-incidents-cluster verify-runtime-traffic-pattern-conformance-cluster verify-runtime-public-report-catalog export-runtime-public-reports verify-rbac-profiles verify-rule-packs verify-detection-pattern-catalog verify-traffic-pattern-promql verify-docs-contract verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
+.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-runtime-canonical-workloads-cluster verify-runtime-riskrule-incidents-cluster verify-runtime-traffic-pattern-conformance-cluster verify-runtime-prometheus-pattern-conformance-cluster verify-runtime-public-report-catalog export-runtime-public-reports verify-rbac-profiles verify-rule-packs verify-detection-pattern-catalog verify-traffic-pattern-promql verify-prometheus-pattern-promql verify-docs-contract verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -179,6 +179,9 @@ verify-runtime-riskrule-incidents-cluster:
 verify-runtime-traffic-pattern-conformance-cluster:
 	bash test/e2e/runtime/verify_traffic_pattern_conformance.sh
 
+verify-runtime-prometheus-pattern-conformance-cluster:
+	bash test/e2e/runtime/verify_prometheus_pattern_conformance.sh
+
 verify-runtime-public-report-catalog:
 	bash hack/verify-public-report-catalog.sh test/e2e/runtime/public_report_scenarios.json
 
@@ -196,6 +199,9 @@ verify-detection-pattern-catalog:
 
 verify-traffic-pattern-promql:
 	bash hack/verify-traffic-pattern-promql.sh
+
+verify-prometheus-pattern-promql:
+	bash hack/verify-prometheus-pattern-promql.sh
 
 verify-docs-contract:
 	bash hack/verify-docs-contract.sh

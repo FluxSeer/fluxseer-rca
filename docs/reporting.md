@@ -104,6 +104,12 @@ When a release or public status page needs a current-HEAD runtime claim, rerun
 the relevant cluster gate and update the baseline manifest with the new source
 identity and artifact provenance.
 
+The current pattern-conformance boundary is also explicit: `request-rate-surge`
+has a retained 5-case cluster baseline. The Prometheus `high-error-rate` and
+`high-latency` runner and PromQL fixture are now available, but they must not be
+described as runtime PASS until an authorized cluster run produces and retains
+their `fluxseer-test-report/v1` summary.
+
 ## 驗證入口
 
 新的 JSON 報告統一使用：
