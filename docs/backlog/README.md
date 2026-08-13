@@ -18,13 +18,14 @@ Status meanings:
 
 | Priority | Workstream | Status | Next completion signal |
 | --- | --- | --- | --- |
-| P0 | [Runtime error matrix](v0.3-runtime-error-matrix.md) | `Validation` | High-impact failure paths have durable runtime artifacts and negative side-effect assertions. |
-| P0 | [Beta stabilization and RCA quality baseline](v0.3-beta-stabilization.md) | `Active` | The first five canonical scenarios have deterministic replay results and recorded quality/cost metrics. |
+| P0 | [Runtime error matrix](v0.3-runtime-error-matrix.md) | `Complete` | No remaining P0 runtime scenario is queued; new cases require a named public contract. |
+| P0 | [Beta stabilization and RCA quality baseline](v0.3-beta-stabilization.md) | `Active` | Expand replay quality, verifier, provider, diagnostics, and real-cluster compatibility evidence. |
 | P1 | [Production-readiness expansion](v0.3-production-readiness.md) | `Active` | Scenario and target coverage extends beyond the first E2E matrix. |
 | P1 | [Architecture hardening follow-ups](v0.3-architecture-hardening.md) | `Active` | Post-action effectiveness verification and the selected durable evidence backend are complete. |
 | P2 | Raw snapshot retention | `Deferred` | Security, encryption, retention, access-control, and audit contracts are approved before adapter implementation. |
 
-The first runtime-validation batch is:
+The original runtime-validation checklist was completed and superseded by the
+formal baselines below. It is retained as provenance, not as an open ticket:
 
 1. rerun the cluster matrix with the current operator image;
 2. assert zero provider requests for provider-policy denial and rejection;
@@ -34,6 +35,22 @@ The first runtime-validation batch is:
    dependency failures;
 5. keep internal dependency-injection reasons at unit or envtest tier unless a
    public runtime path exists.
+
+## Current Reconciliation
+
+As of 2026-08-13, the current branch has no open GitHub Issues. The only open
+GitHub work item is PR #4, which is ready for review and has a mergeable,
+passing CI head. The following repository-local records are therefore the
+remaining actionable workstreams:
+
+- beta stabilization and RCA quality expansion;
+- production-readiness scenario and target expansion;
+- architecture hardening follow-ups;
+- deferred RawSnapshot storage and security work.
+
+P0 runtime validation, canonical workload coverage, v0.4 approval lifecycle,
+the 15-case User-facing Report catalog, and request-rate-surge conformance are
+complete for their declared scopes. They should not be counted as open tickets.
 
 Local and mock-runtime completion checkpoint:
 
