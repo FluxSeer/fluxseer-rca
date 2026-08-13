@@ -448,17 +448,18 @@ User-facing Report for the matched case. Negative cases do not create product
 incidents, and the main 15-example User-facing Report catalog remains
 unchanged.
 
-The first two additional Prometheus pattern checks are available locally:
-`high-error-rate` and `high-latency`. Their cluster runner covers matched,
-boundary/negative, side-effect, and datasource failure controls:
+The first two additional Prometheus pattern checks are now runtime-conformant:
+`high-error-rate` and `high-latency`. Their retained cluster runner covers
+matched, boundary/negative, side-effect, and datasource failure controls:
 
 ```sh
 KUBECONFIG=/path/to/test-kubeconfig \
   make verify-runtime-prometheus-pattern-conformance-cluster
 ```
 
-Until that command produces a retained summary, these two patterns remain
-catalog/render validated rather than runtime-conformant.
+The runner retains a `fluxseer-test-report/v1` 10-case summary and two
+`fluxseer-riskrule-report/v1` User-facing Reports. The recorded source commit,
+controller image, and artifact paths are listed in `reports/runtime/BASELINES.json`.
 
 `verify-rule-packs` checks rendered Helm output. `verify-rule-packs-kind` verifies Kubernetes Events, Prometheus, and Loki baselines in a real kind cluster with fake observability.
 

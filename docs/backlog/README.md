@@ -49,8 +49,9 @@ remaining actionable workstreams:
 - deferred RawSnapshot storage and security work.
 
 P0 runtime validation, canonical workload coverage, v0.4 approval lifecycle,
-the 15-case User-facing Report catalog, and request-rate-surge conformance are
-complete for their declared scopes. They should not be counted as open tickets.
+the 15-case User-facing Report catalog, request-rate-surge conformance, and the
+Prometheus high-error-rate/high-latency conformance slice are complete for their
+declared scopes. They should not be counted as open tickets.
 
 Local and mock-runtime completion checkpoint:
 

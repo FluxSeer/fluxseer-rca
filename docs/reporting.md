@@ -70,6 +70,7 @@ It is validation evidence, not an incident report for users.
 | **15** | User-facing RiskRule Report catalog examples |
 | **2/2** | Internal canonical workload validation scenarios passed |
 | **5/5** | Internal request-rate-surge Traffic Pattern Conformance cases passed |
+| **10/10** | Internal high-error-rate and high-latency Prometheus Pattern Conformance cases passed |
 
 The 15 User-facing Reports are not 15 Detection Patterns. Policy rejection,
 budget exhaustion, missing providers, insufficient evidence, NoIssueFound, and
@@ -84,10 +85,11 @@ Runtime validation is split by contract dimension. The P0 matrix remains a
 15-case control-plane, policy, and failure-path contract; canonical workloads
 remain a 2-case workload/evidence-profile contract. Traffic Pattern
 Conformance is independently counted and validates Prometheus pattern
-semantics. Its first slice covers `request-rate-surge` with five cases. Only the
-matched case produces a User-facing Report in the separate
-`user-facing/traffic-pattern-conformance/` corpus; it does not change the main
-15-example catalog.
+semantics. The retained slices cover `request-rate-surge` with five cases and
+the Prometheus `high-error-rate` / `high-latency` patterns with ten cases (eight
+pattern cases plus two datasource failure controls). Matched cases produce
+User-facing Reports in separate pattern-conformance corpora; they do not change
+the main 15-example catalog.
 
 ### Runtime baseline provenance
 
@@ -104,11 +106,10 @@ When a release or public status page needs a current-HEAD runtime claim, rerun
 the relevant cluster gate and update the baseline manifest with the new source
 identity and artifact provenance.
 
-The current pattern-conformance boundary is also explicit: `request-rate-surge`
-has a retained 5-case cluster baseline. The Prometheus `high-error-rate` and
-`high-latency` runner and PromQL fixture are now available, but they must not be
-described as runtime PASS until an authorized cluster run produces and retains
-their `fluxseer-test-report/v1` summary.
+The current pattern-conformance baselines are explicit: `request-rate-surge` has
+a retained 5-case cluster baseline, and `high-error-rate` / `high-latency` have
+a retained 10-case cluster baseline. Each baseline records the tested source
+identity and controller image in `reports/runtime/BASELINES.json`.
 
 ## 驗證入口
 

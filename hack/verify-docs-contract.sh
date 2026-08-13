@@ -91,7 +91,8 @@ for coverage_contract in \
   "Built-in RulePack Detection Patterns" \
   "Internal P0 runtime validation scenarios passed" \
   "User-facing RiskRule Report catalog examples" \
-  "Internal canonical workload validation scenarios passed"; do
+  "Internal canonical workload validation scenarios passed" \
+  "Internal high-error-rate and high-latency Prometheus Pattern Conformance cases passed"; do
   grep -Fq "${coverage_contract}" "${root}/README.md" || {
     echo "README reporting coverage contract missing: ${coverage_contract}" >&2
     exit 1
