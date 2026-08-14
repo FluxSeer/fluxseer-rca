@@ -36,9 +36,24 @@ formal baselines below. It is retained as provenance, not as an open ticket:
 5. keep internal dependency-injection reasons at unit or envtest tier unless a
    public runtime path exists.
 
+## v0.4 Release Status
+
+As of 2026-08-14:
+
+- **v0.4.0-beta.1, beta.2, beta.3**: Git tags, GHCR operator/demo images, and
+  Helm OCI charts are all published.
+- **v0.4.0-beta.2 GitHub Release**: Tag and OCI artifacts exist; GitHub Release
+  record has not yet been established.
+- **Completed for v0.4 scope**: Approval lifecycle guard, audit trail, TTL
+  cleanup integration (16/16 TTL integration tests passing).
+- **Phase 3c Policy Pack**: Already implemented and integrated on this branch
+  (Policy, Threshold, Escalation, and controller tests pass). Remains opt-in
+  pending broader adoption signaling.
+- **PR #3**: Merged on 2026-08-11.
+
 ## Current Reconciliation
 
-As of 2026-08-13, the current branch has no open GitHub Issues. The only open
+As of 2026-08-14, the current branch has no open GitHub Issues. The only open
 GitHub work item is PR #4, which is ready for review and has a mergeable,
 passing CI head. The following repository-local records are therefore the
 remaining actionable workstreams:
