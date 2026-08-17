@@ -6,16 +6,16 @@
 
 Kubernetes-native RCA control plane for platform and security/compliance-governance teams that need explicit, auditable, and security-first AI-assisted investigation — not a general-purpose on-call chat assistant.
 
-Current release: `v0.3.0-beta.3`
+Current published release: `v0.4.0-beta.3`
 
-Status: `v0.3.0-beta.3 published, canonical RCA runtime semantics verified, provenance verified`
+Current development milestone: `v0.5-alpha.1 Safe Remediation` (unreleased)
+
+Status: `v0.4.0-beta.3 published; v0.5-alpha.1 remains an explicitly gated development slice`
 
 FluxSeer RCA is the project's product name. Source code, binaries, Helm
-artifacts, CRDs, metrics, and Kubernetes resource naming were renamed from the
-earlier `fluxagent` identity to `fluxseer` / `fluxseer-rca` ahead of the next
-release. The most recently published release, `v0.3.0-beta.3`, was built
-under the `fluxagent` name; existing installs from that release remain a
-compatibility reference until a dedicated rename release is published.
+artifacts, CRDs, metrics, and Kubernetes resource naming use the `fluxseer` /
+`fluxseer-rca` identity in the current `v0.4.0-beta.3` release. Older
+`fluxagent` releases remain compatibility and migration references.
 
 FluxSeer RCA turns production signals and operator questions into governed, evidence-verifiable RCA workflows with replay-oriented audit artifacts in Kubernetes.
 
@@ -36,6 +36,67 @@ Can this investigation be audited, reproduced from recorded query metadata, and 
 FluxSeer RCA is the Kubernetes control plane and audit contract around RCA. It is not an all-in-one monitoring stack, not a free-form cluster agent, and not an autonomous production remediation system.
 
 FluxSeer RCA does not grant reasoning providers unrestricted cluster access. It sends only bounded, normalized, and redacted evidence collected through declared investigation policies and datasource capabilities.
+
+## Public Capability Contract
+
+FluxSeer RCA uses four capability labels so that an installed CRD is not
+mistaken for a supported runtime feature:
+
+| Label | Meaning |
+| --- | --- |
+| **Supported** | Tested public behavior covered by the default read-only RCA contract. |
+| **Experimental** | Implemented behavior that requires explicit feature and RBAC opt-in; it is not a production-readiness claim. |
+| **Planned** | A documented direction or interface with no supported implementation in the current release. |
+| **Reserved** | A schema or extension point intentionally retained for compatibility; it must not be treated as active behavior. |
+
+Current boundary:
+
+| Capability | Status | Public boundary |
+| --- | --- | --- |
+| Kubernetes Events, workload status, Prometheus, and Loki evidence | Supported | Read-only collection with declared datasource/query policy. |
+| Heuristic RCA provider | Supported | Local, no-secret default path. |
+| Hosted OpenAI, Claude, and Gemini providers | Beta / opt-in | Requires explicit provider credentials and egress policy. |
+| `kubernetes.rolloutRestart` | Experimental | One allowlisted Deployment mutation path, guarded by approval/policy and explicit remediation plus experimental-executor enablement. |
+| Effectiveness verification | Experimental | Bounded observation window; reports `Effective`, `Ineffective`, `Regressed`, or `Inconclusive`, not a permanent root-cause guarantee. |
+| GitOps Executor | Planned | No production branch, commit, or pull-request backend is shipped. |
+| Runbook Executor | Not supported | The bundled route is simulation-oriented only. |
+| Generic Kubernetes patch/apply/delete/exec/shell or autonomous mutation | Not supported | No general-purpose cluster agent contract. |
+
+The `Executor` interface is intentionally extensible, but an extension point is
+not an official support promise. The only official mutation backend in the
+current development slice is the experimental Kubernetes `rolloutRestart`
+route.
+
+FluxSeer RCA includes 21 built-in detection patterns: 6 Kubernetes-native
+patterns available out of the box, plus 8 Prometheus and 7 Loki patterns that
+require their corresponding `DataSource` integrations and explicit enablement.
+These maintained rule-pack defaults are extensible through declarative
+`RiskRule` resources; they are not the product capability ceiling. See the
+[detection pattern catalog](config/rule-packs/detection-patterns.json) for the
+machine-readable inventory and causal boundaries.
+
+FluxSeer separates anomaly detection from evidence sufficiency and root-cause
+verification, so a detected incident is not automatically treated as a
+confirmed RCA. See the [product and API glossary](docs/glossary.md) for the
+normative terminology.
+
+Reporting uses two deliberately separate contracts: a **User-facing Report**
+(`fluxseer-riskrule-report/v1`) is the product output containing the selected
+`RiskRule`, its `InvestigationRequest` objects, and `RiskSignal` projections;
+an **Internal Validation Report** (`fluxseer-test-report/v1`) proves expected
+versus actual behavior, assertions, differences, and forbidden side effects.
+See [Reporting Architecture And Contracts](docs/reporting.md).
+
+These coverage numbers are intentionally not interchangeable:
+
+| Number | Meaning |
+| --- | --- |
+| **21** | Built-in RulePack Detection Patterns |
+| **15/15** | Internal P0 runtime validation scenarios passed |
+| **15** | User-facing RiskRule Report catalog examples |
+| **2/2** | Internal canonical workload validation scenarios passed |
+| **5/5** | Internal request-rate-surge Traffic Pattern Conformance cases passed |
+| **10/10** | Internal high-error-rate and high-latency Prometheus Pattern Conformance cases passed |
 
 ## Why FluxSeer RCA
 
@@ -70,16 +131,23 @@ flowchart LR
     Signal[Alert / Event / Webhook / Manual Question]
     IR[InvestigationRequest]
     Evidence[Bounded Evidence Collection]
+    Sufficiency[Evidence Sufficiency]
     Reasoning[Reasoning Provider]
     Verify["Claim Verification"]
-    RCA[Structured RCA Status]
+    RCA[Bounded Verdict / Outcome]
 
     Signal --> IR
     IR --> Evidence
-    Evidence --> Reasoning
+    Evidence --> Sufficiency
+    Sufficiency --> Reasoning
     Reasoning --> Verify
     Verify --> RCA
 ```
+
+A rule match or external trigger starts an investigation; it does not confirm
+the RCA. Insufficient required evidence terminates safely as
+`outcome: Inconclusive` with a reason such as `RequiredEvidenceMissing`, before
+unsupported provider claims can become a confirmed verdict.
 
 The current `v0.3` beta supports the operator-first RCA path:
 
@@ -301,18 +369,27 @@ The longer-form design constraints are documented in [docs/architecture/dependen
 
 ### Bootstrap Rule Packs
 
-FluxSeer RCA includes an optional Kubernetes Events rule pack for first-run bootstrap. It helps a new install surface common workload failure events without requiring users to write their first `RiskRule` by hand, but it is not intended to replace Alertmanager or a production detection platform.
+FluxSeer RCA includes 21 built-in detection patterns across its Helm rule
+packs. The 6 Kubernetes-native patterns are enabled by default and require no
+additional observability backend. The 8 Prometheus and 7 Loki patterns require
+their corresponding `DataSource` integrations and explicit enablement. It is
+not intended to replace Alertmanager or a production detection platform.
 
 See [docs/helm-rulepacks.md](docs/helm-rulepacks.md) for configuration and supported rules.
 
 ### Guarded Remediation
 
-Enable this explicitly with `--enable-remediation=true`.
+Enable the guarded lifecycle with `--enable-remediation=true`. Real Kubernetes
+mutation additionally requires `--enable-experimental-executor=true` and the
+matching experimental RBAC profile; remediation without the experimental
+executor remains review/simulation-oriented.
 
 - `RiskSignal` can generate `RemediationPlan`
 - guardrails decide auto-approve / waiting approval / reject
 - approved `AgentAction` routes through executor adapters
 - execution remains separated from AI reasoning
+- only the allowlisted Deployment `kubernetes.rolloutRestart` path performs a
+  real Kubernetes mutation in the current development slice
 
 ## Core CRDs
 
@@ -363,18 +440,16 @@ See:
 
 ### Install The Beta Chart
 
-The `v0.3.0-beta.3` chart is currently published under the pre-rename
-`fluxagent` name (see [architecture/rename-migration-plan.md](docs/architecture/rename-migration-plan.md)).
-Use these names until a rename release is published:
+The current `v0.4.0-beta.3` chart is published under the `fluxseer-rca` name:
 
 ```bash
-helm install fluxagent \
-  oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent \
-  --version 0.3.0-beta.3 \
-  --namespace fluxagent-system \
+helm install fluxseer-rca \
+  oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca \
+  --version 0.4.0-beta.3 \
+  --namespace fluxseer-rca-system \
   --create-namespace
 
-kubectl -n fluxagent-system rollout status deployment/fluxagent-controller-manager
+kubectl -n fluxseer-rca-system rollout status deployment/fluxseer-rca-controller-manager
 ```
 
 ### Install Smoke Investigation
@@ -387,20 +462,20 @@ apiVersion: aiops.platform/v1alpha1
 kind: DataSource
 metadata:
   name: kubernetes-events
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   type: kubernetesEvents
 ---
 apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
-  name: investigate-fluxagent
-  namespace: fluxagent-system
+  name: investigate-fluxseer-rca
+  namespace: fluxseer-rca-system
 spec:
   target:
-    namespace: fluxagent-system
+    namespace: fluxseer-rca-system
     kind: Deployment
-    name: fluxagent-controller-manager
+    name: fluxseer-rca-controller-manager
     apiVersion: apps/v1
   timeRange:
     lookback: 15m
@@ -411,11 +486,11 @@ spec:
   mode: readOnly
 EOF
 
-kubectl -n fluxagent-system wait investigationrequest/investigate-fluxagent \
+kubectl -n fluxseer-rca-system wait investigationrequest/investigate-fluxseer-rca \
   --for=condition=Ready \
   --timeout=120s
 
-kubectl -n fluxagent-system get investigationrequest investigate-fluxagent -o yaml
+kubectl -n fluxseer-rca-system get investigationrequest investigate-fluxseer-rca -o yaml
 ```
 
 This writes an `InvestigationRequest`, collects bounded Kubernetes evidence, and stores the RCA in compatibility status fields plus compact `status.evidenceRefs`.
@@ -427,9 +502,9 @@ This writes an `InvestigationRequest`, collects bounded Kubernetes evidence, and
 For a more useful first RCA, create a workload with a deterministic readiness failure:
 
 ```bash
-kubectl create namespace fluxagent-demo
+kubectl create namespace fluxseer-rca-demo
 
-kubectl -n fluxagent-demo apply -f - <<'EOF'
+kubectl -n fluxseer-rca-demo apply -f - <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -457,17 +532,17 @@ spec:
             failureThreshold: 1
 EOF
 
-kubectl -n fluxagent-demo rollout status deployment/broken-checkout --timeout=45s || true
+kubectl -n fluxseer-rca-demo rollout status deployment/broken-checkout --timeout=45s || true
 
 kubectl apply -f - <<'EOF'
 apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: investigate-broken-checkout
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   target:
-    namespace: fluxagent-demo
+    namespace: fluxseer-rca-demo
     kind: Deployment
     name: broken-checkout
     apiVersion: apps/v1
@@ -480,11 +555,11 @@ spec:
   mode: readOnly
 EOF
 
-kubectl -n fluxagent-system wait investigationrequest/investigate-broken-checkout \
+kubectl -n fluxseer-rca-system wait investigationrequest/investigate-broken-checkout \
   --for=condition=Ready \
   --timeout=120s
 
-kubectl -n fluxagent-system get investigationrequest investigate-broken-checkout -o yaml
+kubectl -n fluxseer-rca-system get investigationrequest investigate-broken-checkout -o yaml
 ```
 
 See:
@@ -505,6 +580,32 @@ make verify-v0.3-schema-freeze
 Hosted OpenAI, Gemini, and Claude provider usage is documented in:
 
 - [docs/tutorials/enable-hosted-model-providers.md](docs/tutorials/enable-hosted-model-providers.md)
+
+### Enable Guarded Policy Pack
+
+Policy Pack is an opt-in remediation governance layer. It must be enabled
+together with remediation:
+
+```bash
+helm upgrade fluxseer-rca \
+  oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca \
+  --version 0.4.0-beta.3 \
+  --namespace fluxseer-rca-system \
+  --reuse-values \
+  --set features.remediation.enabled=true \
+  --set features.policyPack.enabled=true
+
+kubectl apply -f config/samples/escalation-chain.yaml
+kubectl apply -f config/samples/approval-policy.yaml
+kubectl apply -f config/samples/namespace-threshold.yaml
+```
+
+The current beta enforces approval decisions, namespace concurrency limits, and
+namespace TTL/approval-timeout defaults and records escalation timeout
+notifications. Detailed multi-stage escalation actions and protection-level
+behavior remain reserved. See
+the [Policy Pack runtime contract](docs/runtime-modes.md#policy-pack) and the
+[CRD references](docs/README.md#reference).
 
 ## kind Demo
 
@@ -599,6 +700,7 @@ Implemented today:
 - webhook notification flow
 - provider-neutral model abstractions
 - optional guarded remediation path
+- experimental allowlisted Kubernetes rollout restart with bounded effectiveness verification
 - kind demo scaffolding
 
 Stabilization work:
@@ -614,10 +716,12 @@ Operational gaps:
 - broader production-grade vendor response-governance coverage
 - GitOps PR backends and approval UX
 - admission policies and richer multi-cluster support
+- production support and release hardening for v0.5 executors
 
 ## Documentation
 
 - [docs/README.md](docs/README.md)
+- [docs/glossary.md](docs/glossary.md)
 - [docs/architecture/overview.md](docs/architecture/overview.md)
 - [docs/architecture/dependency-neutrality.md](docs/architecture/dependency-neutrality.md)
 - [docs/architecture/read-only-flow.md](docs/architecture/read-only-flow.md)
@@ -629,6 +733,7 @@ Operational gaps:
 - [docs/github-repo.md](docs/github-repo.md)
 - [ROADMAP.md](ROADMAP.md)
 - [docs/open-source-positioning.md](docs/open-source-positioning.md)
+- [docs/capability-maturity.md](docs/capability-maturity.md)
 
 ## License
 

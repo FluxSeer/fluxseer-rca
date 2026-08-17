@@ -1,0 +1,19 @@
+apiVersion: aiops.platform/v1alpha1
+kind: ApprovalPolicy
+metadata:
+  name: standard-remediation
+  namespace: fluxseer-rca-system
+spec:
+  enabled: true
+  actionTypeRules:
+    - actionType: Restart
+      action: manual
+      reason: "Restart actions require human review"
+  severityRules:
+    - minSeverity: High
+      maxSeverity: Critical
+      action: manual
+      timeoutSec: 3600
+  defaultApprovalTimeout: 3600
+  escalation:
+    escalationChainRef: standard-remediation-escalation

@@ -14,7 +14,7 @@
       "records": [
         {
           "reason": "ErrImagePull",
-          "message": "failed to pull image test-harbor.fluxseer.com/checkout/api:bad"
+          "message": "failed to pull image registry.example.com/checkout/api:bad"
         }
       ]
     }
@@ -37,5 +37,13 @@
     "rootCauseType": "ImagePullFailure",
     "claimVerification": "Supported",
     "providerCalls": 1
+  },
+  "baseline": {
+    "scenario": "ImagePullBackOff",
+    "expectedDiagnosis": "The pod cannot start because the configured image cannot be pulled.",
+    "expectedEvidence": [
+      {"kind": "event", "source": "kubernetes-events", "reason": "ErrImagePull"}
+    ],
+    "humanJudgment": "Correct when ImagePullFailure is tied directly to the ErrImagePull event."
   }
 }

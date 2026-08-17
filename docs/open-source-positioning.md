@@ -23,6 +23,34 @@ Its primary audience is platform teams and security/compliance-governance stakeh
 
 Security is part of the product positioning. FluxSeer RCA is read-only by default, secret-minimizing by design, and usable in heuristic-only mode without sending evidence to an external model provider.
 
+## Public Support Boundary
+
+Public documentation uses these labels consistently:
+
+| Label | Meaning |
+| --- | --- |
+| Supported | Tested public runtime behavior in the default read-only RCA contract. |
+| Experimental | Implemented but explicitly gated behavior; not a production-readiness claim. |
+| Planned | Documented future direction without a supported implementation. |
+| Reserved | Compatibility schema or extension point that is not applied at runtime. |
+
+The supported path covers Kubernetes Events, workload status, Prometheus, Loki,
+heuristic RCA, and the governed investigation/audit contracts. Hosted model
+providers are opt-in beta integrations. The only official mutation backend in
+the current development slice is the experimental, allowlisted Kubernetes
+Deployment `kubernetes.rolloutRestart` path.
+
+Real mutation requires both remediation and experimental-executor enablement;
+the default Helm installation remains read-only. Its effectiveness result is
+bounded to the configured observation window and is classified as `Effective`,
+`Ineffective`, `Regressed`, or `Inconclusive`; it is not a permanent claim that
+the incident root cause has been eliminated.
+
+GitOps production execution is planned. Runbook execution, generic Kubernetes
+mutation, shell/SSH actions, and autonomous agent behavior are not supported.
+The public `Executor` interface is extensible, but custom implementations are
+not official FluxSeer support commitments.
+
 ## What Is Open Source Here
 
 - CRD contracts: `InvestigationRequest`, `DataSource`, `RiskRule`, `ModelProvider`, `RiskSignal`, `RemediationPlan`, `AgentAction`
@@ -41,6 +69,8 @@ Security is part of the product positioning. FluxSeer RCA is read-only by defaul
 - hosted model providers require explicit workload-scoped credentials.
 - heuristic mode must remain useful for users that do not want external model calls.
 - remediation is an optional guarded path, not the default truth of the project.
+- model-provider output never directly invokes a Kubernetes API; it must pass
+  through plan creation, policy/approval, executor validation, and audit.
 - install manifests should not pull in a full observability stack by default.
 - install manifests should not run autonomous CLI agents or package developer-local auth caches.
 - investigation entrypoints should collapse into Kubernetes workflow resources rather than bypass the control plane.

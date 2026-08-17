@@ -1,0 +1,53 @@
+{
+  "name": "service-port-mismatch",
+  "target": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "namespace": "prod",
+    "name": "checkout-api"
+  },
+  "datasources": [
+    {
+      "name": "kubernetes-events",
+      "queryType": "event",
+      "records": [
+        {
+          "reason": "Unhealthy",
+          "message": "Service checkout-api targets port 8080 but the workload container listens on port 9090; endpoint connection refused"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Service port mismatch",
+    "riskSummary": "The checkout-api Service target port does not match the workload container port.",
+    "severity": "high",
+    "confidenceScore": 90,
+    "rationale": "The Unhealthy event reports the mismatched target and container ports.",
+    "rcaHypothesis": "Traffic fails because the Service targets port 8080 while checkout-api listens on port 9090.",
+    "rcaCauses": [
+      "Service checkout-api targets port 8080 but the workload container listens on port 9090"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "providerUsage": {
+    "inputTokens": 286,
+    "outputTokens": 74
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "WorkloadDegradation",
+    "claimVerification": "Supported",
+    "providerCalls": 1
+  },
+  "baseline": {
+    "scenario": "ServicePortMismatch",
+    "expectedDiagnosis": "Service traffic fails because targetPort 8080 does not match the container listener on port 9090.",
+    "expectedEvidence": [
+      {"kind": "event", "source": "kubernetes-events", "reason": "Unhealthy"}
+    ],
+    "expectedIncident": true,
+    "humanJudgment": "Correct when the port mismatch is supported by the Unhealthy endpoint event and token usage reaches execution status."
+  }
+}

@@ -1,0 +1,14 @@
+apiVersion: aiops.platform/v1alpha1
+kind: NamespaceThreshold
+metadata:
+  name: production-remediation-limits
+  namespace: fluxseer-rca-system
+spec:
+  enabled: true
+  namespaceSelector:
+    matchLabels:
+      environment: production
+  activePlansLimit: 10
+  pendingApprovalsLimit: 5
+  priority: 100
+  protectionLevel: standard

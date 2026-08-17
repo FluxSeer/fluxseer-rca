@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "fluxseer-test-report/v1",
+  "suiteSchemaVersion": "example-suite/v1",
+  "suite": {"id": "example-suite", "name": "Example Suite", "tier": "cluster"},
+  "run": {
+    "id": "YYYYMMDDTHHMMSSZ",
+    "sourceCommit": "git-sha",
+    "sourceDirty": false,
+    "environment": {"kubernetesContext": null, "namespace": null, "controllerImage": null}
+  },
+  "summary": {"result": "PASS", "total": 1, "passed": 1, "failed": 0},
+  "metrics": {},
+  "scenarios": [
+    {
+      "id": "stable-case-id",
+      "name": "Human-readable case name",
+      "result": "PASS",
+      "expected": {
+        "terminal": {"phase": "Completed", "outcome": "Confirmed", "failureReason": null},
+        "sideEffects": {"providerRequests": 1, "riskSignals": 1, "remediationPlans": 0, "agentActions": 0}
+      },
+      "actual": {
+        "terminal": {"phase": "Completed", "outcome": "Confirmed", "failureReason": null},
+        "sideEffects": {"providerRequests": 1, "riskSignals": 1, "remediationPlans": 0, "agentActions": 0}
+      },
+      "assertions": [
+        {"id": "terminal.phase", "result": "PASS", "expected": "Completed", "actual": "Completed"}
+      ],
+      "differences": [],
+      "artifacts": ["case.json", "case.yaml"]
+    }
+  ]
+}

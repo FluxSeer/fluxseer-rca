@@ -104,6 +104,10 @@ func (r *DeploymentRiskReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			APIVersion: target.APIVersion,
 			Service:    target.Service,
 		}
+		if riskSignal.Annotations == nil {
+			riskSignal.Annotations = map[string]string{}
+		}
+		riskSignal.Annotations[annotationTargetUID] = string(deployment.UID)
 		riskSignal.Spec.SignalType = finding.SignalType
 		riskSignal.Spec.Severity = string(finding.Severity)
 		riskSignal.Spec.Confidence = finding.Confidence

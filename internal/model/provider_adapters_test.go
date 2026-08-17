@@ -22,7 +22,8 @@ func TestOpenAIProviderCompletesStructuredResponse(t *testing.T) {
 			t.Fatalf("expected openai bearer auth, got %q", got)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id": "chatcmpl-openai-request-123",
+			"id":    "chatcmpl-openai-request-123",
+			"usage": map[string]any{"prompt_tokens": 127, "completion_tokens": 43},
 			"choices": []map[string]any{
 				{
 					"message": map[string]any{
@@ -59,6 +60,9 @@ func TestOpenAIProviderCompletesStructuredResponse(t *testing.T) {
 	if resp.ProviderRequestID != "chatcmpl-openai-request-123" {
 		t.Fatalf("expected openai provider request id, got %q", resp.ProviderRequestID)
 	}
+	if resp.InputTokens != 127 || resp.OutputTokens != 43 {
+		t.Fatalf("expected openai token usage 127/43, got %d/%d", resp.InputTokens, resp.OutputTokens)
+	}
 }
 
 func TestClaudeProviderCompletesStructuredResponse(t *testing.T) {
@@ -71,6 +75,7 @@ func TestClaudeProviderCompletesStructuredResponse(t *testing.T) {
 		}
 		w.Header().Set("request-id", "claude-request-456")
 		_ = json.NewEncoder(w).Encode(map[string]any{
+			"usage": map[string]any{"input_tokens": 211, "output_tokens": 67},
 			"content": []map[string]any{
 				{
 					"type": "text",
@@ -103,6 +108,9 @@ func TestClaudeProviderCompletesStructuredResponse(t *testing.T) {
 	if resp.ProviderRequestID != "claude-request-456" {
 		t.Fatalf("expected claude provider request id, got %q", resp.ProviderRequestID)
 	}
+	if resp.InputTokens != 211 || resp.OutputTokens != 67 {
+		t.Fatalf("expected claude token usage 211/67, got %d/%d", resp.InputTokens, resp.OutputTokens)
+	}
 }
 
 func TestGeminiProviderCompletesStructuredResponse(t *testing.T) {
@@ -112,6 +120,7 @@ func TestGeminiProviderCompletesStructuredResponse(t *testing.T) {
 		}
 		w.Header().Set("x-goog-request-id", "gemini-request-789")
 		_ = json.NewEncoder(w).Encode(map[string]any{
+			"usageMetadata": map[string]any{"promptTokenCount": 319, "candidatesTokenCount": 89},
 			"candidates": []map[string]any{
 				{
 					"content": map[string]any{
@@ -148,6 +157,9 @@ func TestGeminiProviderCompletesStructuredResponse(t *testing.T) {
 	}
 	if resp.ProviderRequestID != "gemini-request-789" {
 		t.Fatalf("expected gemini provider request id, got %q", resp.ProviderRequestID)
+	}
+	if resp.InputTokens != 319 || resp.OutputTokens != 89 {
+		t.Fatalf("expected gemini token usage 319/89, got %d/%d", resp.InputTokens, resp.OutputTokens)
 	}
 }
 

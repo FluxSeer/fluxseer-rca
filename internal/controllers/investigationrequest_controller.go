@@ -745,6 +745,20 @@ func validateInvestigationRequestSpecIssue(spec v1alpha1.InvestigationRequestSpe
 	if mode := strings.TrimSpace(spec.Mode); mode != "" && mode != v1alpha1.InvestigationModeReadOnly {
 		return &specValidationIssue{Reason: "UnsupportedInvestigationMode", Message: "unsupported investigation mode: " + mode}
 	}
+	if spec.Purpose == v1alpha1.InvestigationPurposeEffectivenessVerification {
+		if spec.Mode != v1alpha1.InvestigationModeReadOnly {
+			return &specValidationIssue{Reason: "UnsupportedInvestigationMode", Message: "effectiveness verification must use readOnly mode"}
+		}
+		if spec.CreateRiskSignal {
+			return &specValidationIssue{Reason: "InvalidSpec", Message: "effectiveness verification must not create a RiskSignal"}
+		}
+		if spec.Correlation == nil || strings.TrimSpace(spec.Correlation.AgentActionRef.Name) == "" || strings.TrimSpace(spec.Correlation.AgentActionRef.Namespace) == "" {
+			return &specValidationIssue{Reason: "InvalidSpec", Message: "effectiveness verification requires correlation.agentActionRef"}
+		}
+		if strings.TrimSpace(spec.Correlation.ExecutionID) == "" || strings.TrimSpace(spec.Correlation.BaselineDigest) == "" {
+			return &specValidationIssue{Reason: "InvalidSpec", Message: "effectiveness verification requires correlation.executionID and correlation.baselineDigest"}
+		}
+	}
 	if len(spec.DataSources) == 0 && len(spec.Queries) == 0 {
 		return &specValidationIssue{Reason: "InvalidSpec", Message: "spec.dataSources or spec.queries must include at least one datasource reference"}
 	}
@@ -1497,8 +1511,24 @@ func buildRCAExecution(request *v1alpha1.InvestigationRequest, preflight investi
 			},
 		},
 		DurationSeconds: investigationDurationSeconds(request, now),
+		InputTokens:     reasoningInputTokens(rca),
+		OutputTokens:    reasoningOutputTokens(rca),
 		ProviderResult:  providerResult,
 	}
+}
+
+func reasoningInputTokens(rca investigation.RCAResult) int64 {
+	if rca.Reasoning == nil {
+		return 0
+	}
+	return rca.Reasoning.InputTokens
+}
+
+func reasoningOutputTokens(rca investigation.RCAResult) int64 {
+	if rca.Reasoning == nil {
+		return 0
+	}
+	return rca.Reasoning.OutputTokens
 }
 
 func buildRejectedRCAExecution(request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, audit *v1alpha1.ProviderEgressAudit, attempts []v1alpha1.ProviderEgressAttempt, executionID string, now time.Time) *v1alpha1.RCAExecution {
@@ -2109,6 +2139,9 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 		riskSignal.Annotations[annotationTargetRef] = preflight.Target.Namespace + "/" + preflight.Target.Name
 		riskSignal.Annotations[annotationDetectionSource] = "investigation-request"
 		riskSignal.Annotations["fluxseer-rca.aiops.platform/investigation-request"] = request.Namespace + "/" + request.Name
+		if request.Status.Lineage != nil && request.Status.Lineage.TargetUID != "" {
+			riskSignal.Annotations[annotationTargetUID] = request.Status.Lineage.TargetUID
+		}
 		if request.Status.Lineage != nil {
 			applyFindingIdentityAnnotations(riskSignal.Annotations, request.Status.Lineage.FindingIdentity)
 		}

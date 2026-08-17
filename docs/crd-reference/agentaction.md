@@ -51,8 +51,8 @@ Represent one executable action after policy review and, when required, human ap
 | `status.approval` | object | no | Controller-observed approval state, including decision, approval, escalation, timestamps, source, generation, and action digest. |
 | `status.notification` | object | no | Escalation notification attempt state. |
 | `status.dryRunResult` | object | no | Controller-owned dry-run or guardrail result. |
-| `status.execution` | object | no | Executor phase, executor name, summary, and finish time. |
-| `status.effectiveness` | object | no | Post-action effectiveness status. `NotVerified` means execution succeeded but remediation impact was not verified. |
+| `status.execution` | object | no | Executor phase/outcome, execution and idempotency identity, attempt, failure reason, executor name, timing, external reference, retryability, and summary. |
+| `status.effectiveness` | object | no | Post-action effectiveness status, including the immutable baseline, verification reference, settling/observation windows, post-action health, and outcome. `NotVerified` remains the compatibility state when no baseline-capable backend is available. |
 
 ## Field Notes
 
@@ -154,16 +154,52 @@ Typical phases:
 
 ## Execution Model
 
-`AgentActionReconciler` sends approved actions to the executor router. In the current repo, most executors simulate the result and persist a status summary.
+`AgentActionReconciler` sends approved actions to the executor router. The
+experimental Kubernetes Deployment restart path captures the target health
+snapshot before dispatch and persists its digest in
+`status.effectiveness.baseline`. After execution success it waits for the
+bounded settling period, then creates an owned, read-only effectiveness
+`InvestigationRequest`.
+
+The verification request uses the `kubernetes-events` datasource and the
+Deployment health readback from the Kubernetes executor. That datasource must
+be available in the action namespace for event evidence; if it is unavailable,
+the action is completed as `Inconclusive` rather than treated as effective.
 
 Execution success is recorded separately from remediation effectiveness:
 
 ```text
 status.execution.phase=Succeeded
-status.effectiveness.phase=NotVerified
+status.effectiveness.phase=Verifying
 ```
 
 `Succeeded` means the executor completed the requested action. It does not mean the underlying incident was resolved.
+
+The v0.5 contract adds these execution fields to `status.execution`:
+
+| Field | Meaning |
+| --- | --- |
+| `executionID` | Stable identity for the execution record. |
+| `idempotencyKey` | Stable identity used to prevent duplicate backend side effects. |
+| `outcome` | Backend outcome such as `Succeeded`, `Failed`, `TimedOut`, or `Unknown`. |
+| `failureReason` | Machine-readable terminal or diagnostic reason. |
+| `startedAt` / `finishedAt` | Backend execution timing. |
+| `externalRef` | Backend-side reference, when one exists. |
+| `retryable` | Whether the result may be retried under the controller's bounded policy. |
+
+Batch 1 defines and persists this shape. Batch 2 populates deterministic
+execution/idempotency identities. The v0.5 lifecycle captures a pre-action
+baseline, creates the correlated verification request, and compares the
+terminal verification result with the post-action Deployment health snapshot.
+
+Simulation-oriented routes may still stop at `NotVerified`. The v0.5
+`Safe Remediation` target is defined in the
+[Executor safety contract](../architecture/executor-safety-contract.md): a
+successful execution must create or link a follow-up `InvestigationRequest`
+and resolve effectiveness as `Effective`, `Ineffective`, `Regressed`, or
+`Inconclusive`. Request creation, correlation, and classification are
+implemented for the real Kubernetes path. Simulation-oriented routes may still
+remain `NotVerified` because they do not provide a health baseline.
 
 ## Kubernetes Events
 

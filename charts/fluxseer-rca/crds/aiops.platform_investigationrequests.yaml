@@ -38,6 +38,22 @@ spec:
                       type: string
                     service:
                       type: string
+                purpose:
+                  type: string
+                correlation:
+                  type: object
+                  properties:
+                    agentActionRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                    executionID:
+                      type: string
+                    baselineDigest:
+                      type: string
                 timeRange:
                   type: object
                   properties:

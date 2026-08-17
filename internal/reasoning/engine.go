@@ -92,10 +92,12 @@ func (e *Engine) Analyze(ctx context.Context, input domain.IngestionOutput) (dom
 			Causes:     rcaCauses,
 			Evidence:   append([]string{}, input.Evidence.Events...),
 		},
-		Remediation: remediation,
-		RunbookRefs: runbooks,
-		ServiceDocs: docs,
-		Provider:    response.Provider,
+		Remediation:  remediation,
+		RunbookRefs:  runbooks,
+		ServiceDocs:  docs,
+		Provider:     response.Provider,
+		InputTokens:  response.InputTokens,
+		OutputTokens: response.OutputTokens,
 	}, nil
 }
 

@@ -51,6 +51,14 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err := controllerutil.SetControllerReference(&riskSignal, plan, r.Scheme); err != nil {
 			return err
 		}
+		if plan.Annotations == nil {
+			plan.Annotations = map[string]string{}
+		}
+		if targetUID := riskSignal.Annotations[annotationTargetUID]; targetUID != "" {
+			plan.Annotations[annotationTargetUID] = targetUID
+		}
+		plan.Annotations[annotationRiskSignalRef] = riskSignal.Namespace + "/" + riskSignal.Name
+		plan.Annotations[annotationRiskSignalUID] = string(riskSignal.UID)
 
 		plan.Spec.Target = riskSignal.Spec.Target
 		plan.Spec.RecommendedBy = "risk-signal-controller"

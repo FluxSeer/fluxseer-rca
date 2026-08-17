@@ -93,6 +93,32 @@ spec:
 
 ## Control Flow
 
+The canonical semantic flow separates detection from the confidence of the
+result:
+
+```text
+RiskRule / Alert / Manual Request
+-> Detection: did an abnormal condition match?
+-> InvestigationRequest
+-> Evidence Collection
+-> Evidence Sufficiency: does the bundle satisfy the selected profile?
+-> RCA Hypothesis
+-> Claim Verification: are the proposed claims supported by evidence?
+-> Verdict: bounded conclusion represented by the API outcome
+```
+
+Two invariants apply across this flow:
+
+> Detection success does not imply RCA confirmation.
+
+> The RCA verdict MUST NOT be more specific than the strongest
+> evidence-supported causal claim.
+
+For example, an `OOMKilled` event can satisfy detection while missing memory
+metrics leave the `OOMKilled` evidence profile incomplete. The request then
+completes with `outcome: Inconclusive` and the condition reason
+`RequiredEvidenceMissing`; the detection itself is not retracted.
+
 Suggested sequence:
 
 1. resolve the target resource
@@ -146,6 +172,21 @@ p95 latency increased from 180ms to 1.9s
 This improves cost, privacy, and RCA quality while preserving auditability.
 
 ## Status Model
+
+The status layers answer different questions and must not be collapsed into a
+single success flag:
+
+| Layer | Question | Primary API surface |
+| --- | --- | --- |
+| Workflow phase | Did the workflow run to a terminal state? | `status.phase` |
+| Detection | Did the configured condition match? | source `RiskRule`, finding identity, and routed request |
+| Evidence sufficiency | Does collected evidence satisfy the selected profile? | `status.evidenceCoverage`, `status.missingEvidence`, `EvidenceCollectionReady` |
+| Verification | Are RCA claims evidence-supported? | `status.claims[].verification`, `Verified` |
+| Verdict/outcome | What bounded conclusion may consumers use? | `status.outcome`, `status.verdict.outcome` |
+
+Current outcome values include `Confirmed`, `Inconclusive`, `NoIssueFound`,
+and `Unknown`. Reasons such as `RequiredEvidenceMissing` explain a condition or
+failure; they are not additional outcome values.
 
 Recommended condition types:
 

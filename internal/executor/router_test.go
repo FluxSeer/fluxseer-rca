@@ -16,8 +16,8 @@ func TestRouterRoutesToKubernetesExecutor(t *testing.T) {
 		NotificationExecutor{},
 	)
 
-	result, err := router.Execute(context.Background(), ApprovedAction{
-		Resource:   domain.ResourceRef{Namespace: "default", Name: "api"},
+	result, err := router.Execute(context.Background(), ExecutorRequest{
+		Target:     domain.ResourceRef{Namespace: "default", Name: "api"},
 		ActionType: "kubernetes.scaleDeployment",
 		ApprovedBy: "tester",
 	})

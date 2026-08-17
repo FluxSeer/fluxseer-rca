@@ -12,6 +12,20 @@ InvestigationRequest
 -> optional RiskSignal materialization
 ```
 
+## Capability Labels
+
+The following labels are normative for public documentation:
+
+| Label | Meaning |
+| --- | --- |
+| Supported | Tested public runtime behavior covered by the default contract. |
+| Experimental | Implemented behavior requiring explicit feature and RBAC opt-in; not a production-readiness claim. |
+| Planned | Direction or interface documented without a supported current implementation. |
+| Reserved | Schema or extension point retained for compatibility but not applied at runtime. |
+
+Installing a CRD does not make every field or related controller supported. The
+runtime behavior and Helm/RBAC gate are the source of truth.
+
 ## Resource Tiers
 
 | Tier | Resources | Positioning |
@@ -21,7 +35,8 @@ InvestigationRequest
 | Materialization / compatibility | `RiskSignal` | External finding, notification target, and v0.2-compatible output projection. |
 | Guarded experimental | `RemediationPlan`, `AgentAction` | CRDs are installed for compatibility, but controllers and RBAC are disabled by default. |
 | Legacy bootstrap | `DeploymentRiskReconciler` | Annotation-driven Deployment detection path; disabled by default and retained only as explicit opt-in. |
-| Scaffold | OpenTelemetry, CloudWatch datasource adapters | Development skeletons, not supported v0.3 production adapters. |
+| Scaffold | OpenTelemetry, CloudWatch datasource adapters | Development skeletons, not supported v0.4 beta adapters. |
+| Guarded policy pack | `ApprovalPolicy`, `NamespaceThreshold`, `EscalationChain` | Opt-in remediation governance; limits and TTL/approval defaults are implemented, while protection levels and multi-stage actions remain reserved. |
 
 `RiskRule` and `RiskSignal` are valid public APIs, but they are not required for every RCA. New integrations should treat `InvestigationRequest.status` as the canonical RCA truth.
 
@@ -39,11 +54,17 @@ InvestigationRequest
 | Claude API provider | Beta / opt-in | Requires `ModelProvider`, Secret, and hosted-provider data egress opt-in. |
 | Gemini API provider | Beta / opt-in | Requires `ModelProvider`, Secret, and hosted-provider data egress opt-in. |
 | Normalized snapshot retention | Beta / opt-in | Requires `FLUXSEER_RCA_EVIDENCE_STORE_DIR` and `storageRef.name: local-filesystem`. |
-| Raw snapshot retention | Reserved / unsupported | Contract is present, runtime rejects it in v0.3. |
+| Raw snapshot retention | Reserved / unsupported | Contract is present, runtime rejects it in the current v0.4 beta. |
 | Replay artifacts and comparison | Foundation / library | Terminal CRD export and deterministic bundle comparison exist; no runtime replay runner or controller entrypoint is shipped. |
-| OpenTelemetry adapter | Scaffold | Not part of the supported v0.3 adapter set. |
-| CloudWatch adapter | Scaffold | Not part of the supported v0.3 adapter set. |
+| OpenTelemetry adapter | Scaffold | Not part of the supported v0.4 beta adapter set. |
+| CloudWatch adapter | Scaffold | Not part of the supported v0.4 beta adapter set. |
 | Remediation | Experimental | Requires explicit controller and RBAC opt-in. |
+| `kubernetes.rolloutRestart` executor | Experimental | Requires remediation and experimental-executor opt-in; only allowlisted Deployment mutation is real. |
+| Effectiveness verification | Experimental | Uses a bounded post-action observation window and reports four outcomes; it does not prove permanent repair. |
+| GitOps Executor | Planned | No production branch/commit/pull-request backend is implemented. |
+| Runbook Executor | Not supported | Bundled route is simulation-oriented and is not an official production backend. |
+| Generic Kubernetes mutation or shell/SSH execution | Not supported | No general-purpose mutation or agent-shell contract. |
+| `NamespaceThreshold.spec.protectionLevel` | Reserved | Stored in the schema but not applied by the current controller. |
 | Legacy Deployment annotation detection | Legacy / opt-in | Disabled by default. |
 
 ## Default Installation Boundary
@@ -86,7 +107,8 @@ features:
     enabled: true
 ```
 
-Executor-like permissions such as Job or ConfigMap mutation require the broader experimental profile:
+The experimental profile adds only the currently implemented Deployment mutation
+permissions:
 
 ```yaml
 features:
@@ -99,3 +121,7 @@ features:
 Set `rbac.profile` explicitly only as an advanced override.
 
 These profiles do not change CRD installation. Helm CRDs remain installed for API compatibility; runtime controllers and mutation permissions are what remain disabled by default.
+
+The experimental profile is intentionally bounded to the official
+`kubernetes.rolloutRestart` path. It does not authorize generic Kubernetes
+patch/apply/delete/exec, shell, SSH, GitOps, or Runbook execution.

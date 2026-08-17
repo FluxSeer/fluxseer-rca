@@ -1,5 +1,5 @@
 image:
-  repository: fluxseer/fluxseer-rca/operator
+  repository: ghcr.io/fluxseer/fluxseer-rca/operator
   tag: ""
   pullPolicy: IfNotPresent
 
@@ -15,6 +15,7 @@ controller:
   enableLeaderElection: false
   enableRemediation: false
   enableLegacyDeploymentRisk: false
+  enablePolicyPack: false
   extraArgs: []
   extraEnv: []
   resources: {}
@@ -23,6 +24,8 @@ features:
   legacyDeploymentRisk:
     enabled: false
   remediation:
+    enabled: false
+  policyPack:
     enabled: false
   experimentalExecutor:
     enabled: false
@@ -82,6 +85,7 @@ rulePacks:
       comparisonOffset: 30m
       increaseRatio: 3
       minimumCurrentRate: 10
+      baselineEpsilon: 0.001
     resourceThresholds:
       cpuUsageCores: 0.8
       cpuThrottlingRatio: 0.2

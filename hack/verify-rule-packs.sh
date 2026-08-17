@@ -10,8 +10,9 @@ scoped_render="$(mktemp)"
 scoped_values="$(mktemp)"
 multikind_render="$(mktemp)"
 multikind_values="$(mktemp)"
+traffic_tuning_render="$(mktemp)"
 cleanup() {
-  rm -f "$default_render" "$all_render" "$scoped_render" "$scoped_values" "$multikind_render" "$multikind_values"
+  rm -f "$default_render" "$all_render" "$scoped_render" "$scoped_values" "$multikind_render" "$multikind_values" "$traffic_tuning_render"
 }
 trap cleanup EXIT
 
@@ -41,6 +42,13 @@ rulePacks:
         - CronJob
 VALUES
 helm template fluxseer-rca "$chart" --namespace fluxseer-rca-system -f "$multikind_values" >"$multikind_render"
+helm template fluxseer-rca "$chart" --namespace fluxseer-rca-system \
+  --set rulePacks.prometheusBaseline.enabled=true \
+  --set rulePacks.prometheusBaseline.trafficAnomaly.comparisonOffset=1h \
+  --set rulePacks.prometheusBaseline.trafficAnomaly.increaseRatio=5 \
+  --set rulePacks.prometheusBaseline.trafficAnomaly.minimumCurrentRate=50 \
+  --set rulePacks.prometheusBaseline.trafficAnomaly.baselineEpsilon=0.01 \
+  >"$traffic_tuning_render"
 
 require_contains() {
   file="$1"
@@ -75,6 +83,7 @@ require_not_contains "$default_render" "name: fluxseer-rca-loki-baseline"
 require_contains "$all_render" "name: fluxseer-rca-prometheus-baseline"
 require_contains "$all_render" "aiops.platform/rule-pack: prometheus-baseline"
 require_contains "$all_render" "name: high-error-rate"
+require_contains "$all_render" "name: request-rate-surge"
 require_contains "$all_render" "name: high-latency"
 require_contains "$all_render" "name: pod-restart-rate"
 require_contains "$all_render" "name: cpu-saturation"
@@ -89,6 +98,18 @@ require_contains "$all_render" "name: connection-refused"
 require_contains "$all_render" '{{ .namespace }}'
 require_contains "$all_render" '{{ .app }}'
 require_contains "$all_render" '{{ .name }}'
+require_contains "$all_render" '> bool 10'
+require_contains "$all_render" '> bool 0.001'
+require_contains "$all_render" 'offset 30m'
+
+# baselineEpsilon is the single source for both denominator clamping and
+# baseline validity. Use a non-default value so a hard-coded 0.001 cannot pass.
+require_contains "$traffic_tuning_render" 'offset 1h'
+require_contains "$traffic_tuning_render" ')), 0.01)'
+require_contains "$traffic_tuning_render" '> bool 0.01'
+require_contains "$traffic_tuning_render" '> bool 50'
+require_contains "$traffic_tuning_render" 'value: 5'
+require_not_contains "$traffic_tuning_render" ')), 0.001)'
 
 if grep -F "kind: DataSource" "$all_render"; then
   echo "rule packs must not install external DataSource resources" >&2

@@ -109,6 +109,11 @@ spec:
                       type: string
                     createRiskSignal:
                       type: boolean
+                    evidenceRequirements:
+                      type: object
+                      properties:
+                        profile:
+                          type: string
             status:
               type: object
               properties:

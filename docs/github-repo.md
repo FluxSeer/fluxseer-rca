@@ -1,8 +1,8 @@
 # GitHub Repo Metadata
 
-This file contains suggested GitHub repository settings for the project as it
-moves from the historical `FluxAgent` name to the public `FluxSeer RCA` product
-name.
+This file contains suggested GitHub repository settings for the public
+`FluxSeer RCA` product. Historical `FluxAgent` references describe compatibility
+artifacts only.
 
 ## Repository Name
 
@@ -59,14 +59,22 @@ history, or individual responder memory.
 Compatibility note:
 
 ```markdown
-Source code, Helm charts, images, metrics, and CRDs now use `fluxseer` /
-`fluxseer-rca` naming. The most recently published release, `v0.3.0-beta.3`,
-was built under the earlier `fluxagent` name; existing installs from that
-release remain a compatibility reference until a dedicated rename release is
-published.
+Source code, Helm charts, images, metrics, and CRDs use `fluxseer` /
+`fluxseer-rca` naming. The current published release is `v0.4.0-beta.3`.
+Existing installs from the historical `v0.3.0-beta.3` `fluxagent` release
+remain compatibility references.
 ```
 
-## Release Plan
+## Current Release State
+
+As of 2026-08-17:
+
+- `v0.4.0-beta.3` is the current published FluxSeer RCA beta.
+- `v0.4.0-beta.1` and `v0.4.0-beta.3` have GitHub Release records.
+- `v0.4.0-beta.2` has a tag and OCI artifacts but no GitHub Release record.
+- PR #3 is merged; PR #4 is the current open integration review.
+
+## Historical Release Plan
 
 ### Pre-release Tags
 

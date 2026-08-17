@@ -9,7 +9,7 @@ on:
       version:
         description: "Existing annotated tag to publish"
         required: true
-        default: "v0.2.0-beta.1"
+        default: "v0.4.0-beta.3"
         type: string
       release_only:
         description: "Skip immutable artifact publication and create the GitHub release from existing artifacts"
@@ -329,7 +329,7 @@ jobs:
           cat >"$out_dir/RELEASE_NOTES.md" <<EOF
           # FluxSeer RCA $version
 
-          FluxSeer RCA $version is a read-only RCA beta release.
+          FluxSeer RCA $version is a verifiable RCA and guarded remediation beta release.
 
           ## Source
 
@@ -359,9 +359,9 @@ jobs:
 
           ## Scope
 
-          This release includes the verifiable read-only RCA vertical slice, including RiskRule-driven RiskSignal generation, ad-hoc InvestigationRequest workflows, datasource degradation conditions, hosted provider validation, lifecycle smoke coverage, artifact identity, packaging consistency, and reproducible local image builds.
+          This release includes the verifiable RCA vertical slice, guarded remediation approval lifecycle, optional Phase 3 Policy Pack evaluation, RiskRule-driven RiskSignal generation, ad-hoc InvestigationRequest workflows, datasource degradation conditions, hosted provider validation, lifecycle smoke coverage, artifact identity, packaging consistency, and reproducible local image builds.
 
-          Autonomous remediation is not the default product path for this beta.
+          Policy Pack and autonomous remediation remain opt-in and are not enabled by default for this beta.
           EOF
           sed -i 's/^          //' "$out_dir/RELEASE_NOTES.md"
           echo "notes=$out_dir/RELEASE_NOTES.md" >> "$GITHUB_OUTPUT"

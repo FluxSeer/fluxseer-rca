@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -11,9 +12,13 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
+	"github.com/FluxSeer/fluxseer-rca/internal/escalation"
 	"github.com/FluxSeer/fluxseer-rca/internal/executor"
 	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
@@ -82,11 +87,13 @@ func recordPhaseTransition(recorder record.EventRecorder, object runtime.Object,
 
 type AgentActionReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	Executor      *executor.Router
-	Notifier      notifier.Notifier
-	EventRecorder record.EventRecorder
-	Now           func() time.Time
+	Scheme            *runtime.Scheme
+	Executor          *executor.Router
+	EscalationRouter  *escalation.Router
+	PolicyPackEnabled bool
+	Notifier          notifier.Notifier
+	EventRecorder     record.EventRecorder
+	Now               func() time.Time
 }
 
 func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -100,14 +107,51 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		now = r.Now
 	}
 
+	if action.Status.Effectiveness != nil && action.Status.Effectiveness.Phase == v1alpha1.EffectivenessPhaseVerifying {
+		return r.reconcileEffectivenessVerification(ctx, &action, now())
+	}
 	if action.Status.Phase == v1alpha1.PhaseSucceeded || action.Status.Phase == v1alpha1.PhaseFailed || action.Status.Phase == v1alpha1.PhaseRejected {
 		return r.reconcileTerminalStateTTL(ctx, &action, now())
+	}
+	if action.Status.Phase == v1alpha1.PhaseExecuting && action.Status.Execution != nil && action.Status.Execution.ExecutionID != "" {
+		// The dispatch identity was durably recorded before the backend call.
+		// A resync or controller restart must not issue a second side effect;
+		// ask an identity-aware backend to recover the external result instead.
+		request := executorRequestForPersistedAction(&action)
+		if r.Executor != nil {
+			result, found, err := r.Executor.Resolve(ctx, request)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if found {
+				return r.recordExecutionSuccess(ctx, &action, request, result, now())
+			}
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	if !isAgentActionApproved(&action) {
 		return r.reconcilePending(ctx, &action, now())
 	}
 
+	executionTarget := targetToResource(action.Spec.Target)
+	executionParameters := executor.StringParameters(action.Spec.Parameters)
+	actionDigest := agentActionSpecDigest(&action)
+	targetUID := ""
+	if action.Annotations != nil {
+		targetUID = strings.TrimSpace(action.Annotations[annotationTargetUID])
+	}
+	identity := executor.BuildExecutionIdentity(executor.IdentityInput{
+		ActionRef:      action.Namespace + "/" + action.Name,
+		AgentActionUID: string(action.UID),
+		Generation:     action.Generation,
+		ActionIndex:    0,
+		Target:         executionTarget,
+		TargetUID:      targetUID,
+		ActionDigest:   actionDigest,
+		ActionType:     action.Spec.ActionType,
+		Parameters:     executionParameters,
+	})
 	original := action.DeepCopy()
 	startedAt := metav1.NewTime(now())
 	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseExecuting, "approved action is executing", action.Generation, startedAt.Time)
@@ -136,8 +180,41 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		DecidedBy:          approval.DecidedBy,
 		EscalatedAt:        approval.EscalatedAt,
 	}
+	executionRequest := executor.ExecutorRequest{
+		ExecutionID:    identity.ExecutionID,
+		IdempotencyKey: identity.IdempotencyKey,
+		ActionDigest:   actionDigest,
+		ActionType:     action.Spec.ActionType,
+		ActionIndex:    0,
+		Target:         executionTarget,
+		TargetUID:      targetUID,
+		Parameters:     executionParameters,
+		ApprovedBy:     approvedBy,
+		DryRunResult:   action.Spec.DryRunResult,
+		RollbackPlan:   action.Spec.RollbackPlan,
+		Attempt:        1,
+	}
+	baseline, baselineFound, err := r.Executor.CaptureBaseline(ctx, executionRequest)
+	if err != nil {
+		return r.failBeforeDispatch(ctx, &action, executionRequest, "BaselineCaptureFailed", err, now())
+	}
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
-		Phase: "Executing",
+		Phase:          "Executing",
+		ExecutionID:    executionRequest.ExecutionID,
+		IdempotencyKey: executionRequest.IdempotencyKey,
+		Attempt:        int32(executionRequest.Attempt),
+		StartedAt:      &startedAt,
+	}
+	if baselineFound {
+		apiBaseline := effectivenessBaselineFromExecutor(baseline, &action)
+		if err := r.populateBaselineEvidence(ctx, apiBaseline); err != nil {
+			return r.failBeforeDispatch(ctx, &action, executionRequest, "BaselineEvidenceUnavailable", err, now())
+		}
+		action.Status.Effectiveness = &v1alpha1.AgentActionEffectivenessStatus{
+			Phase:    v1alpha1.EffectivenessPhaseNotVerified,
+			Message:  "immutable pre-action health baseline captured before dispatch",
+			Baseline: apiBaseline,
+		}
 	}
 	if statusChangedAction(original, &action) {
 		if err := r.Status().Update(ctx, &action); err != nil {
@@ -148,27 +225,48 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		recordPhaseTransition(r.EventRecorder, &action, original.Status.Phase, action.Status.Phase)
 	}
 
-	result, err := r.Executor.Execute(ctx, executor.ApprovedAction{
-		Resource:     targetToResource(action.Spec.Target),
-		ActionType:   action.Spec.ActionType,
-		Parameters:   action.Spec.Parameters,
-		ApprovedBy:   approvedBy,
-		DryRunResult: action.Spec.DryRunResult,
-		RollbackPlan: action.Spec.RollbackPlan,
-	})
+	result, err := r.Executor.Execute(ctx, executionRequest)
 	if err != nil {
 		if err := r.Get(ctx, req.NamespacedName, &action); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 		finishedAt := metav1.NewTime(now())
+		if result.Outcome == executor.ExecutionOutcomeUnknown {
+			setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseExecuting, "execution outcome is unknown; waiting for backend recovery", action.Generation, finishedAt.Time)
+			executionStatus := action.Status.Execution
+			if executionStatus == nil {
+				executionStatus = &v1alpha1.AgentActionExecutionStatus{}
+			}
+			executionStatus.Phase = "Unknown"
+			executionStatus.Outcome = string(result.Outcome)
+			executionStatus.FailureReason = result.FailureReason
+			if executionStatus.FailureReason == "" {
+				executionStatus.FailureReason = err.Error()
+			}
+			executionStatus.Summary = err.Error()
+			executionStatus.FinishedAt = &finishedAt
+			executionStatus.Retryable = false
+			action.Status.Execution = executionStatus
+			if updateErr := r.Status().Update(ctx, &action); updateErr != nil {
+				recordStatusUpdateConflict("AgentAction", updateErr)
+				return ctrl.Result{}, updateErr
+			}
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseFailed, err.Error(), action.Generation, finishedAt.Time)
 		originalExecution := action.Status.Phase
 		action.Status.FinishedAt = &finishedAt
-		action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
-			Phase:      "Failed",
-			Summary:    err.Error(),
-			FinishedAt: &finishedAt,
+		executionStatus := action.Status.Execution
+		if executionStatus == nil {
+			executionStatus = &v1alpha1.AgentActionExecutionStatus{}
 		}
+		executionStatus.Phase = "Failed"
+		executionStatus.Outcome = string(executor.ExecutionOutcomeFailed)
+		executionStatus.FailureReason = err.Error()
+		executionStatus.Summary = err.Error()
+		executionStatus.FinishedAt = &finishedAt
+		executionStatus.Retryable = false
+		action.Status.Execution = executionStatus
 		if updateErr := r.Status().Update(ctx, &action); updateErr != nil {
 			recordStatusUpdateConflict("AgentAction", updateErr)
 			return ctrl.Result{}, updateErr
@@ -181,28 +279,331 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.Get(ctx, req.NamespacedName, &action); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	originalPhase := action.Status.Phase
-	finishedAt := metav1.NewTime(now())
-	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, finishedAt.Time)
+	return r.recordExecutionSuccess(ctx, &action, executionRequest, result, now())
+}
+
+func executorRequestForPersistedAction(action *v1alpha1.AgentAction) executor.ExecutorRequest {
+	request := executor.ExecutorRequest{
+		ActionType:   action.Spec.ActionType,
+		Target:       targetToResource(action.Spec.Target),
+		Parameters:   executor.StringParameters(action.Spec.Parameters),
+		ApprovedBy:   action.Spec.ApprovedBy,
+		DryRunResult: action.Spec.DryRunResult,
+		RollbackPlan: action.Spec.RollbackPlan,
+		Attempt:      1,
+	}
+	if action.Status.Approval != nil {
+		request.ActionDigest = action.Status.Approval.ActionDigest
+		request.ApprovedBy = action.Status.Approval.ApprovedBy
+	}
+	if action.Status.Execution != nil {
+		request.ExecutionID = action.Status.Execution.ExecutionID
+		request.IdempotencyKey = action.Status.Execution.IdempotencyKey
+		request.Attempt = int(action.Status.Execution.Attempt)
+	}
+	if action.Annotations != nil {
+		request.TargetUID = strings.TrimSpace(action.Annotations[annotationTargetUID])
+	}
+	return request
+}
+
+func (r *AgentActionReconciler) failBeforeDispatch(ctx context.Context, action *v1alpha1.AgentAction, request executor.ExecutorRequest, reason string, dispatchErr error, now time.Time) (ctrl.Result, error) {
+	finishedAt := metav1.NewTime(now)
+	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseFailed, dispatchErr.Error(), action.Generation, finishedAt.Time)
 	action.Status.FinishedAt = &finishedAt
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
-		Phase:      "Succeeded",
-		Executor:   result.Executor,
-		Summary:    result.Summary,
-		FinishedAt: &finishedAt,
+		Phase:          "Failed",
+		Outcome:        string(executor.ExecutionOutcomeFailed),
+		ExecutionID:    request.ExecutionID,
+		IdempotencyKey: request.IdempotencyKey,
+		Attempt:        int32(request.Attempt),
+		FailureReason:  reason,
+		Summary:        dispatchErr.Error(),
+		FinishedAt:     &finishedAt,
+		Retryable:      false,
 	}
 	action.Status.Effectiveness = &v1alpha1.AgentActionEffectivenessStatus{
-		Phase:   "NotVerified",
-		Message: "post-action remediation effectiveness verification is not configured for this experimental action",
+		Phase:   v1alpha1.EffectivenessPhaseNotVerified,
+		Message: "post-action verification was not started because the pre-action baseline could not be captured",
 	}
-	if err := r.Status().Update(ctx, &action); err != nil {
+	if err := r.Status().Update(ctx, action); err != nil {
 		recordStatusUpdateConflict("AgentAction", err)
 		return ctrl.Result{}, err
 	}
-	// Emit Event only after successful status update
-	recordPhaseTransition(r.EventRecorder, &action, originalPhase, action.Status.Phase)
+	return ctrl.Result{}, dispatchErr
+}
 
+func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, action *v1alpha1.AgentAction, request executor.ExecutorRequest, result executor.ExecutorResult, now time.Time) (ctrl.Result, error) {
+	originalPhase := action.Status.Phase
+	finishedAt := metav1.NewTime(now)
+	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, finishedAt.Time)
+	action.Status.FinishedAt = &finishedAt
+	executionID := result.ExecutionID
+	if executionID == "" {
+		executionID = request.ExecutionID
+	}
+	executionStatus := &v1alpha1.AgentActionExecutionStatus{
+		Phase:          "Succeeded",
+		Outcome:        string(result.Outcome),
+		ExecutionID:    executionID,
+		FailureReason:  result.FailureReason,
+		Executor:       result.Executor,
+		Summary:        result.Summary,
+		FinishedAt:     &finishedAt,
+		ExternalRef:    result.ExternalRef,
+		Retryable:      result.Retryable,
+		IdempotencyKey: request.IdempotencyKey,
+		Attempt:        int32(request.Attempt),
+	}
+	if executionStatus.Outcome == "" {
+		executionStatus.Outcome = string(executor.ExecutionOutcomeSucceeded)
+	}
+	if !result.StartedAt.IsZero() {
+		startedAt := metav1.NewTime(result.StartedAt)
+		executionStatus.StartedAt = &startedAt
+	} else if action.Status.Execution != nil {
+		executionStatus.StartedAt = action.Status.Execution.StartedAt
+	}
+	action.Status.Execution = executionStatus
+	effectiveness := &v1alpha1.AgentActionEffectivenessStatus{
+		Phase:   v1alpha1.EffectivenessPhaseNotVerified,
+		Message: "post-action remediation effectiveness verification is unavailable without a pre-action baseline",
+	}
+	if action.Status.Effectiveness != nil && action.Status.Effectiveness.Baseline != nil {
+		effectiveness = action.Status.Effectiveness
+		effectiveness.Phase = v1alpha1.EffectivenessPhaseVerifying
+		effectiveness.Outcome = ""
+		effectiveness.Message = "execution succeeded; waiting for the target to settle before read-only verification"
+		effectiveness.StartedAt = &finishedAt
+		settlingUntil := metav1.NewTime(now.Add(effectivenessSettlingPeriod))
+		observationUntil := metav1.NewTime(now.Add(effectivenessSettlingPeriod + effectivenessObservationWindow))
+		effectiveness.SettlingUntil = &settlingUntil
+		effectiveness.ObservationUntil = &observationUntil
+	}
+	action.Status.Effectiveness = effectiveness
+	if err := r.Status().Update(ctx, action); err != nil {
+		recordStatusUpdateConflict("AgentAction", err)
+		return ctrl.Result{}, err
+	}
+	recordPhaseTransition(r.EventRecorder, action, originalPhase, action.Status.Phase)
 	return ctrl.Result{}, nil
+}
+
+const (
+	effectivenessSettlingPeriod         = 5 * time.Minute
+	effectivenessObservationWindow      = 2 * time.Minute
+	effectivenessVerificationDataSource = "kubernetes-events"
+)
+
+func effectivenessBaselineFromExecutor(baseline executor.EffectivenessBaseline, action *v1alpha1.AgentAction) *v1alpha1.EffectivenessBaseline {
+	conditions := make([]v1alpha1.EffectivenessHealthCondition, 0, len(baseline.Health.Conditions))
+	for _, condition := range baseline.Health.Conditions {
+		conditions = append(conditions, v1alpha1.EffectivenessHealthCondition{
+			Type:    condition.Type,
+			Status:  condition.Status,
+			Reason:  condition.Reason,
+			Message: condition.Message,
+		})
+	}
+	capturedAt := metav1.NewTime(baseline.CapturedAt)
+	return &v1alpha1.EffectivenessBaseline{
+		CapturedAt:    &capturedAt,
+		Target:        action.Spec.Target,
+		TargetUID:     baseline.TargetUID,
+		RiskSignalRef: riskSignalRefFromAction(action),
+		Health: &v1alpha1.EffectivenessHealthSnapshot{
+			Generation:         baseline.Health.Generation,
+			ObservedGeneration: baseline.Health.ObservedGeneration,
+			DesiredReplicas:    baseline.Health.DesiredReplicas,
+			UpdatedReplicas:    baseline.Health.UpdatedReplicas,
+			AvailableReplicas:  baseline.Health.AvailableReplicas,
+			ReadyReplicas:      baseline.Health.ReadyReplicas,
+			Conditions:         conditions,
+		},
+		Digest: baseline.Digest,
+	}
+}
+
+func riskSignalRefFromAction(action *v1alpha1.AgentAction) *v1alpha1.NamespacedObjectReference {
+	if action == nil || action.Annotations == nil {
+		return nil
+	}
+	value := strings.TrimSpace(action.Annotations[annotationRiskSignalRef])
+	if value == "" {
+		return nil
+	}
+	namespace, name := splitNamespacedName(value)
+	if name == "" {
+		return nil
+	}
+	if namespace == "" {
+		namespace = action.Namespace
+	}
+	return &v1alpha1.NamespacedObjectReference{Name: name, Namespace: namespace}
+}
+
+func (r *AgentActionReconciler) populateBaselineEvidence(ctx context.Context, baseline *v1alpha1.EffectivenessBaseline) error {
+	if baseline == nil || baseline.RiskSignalRef == nil {
+		return nil
+	}
+	var riskSignal v1alpha1.RiskSignal
+	if err := r.Get(ctx, client.ObjectKey{Name: baseline.RiskSignalRef.Name, Namespace: baseline.RiskSignalRef.Namespace}, &riskSignal); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			return nil
+		}
+		return fmt.Errorf("get baseline RiskSignal %s/%s: %w", baseline.RiskSignalRef.Namespace, baseline.RiskSignalRef.Name, err)
+	}
+	baseline.EvidenceRefs = append([]v1alpha1.EvidenceRef(nil), riskSignal.Spec.Evidence...)
+	return nil
+}
+
+func (r *AgentActionReconciler) reconcileEffectivenessVerification(ctx context.Context, action *v1alpha1.AgentAction, now time.Time) (ctrl.Result, error) {
+	effectiveness := action.Status.Effectiveness
+	if effectiveness == nil || effectiveness.Baseline == nil || action.Status.Execution == nil || action.Status.Execution.Outcome != string(executor.ExecutionOutcomeSucceeded) {
+		return ctrl.Result{}, nil
+	}
+	if effectiveness.SettlingUntil != nil && now.Before(effectiveness.SettlingUntil.Time) {
+		return ctrl.Result{RequeueAfter: effectiveness.SettlingUntil.Sub(now)}, nil
+	}
+
+	if effectiveness.VerificationRef == nil {
+		verification, err := r.createEffectivenessVerification(ctx, action)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		action.Status.Effectiveness.VerificationRef = &v1alpha1.NamespacedObjectReference{
+			Name:      verification.Name,
+			Namespace: verification.Namespace,
+		}
+		action.Status.Effectiveness.Message = "read-only verification investigation created; waiting for post-action evidence"
+		if err := r.Status().Update(ctx, action); err != nil {
+			recordStatusUpdateConflict("AgentAction", err)
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	if effectiveness.ObservationUntil != nil && now.Before(effectiveness.ObservationUntil.Time) {
+		return ctrl.Result{RequeueAfter: effectiveness.ObservationUntil.Sub(now)}, nil
+	}
+
+	var verification v1alpha1.InvestigationRequest
+	if err := r.Get(ctx, client.ObjectKey{Name: effectiveness.VerificationRef.Name, Namespace: effectiveness.VerificationRef.Namespace}, &verification); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	if verification.Status.Phase != v1alpha1.PhaseCompleted && verification.Status.Phase != v1alpha1.PhaseFailed {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	postHealth, observed, observeErr := r.Executor.ObserveHealth(ctx, executorRequestForPersistedAction(action))
+	evaluation := evaluateEffectiveness(action.Status.Effectiveness.Baseline, postHealth, observed && observeErr == nil, &verification)
+	if observeErr != nil {
+		evaluation = effectivenessEvaluation{Outcome: v1alpha1.EffectivenessOutcomeInconclusive, Message: "post-action health observation failed: " + observeErr.Error()}
+	}
+	finishedAt := metav1.NewTime(now)
+	action.Status.Effectiveness.Phase = v1alpha1.EffectivenessPhaseCompleted
+	action.Status.Effectiveness.Outcome = evaluation.Outcome
+	action.Status.Effectiveness.Message = evaluation.Message
+	action.Status.Effectiveness.FinishedAt = &finishedAt
+	if observed && observeErr == nil {
+		action.Status.Effectiveness.PostActionHealth = effectivenessHealthSnapshotFromExecutor(postHealth)
+	}
+	if err := r.Status().Update(ctx, action); err != nil {
+		recordStatusUpdateConflict("AgentAction", err)
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func effectivenessHealthSnapshotFromExecutor(snapshot executor.HealthSnapshot) *v1alpha1.EffectivenessHealthSnapshot {
+	conditions := make([]v1alpha1.EffectivenessHealthCondition, 0, len(snapshot.Conditions))
+	for _, condition := range snapshot.Conditions {
+		conditions = append(conditions, v1alpha1.EffectivenessHealthCondition{
+			Type:    condition.Type,
+			Status:  condition.Status,
+			Reason:  condition.Reason,
+			Message: condition.Message,
+		})
+	}
+	return &v1alpha1.EffectivenessHealthSnapshot{
+		Generation:         snapshot.Generation,
+		ObservedGeneration: snapshot.ObservedGeneration,
+		DesiredReplicas:    snapshot.DesiredReplicas,
+		UpdatedReplicas:    snapshot.UpdatedReplicas,
+		AvailableReplicas:  snapshot.AvailableReplicas,
+		ReadyReplicas:      snapshot.ReadyReplicas,
+		Conditions:         conditions,
+	}
+}
+
+func (r *AgentActionReconciler) createEffectivenessVerification(ctx context.Context, action *v1alpha1.AgentAction) (*v1alpha1.InvestigationRequest, error) {
+	if r.Scheme == nil {
+		return nil, fmt.Errorf("AgentAction reconciler requires a scheme to create verification InvestigationRequest")
+	}
+	name := effectivenessVerificationName(action)
+	verification := &v1alpha1.InvestigationRequest{}
+	verification.Name = name
+	verification.Namespace = action.Namespace
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, verification, func() error {
+		if err := controllerutil.SetControllerReference(action, verification, r.Scheme); err != nil {
+			return err
+		}
+		if verification.Labels == nil {
+			verification.Labels = map[string]string{}
+		}
+		if verification.Annotations == nil {
+			verification.Annotations = map[string]string{}
+		}
+		verification.Labels[labelManagedBy] = "agentaction-controller"
+		verification.Annotations[annotationLineageSource] = action.Namespace + "/" + action.Name
+		verification.Annotations[annotationLineageSourceKind] = "AgentAction"
+		verification.Annotations[annotationLineageSourceAPI] = v1alpha1.SchemeGroupVersion.String()
+		verification.Annotations[annotationLineageSourceUID] = string(action.UID)
+		verification.Annotations[annotationTargetUID] = action.Status.Effectiveness.Baseline.TargetUID
+		verification.Annotations[annotationInvestigationDepth] = "0"
+		verification.Spec.Target = action.Spec.Target
+		verification.Spec.Purpose = v1alpha1.InvestigationPurposeEffectivenessVerification
+		verification.Spec.Correlation = &v1alpha1.InvestigationCorrelation{
+			AgentActionRef: v1alpha1.NamespacedObjectReference{Name: action.Name, Namespace: action.Namespace},
+			ExecutionID:    action.Status.Execution.ExecutionID,
+			BaselineDigest: action.Status.Effectiveness.Baseline.Digest,
+		}
+		verification.Spec.TimeRange = v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: effectivenessObservationWindow}}
+		verification.Spec.Question = fmt.Sprintf("Verify whether %s recovered after execution %s", targetRefString(action.Spec.Target), action.Status.Execution.ExecutionID)
+		verification.Spec.Queries = []v1alpha1.InvestigationQuery{{
+			Name:          "post-action-workload-events",
+			DatasourceRef: v1alpha1.LocalObjectReference{Name: effectivenessVerificationDataSource},
+			QueryType:     "event",
+			Reasons:       []string{"BackOff", "Unhealthy", "Failed", "FailedCreate", "ProgressDeadlineExceeded"},
+		}}
+		verification.Spec.Mode = v1alpha1.InvestigationModeReadOnly
+		verification.Spec.CreateRiskSignal = false
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return verification, nil
+}
+
+func effectivenessVerificationName(action *v1alpha1.AgentAction) string {
+	digest := canonicaldigest.String(canonicaldigest.RCAJSONV1, struct {
+		ActionUID   string
+		ExecutionID string
+	}{ActionUID: string(action.UID), ExecutionID: action.Status.Execution.ExecutionID})
+	suffix := strings.TrimPrefix(digest, canonicaldigest.AlgorithmSHA256+":")
+	if len(suffix) > 16 {
+		suffix = suffix[:16]
+	}
+	prefix := action.Name
+	maxPrefix := 63 - len("-verify-") - len(suffix)
+	if len(prefix) > maxPrefix {
+		prefix = prefix[:maxPrefix]
+	}
+	return prefix + "-verify-" + suffix
 }
 
 // reconcilePending handles an AgentAction that isAgentActionApproved has
@@ -262,6 +663,19 @@ func (r *AgentActionReconciler) reconcileApprovalTimeout(ctx context.Context, ac
 		return ctrl.Result{RequeueAfter: deadline.Sub(now)}, nil
 	}
 
+	var route *escalation.Route
+	if r.Notifier != nil && r.EscalationRouter != nil {
+		resolved, err := r.EscalationRouter.Resolve(ctx, escalation.ResolveRequest{
+			Namespace:          action.Namespace,
+			EscalationChainRef: action.Annotations[annotationEscalationChainRef],
+			ResourceLabels:     action.Labels,
+		})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		route = resolved
+	}
+
 	if r.Notifier != nil {
 		// Notify before persisting Escalated, mirroring
 		// RiskSignalNotificationReconciler's notify-then-mark-done ordering:
@@ -281,15 +695,21 @@ func (r *AgentActionReconciler) reconcileApprovalTimeout(ctx context.Context, ac
 			return ctrl.Result{}, err
 		}
 
+		fields := map[string]any{
+			"namespace":  action.Namespace,
+			"name":       action.Name,
+			"actionType": action.Spec.ActionType,
+		}
+		if route != nil {
+			fields["escalationChain"] = route.Reference.Name
+			fields["escalationChainVersion"] = route.Reference.Version
+			fields["escalationStageCount"] = len(route.Chain.Spec.Stages)
+		}
 		notifyErr := r.Notifier.Notify(ctx, notifier.Message{
 			Title:   "FluxSeer RCA approval escalation",
 			Summary: fmt.Sprintf("%s exceeded its %ds approval timeout", targetRefString(action.Spec.Target), action.Spec.ApprovalTimeoutSeconds),
 			Body:    action.Status.Message,
-			Fields: map[string]any{
-				"namespace":  action.Namespace,
-				"name":       action.Name,
-				"actionType": action.Spec.ActionType,
-			},
+			Fields:  fields,
 		})
 		if notifyErr != nil {
 			action.Status.Notification.LastError = notifyErr.Error()
@@ -385,8 +805,8 @@ func (r *AgentActionReconciler) reconcileTerminalStateTTL(ctx context.Context, a
 	}
 
 	// Check for retain annotation - if present, never delete
-	if action.ObjectMeta.Annotations != nil {
-		if _, ok := action.ObjectMeta.Annotations["fluxseer-rca.aiops.platform/retain"]; ok {
+	if action.Annotations != nil {
+		if _, ok := action.Annotations["fluxseer-rca.aiops.platform/retain"]; ok {
 			return ctrl.Result{}, nil
 		}
 	}
@@ -413,7 +833,31 @@ func (r *AgentActionReconciler) reconcileTerminalStateTTL(ctx context.Context, a
 }
 
 func (r *AgentActionReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.AgentAction{}).
-		Complete(r)
+		Owns(&v1alpha1.InvestigationRequest{})
+	if r.PolicyPackEnabled {
+		builder = builder.Watches(&v1alpha1.EscalationChain{}, handler.EnqueueRequestsFromMapFunc(r.mapPendingEscalationActions))
+	}
+	return builder.Complete(r)
+}
+
+// mapPendingEscalationActions requeues waiting actions affected by a chain change.
+func (r *AgentActionReconciler) mapPendingEscalationActions(ctx context.Context, chain client.Object) []reconcile.Request {
+	var actions v1alpha1.AgentActionList
+	if err := r.List(ctx, &actions, client.InNamespace(chain.GetNamespace())); err != nil {
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(actions.Items))
+	for i := range actions.Items {
+		action := &actions.Items[i]
+		if action.Status.Phase != v1alpha1.PhaseWaitingApproval {
+			continue
+		}
+		if ref := action.Annotations[annotationEscalationChainRef]; ref != "" && ref != chain.GetName() {
+			continue
+		}
+		requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(action)})
+	}
+	return requests
 }

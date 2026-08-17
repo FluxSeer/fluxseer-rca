@@ -1,0 +1,77 @@
+evaluation_interval: 1m
+
+tests:
+  - name: request-rate-surge-pattern-semantics
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{namespace="traffic-conformance",app="surge-valid"}'
+        values: '0+300x34 10200+1200x6'
+      - series: 'http_requests_total{namespace="traffic-conformance",app="surge-low-volume"}'
+        values: '0+0.3x34 10.2+1.2x6'
+      - series: 'http_requests_total{namespace="traffic-conformance",app="no-surge"}'
+        values: '0+1200x40'
+      - series: 'http_requests_total{namespace="traffic-conformance",app="zero-baseline"}'
+        values: '0+0x34 0+1200x6'
+      - series: 'http_requests_total{namespace="traffic-conformance",app="near-zero-low-volume"}'
+        values: '0+0.06x34 2.04+1.2x6'
+    promql_expr_test:
+      - expr: |
+          (
+            sum(rate(http_requests_total{namespace="traffic-conformance",app="surge-valid"}[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total{namespace="traffic-conformance",app="surge-valid"}[5m] offset 30m)), 0.001)
+          )
+          * (sum(rate(http_requests_total{namespace="traffic-conformance",app="surge-valid"}[5m])) > bool 10)
+          * (sum(rate(http_requests_total{namespace="traffic-conformance",app="surge-valid"}[5m] offset 30m)) > bool 0.001)
+        eval_time: 40m
+        exp_samples:
+          - labels: '{}'
+            value: 4
+      - expr: |
+          (
+            sum(rate(http_requests_total{namespace="traffic-conformance",app="surge-low-volume"}[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total{namespace="traffic-conformance",app="surge-low-volume"}[5m] offset 30m)), 0.001)
+          )
+          * (sum(rate(http_requests_total{namespace="traffic-conformance",app="surge-low-volume"}[5m])) > bool 10)
+          * (sum(rate(http_requests_total{namespace="traffic-conformance",app="surge-low-volume"}[5m] offset 30m)) > bool 0.001)
+        eval_time: 40m
+        exp_samples:
+          - labels: '{}'
+            value: 0
+      - expr: |
+          (
+            sum(rate(http_requests_total{namespace="traffic-conformance",app="no-surge"}[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total{namespace="traffic-conformance",app="no-surge"}[5m] offset 30m)), 0.001)
+          )
+          * (sum(rate(http_requests_total{namespace="traffic-conformance",app="no-surge"}[5m])) > bool 10)
+          * (sum(rate(http_requests_total{namespace="traffic-conformance",app="no-surge"}[5m] offset 30m)) > bool 0.001)
+        eval_time: 40m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+      - expr: |
+          (
+            sum(rate(http_requests_total{namespace="traffic-conformance",app="zero-baseline"}[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total{namespace="traffic-conformance",app="zero-baseline"}[5m] offset 30m)), 0.001)
+          )
+          * (sum(rate(http_requests_total{namespace="traffic-conformance",app="zero-baseline"}[5m])) > bool 10)
+          * (sum(rate(http_requests_total{namespace="traffic-conformance",app="zero-baseline"}[5m] offset 30m)) > bool 0.001)
+        eval_time: 40m
+        exp_samples:
+          - labels: '{}'
+            value: 0
+      - expr: |
+          (
+            sum(rate(http_requests_total{namespace="traffic-conformance",app="near-zero-low-volume"}[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total{namespace="traffic-conformance",app="near-zero-low-volume"}[5m] offset 30m)), 0.001)
+          )
+          * (sum(rate(http_requests_total{namespace="traffic-conformance",app="near-zero-low-volume"}[5m])) > bool 10)
+          * (sum(rate(http_requests_total{namespace="traffic-conformance",app="near-zero-low-volume"}[5m] offset 30m)) > bool 0.001)
+        eval_time: 40m
+        exp_samples:
+          - labels: '{}'
+            value: 0

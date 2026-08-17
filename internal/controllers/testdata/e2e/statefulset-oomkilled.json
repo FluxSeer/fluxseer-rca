@@ -47,5 +47,14 @@
     "rootCauseType": "ResourcePressure",
     "claimVerification": "Supported",
     "providerCalls": 1
+  },
+  "baseline": {
+    "scenario": "OOMKilled",
+    "expectedDiagnosis": "The StatefulSet is under memory pressure and its pod was OOMKilled.",
+    "expectedEvidence": [
+      {"kind": "event", "source": "kubernetes-events", "reason": "OOMKilled"},
+      {"kind": "metric", "source": "prometheus"}
+    ],
+    "humanJudgment": "Correct when resource pressure is supported by both OOMKilled and memory metric evidence."
   }
 }

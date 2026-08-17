@@ -1,0 +1,49 @@
+{
+  "name": "contradictory-evidence",
+  "target": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "namespace": "prod",
+    "name": "checkout-api"
+  },
+  "datasources": [
+    {
+      "name": "prometheus",
+      "queryType": "metric",
+      "records": [
+        {
+          "metric": "http_request_duration_seconds_p95",
+          "value": "normal and below threshold"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Checkout latency regression",
+    "riskSummary": "The provider proposes a p95 latency regression.",
+    "severity": "high",
+    "confidenceScore": 90,
+    "rationale": "provider hypothesis for contradiction testing",
+    "rcaHypothesis": "A p95 latency regression is causing slow responses.",
+    "rcaCauses": [
+      "p95 latency regression is causing slow responses"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Inconclusive",
+    "rootCauseType": "",
+    "claimVerification": "Contradicted",
+    "providerCalls": 1
+  },
+  "baseline": {
+    "scenario": "ContradictoryEvidence",
+    "expectedDiagnosis": "The provider latency hypothesis must be rejected because the metric is normal and below threshold.",
+    "expectedEvidence": [
+      {"kind": "metric", "source": "prometheus"}
+    ],
+    "expectedIncident": true,
+    "humanJudgment": "Correct only when the conflicting claim is Contradicted and the verdict is Inconclusive."
+  }
+}

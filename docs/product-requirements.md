@@ -1,6 +1,6 @@
 # FluxSeer RCA Product Requirements Baseline
 
-Last updated: 2026-07-30
+Last updated: 2026-08-17
 
 This document consolidates the product requirements that should guide README, architecture, CRD, and release-scope wording.
 
@@ -10,7 +10,7 @@ FluxSeer RCA is the product name for the Kubernetes-native control plane for
 evidence-verifiable root cause analysis. Source code and build artifacts now
 use matching `fluxseer` / `fluxseer-rca` naming.
 
-Compatibility name (last published release, `v0.3.0-beta.3`):
+Historical compatibility name (`v0.3.0-beta.3`):
 
 ```text
 FluxAgent
@@ -47,7 +47,11 @@ history, or individual responder memory.
 Current release scope:
 
 ```text
-v0.3.0-beta.3 is a beta hardening prerelease with canonical RCA preflight semantics, evidence gating, direct RiskRule compatibility, hardened read-only defaults, least-privilege default RBAC, GHCR images, Helm OCI packaging, and verified provenance.
+v0.4.0-beta.3 is the current beta release. It retains the frozen v0.3
+canonical RCA contract and adds approval lifecycle governance, audit timestamps,
+notification retry tracking, and terminal-state TTL cleanup for guarded
+remediation resources. Policy Pack resources are implemented as opt-in
+governance foundations; autonomous production remediation is not included.
 ```
 
 The long-term product positioning is intentionally narrower than a general AI SRE agent. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it. The product rename must not be used as a shortcut for breaking the current v1alpha1 API, metric, annotation, or release-artifact compatibility surfaces once real external installs depend on them. (The `fluxagent` -> `fluxseer` / `fluxseer-rca` metric, annotation, and schema/digest identifier rename was an exception made before any external cluster ran this product; see [architecture/rename-migration-plan.md](architecture/rename-migration-plan.md).)
@@ -66,6 +70,12 @@ The long-term product positioning is intentionally narrower than a general AI SR
 - graceful degradation for optional integrations
 - guarded remediation as an opt-in secondary path
 - stable status and condition reasons for CLI, dashboard, alerting, and GitOps consumers
+- detection success does not imply RCA confirmation
+- the RCA verdict must not be more specific than the strongest evidence-supported causal claim
+
+The maintained terminology for detection patterns, signal templates, evidence
+profiles, evidence sufficiency, verification, and verdict/outcome is defined in
+the [product and API glossary](glossary.md).
 
 ## Product Boundaries
 
@@ -262,7 +272,12 @@ The current published beta release includes:
 - `fluxseer investigate` as a CLI wrapper around `InvestigationRequest`
 - optional discovered `RiskSignal` materialization from `InvestigationRequest`
 - webhook notification
-- TTL cleanup for `RiskSignal` and `InvestigationRequest`
+- approval lifecycle, audit timestamps, and notification retry tracking for
+  guarded remediation
+- TTL cleanup for `RiskSignal`, `InvestigationRequest`, `RemediationPlan`, and
+  `AgentAction`
+- opt-in `ApprovalPolicy`, `NamespaceThreshold`, and `EscalationChain`
+  governance foundations
 - read-only Helm default with the legacy Deployment watcher disabled
 - least-privilege default RBAC without remediation or executor mutation permissions
 
@@ -271,6 +286,19 @@ The current scope does not include production-grade autonomous remediation.
 The current scope includes the frozen v0.3 structured `InvestigationRequest.status` contract. Future stabilization should improve runtime coverage, fixtures, dashboards, provider accuracy, and compatibility tests without changing the frozen schema unless an explicit schema-freeze exception is accepted.
 
 ## Baseline Rule Pack Contract
+
+The official Helm rule packs contain 21 built-in detection patterns:
+
+- 6 Kubernetes-native workload patterns available without an additional
+  observability backend;
+- 8 Prometheus metric patterns requiring a configured Prometheus `DataSource`;
+- 7 Loki log patterns requiring a configured Loki `DataSource`.
+
+These counts describe maintained defaults, not the limit of the generic
+`RiskRule` engine. Application Profile entries are parameterized signal
+templates and are not counted as additional built-in detection patterns.
+The maintained identities and capability boundaries live in the
+[machine-readable detection pattern catalog](../config/rule-packs/detection-patterns.json).
 
 FluxSeer RCA should not require users to hand-write every initial `RiskRule`, but built-in rules must remain explicit, bounded, and secondary to the RCA workflow.
 
@@ -421,10 +449,19 @@ FluxSeer RCA now includes the frozen v0.3 structured RCA status contract for `In
 The contract should make this relationship explicit:
 
 ```text
-Claim
--> Evidence reference
+Detection or explicit trigger
+-> Evidence collection
+-> Evidence sufficiency
+-> RCA hypothesis
+-> Evidence-linked claims
 -> Verification status
+-> Bounded verdict/outcome
 ```
+
+A detected incident must remain distinguishable from a confirmed RCA. Missing
+required evidence must produce an abstaining outcome, and verification must
+prevent provider specificity from exceeding the strongest supported causal
+claim.
 
 Compatibility status projections:
 
@@ -665,4 +702,6 @@ For release tags, freeze and confirm:
 - upgrade and uninstall paths have at least smoke-test coverage or are explicitly documented as pending
 - `make verify-release-v0.2-beta` or its documented equivalent passes against the intended release image reference
 
-`v0.2.0-beta.1` passed this gate before it was tagged and published as a prerelease. The release must remain framed as a read-only RCA beta, not as a production remediation platform.
+Historical `v0.2.0-beta.1` passed this gate before it was tagged and published
+as a prerelease. That historical release remained framed as a read-only RCA
+beta, not as a production remediation platform.

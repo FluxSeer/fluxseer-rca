@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
@@ -1434,6 +1436,233 @@ func TestInvestigationRequestReconcilerMarksProviderNotFoundAsHardProviderResolu
 	}
 }
 
+func TestInvestigationRequestReconcilerPersistsSecretReaderFailuresWithoutProviderRequest(t *testing.T) {
+	tests := []struct {
+		name       string
+		wantReason string
+		secrets    func(*runtime.Scheme) modelgateway.SecretResolver
+	}{
+		{
+			name:       "reader unavailable",
+			wantReason: "SecretReaderUnavailable",
+			secrets:    func(*runtime.Scheme) modelgateway.SecretResolver { return nil },
+		},
+		{
+			name:       "read failed",
+			wantReason: "SecretReadFailed",
+			secrets: func(scheme *runtime.Scheme) modelgateway.SecretResolver {
+				reader := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithInterceptorFuncs(interceptor.Funcs{
+						Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+							return errors.New("simulated Kubernetes API secret read failure")
+						},
+					}).
+					Build()
+				return modelgateway.KubeSecretResolver{Client: reader}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := appsv1.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+			if err := corev1.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+			if err := v1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+
+			providerRequests := 0
+			providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				providerRequests++
+				_ = r.Body.Close()
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer providerServer.Close()
+
+			request := &v1alpha1.InvestigationRequest{
+				ObjectMeta: metav1.ObjectMeta{Name: "secret-reader-failure", Namespace: "fluxseer-rca-system", Generation: 1},
+				Spec: v1alpha1.InvestigationRequestSpec{
+					Target: v1alpha1.TargetRef{
+						Namespace:  "prod",
+						Kind:       "Deployment",
+						Name:       "open-api",
+						APIVersion: "apps/v1",
+					},
+					DataSources:      []v1alpha1.LocalObjectReference{{Name: "kubernetes-events"}},
+					ModelProviderRef: v1alpha1.LocalObjectReference{Name: "openai-provider"},
+					Mode:             v1alpha1.InvestigationModeReadOnly,
+					CreateRiskSignal: true,
+				},
+			}
+			deployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+				Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
+			}
+			provider := &v1alpha1.ModelProvider{
+				ObjectMeta: metav1.ObjectMeta{Name: "openai-provider", Namespace: "fluxseer-rca-system", Generation: 2},
+				Spec: v1alpha1.ModelProviderSpec{
+					Provider: "openai",
+					Model:    "gpt-test",
+					Endpoint: providerServer.URL,
+					APIKeySecretRef: &v1alpha1.SecretKeyRef{
+						Name: "openai-secret",
+						Key:  "api-key",
+					},
+					DataPolicy: v1alpha1.ModelProviderDataPolicy{
+						AllowExternalTransmission: true,
+						MaximumClassification:     v1alpha1.DataClassificationLevelRestricted,
+					},
+				},
+			}
+			kubeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+				WithObjects(request, deployment, provider).
+				Build()
+			reconciler := &InvestigationRequestReconciler{
+				Client: kubeClient,
+				Scheme: scheme,
+				Service: &investigation.Service{
+					Client:   kubeClient,
+					Registry: datasource.NewRegistry(fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent}),
+					Resolver: modelgateway.KubeResolver{Client: kubeClient},
+					Gateway: &modelgateway.Gateway{
+						Base:      knowledge.NewBase(),
+						Providers: model.NewRegistry(openai.Provider{Client: providerServer.Client()}),
+						Secrets:   tc.secrets(scheme),
+					},
+				},
+				Now: func() time.Time { return time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC) },
+			}
+
+			if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace}}); err != nil {
+				t.Fatal(err)
+			}
+			var stored v1alpha1.InvestigationRequest
+			if err := kubeClient.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+				t.Fatal(err)
+			}
+			if providerRequests != 0 {
+				t.Fatalf("expected providerRequestCount=0, got %d", providerRequests)
+			}
+			if stored.Status.Phase != v1alpha1.PhaseFailed || stored.Status.Outcome != v1alpha1.InvestigationOutcomeUnknown {
+				t.Fatalf("expected Failed/Unknown terminal status, got phase=%q outcome=%q", stored.Status.Phase, stored.Status.Outcome)
+			}
+			if stored.Status.Failure == nil || stored.Status.Failure.Code != tc.wantReason || stored.Status.Failure.Stage != v1alpha1.InvestigationStageReasoning {
+				t.Fatalf("expected %s reasoning failure, got %#v", tc.wantReason, stored.Status.Failure)
+			}
+			if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != tc.wantReason {
+				t.Fatalf("expected RCAReady false %s, got %#v", tc.wantReason, cond)
+			}
+			if cond := findCondition(stored.Status.Conditions, conditionDegraded); cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != tc.wantReason {
+				t.Fatalf("expected Degraded true %s, got %#v", tc.wantReason, cond)
+			}
+			if stored.Status.Execution == nil || len(stored.Status.Execution.EgressAttempts) != 1 || stored.Status.Execution.EgressAttempts[0].Reason != tc.wantReason {
+				t.Fatalf("expected one %s execution attempt, got %#v", tc.wantReason, stored.Status.Execution)
+			}
+			var signals v1alpha1.RiskSignalList
+			if err := kubeClient.List(context.Background(), &signals); err != nil {
+				t.Fatal(err)
+			}
+			if len(signals.Items) != 0 {
+				t.Fatalf("expected no RiskSignal after %s, got %#v", tc.wantReason, signals.Items)
+			}
+		})
+	}
+}
+
+func TestInvestigationRequestReconcilerPersistsProviderRequestFailure(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	request := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "provider-request-failure", Namespace: "fluxseer-rca-system", Generation: 1},
+		Spec: v1alpha1.InvestigationRequestSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "prod",
+				Kind:       "Deployment",
+				Name:       "open-api",
+				APIVersion: "apps/v1",
+			},
+			DataSources:      []v1alpha1.LocalObjectReference{{Name: "kubernetes-events"}},
+			ModelProviderRef: v1alpha1.LocalObjectReference{Name: "raw-failure-provider"},
+			Mode:             v1alpha1.InvestigationModeReadOnly,
+			CreateRiskSignal: true,
+		},
+	}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "open-api", Namespace: "prod", Labels: map[string]string{"app": "open-api"}},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "open-api"}}}},
+	}
+	provider := &v1alpha1.ModelProvider{
+		ObjectMeta: metav1.ObjectMeta{Name: "raw-failure-provider", Namespace: "fluxseer-rca-system", Generation: 4},
+		Spec:       v1alpha1.ModelProviderSpec{Provider: "raw-failure"},
+	}
+	kubeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithObjects(request, deployment, provider).
+		Build()
+	providerRuntime := &untypedFailingControllerModelProvider{name: "raw-failure"}
+	reconciler := &InvestigationRequestReconciler{
+		Client: kubeClient,
+		Scheme: scheme,
+		Service: &investigation.Service{
+			Client:   kubeClient,
+			Registry: datasource.NewRegistry(fakeInvestigationDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent}),
+			Resolver: modelgateway.KubeResolver{Client: kubeClient},
+			Gateway: &modelgateway.Gateway{
+				Base:      knowledge.NewBase(),
+				Providers: model.NewRegistry(providerRuntime),
+			},
+		},
+		Now: func() time.Time { return time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC) },
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: request.Name, Namespace: request.Namespace}}); err != nil {
+		t.Fatalf("expected stable failure status instead of reconcile error, got %v", err)
+	}
+	var stored v1alpha1.InvestigationRequest
+	if err := kubeClient.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if providerRuntime.calls != 1 {
+		t.Fatalf("expected exactly one provider request, got %d", providerRuntime.calls)
+	}
+	if stored.Status.Phase != v1alpha1.PhaseFailed || stored.Status.Outcome != v1alpha1.InvestigationOutcomeUnknown {
+		t.Fatalf("expected Failed/Unknown terminal status, got phase=%q outcome=%q", stored.Status.Phase, stored.Status.Outcome)
+	}
+	if stored.Status.Failure == nil || stored.Status.Failure.Code != "ProviderRequestFailed" || stored.Status.Failure.Stage != v1alpha1.InvestigationStageReasoning {
+		t.Fatalf("expected ProviderRequestFailed reasoning failure, got %#v", stored.Status.Failure)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "ProviderRequestFailed" {
+		t.Fatalf("expected RCAReady false ProviderRequestFailed, got %#v", cond)
+	}
+	if cond := findCondition(stored.Status.Conditions, conditionDegraded); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "ProviderRequestFailed" {
+		t.Fatalf("expected Degraded false ProviderRequestFailed for an unclassified hard failure, got %#v", cond)
+	}
+	if stored.Status.Execution == nil || len(stored.Status.Execution.EgressAttempts) != 1 || stored.Status.Execution.EgressAttempts[0].Reason != "ProviderRequestFailed" {
+		t.Fatalf("expected ProviderRequestFailed execution attempt, got %#v", stored.Status.Execution)
+	}
+	var signals v1alpha1.RiskSignalList
+	if err := kubeClient.List(context.Background(), &signals); err != nil {
+		t.Fatal(err)
+	}
+	if len(signals.Items) != 0 {
+		t.Fatalf("expected no RiskSignal after ProviderRequestFailed, got %#v", signals.Items)
+	}
+}
+
 func TestInvestigationRequestReconcilerMarksInvalidProviderResponseDistinctly(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
@@ -2176,7 +2405,12 @@ func TestInvestigationRequestReconcilerReusesProviderCompletedCheckpoint(t *test
 	request.Status.Lineage = lineageFromAnnotations(request.Annotations)
 	executionID := investigationExecutionID(request, preflight, evidence)
 	reasoning := checkpointReasoningOutput()
+	reasoning.InputTokens = 233
+	reasoning.OutputTokens = 77
 	request.Status.Execution = buildRCAExecution(request, preflight, evidence, investigation.RCAResult{Reasoning: &reasoning}, executionID, executionStateProviderCompleted, now)
+	if request.Status.Execution.InputTokens != 233 || request.Status.Execution.OutputTokens != 77 {
+		t.Fatalf("expected execution token usage 233/77, got %d/%d", request.Status.Execution.InputTokens, request.Status.Execution.OutputTokens)
+	}
 	request.Status.ResourceStatus = v1alpha1.ResourceStatus{
 		Phase:              v1alpha1.PhaseReasoning,
 		Message:            "provider result persisted for RCA verification",
@@ -2903,6 +3137,18 @@ func (p *countingFailingModelProvider) Complete(context.Context, domain.ModelReq
 		Reason:  "ProviderUnavailable",
 		Message: "provider unavailable",
 	}
+}
+
+type untypedFailingControllerModelProvider struct {
+	name  string
+	calls int
+}
+
+func (p *untypedFailingControllerModelProvider) Name() string { return p.name }
+
+func (p *untypedFailingControllerModelProvider) Complete(context.Context, domain.ModelRequest) (domain.ModelResponse, error) {
+	p.calls++
+	return domain.ModelResponse{}, errors.New("untyped provider request failure")
 }
 
 func checkpointReasoningOutput() domain.ReasoningOutput {

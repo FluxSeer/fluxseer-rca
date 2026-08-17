@@ -132,6 +132,52 @@ func TestRegisterFromResourcesBuildsRegistry(t *testing.T) {
 	}
 }
 
+func TestRegisterFromResourcesSkipsNetworkPolicyDeniedDatasource(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add core scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+
+	denied := &v1alpha1.DataSource{
+		ObjectMeta: metav1.ObjectMeta{Name: "metadata-prometheus", Namespace: "fluxseer-rca-system"},
+		Spec: v1alpha1.DataSourceSpec{
+			Type:     "prometheus",
+			Endpoint: "http://169.254.169.254/latest/meta-data",
+		},
+	}
+	allowed := &v1alpha1.DataSource{
+		ObjectMeta: metav1.ObjectMeta{Name: "public-prometheus", Namespace: "fluxseer-rca-system"},
+		Spec: v1alpha1.DataSourceSpec{
+			Type:     "prometheus",
+			Endpoint: "https://prometheus.example",
+		},
+	}
+	reader := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(denied, allowed).
+		Build()
+	registry := datasource.NewRegistry()
+
+	if err := RegisterFromResources(context.Background(), reader, registry, reader); err != nil {
+		t.Fatalf("register from resources failed: %v", err)
+	}
+	if _, found := registry.Get(denied.Name); found {
+		t.Fatal("expected network-policy-denied datasource to remain unavailable")
+	}
+	if _, found := registry.Get(allowed.Name); !found {
+		t.Fatal("expected valid datasource registration to continue after denied resource")
+	}
+
+	_, err := BuildSourceFromResource(context.Background(), reader, *denied, reader)
+	validationErr := expectNetworkPolicyDenied(t, err)
+	if !strings.Contains(validationErr.Message, "169.254.169.254") {
+		t.Fatalf("expected denied endpoint identity in diagnostic, got %q", validationErr.Message)
+	}
+}
+
 func TestBuildSourceFromResourceValidatesQueryPolicy(t *testing.T) {
 	_, err := BuildSourceFromResource(context.Background(), nil, v1alpha1.DataSource{
 		Spec: v1alpha1.DataSourceSpec{
@@ -207,7 +253,7 @@ func TestBuildHTTPClientRejectsDeniedDatasourceEndpoints(t *testing.T) {
 		{name: "metadata", endpoint: "http://169.254.169.254/latest/meta-data"},
 		{name: "loopback", endpoint: "http://127.0.0.1:9090"},
 		{name: "link-local", endpoint: "http://169.254.10.20:9090"},
-		{name: "private-without-allowlist", endpoint: "http://10.32.0.15:9090"},
+		{name: "private-without-allowlist", endpoint: "http://10.0.0.15:9090"},
 		{name: "ipv6-loopback", endpoint: "http://[::1]:9090"},
 		{name: "ipv6-link-local", endpoint: "http://[fe80::1]:9090"},
 		{name: "ipv6-unspecified", endpoint: "http://[::]:9090"},
@@ -231,9 +277,9 @@ func TestBuildHTTPClientAllowsConfiguredPrivateCIDRAndClusterService(t *testing.
 	if _, err := buildHTTPClient(context.Background(), nil, v1alpha1.DataSource{
 		Spec: v1alpha1.DataSourceSpec{
 			Type:     "prometheus",
-			Endpoint: "http://10.32.0.15:9090",
+			Endpoint: "http://10.0.0.15:9090",
 			NetworkPolicy: v1alpha1.DataSourceNetworkPolicy{
-				AllowedCIDRs: []string{"10.32.0.0/16"},
+				AllowedCIDRs: []string{"10.0.0.0/8"},
 			},
 		},
 	}); err != nil {
@@ -345,9 +391,9 @@ func TestDatasourcePolicyDialContextPinsAllowedResolvedIP(t *testing.T) {
 	expectedErr := errors.New("dial stopped after policy validation")
 	var dialAddress string
 	dial := datasourcePolicyDialContext(
-		v1alpha1.DataSourceNetworkPolicy{AllowedCIDRs: []string{"10.32.0.0/16"}},
+		v1alpha1.DataSourceNetworkPolicy{AllowedCIDRs: []string{"10.0.0.0/8"}},
 		func(context.Context, string) ([]net.IPAddr, error) {
-			return []net.IPAddr{{IP: net.ParseIP("10.32.0.15")}}, nil
+			return []net.IPAddr{{IP: net.ParseIP("10.0.0.15")}}, nil
 		},
 		func(_ context.Context, _ string, address string) (net.Conn, error) {
 			dialAddress = address
@@ -359,7 +405,7 @@ func TestDatasourcePolicyDialContextPinsAllowedResolvedIP(t *testing.T) {
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected dial sentinel after policy validation, got %v", err)
 	}
-	if dialAddress != "10.32.0.15:9090" {
+	if dialAddress != "10.0.0.15:9090" {
 		t.Fatalf("expected dial to pinned IP address, got %q", dialAddress)
 	}
 }
@@ -367,10 +413,10 @@ func TestDatasourcePolicyDialContextPinsAllowedResolvedIP(t *testing.T) {
 func TestDatasourcePolicyDialContextRejectsWhenAnyResolvedIPDenied(t *testing.T) {
 	dialCalled := false
 	dial := datasourcePolicyDialContext(
-		v1alpha1.DataSourceNetworkPolicy{AllowedCIDRs: []string{"10.32.0.0/16"}},
+		v1alpha1.DataSourceNetworkPolicy{AllowedCIDRs: []string{"10.0.0.0/8"}},
 		func(context.Context, string) ([]net.IPAddr, error) {
 			return []net.IPAddr{
-				{IP: net.ParseIP("10.32.0.15")},
+				{IP: net.ParseIP("10.0.0.15")},
 				{IP: net.ParseIP("169.254.169.254")},
 			}, nil
 		},

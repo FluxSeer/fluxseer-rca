@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: observability
-          image: fluxseer/fluxseer-rca/demo-observability:v0.2.0-beta.1
+          image: ghcr.io/fluxseer/fluxseer-rca/demo-observability:v0.4.0-beta.3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

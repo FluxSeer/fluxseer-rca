@@ -101,6 +101,10 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
+		Usage struct {
+			InputTokens  int64 `json:"input_tokens"`
+			OutputTokens int64 `json:"output_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(httpResp.Body, &decoded); err != nil {
 		return domain.ModelResponse{}, &model.ProviderError{
@@ -114,7 +118,8 @@ func (p Provider) Complete(ctx context.Context, req domain.ModelRequest) (domain
 			if err != nil {
 				return domain.ModelResponse{}, err
 			}
-			return model.WithProviderRequestID(resp, httpResp.RequestID), nil
+			resp = model.WithProviderRequestID(resp, httpResp.RequestID)
+			return model.WithTokenUsage(resp, decoded.Usage.InputTokens, decoded.Usage.OutputTokens), nil
 		}
 	}
 	return domain.ModelResponse{}, &model.ProviderError{

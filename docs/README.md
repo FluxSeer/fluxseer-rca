@@ -2,11 +2,11 @@
 
 FluxSeer RCA is the product name for this Kubernetes-native RCA control
 plane. Source code, Helm charts, and build artifacts use matching `fluxseer` /
-`fluxseer-rca` naming; the most recently published release, `v0.4.0-beta.2`,
-includes approval lifecycle and guardrails for production remediation governance (see
+`fluxseer-rca` naming; the most recently published release, `v0.4.0-beta.3`,
+includes approval lifecycle, terminal-state TTL cleanup, and guardrails for production remediation governance (see
 [architecture/rename-migration-plan.md](architecture/rename-migration-plan.md)).
 
-Current published release: `v0.4.0-beta.2`
+Current published release: `v0.4.0-beta.3`
 
 Current API identity: `aiops.platform/v1alpha1`
 
@@ -23,17 +23,26 @@ dashboard screenshots, terminal history, or individual responder memory.
 - Product positioning: Kubernetes-native, evidence-verifiable RCA control plane.
 - Highest-value promise: make Kubernetes incident investigations durable,
   evidence-linked organizational knowledge.
-- Current release scope: `v0.4.0-beta.2` introduces approval lifecycle, escalation handling, approval audit timestamps, notification retry tracking, and production governance for remediation actions while maintaining read-only RCA as the default.
-- Current v0.4 engineering state: guardrails and approval lifecycle consolidation, preparing for v0.5 low-risk action execution.
+- Current release scope: `v0.4.0-beta.3` adds terminal-state TTL cleanup for `AgentAction` and `RemediationPlan` on top of approval lifecycle, escalation handling, approval audit timestamps, notification retry tracking, and production governance while maintaining read-only RCA as the default.
+- Current v0.4 engineering state: guardrails, approval lifecycle, and lifecycle
+  cleanup consolidation are complete for the published beta scope. The current
+  development milestone is the unreleased v0.5-alpha.1 **Safe Remediation**
+  slice, not a general-purpose executor expansion.
 - `InvestigationRequest` is the primary operator-first entrypoint for ad-hoc or externally triggered RCA.
 - `RiskRule` is a valid bootstrap detection and rule-pack entrypoint, not the canonical RCA ownership surface.
 - `RiskSignal` is a materialized finding, notification target, and compatibility projection.
 - `RemediationPlan` and `AgentAction` remain guarded experimental expansion paths.
 - Hosted model integrations are limited to OpenAI API, Claude API, and Gemini API; heuristic remains the no-secret default.
 - Prometheus, Loki, and Kubernetes Events are supported adapters. Prometheus and Loki remain optional integrations.
+- Official Helm rule packs contain 21 built-in detection patterns: 6
+  Kubernetes-native patterns enabled out of the box, plus 8 Prometheus and 7
+  Loki patterns that require their corresponding optional DataSources.
+- Detection success is distinct from evidence sufficiency and root-cause
+  verification; a matched incident is not automatically a confirmed RCA.
 
 ## Start Here
 
+- [Product and API glossary](glossary.md)
 - [Product requirements](product-requirements.md)
 - [Architecture overview](architecture/overview.md)
 - [Mermaid architecture diagrams](architecture/mermaid-diagrams.md)
@@ -53,9 +62,10 @@ Current maintained architecture:
 - [Investigation flow](architecture/investigation-flow.md)
 - [Model gateway](architecture/model-gateway.md)
 - [Action executor](architecture/action-executor.md)
+- [Executor safety contract](architecture/executor-safety-contract.md)
 - [Remediation flow](architecture/remediation-flow.md)
 - [v0.3 investigation experience](architecture/v0.3-investigation-experience.md)
-- [FluxSeer RCA → FluxSeer RCA rename migration plan](architecture/rename-migration-plan.md)
+- [FluxAgent → FluxSeer RCA rename migration plan](architecture/rename-migration-plan.md)
 
 Historical architecture records:
 
@@ -77,6 +87,15 @@ CRD references:
 - [RiskSignal](crd-reference/risksignal.md)
 - [RemediationPlan](crd-reference/remediationplan.md)
 - [AgentAction](crd-reference/agentaction.md)
+- [ApprovalPolicy](crd-reference/approvalpolicy.md)
+- [NamespaceThreshold](crd-reference/namespacethreshold.md)
+- [EscalationChain](crd-reference/escalationchain.md)
+
+Policy Pack samples:
+
+- [ApprovalPolicy sample](../config/samples/approval-policy.yaml)
+- [NamespaceThreshold sample](../config/samples/namespace-threshold.yaml)
+- [EscalationChain sample](../config/samples/escalation-chain.yaml)
 
 Adapter references:
 
@@ -90,13 +109,17 @@ Adapter references:
 Operations and packaging:
 
 - [Runtime modes](runtime-modes.md)
+- [Report contracts and migration](reporting.md)
+- [RiskRule anomaly reports](riskrule-reports.md)
 - [Helm rule packs](helm-rulepacks.md)
+- [Detection pattern catalog](../config/rule-packs/detection-patterns.json)
 - [Metrics](metrics.md)
 - [Kubernetes ecosystem integration contract](ecosystem-integration-contract.md)
 - [GitHub repository setup](github-repo.md)
 
 Product positioning:
 
+- [Product and API glossary](glossary.md)
 - [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [Open source positioning](open-source-positioning.md)
 - [Competitive positioning](competitive-positioning.md)
@@ -116,6 +139,8 @@ Product positioning:
 
 Current planning:
 
+- [Backlog execution ledger](backlog/README.md)
+- [v0.5 Safe Remediation](backlog/v0.5-safe-remediation.md)
 - [v0.4 workload target coverage gate](backlog/v0.4-workload-target-coverage.md)
 - [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [v0.3 product direction](backlog/v0.3-product-direction.md)

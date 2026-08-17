@@ -131,6 +131,28 @@ func TestVerifyClaimsDoesNotTreatUnhealthyAsHealthyContradiction(t *testing.T) {
 	}
 }
 
+func TestVerifyClaimsDoesNotTreatNegativeHealthStatesAsContradictions(t *testing.T) {
+	tests := []struct {
+		name      string
+		statement string
+		summary   string
+	}{
+		{name: "not ready", statement: "checkout-api pod is not ready", summary: "readiness probe failed and checkout-api pod is not ready"},
+		{name: "not available", statement: "payments service is not available", summary: "payments service is not available after a refused connection"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := VerifyClaims(
+				[]Claim{{ID: "claim-001", Statement: tt.statement}},
+				[]EvidenceRef{{ID: "evidence-001", Kind: "event", Summary: tt.summary}},
+			)
+			if result.Claims[0].Verification != VerificationSupported {
+				t.Fatalf("expected negative health state to support rather than contradict the claim, got %#v", result.Claims[0])
+			}
+		})
+	}
+}
+
 func TestVerifyClaimsWithoutEvidenceIsUnverified(t *testing.T) {
 	result := VerifyClaims([]Claim{{ID: "claim-001", Statement: "Pods are restarting"}}, nil)
 
@@ -151,10 +173,82 @@ func TestVerifyClaimsAppliesDomainSpecificSupportRequirements(t *testing.T) {
 		wantRefs   int
 	}{
 		{
-			name:  "image pull requires image pull event",
+			name:  "generic image pull failure requires image pull event",
+			claim: "The workload has an image pull failure",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "ErrImagePull", Summary: "failed to pull image"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   1,
+		},
+		{
+			name:  "generic image pull event does not prove missing image",
 			claim: "ImagePullBackOff is caused by a missing container image",
 			evidence: []EvidenceRef{
 				{ID: "evidence-001", Kind: "event", Reason: "ErrImagePull", Summary: "failed to pull image"},
+			},
+			wantStatus: VerificationUnsupported,
+			wantRefs:   0,
+		},
+		{
+			name:  "manifest unknown supports missing image claim",
+			claim: "ImagePullBackOff is caused by a missing container image",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "ErrImagePull", Summary: "failed to pull image: manifest unknown: image not found"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   1,
+		},
+		{
+			name:  "generic image pull event does not prove registry authentication failure",
+			claim: "Image pull failed because registry authentication was denied",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "ErrImagePull", Summary: "failed to pull image"},
+			},
+			wantStatus: VerificationUnsupported,
+			wantRefs:   0,
+		},
+		{
+			name:  "pull access denied supports registry authentication failure",
+			claim: "Image pull failed because registry authentication was denied",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "ErrImagePull", Summary: "pull access denied: authentication required"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   1,
+		},
+		{
+			name:  "generic image pull event does not prove registry DNS failure",
+			claim: "Image pull failed because the registry DNS lookup failed",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "ErrImagePull", Summary: "failed to pull image"},
+			},
+			wantStatus: VerificationUnsupported,
+			wantRefs:   0,
+		},
+		{
+			name:  "no such host supports registry DNS failure",
+			claim: "Image pull failed because the registry DNS lookup failed",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "ErrImagePull", Summary: "dial registry.example: no such host"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   1,
+		},
+		{
+			name:  "generic image pull event does not prove registry unavailability",
+			claim: "Image pull failed because the registry was unavailable",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "ErrImagePull", Summary: "failed to pull image"},
+			},
+			wantStatus: VerificationUnsupported,
+			wantRefs:   0,
+		},
+		{
+			name:  "registry timeout supports registry unavailability",
+			claim: "Image pull failed because the registry was unavailable",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "ErrImagePull", Summary: "registry timeout: service unavailable"},
 			},
 			wantStatus: VerificationSupported,
 			wantRefs:   1,

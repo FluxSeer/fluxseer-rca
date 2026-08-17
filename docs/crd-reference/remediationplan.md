@@ -2,6 +2,12 @@
 
 `RemediationPlan` is the reviewable bridge between risk detection and executable action.
 
+**Runtime support:** Experimental and guarded. The controller reconciles plans
+only when remediation is explicitly enabled. Real workload mutation additionally
+requires the experimental executor flag and is limited to the allowlisted
+Deployment `kubernetes.rolloutRestart` path; other executor routes remain
+simulation-oriented or unsupported.
+
 ## API
 
 - Group: `aiops.platform`

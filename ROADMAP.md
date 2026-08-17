@@ -89,15 +89,88 @@ operational timeline only; the durable approval timestamps remain in
 
 Focus:
 
-- safe executor enablement
-- low-risk action backends first
-- GitOps-first mutation paths where possible
+- **Safe Remediation**: prove that FluxSeer can safely execute an approved
+  remediation and verify whether it actually fixed the incident
+- Kubernetes executor for a small, explicitly allowlisted action set
+- GitOps executor as the preferred mutation path where possible
+- controller-owned policy status and stronger execution auditability
 
 Target outcomes:
 
-- enable only low-risk diagnostic and notification actions first
-- add safer GitOps PR style mutation backends before direct workload mutation
-- preserve dry-run, rollback, and audit guarantees for every executable action
+- complete the closed-loop path:
+  `RiskSignal -> RemediationPlan -> Approval -> AgentAction -> Executor -> Verification Investigation`
+- define an executor safety contract covering idempotency, retry budget,
+  timeout/deadline, execution identity, target identity, and audit metadata
+- execute only approved, allowlisted, low-risk Kubernetes actions and
+  GitOps/PR-style changes; direct broad mutation is not part of the MVP
+- persist effectiveness as a separate result from execution, with explicit
+  `Effective`, `Ineffective`, `Regressed`, or `Inconclusive` outcomes
+- reconcile `ApprovalPolicy`, `NamespaceThreshold`, and `EscalationChain`
+  status enough for consumers to see readiness, observed generation, and
+  validation errors
+- make the action audit trail link the approval, executor attempt, target,
+  policy snapshot, and post-action verification
+
+The detailed scope, dependency order, and acceptance gates are tracked in
+[`docs/backlog/v0.5-safe-remediation.md`](docs/backlog/v0.5-safe-remediation.md).
+
+The first release checkpoint is `v0.5-alpha.1`:
+
+```text
+Executor safety contract
++ one real allowlisted Kubernetes remediation path
++ post-action effectiveness verification
+```
+
+GitOps is a follow-up v0.5 backend. It is not an `alpha.1` acceptance gate.
+
+### `v0.6`
+
+Focus:
+
+- automation workflow around an already-safe executor
+
+Target outcomes:
+
+- multi-stage escalation progression, including timeout notification,
+  reassignment, and auto-reject decisions where policy permits
+- `RiskSignal` to `InvestigationRequest` alert-ingress workflow
+- bounded reinvestigation, cooldown, deduplication, and loop prevention
+- native alert receiver integrations only if a concrete product need is
+  demonstrated; generic webhook remains the baseline
+
+### `v0.7`
+
+Focus:
+
+- evidence governance and observability expansion
+
+Target outcomes:
+
+- OpenTelemetry as trace/evidence input rather than metrics-only scaffolding
+- CloudWatch adapter, if its support contract is justified
+- RawSnapshot lifecycle, encryption at rest, access policy, deletion policy,
+  retention, and audit contracts
+- production-grade evidence storage and lifecycle operations
+
+### `v0.8`
+
+Focus:
+
+- advanced investigation and evaluation workflows
+
+Target outcomes:
+
+- runtime replay runner
+- adaptive investigation runtime after bounded experiments establish a safe
+  contract
+- cross-investigation correlation and advanced causal analysis
+
+The following are intentionally not committed to the v0.5 MVP: a general
+Runbook executor, full multi-stage `EscalationChain` semantics, native
+Slack/Email/PagerDuty receivers, arbitrary alert-ingress automation,
+`NamespaceThreshold.spec.protectionLevel`, RawSnapshot storage, OTel or
+CloudWatch production support, replay execution, and adaptive runtime.
 
 ## Workstreams
 
@@ -112,9 +185,10 @@ Target outcomes:
 
 - harden Prometheus and Loki auth and retry behavior
 - add better Kubernetes Event filtering
-- expand OpenTelemetry and CloudWatch from scaffold to usable integration
 - support templated queries driven by target metadata and rule configuration
 - evolve toward capability-oriented datasource contracts and dedicated datasource configuration resources
+- keep OpenTelemetry and CloudWatch explicitly scaffolded until the v0.7
+  observability contract is approved
 
 ### Reasoning
 
@@ -129,18 +203,28 @@ Target outcomes:
 - summarize evidence into `RiskSignal` status instead of storing raw large payloads in etcd
 - add redaction before any provider-bound reasoning call
 - preserve references to datasource evidence without leaking secrets
+- use a follow-up `InvestigationRequest` as the v0.5 verification boundary for
+  remediation effectiveness
+- defer raw evidence governance, encryption, deletion, and access policy to
+  the v0.7 evidence milestone
 
 ### Guardrails and Approval
 
 - explicit policy packs
 - environment-specific thresholds
 - approval timeout and escalation handling
+- reconcile policy status and validation conditions for the v0.5 executor
+  contract
+- keep full multi-stage escalation behavior out of v0.5
 
 ### Execution
 
-- delay broad executor expansion until the read-only RCA path is stable
-- prefer low-risk diagnostics and GitOps-oriented actions first
-- keep mutating Kubernetes executors out of the default product truth
+- implement the v0.5 Safe Remediation checklist in dependency order
+- use an allowlisted Kubernetes executor and a GitOps/PR executor as the first
+  real backends
+- keep Runbook execution, arbitrary mutation, and native notification
+  integrations deferred
+- require post-action verification before claiming remediation effectiveness
 
 ### Demo and DX
 
@@ -149,7 +233,7 @@ Target outcomes:
 - expand tutorial coverage and expected outputs
 - make validation repeatable for users who did not build the project themselves
 
-## Non-Goals for the Current Phase
+## Non-Goals for v0.4 and v0.5 Safe Remediation
 
 - claiming full autonomous production remediation
 - coupling the project to one observability vendor
@@ -157,6 +241,16 @@ Target outcomes:
 - letting provider output directly trigger production mutation
 - storing unredacted logs or secrets in CRD status
 - shipping Prometheus or Loki as mandatory bundled dependencies
+- shipping a general-purpose Runbook executor
+- implementing the complete multi-stage `EscalationChain` engine
+- adding native Slack, Email, or PagerDuty integrations before a generic
+  webhook contract proves insufficient
+- treating `protectionLevel` as meaningful before its enforcement semantics
+  are defined
+- making RawSnapshot, encryption, deletion policy, or payload access policy a
+  v0.5 prerequisite
+- making OpenTelemetry, CloudWatch, replay, adaptive investigation, or
+  automatic alert reinvestigation part of the v0.5 acceptance gate
 
 ## `v0.2` Definition of Done
 

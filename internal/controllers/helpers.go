@@ -24,6 +24,8 @@ const (
 	annotationLineageSourceUID   = "fluxseer-rca.aiops.platform/lineage-source-uid"
 	annotationLineageGeneration  = "fluxseer-rca.aiops.platform/lineage-generation"
 	annotationTargetUID          = "fluxseer-rca.aiops.platform/target-uid"
+	annotationRiskSignalRef      = "fluxseer-rca.aiops.platform/risk-signal-ref"
+	annotationRiskSignalUID      = "fluxseer-rca.aiops.platform/risk-signal-uid"
 	annotationFindingFingerprint = "fluxseer-rca.aiops.platform/finding-fingerprint"
 	annotationFindingSchema      = "fluxseer-rca.aiops.platform/finding-schema"
 	annotationFindingType        = "fluxseer-rca.aiops.platform/finding-type"
@@ -33,6 +35,7 @@ const (
 	annotationTargetGeneration   = "fluxseer-rca.aiops.platform/target-generation"
 	annotationInvestigationDepth = "fluxseer-rca.aiops.platform/investigation-depth"
 	annotationWindowBucket       = "fluxseer-rca.aiops.platform/window-bucket"
+	annotationEscalationChainRef = "fluxseer-rca.aiops.platform/escalation-chain-ref"
 	conditionReady               = "Ready"
 	conditionDegraded            = "Degraded"
 	conditionTargetResolved      = "TargetResolved"
@@ -112,6 +115,8 @@ func targetRefString(target v1alpha1.TargetRef) string {
 
 func defaultRollbackPlan(actionType string) []string {
 	switch actionType {
+	case "kubernetes.rolloutRestart":
+		return []string{"verify the restarted Deployment rollout and revert the triggering workload change if health does not recover"}
 	case "kubernetes.rolloutPause":
 		return []string{"resume rollout after validation", "revert deployment image if crash loop persists"}
 	case "kubernetes.scaleDeployment":

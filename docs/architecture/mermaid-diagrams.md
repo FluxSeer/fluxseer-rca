@@ -7,14 +7,18 @@ Scope:
 - current default path: read-only RCA through `RiskRule` and `InvestigationRequest`
 - current optional integrations: Prometheus, Loki, Kubernetes Events, OpenAI API, Claude API, Gemini API, heuristic provider
 - current guarded experimental path: `RemediationPlan` and `AgentAction` with approval lifecycle and escalation
-- current release identity: `v0.4.0-beta.1`
+- current release identity: `v0.4.0-beta.3`
 - API group/version identity: `aiops.platform/v1alpha1`
 
 The API group and version identity are fixed for the current `v0.4` line. The `v1alpha1` schema remains subject to compatible beta hardening.
 
 The diagrams are intentionally Kubernetes-native. Hosted providers receive bounded evidence bundles; they do not receive cluster credentials or direct Kubernetes API access.
 
-Important `v0.4.0-beta.1` boundary: approval lifecycle and escalation handling for `RemediationPlan` and `AgentAction` enable production governance of guarded remediation. Direct `RiskRule` RCA receives gateway-level hosted-provider egress opt-in enforcement; the canonical `InvestigationRequest` path owns full `status.execution.egressAudit` visibility.
+Important `v0.4.0-beta.3` boundary: approval lifecycle, escalation handling,
+and terminal-state cleanup for `RemediationPlan` and `AgentAction` enable
+governance of guarded remediation. Direct `RiskRule` RCA receives
+gateway-level hosted-provider egress opt-in enforcement; the canonical
+`InvestigationRequest` path owns full `status.execution.egressAudit` visibility.
 
 ## System Context
 
@@ -447,7 +451,7 @@ sequenceDiagram
         RR->>DS: execute bounded configured signals
         DS-->>RR: query results
         RR->>GW: optional direct RCA if ai.rcaEnabled=true
-        Note over RR,GW: v0.4.0-beta.1 direct RiskRule RCA applies gateway-level hosted-provider egress opt-in, but does not own canonical egressAudit status.
+        Note over RR,GW: v0.4.0-beta.3 direct RiskRule RCA applies gateway-level hosted-provider egress opt-in, but does not own canonical egressAudit status.
         GW->>MP: provider-neutral request
         MP-->>GW: normalized RCA response
         GW-->>RR: RCA result or degraded provider issue
@@ -551,7 +555,7 @@ flowchart LR
 
 ## Hosted Provider Egress Decision
 
-This diagram describes the canonical `InvestigationRequest` path in `v0.4.0-beta.1`.
+This diagram describes the canonical `InvestigationRequest` path in `v0.4.0-beta.3`.
 
 ```mermaid
 flowchart TD
@@ -682,7 +686,7 @@ flowchart TD
 
 `EvidenceRef.query` may be persisted in `InvestigationRequest.status`; users should not place secret-bearing text in query strings. The beta.2 retention boundary avoids storing full raw adapter payloads, large raw logs, and provider prompts in status.
 
-The `local-filesystem` normalized snapshot store is development-oriented in `v0.4.0-beta.1`: it is not encrypted, has no automatic snapshot garbage collection, and should not be treated as durable production evidence storage.
+The `local-filesystem` normalized snapshot store is development-oriented in `v0.4.0-beta.3`: it is not encrypted, has no automatic snapshot garbage collection, and should not be treated as durable production evidence storage.
 
 ```mermaid
 flowchart TB
@@ -797,6 +801,7 @@ sequenceDiagram
     participant AA as AgentAction
     participant AAC as AgentActionReconciler
     participant Exec as executor.Router
+    participant IR as Verification InvestigationRequest
 
     Note over RS,AAC: Disabled by default. Requires explicit feature and RBAC profile. AgentAction status has approval, dry-run, execution, and effectiveness fields; approval is digest-bound to what guardrails actually evaluated (see crd-reference/agentaction.md), spec.dryRunResult compatibility is still tracked for hardening.
     RS-->>RSC: confirmed signal
@@ -821,7 +826,10 @@ sequenceDiagram
         AAC->>Exec: execute or simulate
         Exec-->>AAC: result
         AAC->>AA: status.execution.phase=Succeeded or Failed
-        AAC->>AA: status.effectiveness remains Pending until post-action verification exists
+        AAC->>AA: baseline + status.effectiveness=Verifying
+        AAC->>IR: owned readOnly verification InvestigationRequest
+        IR-->>AAC: terminal evidence outcome
+        AAC->>AA: status.effectiveness=Effective/Ineffective/Regressed/Inconclusive
     end
 ```
 
@@ -860,7 +868,7 @@ flowchart TB
 
 ## Release And Publication Pipeline
 
-This diagram records the `v0.4.0-beta.1` release path used by the project. The `release.yml` workflow is triggered by the annotated tag; the `test -> main -> tag` path is release discipline, not a hard workflow dependency.
+This diagram records the `v0.4.0-beta.3` release path used by the project. The `release.yml` workflow is triggered by the annotated tag; the `test -> main -> tag` path is release discipline, not a hard workflow dependency.
 
 ```mermaid
 flowchart LR
@@ -868,7 +876,7 @@ flowchart LR
     MainBranch[main branch]
     Gate[verify-release-v0.3-beta]
     MainCI[main CI]
-    Tag[annotated tag v0.4.0-beta.1]
+    Tag[annotated tag v0.4.0-beta.3]
     ReleaseWF[release.yml]
     Operator[GHCR operator image]
     Demo[GHCR demo-observability image]

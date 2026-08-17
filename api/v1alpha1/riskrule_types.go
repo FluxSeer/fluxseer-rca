@@ -59,8 +59,9 @@ const (
 )
 
 type RiskRuleInvestigationPolicy struct {
-	Mode             string `json:"mode,omitempty"`
-	CreateRiskSignal bool   `json:"createRiskSignal,omitempty"`
+	Mode                 string               `json:"mode,omitempty"`
+	CreateRiskSignal     bool                 `json:"createRiskSignal,omitempty"`
+	EvidenceRequirements EvidenceRequirements `json:"evidenceRequirements,omitempty"`
 }
 
 type RiskRuleSpec struct {

@@ -11,6 +11,17 @@ Participation in this project is governed by the [Code of Conduct](CODE_OF_CONDU
 - Add new model providers behind `internal/model` interfaces.
 - Prefer read-only and GitOps-first flows over direct mutation.
 - Every executable action must remain guardrailed and auditable.
+- Preserve the distinction between detection, evidence sufficiency, claim
+  verification, and the final verdict/outcome.
+- Detection success must not imply RCA confirmation.
+- An RCA verdict must not be more specific than the strongest
+  evidence-supported causal claim.
+
+Use the terminology in the [product and API glossary](docs/glossary.md) when
+adding detection patterns, evidence profiles, status fields, tests, or product
+documentation. Application-specific parameterized queries are signal
+templates; do not count them as new built-in detection patterns unless the
+project ships and maintains the detector as an official rule-pack default.
 
 ## Development
 

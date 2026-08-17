@@ -2,11 +2,23 @@
 
 This document defines the supported mode switches in FluxSeer RCA and separates user-facing runtime configuration from maintainer-only deployment and release flows.
 
-Current release baseline: `v0.4.0-beta.2`
+Current release baseline: `v0.4.0-beta.3`
 
 Current API identity: `aiops.platform/v1alpha1`
 
 The API group and version identity are fixed for the current v0.4 line. This does not mean that every v1alpha1 schema field is generally available or stable.
+
+## Public Capability Labels
+
+`Supported` means tested public runtime behavior. `Experimental` means
+implemented behavior that requires explicit feature and RBAC opt-in and is not
+a production-readiness claim. `Planned` means documented future work without a
+supported implementation. `Reserved` means a compatibility schema or
+extension point that is not applied at runtime.
+
+CRD installation is not equivalent to runtime support. The current published
+release remains `v0.4.0-beta.3`; the bounded `v0.5-alpha.1` executor slice is
+development work and is not yet a published release.
 
 ## Mode Ownership
 
@@ -51,6 +63,7 @@ These are the primary mode choices an installer or API user should understand.
 | Evidence retention | `MetadataOnly`, `NormalizedSnapshot`, `RawSnapshot` | `MetadataOnly` | `InvestigationRequest` |
 | Query security | `LegacyUnrestricted`, `TemplatesOnly` | compatibility-dependent | `DataSource` |
 | Rule packs | Kubernetes, Prometheus, Loki baseline | Kubernetes baseline enabled | Helm |
+| Policy pack | Approval policies, namespace thresholds, escalation routing | disabled | Helm + policy CRDs |
 | Approval lifecycle | auto approval, human approval, escalation | disabled with remediation | `RemediationPlan` / `AgentAction` |
 
 ## Runtime Capability
@@ -63,6 +76,8 @@ features:
     enabled: false
   remediation:
     enabled: false
+  policyPack:
+    enabled: false
   experimentalExecutor:
     enabled: false
 ```
@@ -71,6 +86,7 @@ The default read-only RCA mode is not a single boolean. It is the installed stat
 
 ```text
 remediation=false
+policyPack=false
 experimentalExecutor=false
 legacyDeploymentRisk=false
 ```
@@ -82,7 +98,8 @@ Capability semantics:
 | read-only RCA | enabled | Supported | Collect bounded evidence and write FluxSeer RCA CRD status without mutating workloads. |
 | `legacyDeploymentRisk` | disabled | Legacy / opt-in | Enables the annotation-driven Deployment watcher. |
 | `remediation` | disabled | Experimental / opt-in | Enables `RemediationPlan` and `AgentAction` reconciliation. |
-| `experimentalExecutor` | disabled | Experimental / opt-in | Adds executor-like permissions such as Job and ConfigMap mutation. |
+| `policyPack` | disabled | Experimental / opt-in | Enables CRD-based approval policy, namespace threshold, and escalation routing for remediation. Requires remediation. |
+| `experimentalExecutor` | disabled | Experimental / opt-in | Adds only the currently implemented Deployment mutation permissions for the allowlisted `kubernetes.rolloutRestart` path. |
 
 ## Approval Lifecycle and Audit
 
@@ -123,9 +140,53 @@ Dependency rules:
 
 ```text
 experimentalExecutor -> requires remediation
+policyPack           -> requires remediation
 remediation          -> independent from legacyDeploymentRisk
 legacy watcher       -> compatibility only
 ```
+
+## Policy Pack
+
+The policy pack is an opt-in layer for guarded remediation. Enable it together
+with remediation through Helm:
+
+```yaml
+features:
+  remediation:
+    enabled: true
+  policyPack:
+    enabled: true
+```
+
+The current beta implements these policy behaviors:
+
+- `ApprovalPolicy` selects auto, manual, or rejected decisions by action type
+  and severity, and can provide an approval timeout and escalation-chain
+  reference.
+- `NamespaceThreshold` selects the highest-priority applicable policy and
+  enforces `activePlansLimit` and `pendingApprovalsLimit`. When a plan omits
+  TTL or approval timeout values, `defaultTTLSeconds` and
+  `defaultApprovalTimeoutSeconds` are persisted onto the plan and generated
+  action; explicit plan values take precedence.
+- `EscalationChain` selects and records an escalation-chain snapshot when an
+  approval timeout notification is emitted.
+
+The following CRD fields remain schema contracts that are not applied by the
+current beta controller: `NamespaceThreshold.spec.protectionLevel` and the
+detailed stage-by-stage `EscalationChain.spec.stages[].delay`, `condition`,
+`actions`, `assignees`, and `notificationTemplate` behavior. The current
+escalation path notifies and marks the action `Escalated`; it does not
+auto-reject, reassign, or force-execute an action.
+
+The policy resources expose status fields for future validation reporting, but
+the current beta does not run separate reconcilers that populate their
+`Pending`/`Valid`/`Invalid`/`Disabled` status. Invalid or explicitly disabled
+resources are ignored by policy resolution.
+
+The policy CRD runtime support is therefore limited to selection,
+concurrency/TTL/approval defaults, and escalation notification. Protection-level
+behavior, stage-by-stage escalation actions, and separate policy status
+reconcilers are reserved.
 
 ## RCA Entry
 
@@ -169,7 +230,7 @@ spec:
 
 `readOnly` means FluxSeer RCA may read declared evidence sources and write FluxSeer RCA-owned status or optional result resources. It does not grant workload mutation.
 
-Other execution modes are not implemented in `v0.4.0-beta.2`. The field exists as a compatibility and future-extension point, not as a hidden remediation switch.
+Other execution modes are not implemented in `v0.4.0-beta.3`. The field exists as a compatibility and future-extension point, not as a hidden remediation switch.
 
 ## RCA Provider
 
@@ -333,7 +394,7 @@ rbac:
 | --- | --- |
 | `readOnlyRCA` | Default read-only RCA permissions. |
 | `remediation` | Adds remediation/action CRD permissions. |
-| `experimentalExecutor` | Adds executor-like Job and ConfigMap permissions. |
+| `experimentalExecutor` | Adds bounded Deployment `get`/`patch`/`update` permissions for the allowlisted rollout-restart path. |
 
 The design risk is that feature flags and `rbac.profile` can become two sources of truth. For example:
 
@@ -375,7 +436,9 @@ The manager process exposes flags:
 
 ```text
 --enable-remediation
+--enable-policy-pack
 --enable-legacy-deployment-risk
+--enable-experimental-executor
 --leader-elect
 --metrics-bind-address
 --health-probe-bind-address
@@ -385,7 +448,7 @@ These split into two groups:
 
 | Group | Flags |
 | --- | --- |
-| Capability flags | `--enable-remediation`, `--enable-legacy-deployment-risk` |
+| Capability flags | `--enable-remediation`, `--enable-policy-pack`, `--enable-legacy-deployment-risk` |
 | Operational flags | `--leader-elect`, `--metrics-bind-address`, `--health-probe-bind-address` |
 
 For normal users, Helm should be the public configuration surface. Container args are the Deployment rendering mechanism, not the preferred user interface.
@@ -404,7 +467,7 @@ Do not document these as user-facing runtime modes. They belong in release engin
 
 ## Support Matrix
 
-In this beta document, `Supported` means implemented, covered by the current runtime path, and intended for use in `v0.4.0-beta.2`. It does not imply general availability or compatibility guarantees beyond the documented API group/version identity.
+In this beta document, `Supported` means implemented, covered by the current runtime path, and intended for use in `v0.4.0-beta.3`. It does not imply general availability or compatibility guarantees beyond the documented API group/version identity.
 
 | Capability | Support level |
 | --- | --- |

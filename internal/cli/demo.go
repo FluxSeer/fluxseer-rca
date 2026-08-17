@@ -29,6 +29,7 @@ func runDemo(stdout io.Writer) error {
 			AllowedActionTypes: []string{
 				"kubernetes.scaleDeployment",
 				"kubernetes.rolloutPause",
+				"kubernetes.rolloutRestart",
 				"gitops.createPullRequest",
 				"runbook.triggerWorkflow",
 				"notification.sendSlack",

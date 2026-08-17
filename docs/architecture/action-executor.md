@@ -6,6 +6,13 @@ FluxSeer RCA separates decision-making from execution. The executor layer only r
 
 Source: [internal/executor/router.go](../../internal/executor/router.go)
 
+The target v0.5 contract and lifecycle are defined in the
+[Executor safety contract](executor-safety-contract.md). Batch 1 now exposes
+the typed `ExecutorRequest` and `ExecutorResult` contract, deterministic
+identity generation, idempotency enforcement, lifecycle recovery, and one
+gated real Kubernetes side-effect path. The bundled GitOps, Runbook, and
+non-allowlisted Kubernetes routes remain simulation-oriented.
+
 The router dispatches by action prefix:
 
 - `kubernetes.*`
@@ -36,8 +43,16 @@ This means controllers and model providers do not need to know how a Kubernetes 
 
 ### Kubernetes Executor
 
-- simulates rollout pause, scale, or other Kubernetes-style actions
-- returns execution metadata instead of mutating a live workload
+- simulates unsupported or non-alpha Kubernetes-style actions by default
+- executes only the allowlisted `kubernetes.rolloutRestart` Deployment path
+  when `--enable-experimental-executor=true` and the matching RBAC profile are
+  enabled
+- validates target UID and records the execution identity on the Pod template
+- resolves uncertain results through read-after-write lookup
+- captures an immutable pre-action Deployment health baseline
+- creates a settling-window, read-only verification investigation and evaluates
+  the post-action result as `Effective`, `Ineffective`, `Regressed`, or
+  `Inconclusive`
 
 ### GitOps Executor
 
@@ -105,6 +120,11 @@ Live executors should eventually support:
 
 ## Current Production Posture
 
-The executors expose the right interfaces, but only notification has a real outbound path in the current repo. Kubernetes, GitOps, and runbook execution are still simulation-oriented.
+The executors expose the shared contract. Notification has a real outbound
+path, and Kubernetes now has one explicitly gated `rolloutRestart` path;
+GitOps, Runbook, and all other Kubernetes actions remain simulation-oriented.
 
-That is intentional for `v0.1` because the project should lead with safe contracts, auditable flow, and local demoability.
+That remains the current `v0.4.0-beta.3` release posture, while this branch
+contains the bounded v0.5-alpha.1 Safe Remediation slice: one allowlisted
+Kubernetes action with post-action verification. GitOps production execution,
+Runbook execution, and broad autonomous mutation remain deferred.

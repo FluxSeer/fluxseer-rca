@@ -28,6 +28,7 @@ import (
 	promadapter "github.com/FluxSeer/fluxseer-rca/internal/datasource/prometheus"
 	"github.com/FluxSeer/fluxseer-rca/internal/datasourceconfig"
 	"github.com/FluxSeer/fluxseer-rca/internal/detector"
+	"github.com/FluxSeer/fluxseer-rca/internal/escalation"
 	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
 	"github.com/FluxSeer/fluxseer-rca/internal/executor"
 	"github.com/FluxSeer/fluxseer-rca/internal/guardrails"
@@ -40,6 +41,7 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/model/openai"
 	"github.com/FluxSeer/fluxseer-rca/internal/modelgateway"
 	"github.com/FluxSeer/fluxseer-rca/internal/notifier/webhook"
+	"github.com/FluxSeer/fluxseer-rca/internal/thresholds"
 	"github.com/FluxSeer/fluxseer-rca/internal/version"
 )
 
@@ -51,12 +53,16 @@ func Run(args []string, out io.Writer) error {
 	var probeAddr string
 	var enableLeaderElection bool
 	var enableRemediation bool
+	var enableExperimentalExecutor bool
 	var enableLegacyDeploymentRisk bool
+	var enablePolicyPack bool
 	fs.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	fs.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	fs.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	fs.BoolVar(&enableRemediation, "enable-remediation", false, "Enable RemediationPlan and AgentAction reconciliation.")
+	fs.BoolVar(&enableExperimentalExecutor, "enable-experimental-executor", false, "Enable real allowlisted executor backends.")
 	fs.BoolVar(&enableLegacyDeploymentRisk, "enable-legacy-deployment-risk", false, "Enable legacy annotation-driven Deployment risk reconciliation.")
+	fs.BoolVar(&enablePolicyPack, "enable-policy-pack", false, "Enable CRD-based ApprovalPolicy evaluation for remediation plans.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -81,10 +87,11 @@ func Run(args []string, out io.Writer) error {
 		return fmt.Errorf("unable to start manager: %w", err)
 	}
 
-	policyEngine := guardrails.NewEngine(guardrails.Policy{
+	legacyGuardrails := guardrails.NewEngine(guardrails.Policy{
 		AllowedActionTypes: []string{
 			"kubernetes.scaleDeployment",
 			"kubernetes.rolloutPause",
+			"kubernetes.rolloutRestart",
 			"gitops.createPullRequest",
 			"runbook.triggerWorkflow",
 			"notification.sendSlack",
@@ -93,9 +100,20 @@ func Run(args []string, out io.Writer) error {
 		AutoApproveMaxSeverity:   "low",
 		RequireApprovalAtOrAbove: "medium",
 	})
+	policyEngine := guardrails.NewPolicyEngine(mgr.GetAPIReader(), legacyGuardrails, enablePolicyPack)
+	var escalationRouter *escalation.Router
+	var thresholdEnforcer *thresholds.Enforcer
+	if enablePolicyPack {
+		escalationRouter = escalation.NewRouter(mgr.GetAPIReader())
+		thresholdEnforcer = thresholds.NewEnforcer(mgr.GetAPIReader())
+	}
 
+	kubernetesExecutor := executor.KubernetesExecutor{}
+	if enableExperimentalExecutor {
+		kubernetesExecutor.Client = mgr.GetClient()
+	}
 	executorRouter := executor.NewRouter(
-		executor.KubernetesExecutor{},
+		kubernetesExecutor,
 		executor.GitOpsExecutor{},
 		executor.RunbookExecutor{},
 		executor.NotificationExecutor{WebhookURL: os.Getenv("FLUXSEER_RCA_WEBHOOK_URL")},
@@ -193,10 +211,13 @@ func Run(args []string, out io.Writer) error {
 
 	if enableRemediation {
 		if err := (&controllers.RemediationPlanReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			Guardrails:    policyEngine,
-			EventRecorder: mgr.GetEventRecorderFor("remediationplan-controller"),
+			Client:            mgr.GetClient(),
+			Scheme:            mgr.GetScheme(),
+			Guardrails:        legacyGuardrails,
+			PolicyEngine:      policyEngine,
+			Thresholds:        thresholdEnforcer,
+			PolicyPackEnabled: enablePolicyPack,
+			EventRecorder:     mgr.GetEventRecorderFor("remediationplan-controller"),
 		}).SetupWithManager(mgr); err != nil {
 			return fmt.Errorf("unable to create RemediationPlan controller: %w", err)
 		}
@@ -207,10 +228,12 @@ func Run(args []string, out io.Writer) error {
 			return fmt.Errorf("unable to create RemediationPlan TTL controller: %w", err)
 		}
 		agentActionReconciler := &controllers.AgentActionReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			Executor:      executorRouter,
-			EventRecorder: mgr.GetEventRecorderFor("agentaction-controller"),
+			Client:            mgr.GetClient(),
+			Scheme:            mgr.GetScheme(),
+			Executor:          executorRouter,
+			EscalationRouter:  escalationRouter,
+			PolicyPackEnabled: enablePolicyPack,
+			EventRecorder:     mgr.GetEventRecorderFor("agentaction-controller"),
 		}
 		if webhookURL != "" {
 			// Reuse the same webhook endpoint RiskSignalNotificationReconciler

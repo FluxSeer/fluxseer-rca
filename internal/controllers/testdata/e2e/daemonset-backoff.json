@@ -37,5 +37,13 @@
     "rootCauseType": "CrashLoop",
     "claimVerification": "Supported",
     "providerCalls": 1
+  },
+  "baseline": {
+    "scenario": "CrashLoopBackOff",
+    "expectedDiagnosis": "DaemonSet pods are repeatedly restarting after BackOff events.",
+    "expectedEvidence": [
+      {"kind": "event", "source": "kubernetes-events", "reason": "BackOff"}
+    ],
+    "humanJudgment": "Correct when the crash-loop claim remains linked to the BackOff event."
   }
 }

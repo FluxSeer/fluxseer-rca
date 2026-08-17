@@ -2,7 +2,7 @@ name: FluxSeer RCA CI
 
 on:
   push:
-    branches: [main, test]
+    branches: [main]
   pull_request:
     branches: [main]
     paths:
@@ -15,8 +15,11 @@ on:
       - "hack/**"
       - "internal/**"
       - "test/**"
+      - "CHANGELOG.md"
+      - "CONTRIBUTING.md"
       - "Dockerfile"
       - "Makefile"
+      - "README.md"
       - "go.mod"
       - "go.sum"
       - ".github/workflows/**"
@@ -30,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RELEASE_VERSION: v0.4.0-beta.2
+  RELEASE_VERSION: v0.4.0-beta.3
   TARGET_PLATFORM: linux/amd64
 
 jobs:
@@ -104,6 +107,13 @@ jobs:
 
       - name: Verify rule packs
         run: make verify-rule-packs
+
+      - name: Verify detection catalog and documentation contract
+        run: |
+          make verify-detection-pattern-catalog
+          make verify-traffic-pattern-promql
+          make verify-prometheus-pattern-promql
+          make verify-docs-contract
 
       - name: Helm lint
         run: helm lint charts/fluxseer-rca

@@ -33,12 +33,17 @@ spec:
         (
           sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m]))
           /
-          clamp_min(sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m] offset {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.comparisonOffset }})), 0.001)
+          clamp_min(sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m] offset {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.comparisonOffset }})), {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.baselineEpsilon }})
         )
         *
         (
           sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m]))
           > bool {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.minimumCurrentRate }}
+        )
+        *
+        (
+          sum(rate(http_requests_total{namespace="{{ "{{ .namespace }}" }}",app="{{ "{{ .app }}" }}"}[5m] offset {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.comparisonOffset }}))
+          > bool {{ .Values.rulePacks.prometheusBaseline.trafficAnomaly.baselineEpsilon }}
         )
       threshold:
         operator: ">"

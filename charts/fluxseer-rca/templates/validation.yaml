@@ -8,3 +8,6 @@
 {{- if and (eq $profile "experimentalExecutor") (not (or .Values.controller.enableRemediation .Values.features.remediation.enabled)) -}}
 {{- fail "rbac.profile=experimentalExecutor requires features.remediation.enabled=true or controller.enableRemediation=true" -}}
 {{- end -}}
+{{- if and (or .Values.controller.enablePolicyPack .Values.features.policyPack.enabled) (not (or .Values.controller.enableRemediation .Values.features.remediation.enabled)) -}}
+{{- fail "policy pack requires features.remediation.enabled=true or controller.enableRemediation=true" -}}
+{{- end -}}
