@@ -24,9 +24,10 @@ dashboard screenshots, terminal history, or individual responder memory.
 - Highest-value promise: make Kubernetes incident investigations durable,
   evidence-linked organizational knowledge.
 - Current release scope: `v0.4.0-beta.3` adds terminal-state TTL cleanup for `AgentAction` and `RemediationPlan` on top of approval lifecycle, escalation handling, approval audit timestamps, notification retry tracking, and production governance while maintaining read-only RCA as the default.
-- Current v0.4 engineering state: guardrails and approval lifecycle
-  consolidation is complete for the beta scope; the next planned milestone is
-  v0.5 **Safe Remediation**, not a general-purpose executor expansion.
+- Current v0.4 engineering state: guardrails, approval lifecycle, and lifecycle
+  cleanup consolidation are complete for the published beta scope. The current
+  development milestone is the unreleased v0.5-alpha.1 **Safe Remediation**
+  slice, not a general-purpose executor expansion.
 - `InvestigationRequest` is the primary operator-first entrypoint for ad-hoc or externally triggered RCA.
 - `RiskRule` is a valid bootstrap detection and rule-pack entrypoint, not the canonical RCA ownership surface.
 - `RiskSignal` is a materialized finding, notification target, and compatibility projection.

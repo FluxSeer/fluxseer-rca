@@ -15,6 +15,9 @@ GOWORK=off go run ./cmd/manager --enable-remediation=true
 ```
 
 The wiring lives in [internal/operatorapp/run.go](../../internal/operatorapp/run.go).
+The real Kubernetes mutation path additionally requires
+`--enable-experimental-executor=true`; remediation without that flag remains
+review/simulation-oriented.
 
 ## Flow Summary
 
@@ -91,14 +94,17 @@ Guardrails also exist to prevent:
 - bypass of approval on destructive or higher-risk actions
 - remediation against protected targets without explicit policy allowance
 
-Default allowlisted action types:
+Action routes recognized by the compatibility guardrail layer:
 
-- `kubernetes.scaleDeployment`
-- `kubernetes.rolloutPause`
-- `kubernetes.rolloutRestart` (v0.5-alpha.1 allowlisted slice)
-- `gitops.createPullRequest`
-- `runbook.triggerWorkflow`
-- `notification.sendSlack`
+- `kubernetes.rolloutRestart` — the only real Kubernetes mutation path in the
+  current v0.5-alpha.1 development slice.
+- `kubernetes.scaleDeployment` and `kubernetes.rolloutPause` — simulation or
+  compatibility routes; not supported real mutation backends.
+- `gitops.createPullRequest` — planned production backend; current route is
+  simulation-oriented.
+- `runbook.triggerWorkflow` — not a supported production backend; current route
+  is simulation-oriented.
+- `notification.sendSlack` — notification routing, not workload mutation.
 
 ## Status Model
 
@@ -146,4 +152,8 @@ flowchart LR
 
 ## Important Limitation
 
-This path exists and is testable, but the executors are still simulation-oriented. The repo exposes the contracts, policy seams, and controller flow before claiming production-grade autonomous remediation.
+This path exists and is testable. The allowlisted Kubernetes
+`kubernetes.rolloutRestart` route performs a real mutation only under the
+experimental executor gate and records bounded post-action effectiveness. Other
+Kubernetes, GitOps, and Runbook routes remain simulation-oriented or unsupported;
+the project does not claim production-grade autonomous remediation.

@@ -436,13 +436,17 @@ Current investigation layer in `v0.4.0-beta.3`:
 - thin CLI wrapper over the CRD workflow
 - future UI wrappers over the same CRD workflow
 
-Simulation-oriented today:
+Simulation-oriented or unsupported today:
 
-- most `kubernetes.*` executor behavior
-- most `gitops.*` executor behavior
-- most `runbook.*` executor behavior
+- non-allowlisted `kubernetes.*` executor behavior; the experimental
+  `kubernetes.rolloutRestart` path is the one real Kubernetes slice
+- `gitops.*` executor behavior
+- `runbook.*` executor behavior
 
-This means FluxSeer RCA should be described today as a read-only RCA control plane with optional `RiskSignal` projection and guarded remediation expansion seams, not as a fully autonomous production remediation system.
+This means FluxSeer RCA should be described today as a read-only RCA control
+plane with optional `RiskSignal` projection and one explicitly gated
+experimental remediation slice, not as a fully autonomous production
+remediation system.
 
 ## Safety Model
 
@@ -540,4 +544,6 @@ It should not yet be described as:
 
 That distinction matters because the default path is intentionally safe, Kubernetes-native, and easy to validate, while guarded remediation is an opt-in and audited expansion path.
 
-The conservative release label is `v0.4.0-beta.1 approval lifecycle and guardrails`.
+The conservative published release label is `v0.4.0-beta.3 approval lifecycle,
+TTL cleanup, and guardrails`; the bounded `v0.5-alpha.1` executor slice remains
+unreleased development work.
