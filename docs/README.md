@@ -61,6 +61,7 @@ Current maintained architecture:
 - [Investigation flow](architecture/investigation-flow.md)
 - [Model gateway](architecture/model-gateway.md)
 - [Action executor](architecture/action-executor.md)
+- [Executor safety contract](architecture/executor-safety-contract.md)
 - [Remediation flow](architecture/remediation-flow.md)
 - [v0.3 investigation experience](architecture/v0.3-investigation-experience.md)
 - [FluxAgent → FluxSeer RCA rename migration plan](architecture/rename-migration-plan.md)

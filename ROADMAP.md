@@ -104,7 +104,7 @@ Target outcomes:
 - execute only approved, allowlisted, low-risk Kubernetes actions and
   GitOps/PR-style changes; direct broad mutation is not part of the MVP
 - persist effectiveness as a separate result from execution, with explicit
-  `Effective`, `Ineffective`, `Regressed`, or `Unknown` outcomes
+  `Effective`, `Ineffective`, `Regressed`, or `Inconclusive` outcomes
 - reconcile `ApprovalPolicy`, `NamespaceThreshold`, and `EscalationChain`
   status enough for consumers to see readiness, observed generation, and
   validation errors
@@ -113,6 +113,16 @@ Target outcomes:
 
 The detailed scope, dependency order, and acceptance gates are tracked in
 [`docs/backlog/v0.5-safe-remediation.md`](docs/backlog/v0.5-safe-remediation.md).
+
+The first release checkpoint is `v0.5-alpha.1`:
+
+```text
+Executor safety contract
++ one real allowlisted Kubernetes remediation path
++ post-action effectiveness verification
+```
+
+GitOps is a follow-up v0.5 backend. It is not an `alpha.1` acceptance gate.
 
 ### `v0.6`
 

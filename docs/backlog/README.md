@@ -19,7 +19,7 @@ Status meanings:
 | Priority | Workstream | Status | Next completion signal |
 | --- | --- | --- | --- |
 | P0 | [Runtime error matrix](v0.3-runtime-error-matrix.md) | `Complete` | No remaining P0 runtime scenario is queued; new cases require a named public contract. |
-| P0 | [v0.5 Safe Remediation](v0.5-safe-remediation.md) | `Active` | Allowlisted Kubernetes and GitOps execution, safety-contract tests, post-action verification, policy status, and audit links pass the release gates. |
+| P0 | [v0.5 Safe Remediation](v0.5-safe-remediation.md) | `Active` | `v0.5-alpha.1` proves the safety contract, one real Kubernetes action, and post-action verification; GitOps follows as a second backend. |
 | P0 | [Beta stabilization and RCA quality baseline](v0.3-beta-stabilization.md) | `Active` | Expand replay quality, verifier, provider, diagnostics, and real-cluster compatibility evidence. |
 | P1 | [Production-readiness expansion](v0.3-production-readiness.md) | `Active` | Scenario and target coverage extends beyond the first E2E matrix. |
 | P1 | [Architecture hardening follow-ups](v0.3-architecture-hardening.md) | `Active` | Post-action effectiveness verification and the selected durable evidence backend are complete. |

@@ -165,6 +165,13 @@ status.effectiveness.phase=NotVerified
 
 `Succeeded` means the executor completed the requested action. It does not mean the underlying incident was resolved.
 
+The current `v0.4.0-beta.3` controller stops at `NotVerified`. The v0.5
+`Safe Remediation` target is defined in the
+[Executor safety contract](../architecture/executor-safety-contract.md): a
+successful execution must create or link a follow-up `InvestigationRequest`
+and resolve effectiveness as `Effective`, `Ineffective`, `Regressed`, or
+`Inconclusive`. These are planned v0.5 semantics, not current beta capability.
+
 ## Kubernetes Events
 
 Events are emitted only after a phase status update succeeds and only when
