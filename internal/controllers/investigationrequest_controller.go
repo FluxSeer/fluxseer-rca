@@ -745,6 +745,20 @@ func validateInvestigationRequestSpecIssue(spec v1alpha1.InvestigationRequestSpe
 	if mode := strings.TrimSpace(spec.Mode); mode != "" && mode != v1alpha1.InvestigationModeReadOnly {
 		return &specValidationIssue{Reason: "UnsupportedInvestigationMode", Message: "unsupported investigation mode: " + mode}
 	}
+	if spec.Purpose == v1alpha1.InvestigationPurposeEffectivenessVerification {
+		if spec.Mode != v1alpha1.InvestigationModeReadOnly {
+			return &specValidationIssue{Reason: "UnsupportedInvestigationMode", Message: "effectiveness verification must use readOnly mode"}
+		}
+		if spec.CreateRiskSignal {
+			return &specValidationIssue{Reason: "InvalidSpec", Message: "effectiveness verification must not create a RiskSignal"}
+		}
+		if spec.Correlation == nil || strings.TrimSpace(spec.Correlation.AgentActionRef.Name) == "" || strings.TrimSpace(spec.Correlation.AgentActionRef.Namespace) == "" {
+			return &specValidationIssue{Reason: "InvalidSpec", Message: "effectiveness verification requires correlation.agentActionRef"}
+		}
+		if strings.TrimSpace(spec.Correlation.ExecutionID) == "" || strings.TrimSpace(spec.Correlation.BaselineDigest) == "" {
+			return &specValidationIssue{Reason: "InvalidSpec", Message: "effectiveness verification requires correlation.executionID and correlation.baselineDigest"}
+		}
+	}
 	if len(spec.DataSources) == 0 && len(spec.Queries) == 0 {
 		return &specValidationIssue{Reason: "InvalidSpec", Message: "spec.dataSources or spec.queries must include at least one datasource reference"}
 	}

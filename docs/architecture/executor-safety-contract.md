@@ -21,8 +21,9 @@ GitOps uses the same contract in a later v0.5 increment. Runbook execution and
 arbitrary autonomous mutation are not covered by this design.
 
 Implementation status: the typed request/result contract, deterministic
-identity guard, and the gated Kubernetes Deployment restart backend are now
-present. Effectiveness verification remains the next alpha.1 batch.
+identity guard, gated Kubernetes Deployment restart backend, immutable
+pre-action baseline, settling window, and read-only verification request
+lifecycle are now present. Outcome evaluation remains the final alpha.1 batch.
 
 ## Ownership Boundary
 
@@ -87,10 +88,9 @@ type Executor interface {
 }
 ```
 
-The `Supports` method and lookup-based recovery remain future additions.
-`Router` remains responsible for route selection and the controller remains
-responsible for approval, policy revalidation, status updates, and verification
-orchestration.
+`Router` remains responsible for route selection and optional baseline/health
+capabilities. The controller remains responsible for approval, policy
+revalidation, status updates, and verification orchestration.
 
 ## Identity and Idempotency
 
@@ -193,9 +193,11 @@ Terminal failure reasons must be machine-readable, for example:
 
 ## Effectiveness Verification
 
-The verification workflow must capture a baseline before mutation and a
-follow-up `InvestigationRequest` after the action. The follow-up is correlated
-to the `AgentAction` through the execution identity and a durable
+The verification workflow captures a baseline before mutation and creates a
+follow-up `InvestigationRequest` after the settling period. The request is
+`readOnly`, has `spec.purpose=effectivenessVerification`, carries an explicit
+`spec.correlation` with the action, execution ID, and baseline digest, and is
+owned by the `AgentAction`. The action persists the baseline and durable
 `status.effectiveness.verificationRef`.
 
 | Outcome | Meaning |

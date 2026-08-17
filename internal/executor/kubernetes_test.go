@@ -62,6 +62,52 @@ func TestKubernetesExecutorRestartsAllowlistedDeployment(t *testing.T) {
 	}
 }
 
+func TestKubernetesExecutorCapturesPreActionBaseline(t *testing.T) {
+	replicas := int32(3)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "payments",
+			Name:       "payments-api",
+			UID:        types.UID("deployment-uid"),
+			Generation: 7,
+		},
+		Spec: appsv1.DeploymentSpec{Replicas: &replicas},
+		Status: appsv1.DeploymentStatus{
+			ObservedGeneration: 6,
+			UpdatedReplicas:    1,
+			AvailableReplicas:  0,
+			ReadyReplicas:      0,
+			Conditions: []appsv1.DeploymentCondition{{
+				Type:    appsv1.DeploymentAvailable,
+				Status:  corev1.ConditionFalse,
+				Reason:  "MinimumReplicasUnavailable",
+				Message: "deployment has no available replicas",
+			}},
+		},
+	}
+	kubeClient := fake.NewClientBuilder().WithScheme(clientgoscheme.Scheme).WithObjects(deployment).Build()
+	capturedAt := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
+	executor := KubernetesExecutor{Client: kubeClient, Now: func() time.Time { return capturedAt }}
+	request := ExecutorRequest{
+		ExecutionID:    "exec-baseline-1",
+		IdempotencyKey: "sha256:baseline-1",
+		ActionType:     KubernetesRolloutRestartAction,
+		Target:         domain.ResourceRef{Namespace: "payments", Kind: "Deployment", Name: "payments-api", APIVersion: "apps/v1"},
+		TargetUID:      "deployment-uid",
+	}
+
+	baseline, found, err := executor.CaptureBaseline(context.Background(), request)
+	if err != nil || !found {
+		t.Fatalf("expected baseline capture, baseline=%#v found=%v err=%v", baseline, found, err)
+	}
+	if !baseline.CapturedAt.Equal(capturedAt) || baseline.Health.DesiredReplicas != 3 || baseline.Health.AvailableReplicas != 0 || baseline.Health.ReadyReplicas != 0 {
+		t.Fatalf("unexpected baseline snapshot: %#v", baseline)
+	}
+	if baseline.Digest == "" {
+		t.Fatal("expected immutable baseline digest")
+	}
+}
+
 func TestKubernetesExecutorRejectsTargetUIDMismatch(t *testing.T) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "payments-api", UID: types.UID("current-uid")},

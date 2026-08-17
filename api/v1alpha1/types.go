@@ -25,6 +25,15 @@ const (
 	PhaseReadyForApproval = "ReadyForApproval"
 	PhaseCompleted        = "Completed"
 	PhaseEscalated        = "Escalated"
+
+	EffectivenessPhaseNotVerified = "NotVerified"
+	EffectivenessPhaseVerifying   = "Verifying"
+	EffectivenessPhaseCompleted   = "Completed"
+
+	EffectivenessOutcomeEffective    = "Effective"
+	EffectivenessOutcomeIneffective  = "Ineffective"
+	EffectivenessOutcomeRegressed    = "Regressed"
+	EffectivenessOutcomeInconclusive = "Inconclusive"
 )
 
 type TargetRef struct {
@@ -228,10 +237,48 @@ type AgentActionExecutionStatus struct {
 	Retryable      bool         `json:"retryable,omitempty"`
 }
 
+type EffectivenessHealthCondition struct {
+	Type    string `json:"type,omitempty"`
+	Status  string `json:"status,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type EffectivenessHealthSnapshot struct {
+	Generation         int64                          `json:"generation,omitempty"`
+	ObservedGeneration int64                          `json:"observedGeneration,omitempty"`
+	DesiredReplicas    int32                          `json:"desiredReplicas,omitempty"`
+	UpdatedReplicas    int32                          `json:"updatedReplicas,omitempty"`
+	AvailableReplicas  int32                          `json:"availableReplicas,omitempty"`
+	ReadyReplicas      int32                          `json:"readyReplicas,omitempty"`
+	Conditions         []EffectivenessHealthCondition `json:"conditions,omitempty"`
+}
+
+// EffectivenessBaseline is the immutable pre-dispatch observation used to
+// compare post-action evidence. It deliberately contains health state rather
+// than execution metadata so an executor result cannot masquerade as a
+// remediation outcome.
+type EffectivenessBaseline struct {
+	CapturedAt        *metav1.Time                 `json:"capturedAt,omitempty"`
+	Target            TargetRef                    `json:"target"`
+	TargetUID         string                       `json:"targetUID,omitempty"`
+	RiskSignalRef     *NamespacedObjectReference   `json:"riskSignalRef,omitempty"`
+	EvidenceRefs      []EvidenceRef                `json:"evidenceRefs,omitempty"`
+	Health            *EffectivenessHealthSnapshot `json:"health,omitempty"`
+	Digest            string                       `json:"digest,omitempty"`
+	UnavailableReason string                       `json:"unavailableReason,omitempty"`
+}
+
 type AgentActionEffectivenessStatus struct {
-	Phase           string                     `json:"phase,omitempty"`
-	Message         string                     `json:"message,omitempty"`
-	VerificationRef *NamespacedObjectReference `json:"verificationRef,omitempty"`
+	Phase            string                     `json:"phase,omitempty"`
+	Outcome          string                     `json:"outcome,omitempty"`
+	Message          string                     `json:"message,omitempty"`
+	VerificationRef  *NamespacedObjectReference `json:"verificationRef,omitempty"`
+	Baseline         *EffectivenessBaseline     `json:"baseline,omitempty"`
+	StartedAt        *metav1.Time               `json:"startedAt,omitempty"`
+	FinishedAt       *metav1.Time               `json:"finishedAt,omitempty"`
+	SettlingUntil    *metav1.Time               `json:"settlingUntil,omitempty"`
+	ObservationUntil *metav1.Time               `json:"observationUntil,omitempty"`
 }
 
 type AgentActionStatus struct {
@@ -511,6 +558,39 @@ func (in *AgentAction) DeepCopyInto(out *AgentAction) {
 		if in.Status.Effectiveness.VerificationRef != nil {
 			ref := *in.Status.Effectiveness.VerificationRef
 			effectiveness.VerificationRef = &ref
+		}
+		if in.Status.Effectiveness.StartedAt != nil {
+			effectiveness.StartedAt = in.Status.Effectiveness.StartedAt.DeepCopy()
+		}
+		if in.Status.Effectiveness.FinishedAt != nil {
+			effectiveness.FinishedAt = in.Status.Effectiveness.FinishedAt.DeepCopy()
+		}
+		if in.Status.Effectiveness.SettlingUntil != nil {
+			effectiveness.SettlingUntil = in.Status.Effectiveness.SettlingUntil.DeepCopy()
+		}
+		if in.Status.Effectiveness.ObservationUntil != nil {
+			effectiveness.ObservationUntil = in.Status.Effectiveness.ObservationUntil.DeepCopy()
+		}
+		if in.Status.Effectiveness.Baseline != nil {
+			baseline := *in.Status.Effectiveness.Baseline
+			if in.Status.Effectiveness.Baseline.CapturedAt != nil {
+				baseline.CapturedAt = in.Status.Effectiveness.Baseline.CapturedAt.DeepCopy()
+			}
+			if in.Status.Effectiveness.Baseline.RiskSignalRef != nil {
+				ref := *in.Status.Effectiveness.Baseline.RiskSignalRef
+				baseline.RiskSignalRef = &ref
+			}
+			if in.Status.Effectiveness.Baseline.EvidenceRefs != nil {
+				baseline.EvidenceRefs = deepcopyEvidenceRefs(in.Status.Effectiveness.Baseline.EvidenceRefs)
+			}
+			if in.Status.Effectiveness.Baseline.Health != nil {
+				health := *in.Status.Effectiveness.Baseline.Health
+				if in.Status.Effectiveness.Baseline.Health.Conditions != nil {
+					health.Conditions = append([]EffectivenessHealthCondition(nil), in.Status.Effectiveness.Baseline.Health.Conditions...)
+				}
+				baseline.Health = &health
+			}
+			effectiveness.Baseline = &baseline
 		}
 		out.Status.Effectiveness = &effectiveness
 	}

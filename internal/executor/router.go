@@ -11,6 +11,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 )
 
 type Executor interface {
@@ -57,6 +60,30 @@ func (r *Router) Resolve(ctx context.Context, request ExecutorRequest) (Executor
 		return ExecutorResult{}, false, nil
 	}
 	return resolver.Resolve(ctx, request)
+}
+
+func (r *Router) CaptureBaseline(ctx context.Context, request ExecutorRequest) (EffectivenessBaseline, bool, error) {
+	backend, err := r.executorFor(request.ActionType)
+	if err != nil {
+		return EffectivenessBaseline{}, false, err
+	}
+	capturer, ok := backend.(BaselineCapturer)
+	if !ok {
+		return EffectivenessBaseline{}, false, nil
+	}
+	return capturer.CaptureBaseline(ctx, request)
+}
+
+func (r *Router) ObserveHealth(ctx context.Context, request ExecutorRequest) (HealthSnapshot, bool, error) {
+	backend, err := r.executorFor(request.ActionType)
+	if err != nil {
+		return HealthSnapshot{}, false, err
+	}
+	observer, ok := backend.(HealthObserver)
+	if !ok {
+		return HealthSnapshot{}, false, nil
+	}
+	return observer.ObserveHealth(ctx, request)
 }
 
 func (r *Router) executorFor(actionType string) (Executor, error) {
@@ -136,6 +163,86 @@ func (e KubernetesExecutor) Execute(ctx context.Context, action ExecutorRequest)
 	}
 
 	return kubernetesSuccessResult(e.Name(), action, startedAt, now(), &deployment, "rollout restart annotation applied"), nil
+}
+
+func (e KubernetesExecutor) CaptureBaseline(ctx context.Context, action ExecutorRequest) (EffectivenessBaseline, bool, error) {
+	if e.Client == nil {
+		return EffectivenessBaseline{}, false, nil
+	}
+	if err := validateKubernetesRestartRequest(action); err != nil {
+		return EffectivenessBaseline{}, false, err
+	}
+
+	var deployment appsv1.Deployment
+	if err := e.Client.Get(ctx, types.NamespacedName{Namespace: action.Target.Namespace, Name: action.Target.Name}, &deployment); err != nil {
+		return EffectivenessBaseline{}, false, fmt.Errorf("get baseline deployment %s/%s: %w", action.Target.Namespace, action.Target.Name, err)
+	}
+	if string(deployment.UID) != action.TargetUID {
+		return EffectivenessBaseline{}, false, fmt.Errorf("baseline target UID mismatch: expected %q, got %q", action.TargetUID, deployment.UID)
+	}
+
+	snapshot := deploymentHealthSnapshot(&deployment)
+	baseline := EffectivenessBaseline{
+		CapturedAt: e.currentTime(),
+		Target:     action.Target,
+		TargetUID:  string(deployment.UID),
+		Health:     snapshot,
+	}
+	baseline.Digest = canonicaldigest.String(ExecutorIdentityJSONV1, struct {
+		Target    domain.ResourceRef
+		TargetUID string
+		Health    HealthSnapshot
+	}{Target: baseline.Target, TargetUID: baseline.TargetUID, Health: baseline.Health})
+	return baseline, true, nil
+}
+
+func (e KubernetesExecutor) ObserveHealth(ctx context.Context, action ExecutorRequest) (HealthSnapshot, bool, error) {
+	if e.Client == nil {
+		return HealthSnapshot{}, false, nil
+	}
+	if err := validateKubernetesRestartRequest(action); err != nil {
+		return HealthSnapshot{}, false, err
+	}
+	var deployment appsv1.Deployment
+	if err := e.Client.Get(ctx, types.NamespacedName{Namespace: action.Target.Namespace, Name: action.Target.Name}, &deployment); err != nil {
+		return HealthSnapshot{}, false, fmt.Errorf("get observed deployment %s/%s: %w", action.Target.Namespace, action.Target.Name, err)
+	}
+	if string(deployment.UID) != action.TargetUID {
+		return HealthSnapshot{}, false, fmt.Errorf("observed target UID mismatch: expected %q, got %q", action.TargetUID, deployment.UID)
+	}
+	return deploymentHealthSnapshot(&deployment), true, nil
+}
+
+func (e KubernetesExecutor) currentTime() time.Time {
+	if e.Now != nil {
+		return e.Now()
+	}
+	return time.Now()
+}
+
+func deploymentHealthSnapshot(deployment *appsv1.Deployment) HealthSnapshot {
+	desired := int32(1)
+	if deployment.Spec.Replicas != nil {
+		desired = *deployment.Spec.Replicas
+	}
+	conditions := make([]HealthCondition, 0, len(deployment.Status.Conditions))
+	for _, condition := range deployment.Status.Conditions {
+		conditions = append(conditions, HealthCondition{
+			Type:    string(condition.Type),
+			Status:  string(condition.Status),
+			Reason:  condition.Reason,
+			Message: condition.Message,
+		})
+	}
+	return HealthSnapshot{
+		Generation:         deployment.Generation,
+		ObservedGeneration: deployment.Status.ObservedGeneration,
+		DesiredReplicas:    desired,
+		UpdatedReplicas:    deployment.Status.UpdatedReplicas,
+		AvailableReplicas:  deployment.Status.AvailableReplicas,
+		ReadyReplicas:      deployment.Status.ReadyReplicas,
+		Conditions:         conditions,
+	}
 }
 
 // Resolve implements read-after-write recovery for an uncertain Kubernetes

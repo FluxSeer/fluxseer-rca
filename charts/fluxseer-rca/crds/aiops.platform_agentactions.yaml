@@ -80,18 +80,81 @@ spec:
                   type: object
                   properties:
                     phase: {type: string}
+                    outcome: {type: string}
+                    executionID: {type: string}
+                    idempotencyKey: {type: string}
+                    attempt: {type: integer, format: int32}
+                    failureReason: {type: string}
                     executor: {type: string}
                     summary: {type: string}
+                    startedAt: {type: string, format: date-time}
                     finishedAt: {type: string, format: date-time}
+                    externalRef: {type: string}
+                    retryable: {type: boolean}
                 effectiveness:
                   type: object
                   properties:
                     phase: {type: string}
+                    outcome: {type: string}
                     message: {type: string}
+                    startedAt: {type: string, format: date-time}
+                    finishedAt: {type: string, format: date-time}
+                    settlingUntil: {type: string, format: date-time}
+                    observationUntil: {type: string, format: date-time}
                     verificationRef:
                       type: object
                       properties:
                         name: {type: string}
                         namespace: {type: string}
+                    baseline:
+                      type: object
+                      required: ["target"]
+                      properties:
+                        capturedAt: {type: string, format: date-time}
+                        target:
+                          type: object
+                          properties:
+                            cluster: {type: string}
+                            namespace: {type: string}
+                            kind: {type: string}
+                            name: {type: string}
+                            apiVersion: {type: string}
+                            service: {type: string}
+                        targetUID: {type: string}
+                        riskSignalRef:
+                          type: object
+                          properties:
+                            name: {type: string}
+                            namespace: {type: string}
+                        evidenceRefs:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id: {type: string}
+                              kind: {type: string}
+                              source: {type: string}
+                              summary: {type: string}
+                              link: {type: string}
+                        digest: {type: string}
+                        unavailableReason: {type: string}
+                        health:
+                          type: object
+                          properties:
+                            generation: {type: integer, format: int64}
+                            observedGeneration: {type: integer, format: int64}
+                            desiredReplicas: {type: integer, format: int32}
+                            updatedReplicas: {type: integer, format: int32}
+                            availableReplicas: {type: integer, format: int32}
+                            readyReplicas: {type: integer, format: int32}
+                            conditions:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  type: {type: string}
+                                  status: {type: string}
+                                  reason: {type: string}
+                                  message: {type: string}
       subresources:
         status: {}

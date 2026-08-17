@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	InvestigationModeReadOnly = "readOnly"
+	InvestigationModeReadOnly                     = "readOnly"
+	InvestigationPurposeEffectivenessVerification = "effectivenessVerification"
 
 	EvidenceRetentionModeMetadataOnly       = "MetadataOnly"
 	EvidenceRetentionModeNormalizedSnapshot = "NormalizedSnapshot"
@@ -57,20 +58,22 @@ type InvestigationQuery struct {
 }
 
 type InvestigationRequestSpec struct {
-	Target               TargetRef                `json:"target"`
-	TimeRange            InvestigationTimeRange   `json:"timeRange,omitempty"`
-	Question             string                   `json:"question,omitempty"`
-	DataSources          []LocalObjectReference   `json:"dataSources,omitempty"`
-	Queries              []InvestigationQuery     `json:"queries,omitempty"`
-	ModelProviderRef     LocalObjectReference     `json:"modelProviderRef,omitempty"`
-	Mode                 string                   `json:"mode,omitempty"`
-	CreateRiskSignal     bool                     `json:"createRiskSignal,omitempty"`
-	EvidenceRequirements EvidenceRequirements     `json:"evidenceRequirements,omitempty"`
-	EvidenceRetention    EvidenceRetentionPolicy  `json:"evidenceRetention,omitempty"`
-	QueryRetention       QueryRetentionPolicy     `json:"queryRetention,omitempty"`
-	QueryBudget          InvestigationQueryBudget `json:"queryBudget,omitempty"`
-	LoopPolicy           InvestigationLoopPolicy  `json:"loopPolicy,omitempty"`
-	TTLSeconds           int64                    `json:"ttlSeconds,omitempty"`
+	Target               TargetRef                 `json:"target"`
+	Purpose              string                    `json:"purpose,omitempty"`
+	Correlation          *InvestigationCorrelation `json:"correlation,omitempty"`
+	TimeRange            InvestigationTimeRange    `json:"timeRange,omitempty"`
+	Question             string                    `json:"question,omitempty"`
+	DataSources          []LocalObjectReference    `json:"dataSources,omitempty"`
+	Queries              []InvestigationQuery      `json:"queries,omitempty"`
+	ModelProviderRef     LocalObjectReference      `json:"modelProviderRef,omitempty"`
+	Mode                 string                    `json:"mode,omitempty"`
+	CreateRiskSignal     bool                      `json:"createRiskSignal,omitempty"`
+	EvidenceRequirements EvidenceRequirements      `json:"evidenceRequirements,omitempty"`
+	EvidenceRetention    EvidenceRetentionPolicy   `json:"evidenceRetention,omitempty"`
+	QueryRetention       QueryRetentionPolicy      `json:"queryRetention,omitempty"`
+	QueryBudget          InvestigationQueryBudget  `json:"queryBudget,omitempty"`
+	LoopPolicy           InvestigationLoopPolicy   `json:"loopPolicy,omitempty"`
+	TTLSeconds           int64                     `json:"ttlSeconds,omitempty"`
 }
 
 type EvidenceRequirements struct {
@@ -132,6 +135,12 @@ type EventResultLimits struct {
 type InvestigationLoopPolicy struct {
 	MaxDepth              int32 `json:"maxDepth,omitempty"`
 	AllowRiskSignalSource bool  `json:"allowRiskSignalSource,omitempty"`
+}
+
+type InvestigationCorrelation struct {
+	AgentActionRef NamespacedObjectReference `json:"agentActionRef"`
+	ExecutionID    string                    `json:"executionID,omitempty"`
+	BaselineDigest string                    `json:"baselineDigest,omitempty"`
 }
 
 type RCAVerdict struct {
@@ -360,6 +369,10 @@ func (in *InvestigationRequest) DeepCopyInto(out *InvestigationRequest) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	if in.Spec.Correlation != nil {
+		correlation := *in.Spec.Correlation
+		out.Spec.Correlation = &correlation
+	}
 	if in.Spec.DataSources != nil {
 		out.Spec.DataSources = append([]LocalObjectReference(nil), in.Spec.DataSources...)
 	}

@@ -130,6 +130,11 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if targetUID := plan.Annotations[annotationTargetUID]; targetUID != "" {
 			action.Annotations[annotationTargetUID] = targetUID
 		}
+		for _, key := range []string{annotationRiskSignalRef, annotationRiskSignalUID} {
+			if value := plan.Annotations[key]; value != "" {
+				action.Annotations[key] = value
+			}
+		}
 		action.Spec.Target = plan.Spec.Target
 		action.Spec.ActionType = step.ActionType
 		action.Spec.Parameters = step.Parameters

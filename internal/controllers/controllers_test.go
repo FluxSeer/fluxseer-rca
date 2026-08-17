@@ -444,6 +444,89 @@ func TestAgentActionReconcilerExecutesRealDeploymentRestart(t *testing.T) {
 	}
 }
 
+func TestAgentActionReconcilerCreatesSettledReadOnlyVerification(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add FluxSeer scheme: %v", err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+
+	now := time.Date(2026, 8, 17, 13, 0, 0, 0, time.UTC)
+	replicas := int32(3)
+	action := &v1alpha1.AgentAction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "restart-action",
+			Namespace:  "payments",
+			UID:        types.UID("action-uid"),
+			Generation: 1,
+			Annotations: map[string]string{
+				annotationTargetUID: "deployment-uid",
+			},
+		},
+		Spec: v1alpha1.AgentActionSpec{
+			Target:     v1alpha1.TargetRef{Namespace: "payments", Kind: "Deployment", Name: "payments-api", APIVersion: "apps/v1"},
+			ActionType: executor.KubernetesRolloutRestartAction,
+		},
+		Status: v1alpha1.AgentActionStatus{ResourceStatus: v1alpha1.ResourceStatus{Phase: v1alpha1.PhaseApproved}},
+	}
+	action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{Approved: true, ApprovedBy: "policy", Source: "GuardrailsAutoApproval", ActionDigest: agentActionSpecDigest(action)}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "payments-api", UID: types.UID("deployment-uid")},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+		Status:     appsv1.DeploymentStatus{AvailableReplicas: 0, ReadyReplicas: 0},
+	}
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&v1alpha1.AgentAction{}).WithObjects(action, deployment).Build()
+	reconciler := &AgentActionReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Executor: executor.NewRouter(
+			executor.KubernetesExecutor{Client: fakeClient, Now: func() time.Time { return now }},
+			executor.GitOpsExecutor{}, executor.RunbookExecutor{}, executor.NotificationExecutor{},
+		),
+		Now: func() time.Time { return now },
+	}
+	key := types.NamespacedName{Name: action.Name, Namespace: action.Namespace}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
+		t.Fatalf("initial restart reconcile failed: %v", err)
+	}
+	var updated v1alpha1.AgentAction
+	if err := fakeClient.Get(context.Background(), key, &updated); err != nil {
+		t.Fatalf("get updated action: %v", err)
+	}
+	if updated.Status.Effectiveness == nil || updated.Status.Effectiveness.Phase != v1alpha1.EffectivenessPhaseVerifying || updated.Status.Effectiveness.Baseline == nil {
+		t.Fatalf("expected verifying status with baseline, got %#v", updated.Status.Effectiveness)
+	}
+	if updated.Status.Effectiveness.Baseline.Health.AvailableReplicas != 0 || updated.Status.Effectiveness.Baseline.Health.DesiredReplicas != 3 {
+		t.Fatalf("unexpected pre-action health baseline: %#v", updated.Status.Effectiveness.Baseline.Health)
+	}
+
+	now = updated.Status.Effectiveness.SettlingUntil.Add(time.Second)
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
+		t.Fatalf("verification creation reconcile failed: %v", err)
+	}
+	if err := fakeClient.Get(context.Background(), key, &updated); err != nil {
+		t.Fatalf("get action after verification creation: %v", err)
+	}
+	if updated.Status.Effectiveness.VerificationRef == nil {
+		t.Fatal("expected durable verification reference")
+	}
+	var verification v1alpha1.InvestigationRequest
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: updated.Status.Effectiveness.VerificationRef.Name, Namespace: "payments"}, &verification); err != nil {
+		t.Fatalf("get verification request: %v", err)
+	}
+	if verification.Spec.Purpose != v1alpha1.InvestigationPurposeEffectivenessVerification || verification.Spec.Mode != v1alpha1.InvestigationModeReadOnly || verification.Spec.CreateRiskSignal {
+		t.Fatalf("expected read-only effectiveness request, got %#v", verification.Spec)
+	}
+	if verification.Spec.Correlation == nil || verification.Spec.Correlation.ExecutionID != updated.Status.Execution.ExecutionID || verification.Spec.Correlation.BaselineDigest != updated.Status.Effectiveness.Baseline.Digest {
+		t.Fatalf("expected execution/baseline correlation, got %#v", verification.Spec.Correlation)
+	}
+	if len(verification.OwnerReferences) != 1 || verification.OwnerReferences[0].Name != action.Name {
+		t.Fatalf("expected verification request owned by AgentAction, got %#v", verification.OwnerReferences)
+	}
+}
+
 func TestAgentActionReconcilerRejectsDirectlyCreatedActionDespiteApprovedBy(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {

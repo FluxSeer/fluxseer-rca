@@ -102,6 +102,44 @@ type ExecutionResolver interface {
 	Resolve(ctx context.Context, request ExecutorRequest) (ExecutorResult, bool, error)
 }
 
+// HealthCondition is a normalized condition captured as part of a
+// pre-dispatch baseline or post-action observation.
+type HealthCondition struct {
+	Type    string `json:"type,omitempty"`
+	Status  string `json:"status,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type HealthSnapshot struct {
+	Generation         int64             `json:"generation,omitempty"`
+	ObservedGeneration int64             `json:"observedGeneration,omitempty"`
+	DesiredReplicas    int32             `json:"desiredReplicas,omitempty"`
+	UpdatedReplicas    int32             `json:"updatedReplicas,omitempty"`
+	AvailableReplicas  int32             `json:"availableReplicas,omitempty"`
+	ReadyReplicas      int32             `json:"readyReplicas,omitempty"`
+	Conditions         []HealthCondition `json:"conditions,omitempty"`
+}
+
+type EffectivenessBaseline struct {
+	CapturedAt time.Time          `json:"capturedAt"`
+	Target     domain.ResourceRef `json:"target"`
+	TargetUID  string             `json:"targetUID,omitempty"`
+	Health     HealthSnapshot     `json:"health"`
+	Digest     string             `json:"digest,omitempty"`
+}
+
+// BaselineCapturer is intentionally separate from Execute. The controller
+// must capture an immutable observation before dispatching a mutation.
+type BaselineCapturer interface {
+	CaptureBaseline(ctx context.Context, request ExecutorRequest) (EffectivenessBaseline, bool, error)
+}
+
+// HealthObserver reads post-action health without mutating the target.
+type HealthObserver interface {
+	ObserveHealth(ctx context.Context, request ExecutorRequest) (HealthSnapshot, bool, error)
+}
+
 // StringParameters converts the CRD's compatibility map[string]string
 // representation into the executor contract's structured parameter map.
 func StringParameters(values map[string]string) map[string]any {

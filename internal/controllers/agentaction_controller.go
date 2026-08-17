@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -106,6 +107,9 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		now = r.Now
 	}
 
+	if action.Status.Effectiveness != nil && action.Status.Effectiveness.Phase == v1alpha1.EffectivenessPhaseVerifying {
+		return r.reconcileEffectivenessVerification(ctx, &action, now())
+	}
 	if action.Status.Phase == v1alpha1.PhaseSucceeded || action.Status.Phase == v1alpha1.PhaseFailed || action.Status.Phase == v1alpha1.PhaseRejected {
 		return r.reconcileTerminalStateTTL(ctx, &action, now())
 	}
@@ -190,12 +194,23 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		RollbackPlan:   action.Spec.RollbackPlan,
 		Attempt:        1,
 	}
+	baseline, baselineFound, err := r.Executor.CaptureBaseline(ctx, executionRequest)
+	if err != nil {
+		return r.failBeforeDispatch(ctx, &action, executionRequest, "BaselineCaptureFailed", err, now())
+	}
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 		Phase:          "Executing",
 		ExecutionID:    executionRequest.ExecutionID,
 		IdempotencyKey: executionRequest.IdempotencyKey,
 		Attempt:        int32(executionRequest.Attempt),
 		StartedAt:      &startedAt,
+	}
+	if baselineFound {
+		action.Status.Effectiveness = &v1alpha1.AgentActionEffectivenessStatus{
+			Phase:    v1alpha1.EffectivenessPhaseNotVerified,
+			Message:  "immutable pre-action health baseline captured before dispatch",
+			Baseline: effectivenessBaselineFromExecutor(baseline, &action),
+		}
 	}
 	if statusChangedAction(original, &action) {
 		if err := r.Status().Update(ctx, &action); err != nil {
@@ -288,6 +303,32 @@ func executorRequestForPersistedAction(action *v1alpha1.AgentAction) executor.Ex
 	return request
 }
 
+func (r *AgentActionReconciler) failBeforeDispatch(ctx context.Context, action *v1alpha1.AgentAction, request executor.ExecutorRequest, reason string, dispatchErr error, now time.Time) (ctrl.Result, error) {
+	finishedAt := metav1.NewTime(now)
+	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseFailed, dispatchErr.Error(), action.Generation, finishedAt.Time)
+	action.Status.FinishedAt = &finishedAt
+	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
+		Phase:          "Failed",
+		Outcome:        string(executor.ExecutionOutcomeFailed),
+		ExecutionID:    request.ExecutionID,
+		IdempotencyKey: request.IdempotencyKey,
+		Attempt:        int32(request.Attempt),
+		FailureReason:  reason,
+		Summary:        dispatchErr.Error(),
+		FinishedAt:     &finishedAt,
+		Retryable:      false,
+	}
+	action.Status.Effectiveness = &v1alpha1.AgentActionEffectivenessStatus{
+		Phase:   v1alpha1.EffectivenessPhaseNotVerified,
+		Message: "post-action verification was not started because the pre-action baseline could not be captured",
+	}
+	if err := r.Status().Update(ctx, action); err != nil {
+		recordStatusUpdateConflict("AgentAction", err)
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, dispatchErr
+}
+
 func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, action *v1alpha1.AgentAction, request executor.ExecutorRequest, result executor.ExecutorResult, now time.Time) (ctrl.Result, error) {
 	originalPhase := action.Status.Phase
 	finishedAt := metav1.NewTime(now)
@@ -320,16 +361,161 @@ func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, acti
 		executionStatus.StartedAt = action.Status.Execution.StartedAt
 	}
 	action.Status.Execution = executionStatus
-	action.Status.Effectiveness = &v1alpha1.AgentActionEffectivenessStatus{
-		Phase:   "NotVerified",
-		Message: "post-action remediation effectiveness verification is not configured for this experimental action",
+	effectiveness := &v1alpha1.AgentActionEffectivenessStatus{
+		Phase:   v1alpha1.EffectivenessPhaseNotVerified,
+		Message: "post-action remediation effectiveness verification is unavailable without a pre-action baseline",
 	}
+	if action.Status.Effectiveness != nil && action.Status.Effectiveness.Baseline != nil {
+		effectiveness = action.Status.Effectiveness
+		effectiveness.Phase = v1alpha1.EffectivenessPhaseVerifying
+		effectiveness.Outcome = ""
+		effectiveness.Message = "execution succeeded; waiting for the target to settle before read-only verification"
+		effectiveness.StartedAt = &finishedAt
+		settlingUntil := metav1.NewTime(now.Add(effectivenessSettlingPeriod))
+		observationUntil := metav1.NewTime(now.Add(effectivenessSettlingPeriod + effectivenessObservationWindow))
+		effectiveness.SettlingUntil = &settlingUntil
+		effectiveness.ObservationUntil = &observationUntil
+	}
+	action.Status.Effectiveness = effectiveness
 	if err := r.Status().Update(ctx, action); err != nil {
 		recordStatusUpdateConflict("AgentAction", err)
 		return ctrl.Result{}, err
 	}
 	recordPhaseTransition(r.EventRecorder, action, originalPhase, action.Status.Phase)
 	return ctrl.Result{}, nil
+}
+
+const (
+	effectivenessSettlingPeriod         = 5 * time.Minute
+	effectivenessObservationWindow      = 2 * time.Minute
+	effectivenessVerificationDataSource = "kubernetes-events"
+)
+
+func effectivenessBaselineFromExecutor(baseline executor.EffectivenessBaseline, action *v1alpha1.AgentAction) *v1alpha1.EffectivenessBaseline {
+	conditions := make([]v1alpha1.EffectivenessHealthCondition, 0, len(baseline.Health.Conditions))
+	for _, condition := range baseline.Health.Conditions {
+		conditions = append(conditions, v1alpha1.EffectivenessHealthCondition{
+			Type:    condition.Type,
+			Status:  condition.Status,
+			Reason:  condition.Reason,
+			Message: condition.Message,
+		})
+	}
+	capturedAt := metav1.NewTime(baseline.CapturedAt)
+	return &v1alpha1.EffectivenessBaseline{
+		CapturedAt: &capturedAt,
+		Target:     action.Spec.Target,
+		TargetUID:  baseline.TargetUID,
+		Health: &v1alpha1.EffectivenessHealthSnapshot{
+			Generation:         baseline.Health.Generation,
+			ObservedGeneration: baseline.Health.ObservedGeneration,
+			DesiredReplicas:    baseline.Health.DesiredReplicas,
+			UpdatedReplicas:    baseline.Health.UpdatedReplicas,
+			AvailableReplicas:  baseline.Health.AvailableReplicas,
+			ReadyReplicas:      baseline.Health.ReadyReplicas,
+			Conditions:         conditions,
+		},
+		Digest: baseline.Digest,
+	}
+}
+
+func (r *AgentActionReconciler) reconcileEffectivenessVerification(ctx context.Context, action *v1alpha1.AgentAction, now time.Time) (ctrl.Result, error) {
+	effectiveness := action.Status.Effectiveness
+	if effectiveness == nil || effectiveness.Baseline == nil || action.Status.Execution == nil || action.Status.Execution.Outcome != string(executor.ExecutionOutcomeSucceeded) {
+		return ctrl.Result{}, nil
+	}
+	if effectiveness.SettlingUntil != nil && now.Before(effectiveness.SettlingUntil.Time) {
+		return ctrl.Result{RequeueAfter: effectiveness.SettlingUntil.Sub(now)}, nil
+	}
+
+	if effectiveness.VerificationRef == nil {
+		verification, err := r.createEffectivenessVerification(ctx, action)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		action.Status.Effectiveness.VerificationRef = &v1alpha1.NamespacedObjectReference{
+			Name:      verification.Name,
+			Namespace: verification.Namespace,
+		}
+		action.Status.Effectiveness.Message = "read-only verification investigation created; waiting for post-action evidence"
+		if err := r.Status().Update(ctx, action); err != nil {
+			recordStatusUpdateConflict("AgentAction", err)
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	if effectiveness.ObservationUntil != nil && now.Before(effectiveness.ObservationUntil.Time) {
+		return ctrl.Result{RequeueAfter: effectiveness.ObservationUntil.Sub(now)}, nil
+	}
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+}
+
+func (r *AgentActionReconciler) createEffectivenessVerification(ctx context.Context, action *v1alpha1.AgentAction) (*v1alpha1.InvestigationRequest, error) {
+	if r.Scheme == nil {
+		return nil, fmt.Errorf("AgentAction reconciler requires a scheme to create verification InvestigationRequest")
+	}
+	name := effectivenessVerificationName(action)
+	verification := &v1alpha1.InvestigationRequest{}
+	verification.Name = name
+	verification.Namespace = action.Namespace
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, verification, func() error {
+		if err := controllerutil.SetControllerReference(action, verification, r.Scheme); err != nil {
+			return err
+		}
+		if verification.Labels == nil {
+			verification.Labels = map[string]string{}
+		}
+		if verification.Annotations == nil {
+			verification.Annotations = map[string]string{}
+		}
+		verification.Labels[labelManagedBy] = "agentaction-controller"
+		verification.Annotations[annotationLineageSource] = action.Namespace + "/" + action.Name
+		verification.Annotations[annotationLineageSourceKind] = "AgentAction"
+		verification.Annotations[annotationLineageSourceAPI] = v1alpha1.SchemeGroupVersion.String()
+		verification.Annotations[annotationLineageSourceUID] = string(action.UID)
+		verification.Annotations[annotationTargetUID] = action.Status.Effectiveness.Baseline.TargetUID
+		verification.Annotations[annotationInvestigationDepth] = "0"
+		verification.Spec.Target = action.Spec.Target
+		verification.Spec.Purpose = v1alpha1.InvestigationPurposeEffectivenessVerification
+		verification.Spec.Correlation = &v1alpha1.InvestigationCorrelation{
+			AgentActionRef: v1alpha1.NamespacedObjectReference{Name: action.Name, Namespace: action.Namespace},
+			ExecutionID:    action.Status.Execution.ExecutionID,
+			BaselineDigest: action.Status.Effectiveness.Baseline.Digest,
+		}
+		verification.Spec.TimeRange = v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: effectivenessObservationWindow}}
+		verification.Spec.Question = fmt.Sprintf("Verify whether %s recovered after execution %s", targetRefString(action.Spec.Target), action.Status.Execution.ExecutionID)
+		verification.Spec.Queries = []v1alpha1.InvestigationQuery{{
+			Name:          "post-action-workload-events",
+			DatasourceRef: v1alpha1.LocalObjectReference{Name: effectivenessVerificationDataSource},
+			QueryType:     "event",
+			Reasons:       []string{"BackOff", "Unhealthy", "Failed", "FailedCreate", "ProgressDeadlineExceeded"},
+		}}
+		verification.Spec.Mode = v1alpha1.InvestigationModeReadOnly
+		verification.Spec.CreateRiskSignal = false
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return verification, nil
+}
+
+func effectivenessVerificationName(action *v1alpha1.AgentAction) string {
+	digest := canonicaldigest.String(canonicaldigest.RCAJSONV1, struct {
+		ActionUID   string
+		ExecutionID string
+	}{ActionUID: string(action.UID), ExecutionID: action.Status.Execution.ExecutionID})
+	suffix := strings.TrimPrefix(digest, canonicaldigest.AlgorithmSHA256+":")
+	if len(suffix) > 16 {
+		suffix = suffix[:16]
+	}
+	prefix := action.Name
+	maxPrefix := 63 - len("-verify-") - len(suffix)
+	if len(prefix) > maxPrefix {
+		prefix = prefix[:maxPrefix]
+	}
+	return prefix + "-verify-" + suffix
 }
 
 // reconcilePending handles an AgentAction that isAgentActionApproved has
@@ -560,7 +746,8 @@ func (r *AgentActionReconciler) reconcileTerminalStateTTL(ctx context.Context, a
 
 func (r *AgentActionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.AgentAction{})
+		For(&v1alpha1.AgentAction{}).
+		Owns(&v1alpha1.InvestigationRequest{})
 	if r.PolicyPackEnabled {
 		builder = builder.Watches(&v1alpha1.EscalationChain{}, handler.EnqueueRequestsFromMapFunc(r.mapPendingEscalationActions))
 	}

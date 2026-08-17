@@ -23,6 +23,8 @@ It does not execute remediation.
 Current spec fields:
 
 - `target`
+- `purpose`
+- `correlation.agentActionRef`, `correlation.executionID`, and `correlation.baselineDigest`
 - `timeRange.lookback`
 - `question`
 - `dataSources[]`
@@ -31,6 +33,12 @@ Current spec fields:
 - `mode`
 - `createRiskSignal`
 - `ttlSeconds`
+
+`purpose: effectivenessVerification` is reserved for the post-action
+verification request created by `AgentActionReconciler`. It requires
+`mode: readOnly`, `createRiskSignal: false`, and a complete `correlation`
+object. This purpose never authorizes a mutation; it only asks the existing
+investigation pipeline to collect post-action evidence.
 
 Supported `spec.target.kind` values for direct `InvestigationRequest` resolution:
 

@@ -24,6 +24,8 @@ const (
 	annotationLineageSourceUID   = "fluxseer-rca.aiops.platform/lineage-source-uid"
 	annotationLineageGeneration  = "fluxseer-rca.aiops.platform/lineage-generation"
 	annotationTargetUID          = "fluxseer-rca.aiops.platform/target-uid"
+	annotationRiskSignalRef      = "fluxseer-rca.aiops.platform/risk-signal-ref"
+	annotationRiskSignalUID      = "fluxseer-rca.aiops.platform/risk-signal-uid"
 	annotationFindingFingerprint = "fluxseer-rca.aiops.platform/finding-fingerprint"
 	annotationFindingSchema      = "fluxseer-rca.aiops.platform/finding-schema"
 	annotationFindingType        = "fluxseer-rca.aiops.platform/finding-type"

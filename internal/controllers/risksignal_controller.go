@@ -57,6 +57,8 @@ func (r *RiskSignalReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if targetUID := riskSignal.Annotations[annotationTargetUID]; targetUID != "" {
 			plan.Annotations[annotationTargetUID] = targetUID
 		}
+		plan.Annotations[annotationRiskSignalRef] = riskSignal.Namespace + "/" + riskSignal.Name
+		plan.Annotations[annotationRiskSignalUID] = string(riskSignal.UID)
 
 		plan.Spec.Target = riskSignal.Spec.Target
 		plan.Spec.RecommendedBy = "risk-signal-controller"
