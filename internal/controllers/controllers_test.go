@@ -8,6 +8,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -477,7 +478,7 @@ func TestAgentActionReconcilerCreatesSettledReadOnlyVerification(t *testing.T) {
 		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 		Status:     appsv1.DeploymentStatus{AvailableReplicas: 0, ReadyReplicas: 0},
 	}
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&v1alpha1.AgentAction{}).WithObjects(action, deployment).Build()
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&v1alpha1.AgentAction{}, &v1alpha1.InvestigationRequest{}).WithObjects(action, deployment).Build()
 	reconciler := &AgentActionReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
@@ -524,6 +525,38 @@ func TestAgentActionReconcilerCreatesSettledReadOnlyVerification(t *testing.T) {
 	}
 	if len(verification.OwnerReferences) != 1 || verification.OwnerReferences[0].Name != action.Name {
 		t.Fatalf("expected verification request owned by AgentAction, got %#v", verification.OwnerReferences)
+	}
+
+	var updatedDeployment appsv1.Deployment
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Namespace: "payments", Name: "payments-api"}, &updatedDeployment); err != nil {
+		t.Fatalf("get deployment for post-action health: %v", err)
+	}
+	updatedDeployment.Status.ObservedGeneration = updatedDeployment.Generation
+	updatedDeployment.Status.UpdatedReplicas = 3
+	updatedDeployment.Status.AvailableReplicas = 3
+	updatedDeployment.Status.ReadyReplicas = 3
+	updatedDeployment.Status.Conditions = []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue}}
+	if err := fakeClient.Status().Update(context.Background(), &updatedDeployment); err != nil {
+		t.Fatalf("update post-action deployment health: %v", err)
+	}
+	verification.Status.Phase = v1alpha1.PhaseCompleted
+	verification.Status.Outcome = v1alpha1.InvestigationOutcomeNoIssueFound
+	verification.Status.Summary = "no original incident event observed"
+	if err := fakeClient.Status().Update(context.Background(), &verification); err != nil {
+		t.Fatalf("update verification result: %v", err)
+	}
+	now = updated.Status.Effectiveness.ObservationUntil.Add(time.Second)
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
+		t.Fatalf("effectiveness evaluation reconcile failed: %v", err)
+	}
+	if err := fakeClient.Get(context.Background(), key, &updated); err != nil {
+		t.Fatalf("get action after effectiveness evaluation: %v", err)
+	}
+	if updated.Status.Effectiveness.Phase != v1alpha1.EffectivenessPhaseCompleted || updated.Status.Effectiveness.Outcome != v1alpha1.EffectivenessOutcomeEffective {
+		t.Fatalf("expected effective remediation, got %#v", updated.Status.Effectiveness)
+	}
+	if updated.Status.Effectiveness.PostActionHealth == nil || updated.Status.Effectiveness.PostActionHealth.AvailableReplicas != 3 {
+		t.Fatalf("expected persisted post-action health, got %#v", updated.Status.Effectiveness.PostActionHealth)
 	}
 }
 

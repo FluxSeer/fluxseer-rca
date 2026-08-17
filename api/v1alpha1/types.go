@@ -270,15 +270,16 @@ type EffectivenessBaseline struct {
 }
 
 type AgentActionEffectivenessStatus struct {
-	Phase            string                     `json:"phase,omitempty"`
-	Outcome          string                     `json:"outcome,omitempty"`
-	Message          string                     `json:"message,omitempty"`
-	VerificationRef  *NamespacedObjectReference `json:"verificationRef,omitempty"`
-	Baseline         *EffectivenessBaseline     `json:"baseline,omitempty"`
-	StartedAt        *metav1.Time               `json:"startedAt,omitempty"`
-	FinishedAt       *metav1.Time               `json:"finishedAt,omitempty"`
-	SettlingUntil    *metav1.Time               `json:"settlingUntil,omitempty"`
-	ObservationUntil *metav1.Time               `json:"observationUntil,omitempty"`
+	Phase            string                       `json:"phase,omitempty"`
+	Outcome          string                       `json:"outcome,omitempty"`
+	Message          string                       `json:"message,omitempty"`
+	VerificationRef  *NamespacedObjectReference   `json:"verificationRef,omitempty"`
+	Baseline         *EffectivenessBaseline       `json:"baseline,omitempty"`
+	PostActionHealth *EffectivenessHealthSnapshot `json:"postActionHealth,omitempty"`
+	StartedAt        *metav1.Time                 `json:"startedAt,omitempty"`
+	FinishedAt       *metav1.Time                 `json:"finishedAt,omitempty"`
+	SettlingUntil    *metav1.Time                 `json:"settlingUntil,omitempty"`
+	ObservationUntil *metav1.Time                 `json:"observationUntil,omitempty"`
 }
 
 type AgentActionStatus struct {
@@ -591,6 +592,13 @@ func (in *AgentAction) DeepCopyInto(out *AgentAction) {
 				baseline.Health = &health
 			}
 			effectiveness.Baseline = &baseline
+		}
+		if in.Status.Effectiveness.PostActionHealth != nil {
+			health := *in.Status.Effectiveness.PostActionHealth
+			if in.Status.Effectiveness.PostActionHealth.Conditions != nil {
+				health.Conditions = append([]EffectivenessHealthCondition(nil), in.Status.Effectiveness.PostActionHealth.Conditions...)
+			}
+			effectiveness.PostActionHealth = &health
 		}
 		out.Status.Effectiveness = &effectiveness
 	}

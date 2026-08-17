@@ -8,10 +8,10 @@ Source: [internal/executor/router.go](../../internal/executor/router.go)
 
 The target v0.5 contract and lifecycle are defined in the
 [Executor safety contract](executor-safety-contract.md). Batch 1 now exposes
-the typed `ExecutorRequest` and `ExecutorResult` contract; identity
-generation, idempotency enforcement, lifecycle recovery, and real side
-effects remain alpha.1 work. The bundled backends are still simulation
-oriented.
+the typed `ExecutorRequest` and `ExecutorResult` contract, deterministic
+identity generation, idempotency enforcement, lifecycle recovery, and one
+gated real Kubernetes side-effect path. The bundled GitOps, Runbook, and
+non-allowlisted Kubernetes routes remain simulation-oriented.
 
 The router dispatches by action prefix:
 
@@ -49,6 +49,10 @@ This means controllers and model providers do not need to know how a Kubernetes 
   enabled
 - validates target UID and records the execution identity on the Pod template
 - resolves uncertain results through read-after-write lookup
+- captures an immutable pre-action Deployment health baseline
+- creates a settling-window, read-only verification investigation and evaluates
+  the post-action result as `Effective`, `Ineffective`, `Regressed`, or
+  `Inconclusive`
 
 ### GitOps Executor
 
@@ -120,8 +124,7 @@ The executors expose the shared contract. Notification has a real outbound
 path, and Kubernetes now has one explicitly gated `rolloutRestart` path;
 GitOps, Runbook, and all other Kubernetes actions remain simulation-oriented.
 
-That remains the current `v0.4.0-beta.3` posture: the project leads with safe
-contracts, auditable approval flow, and local demoability. The next milestone
-is v0.5 **Safe Remediation**, which will productionize only the allowlisted
-Kubernetes and GitOps paths and add post-action effectiveness verification;
-Runbook execution and broad autonomous mutation remain deferred.
+That remains the current `v0.4.0-beta.3` release posture, while this branch
+contains the bounded v0.5-alpha.1 Safe Remediation slice: one allowlisted
+Kubernetes action with post-action verification. GitOps production execution,
+Runbook execution, and broad autonomous mutation remain deferred.

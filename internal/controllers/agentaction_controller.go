@@ -206,10 +206,14 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		StartedAt:      &startedAt,
 	}
 	if baselineFound {
+		apiBaseline := effectivenessBaselineFromExecutor(baseline, &action)
+		if err := r.populateBaselineEvidence(ctx, apiBaseline); err != nil {
+			return r.failBeforeDispatch(ctx, &action, executionRequest, "BaselineEvidenceUnavailable", err, now())
+		}
 		action.Status.Effectiveness = &v1alpha1.AgentActionEffectivenessStatus{
 			Phase:    v1alpha1.EffectivenessPhaseNotVerified,
 			Message:  "immutable pre-action health baseline captured before dispatch",
-			Baseline: effectivenessBaselineFromExecutor(baseline, &action),
+			Baseline: apiBaseline,
 		}
 	}
 	if statusChangedAction(original, &action) {
@@ -403,9 +407,10 @@ func effectivenessBaselineFromExecutor(baseline executor.EffectivenessBaseline, 
 	}
 	capturedAt := metav1.NewTime(baseline.CapturedAt)
 	return &v1alpha1.EffectivenessBaseline{
-		CapturedAt: &capturedAt,
-		Target:     action.Spec.Target,
-		TargetUID:  baseline.TargetUID,
+		CapturedAt:    &capturedAt,
+		Target:        action.Spec.Target,
+		TargetUID:     baseline.TargetUID,
+		RiskSignalRef: riskSignalRefFromAction(action),
 		Health: &v1alpha1.EffectivenessHealthSnapshot{
 			Generation:         baseline.Health.Generation,
 			ObservedGeneration: baseline.Health.ObservedGeneration,
@@ -417,6 +422,39 @@ func effectivenessBaselineFromExecutor(baseline executor.EffectivenessBaseline, 
 		},
 		Digest: baseline.Digest,
 	}
+}
+
+func riskSignalRefFromAction(action *v1alpha1.AgentAction) *v1alpha1.NamespacedObjectReference {
+	if action == nil || action.Annotations == nil {
+		return nil
+	}
+	value := strings.TrimSpace(action.Annotations[annotationRiskSignalRef])
+	if value == "" {
+		return nil
+	}
+	namespace, name := splitNamespacedName(value)
+	if name == "" {
+		return nil
+	}
+	if namespace == "" {
+		namespace = action.Namespace
+	}
+	return &v1alpha1.NamespacedObjectReference{Name: name, Namespace: namespace}
+}
+
+func (r *AgentActionReconciler) populateBaselineEvidence(ctx context.Context, baseline *v1alpha1.EffectivenessBaseline) error {
+	if baseline == nil || baseline.RiskSignalRef == nil {
+		return nil
+	}
+	var riskSignal v1alpha1.RiskSignal
+	if err := r.Get(ctx, client.ObjectKey{Name: baseline.RiskSignalRef.Name, Namespace: baseline.RiskSignalRef.Namespace}, &riskSignal); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			return nil
+		}
+		return fmt.Errorf("get baseline RiskSignal %s/%s: %w", baseline.RiskSignalRef.Namespace, baseline.RiskSignalRef.Name, err)
+	}
+	baseline.EvidenceRefs = append([]v1alpha1.EvidenceRef(nil), riskSignal.Spec.Evidence...)
+	return nil
 }
 
 func (r *AgentActionReconciler) reconcileEffectivenessVerification(ctx context.Context, action *v1alpha1.AgentAction, now time.Time) (ctrl.Result, error) {
@@ -448,7 +486,57 @@ func (r *AgentActionReconciler) reconcileEffectivenessVerification(ctx context.C
 	if effectiveness.ObservationUntil != nil && now.Before(effectiveness.ObservationUntil.Time) {
 		return ctrl.Result{RequeueAfter: effectiveness.ObservationUntil.Sub(now)}, nil
 	}
-	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+
+	var verification v1alpha1.InvestigationRequest
+	if err := r.Get(ctx, client.ObjectKey{Name: effectiveness.VerificationRef.Name, Namespace: effectiveness.VerificationRef.Namespace}, &verification); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	if verification.Status.Phase != v1alpha1.PhaseCompleted && verification.Status.Phase != v1alpha1.PhaseFailed {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	postHealth, observed, observeErr := r.Executor.ObserveHealth(ctx, executorRequestForPersistedAction(action))
+	evaluation := evaluateEffectiveness(action.Status.Effectiveness.Baseline, postHealth, observed && observeErr == nil, &verification)
+	if observeErr != nil {
+		evaluation = effectivenessEvaluation{Outcome: v1alpha1.EffectivenessOutcomeInconclusive, Message: "post-action health observation failed: " + observeErr.Error()}
+	}
+	finishedAt := metav1.NewTime(now)
+	action.Status.Effectiveness.Phase = v1alpha1.EffectivenessPhaseCompleted
+	action.Status.Effectiveness.Outcome = evaluation.Outcome
+	action.Status.Effectiveness.Message = evaluation.Message
+	action.Status.Effectiveness.FinishedAt = &finishedAt
+	if observed && observeErr == nil {
+		action.Status.Effectiveness.PostActionHealth = effectivenessHealthSnapshotFromExecutor(postHealth)
+	}
+	if err := r.Status().Update(ctx, action); err != nil {
+		recordStatusUpdateConflict("AgentAction", err)
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func effectivenessHealthSnapshotFromExecutor(snapshot executor.HealthSnapshot) *v1alpha1.EffectivenessHealthSnapshot {
+	conditions := make([]v1alpha1.EffectivenessHealthCondition, 0, len(snapshot.Conditions))
+	for _, condition := range snapshot.Conditions {
+		conditions = append(conditions, v1alpha1.EffectivenessHealthCondition{
+			Type:    condition.Type,
+			Status:  condition.Status,
+			Reason:  condition.Reason,
+			Message: condition.Message,
+		})
+	}
+	return &v1alpha1.EffectivenessHealthSnapshot{
+		Generation:         snapshot.Generation,
+		ObservedGeneration: snapshot.ObservedGeneration,
+		DesiredReplicas:    snapshot.DesiredReplicas,
+		UpdatedReplicas:    snapshot.UpdatedReplicas,
+		AvailableReplicas:  snapshot.AvailableReplicas,
+		ReadyReplicas:      snapshot.ReadyReplicas,
+		Conditions:         conditions,
+	}
 }
 
 func (r *AgentActionReconciler) createEffectivenessVerification(ctx context.Context, action *v1alpha1.AgentAction) (*v1alpha1.InvestigationRequest, error) {

@@ -156,5 +156,23 @@ spec:
                                   status: {type: string}
                                   reason: {type: string}
                                   message: {type: string}
+                    postActionHealth:
+                      type: object
+                      properties:
+                        generation: {type: integer, format: int64}
+                        observedGeneration: {type: integer, format: int64}
+                        desiredReplicas: {type: integer, format: int32}
+                        updatedReplicas: {type: integer, format: int32}
+                        availableReplicas: {type: integer, format: int32}
+                        readyReplicas: {type: integer, format: int32}
+                        conditions:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              type: {type: string}
+                              status: {type: string}
+                              reason: {type: string}
+                              message: {type: string}
       subresources:
         status: {}

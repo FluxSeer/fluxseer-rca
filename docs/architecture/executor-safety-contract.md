@@ -22,8 +22,9 @@ arbitrary autonomous mutation are not covered by this design.
 
 Implementation status: the typed request/result contract, deterministic
 identity guard, gated Kubernetes Deployment restart backend, immutable
-pre-action baseline, settling window, and read-only verification request
-lifecycle are now present. Outcome evaluation remains the final alpha.1 batch.
+pre-action baseline, settling window, read-only verification request lifecycle,
+and baseline/post-action outcome evaluation are now present for the real
+Kubernetes path. GitOps and simulation routes remain outside this alpha slice.
 
 ## Ownership Boundary
 
@@ -202,10 +203,10 @@ owned by the `AgentAction`. The action persists the baseline and durable
 
 | Outcome | Meaning |
 | --- | --- |
-| `Effective` | The targeted incident signal cleared within the verification window and evidence supports the change. |
-| `Ineffective` | The targeted signal remains or evidence shows the action did not address the cause. |
-| `Regressed` | The signal cleared, then returned during the observation window. |
-| `Inconclusive` | Evidence, timing, or datasource availability is insufficient to decide. |
+| `Effective` | The verification reports no issue, post-action health is healthy, and health improved over the baseline. |
+| `Ineffective` | The original condition remains or the verification reports no issue while target health is still below desired state. |
+| `Regressed` | The post-action snapshot is objectively worse than baseline or contains a new material rollout failure. |
+| `Inconclusive` | Evidence, timing, target intent, or datasource/health availability is insufficient to decide. |
 
 The executor must not calculate these outcomes from a local API success
 alone. They belong to the verification investigation and are recorded

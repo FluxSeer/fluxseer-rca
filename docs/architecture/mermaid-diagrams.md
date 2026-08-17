@@ -797,6 +797,7 @@ sequenceDiagram
     participant AA as AgentAction
     participant AAC as AgentActionReconciler
     participant Exec as executor.Router
+    participant IR as Verification InvestigationRequest
 
     Note over RS,AAC: Disabled by default. Requires explicit feature and RBAC profile. AgentAction status has approval, dry-run, execution, and effectiveness fields; approval is digest-bound to what guardrails actually evaluated (see crd-reference/agentaction.md), spec.dryRunResult compatibility is still tracked for hardening.
     RS-->>RSC: confirmed signal
@@ -821,7 +822,10 @@ sequenceDiagram
         AAC->>Exec: execute or simulate
         Exec-->>AAC: result
         AAC->>AA: status.execution.phase=Succeeded or Failed
-        AAC->>AA: status.effectiveness remains Pending until post-action verification exists
+        AAC->>AA: baseline + status.effectiveness=Verifying
+        AAC->>IR: owned readOnly verification InvestigationRequest
+        IR-->>AAC: terminal evidence outcome
+        AAC->>AA: status.effectiveness=Effective/Ineffective/Regressed/Inconclusive
     end
 ```
 
