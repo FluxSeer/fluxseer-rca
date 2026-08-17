@@ -145,6 +145,89 @@ func TestRemediationPlanPolicyWatchMapsOnlyUndecidedPlans(t *testing.T) {
 	}
 }
 
+func TestRemediationPlanReconcilerAppliesNamespaceThresholdDefaults(t *testing.T) {
+	scheme := policyIntegrationScheme(t)
+	newPlan := func(name string, ttlSeconds, approvalTimeoutSeconds int64) *v1alpha1.RemediationPlan {
+		return &v1alpha1.RemediationPlan{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "prod", Generation: 1},
+			Spec: v1alpha1.RemediationPlanSpec{
+				Target:                 v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: name},
+				Severity:               "low",
+				TTLSeconds:             ttlSeconds,
+				ApprovalTimeoutSeconds: approvalTimeoutSeconds,
+				Steps: []v1alpha1.RemediationStep{{
+					Name:       "scale-down",
+					ActionType: "kubernetes.scaleDeployment",
+				}},
+			},
+		}
+	}
+	defaultedPlan := newPlan("defaulted", 0, 0)
+	explicitPlan := newPlan("explicit", 300, 45)
+	threshold := &v1alpha1.NamespaceThreshold{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod-defaults", Namespace: "prod"},
+		Spec: v1alpha1.NamespaceThresholdSpec{
+			Enabled:                       true,
+			DefaultTTLSeconds:             7200,
+			DefaultApprovalTimeoutSeconds: 180,
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RemediationPlan{}, &v1alpha1.AgentAction{}).
+		WithObjects(defaultedPlan, explicitPlan, threshold).
+		Build()
+	legacy := guardrails.NewEngine(guardrails.Policy{
+		AllowedActionTypes:       []string{"kubernetes.scaleDeployment"},
+		AutoApproveMaxSeverity:   domain.SeverityLow,
+		RequireApprovalAtOrAbove: domain.SeverityMedium,
+	})
+	reconciler := &RemediationPlanReconciler{
+		Client:     fakeClient,
+		Scheme:     scheme,
+		Guardrails: legacy,
+		Thresholds: thresholds.NewEnforcer(fakeClient),
+	}
+
+	for _, plan := range []*v1alpha1.RemediationPlan{defaultedPlan, explicitPlan} {
+		if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(plan)}); err != nil {
+			t.Fatalf("reconcile %s plan: %v", plan.Name, err)
+		}
+	}
+
+	var storedDefaultedPlan v1alpha1.RemediationPlan
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(defaultedPlan), &storedDefaultedPlan); err != nil {
+		t.Fatalf("get defaulted plan: %v", err)
+	}
+	if storedDefaultedPlan.Spec.TTLSeconds != 7200 || storedDefaultedPlan.Spec.ApprovalTimeoutSeconds != 180 {
+		t.Fatalf("expected namespace defaults on plan, got ttl=%d approvalTimeout=%d", storedDefaultedPlan.Spec.TTLSeconds, storedDefaultedPlan.Spec.ApprovalTimeoutSeconds)
+	}
+
+	var defaultedAction v1alpha1.AgentAction
+	if err := fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "prod", Name: "defaulted-action"}, &defaultedAction); err != nil {
+		t.Fatalf("get defaulted action: %v", err)
+	}
+	if defaultedAction.Spec.TTLSeconds != 7200 || defaultedAction.Spec.ApprovalTimeoutSeconds != 180 {
+		t.Fatalf("expected namespace defaults on action, got ttl=%d approvalTimeout=%d", defaultedAction.Spec.TTLSeconds, defaultedAction.Spec.ApprovalTimeoutSeconds)
+	}
+
+	var storedExplicitPlan v1alpha1.RemediationPlan
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(explicitPlan), &storedExplicitPlan); err != nil {
+		t.Fatalf("get explicit plan: %v", err)
+	}
+	if storedExplicitPlan.Spec.TTLSeconds != 300 || storedExplicitPlan.Spec.ApprovalTimeoutSeconds != 45 {
+		t.Fatalf("expected explicit plan values to win, got ttl=%d approvalTimeout=%d", storedExplicitPlan.Spec.TTLSeconds, storedExplicitPlan.Spec.ApprovalTimeoutSeconds)
+	}
+
+	var explicitAction v1alpha1.AgentAction
+	if err := fakeClient.Get(context.Background(), client.ObjectKey{Namespace: "prod", Name: "explicit-action"}, &explicitAction); err != nil {
+		t.Fatalf("get explicit action: %v", err)
+	}
+	if explicitAction.Spec.TTLSeconds != 300 || explicitAction.Spec.ApprovalTimeoutSeconds != 45 {
+		t.Fatalf("expected explicit action values to win, got ttl=%d approvalTimeout=%d", explicitAction.Spec.TTLSeconds, explicitAction.Spec.ApprovalTimeoutSeconds)
+	}
+}
+
 func TestRemediationPlanReconcilerRejectsNamespaceThresholdViolation(t *testing.T) {
 	scheme := policyIntegrationScheme(t)
 	currentPlan := &v1alpha1.RemediationPlan{

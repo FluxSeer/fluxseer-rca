@@ -82,6 +82,23 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if !result.Allowed {
 			return r.rejectForThreshold(ctx, &plan, result, now())
 		}
+		if result.Resolution != nil {
+			threshold := result.Resolution.Threshold.Spec
+			defaultsChanged := false
+			if plan.Spec.TTLSeconds == 0 && threshold.DefaultTTLSeconds > 0 {
+				plan.Spec.TTLSeconds = threshold.DefaultTTLSeconds
+				defaultsChanged = true
+			}
+			if plan.Spec.ApprovalTimeoutSeconds == 0 && threshold.DefaultApprovalTimeoutSeconds > 0 {
+				plan.Spec.ApprovalTimeoutSeconds = threshold.DefaultApprovalTimeoutSeconds
+				defaultsChanged = true
+			}
+			if defaultsChanged {
+				if err := r.persistNamespaceDefaults(ctx, &plan); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
 	}
 
 	evaluation, err := r.evaluatePolicy(ctx, &plan)
@@ -192,6 +209,17 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// persistNamespaceDefaults makes threshold-derived values visible on the
+// RemediationPlan itself. This keeps the plan TTL controller and the generated
+// AgentAction on the same effective contract, while preserving any explicit
+// plan values supplied by the user.
+func (r *RemediationPlanReconciler) persistNamespaceDefaults(ctx context.Context, plan *v1alpha1.RemediationPlan) error {
+	if plan == nil {
+		return nil
+	}
+	return r.Update(ctx, plan)
 }
 
 func (r *RemediationPlanReconciler) evaluatePolicy(ctx context.Context, plan *v1alpha1.RemediationPlan) (guardrails.PolicyEvaluation, error) {
