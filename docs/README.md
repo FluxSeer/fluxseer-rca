@@ -24,7 +24,9 @@ dashboard screenshots, terminal history, or individual responder memory.
 - Highest-value promise: make Kubernetes incident investigations durable,
   evidence-linked organizational knowledge.
 - Current release scope: `v0.4.0-beta.3` adds terminal-state TTL cleanup for `AgentAction` and `RemediationPlan` on top of approval lifecycle, escalation handling, approval audit timestamps, notification retry tracking, and production governance while maintaining read-only RCA as the default.
-- Current v0.4 engineering state: guardrails and approval lifecycle consolidation, preparing for v0.5 low-risk action execution.
+- Current v0.4 engineering state: guardrails and approval lifecycle
+  consolidation is complete for the beta scope; the next planned milestone is
+  v0.5 **Safe Remediation**, not a general-purpose executor expansion.
 - `InvestigationRequest` is the primary operator-first entrypoint for ad-hoc or externally triggered RCA.
 - `RiskRule` is a valid bootstrap detection and rule-pack entrypoint, not the canonical RCA ownership surface.
 - `RiskSignal` is a materialized finding, notification target, and compatibility projection.
@@ -136,6 +138,7 @@ Product positioning:
 Current planning:
 
 - [Backlog execution ledger](backlog/README.md)
+- [v0.5 Safe Remediation](backlog/v0.5-safe-remediation.md)
 - [v0.4 workload target coverage gate](backlog/v0.4-workload-target-coverage.md)
 - [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [v0.3 product direction](backlog/v0.3-product-direction.md)

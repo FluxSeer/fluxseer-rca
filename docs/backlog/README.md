@@ -19,10 +19,14 @@ Status meanings:
 | Priority | Workstream | Status | Next completion signal |
 | --- | --- | --- | --- |
 | P0 | [Runtime error matrix](v0.3-runtime-error-matrix.md) | `Complete` | No remaining P0 runtime scenario is queued; new cases require a named public contract. |
+| P0 | [v0.5 Safe Remediation](v0.5-safe-remediation.md) | `Active` | Allowlisted Kubernetes and GitOps execution, safety-contract tests, post-action verification, policy status, and audit links pass the release gates. |
 | P0 | [Beta stabilization and RCA quality baseline](v0.3-beta-stabilization.md) | `Active` | Expand replay quality, verifier, provider, diagnostics, and real-cluster compatibility evidence. |
 | P1 | [Production-readiness expansion](v0.3-production-readiness.md) | `Active` | Scenario and target coverage extends beyond the first E2E matrix. |
 | P1 | [Architecture hardening follow-ups](v0.3-architecture-hardening.md) | `Active` | Post-action effectiveness verification and the selected durable evidence backend are complete. |
-| P2 | Raw snapshot retention | `Deferred` | Security, encryption, retention, access-control, and audit contracts are approved before adapter implementation. |
+| P2 | Evidence governance and RawSnapshot | `Deferred` | v0.7 security, encryption, retention, access-control, deletion, and audit contracts are approved before adapter implementation. |
+| P2 | OpenTelemetry and CloudWatch production adapters | `Deferred` | v0.7 observability contracts establish trace/evidence semantics and support boundaries. |
+| P2 | Alert automation and full escalation workflow | `Deferred` | v0.6 defines bounded alert ingress, reinvestigation, cooldown, loop prevention, and multi-stage escalation semantics. |
+| P3 | Replay runner and adaptive investigation | `Deferred` | v0.8 establishes safe runtime replay and bounded adaptive-investigation contracts. |
 
 The original runtime-validation checklist was completed and superseded by the
 formal baselines below. It is retained as provenance, not as an open ticket:
@@ -59,9 +63,11 @@ passing CI head. The following repository-local records are therefore the
 remaining actionable workstreams:
 
 - beta stabilization and RCA quality expansion;
+- v0.5 Safe Remediation implementation and release gates;
 - production-readiness scenario and target expansion;
 - architecture hardening follow-ups;
-- deferred RawSnapshot storage and security work.
+- deferred v0.6-v0.8 automation, evidence governance, observability, replay,
+  and adaptive-investigation work.
 
 P0 runtime validation, canonical workload coverage, v0.4 approval lifecycle,
 the 15-case User-facing Report catalog, request-rate-surge conformance, and the
