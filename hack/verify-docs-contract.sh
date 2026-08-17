@@ -30,7 +30,7 @@ ci_version="$(awk '$1 == "RELEASE_VERSION:" {print $2; exit}' "${root}/.github/w
   exit 1
 }
 
-grep -Fq "Current release: \`${release_version}\`" "${root}/README.md"
+grep -Fq "Current published release: \`${release_version}\`" "${root}/README.md"
 grep -Fq "Current published release: \`${release_version}\`" "${root}/docs/README.md"
 grep -Fq "Current release baseline: \`${release_version}\`" "${root}/docs/runtime-modes.md"
 grep -Fq "## [${release_version}]" "${root}/CHANGELOG.md"

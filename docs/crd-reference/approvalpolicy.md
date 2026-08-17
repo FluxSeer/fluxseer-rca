@@ -3,6 +3,11 @@
 `ApprovalPolicy` defines approval decisions for guarded remediation. It is
 used only when the remediation controller and Policy Pack are enabled.
 
+**Runtime support:** Experimental and opt-in. The current beta supports policy
+selection, action/severity decisions, timeout defaults, and escalation-chain
+references. Installing the CRD alone does not start a policy reconciler or
+enable mutation.
+
 ```yaml
 apiVersion: aiops.platform/v1alpha1
 kind: ApprovalPolicy

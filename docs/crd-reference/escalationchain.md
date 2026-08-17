@@ -4,6 +4,11 @@
 notifications. It is used by the guarded remediation path when Policy Pack is
 enabled.
 
+**Runtime support:** Experimental and opt-in, limited to chain selection,
+notification metadata, and the `Escalated` audit transition. Stage-by-stage
+delays, conditions, assignees, templates, reassignment, auto-rejection, and
+force-execution are Reserved and are not executed by the current runtime.
+
 ```yaml
 apiVersion: aiops.platform/v1alpha1
 kind: EscalationChain

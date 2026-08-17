@@ -3,6 +3,11 @@
 `NamespaceThreshold` limits guarded remediation concurrency for one namespace
 or a set of namespaces. It is used by the Policy Pack threshold enforcer.
 
+**Runtime support:** Experimental and opt-in. The current beta applies matching
+limits and TTL/approval defaults during guarded remediation. The
+`spec.protectionLevel` field is Reserved: it is stored for schema compatibility
+but is not applied by the runtime.
+
 ```yaml
 apiVersion: aiops.platform/v1alpha1
 kind: NamespaceThreshold

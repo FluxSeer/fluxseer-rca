@@ -6,9 +6,11 @@
 
 Kubernetes-native RCA control plane for platform and security/compliance-governance teams that need explicit, auditable, and security-first AI-assisted investigation — not a general-purpose on-call chat assistant.
 
-Current release: `v0.4.0-beta.3`
+Current published release: `v0.4.0-beta.3`
 
-Status: `v0.4.0-beta.3 published, lifecycle cleanup and canonical RCA runtime semantics verified`
+Current development milestone: `v0.5-alpha.1 Safe Remediation` (unreleased)
+
+Status: `v0.4.0-beta.3 published; v0.5-alpha.1 remains an explicitly gated development slice`
 
 FluxSeer RCA is the project's product name. Source code, binaries, Helm
 artifacts, CRDs, metrics, and Kubernetes resource naming use the `fluxseer` /
@@ -34,6 +36,36 @@ Can this investigation be audited, reproduced from recorded query metadata, and 
 FluxSeer RCA is the Kubernetes control plane and audit contract around RCA. It is not an all-in-one monitoring stack, not a free-form cluster agent, and not an autonomous production remediation system.
 
 FluxSeer RCA does not grant reasoning providers unrestricted cluster access. It sends only bounded, normalized, and redacted evidence collected through declared investigation policies and datasource capabilities.
+
+## Public Capability Contract
+
+FluxSeer RCA uses four capability labels so that an installed CRD is not
+mistaken for a supported runtime feature:
+
+| Label | Meaning |
+| --- | --- |
+| **Supported** | Tested public behavior covered by the default read-only RCA contract. |
+| **Experimental** | Implemented behavior that requires explicit feature and RBAC opt-in; it is not a production-readiness claim. |
+| **Planned** | A documented direction or interface with no supported implementation in the current release. |
+| **Reserved** | A schema or extension point intentionally retained for compatibility; it must not be treated as active behavior. |
+
+Current boundary:
+
+| Capability | Status | Public boundary |
+| --- | --- | --- |
+| Kubernetes Events, workload status, Prometheus, and Loki evidence | Supported | Read-only collection with declared datasource/query policy. |
+| Heuristic RCA provider | Supported | Local, no-secret default path. |
+| Hosted OpenAI, Claude, and Gemini providers | Beta / opt-in | Requires explicit provider credentials and egress policy. |
+| `kubernetes.rolloutRestart` | Experimental | One allowlisted Deployment mutation path, guarded by approval/policy and explicit remediation plus experimental-executor enablement. |
+| Effectiveness verification | Experimental | Bounded observation window; reports `Effective`, `Ineffective`, `Regressed`, or `Inconclusive`, not a permanent root-cause guarantee. |
+| GitOps Executor | Planned | No production branch, commit, or pull-request backend is shipped. |
+| Runbook Executor | Not supported | The bundled route is simulation-oriented only. |
+| Generic Kubernetes patch/apply/delete/exec/shell or autonomous mutation | Not supported | No general-purpose cluster agent contract. |
+
+The `Executor` interface is intentionally extensible, but an extension point is
+not an official support promise. The only official mutation backend in the
+current development slice is the experimental Kubernetes `rolloutRestart`
+route.
 
 FluxSeer RCA includes 21 built-in detection patterns: 6 Kubernetes-native
 patterns available out of the box, plus 8 Prometheus and 7 Loki patterns that
@@ -347,12 +379,17 @@ See [docs/helm-rulepacks.md](docs/helm-rulepacks.md) for configuration and suppo
 
 ### Guarded Remediation
 
-Enable this explicitly with `--enable-remediation=true`.
+Enable the guarded lifecycle with `--enable-remediation=true`. Real Kubernetes
+mutation additionally requires `--enable-experimental-executor=true` and the
+matching experimental RBAC profile; remediation without the experimental
+executor remains review/simulation-oriented.
 
 - `RiskSignal` can generate `RemediationPlan`
 - guardrails decide auto-approve / waiting approval / reject
 - approved `AgentAction` routes through executor adapters
 - execution remains separated from AI reasoning
+- only the allowlisted Deployment `kubernetes.rolloutRestart` path performs a
+  real Kubernetes mutation in the current development slice
 
 ## Core CRDs
 
@@ -663,6 +700,7 @@ Implemented today:
 - webhook notification flow
 - provider-neutral model abstractions
 - optional guarded remediation path
+- experimental allowlisted Kubernetes rollout restart with bounded effectiveness verification
 - kind demo scaffolding
 
 Stabilization work:
@@ -678,6 +716,7 @@ Operational gaps:
 - broader production-grade vendor response-governance coverage
 - GitOps PR backends and approval UX
 - admission policies and richer multi-cluster support
+- production support and release hardening for v0.5 executors
 
 ## Documentation
 
@@ -694,6 +733,7 @@ Operational gaps:
 - [docs/github-repo.md](docs/github-repo.md)
 - [ROADMAP.md](ROADMAP.md)
 - [docs/open-source-positioning.md](docs/open-source-positioning.md)
+- [docs/capability-maturity.md](docs/capability-maturity.md)
 
 ## License
 

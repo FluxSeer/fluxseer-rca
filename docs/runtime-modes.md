@@ -8,6 +8,18 @@ Current API identity: `aiops.platform/v1alpha1`
 
 The API group and version identity are fixed for the current v0.4 line. This does not mean that every v1alpha1 schema field is generally available or stable.
 
+## Public Capability Labels
+
+`Supported` means tested public runtime behavior. `Experimental` means
+implemented behavior that requires explicit feature and RBAC opt-in and is not
+a production-readiness claim. `Planned` means documented future work without a
+supported implementation. `Reserved` means a compatibility schema or
+extension point that is not applied at runtime.
+
+CRD installation is not equivalent to runtime support. The current published
+release remains `v0.4.0-beta.3`; the bounded `v0.5-alpha.1` executor slice is
+development work and is not yet a published release.
+
 ## Mode Ownership
 
 FluxSeer RCA has several configuration surfaces. They should not be treated as one flat list.
@@ -87,7 +99,7 @@ Capability semantics:
 | `legacyDeploymentRisk` | disabled | Legacy / opt-in | Enables the annotation-driven Deployment watcher. |
 | `remediation` | disabled | Experimental / opt-in | Enables `RemediationPlan` and `AgentAction` reconciliation. |
 | `policyPack` | disabled | Experimental / opt-in | Enables CRD-based approval policy, namespace threshold, and escalation routing for remediation. Requires remediation. |
-| `experimentalExecutor` | disabled | Experimental / opt-in | Adds executor-like permissions such as Job and ConfigMap mutation. |
+| `experimentalExecutor` | disabled | Experimental / opt-in | Adds only the currently implemented Deployment mutation permissions for the allowlisted `kubernetes.rolloutRestart` path. |
 
 ## Approval Lifecycle and Audit
 
@@ -170,6 +182,11 @@ The policy resources expose status fields for future validation reporting, but
 the current beta does not run separate reconcilers that populate their
 `Pending`/`Valid`/`Invalid`/`Disabled` status. Invalid or explicitly disabled
 resources are ignored by policy resolution.
+
+The policy CRD runtime support is therefore limited to selection,
+concurrency/TTL/approval defaults, and escalation notification. Protection-level
+behavior, stage-by-stage escalation actions, and separate policy status
+reconcilers are reserved.
 
 ## RCA Entry
 
@@ -377,7 +394,7 @@ rbac:
 | --- | --- |
 | `readOnlyRCA` | Default read-only RCA permissions. |
 | `remediation` | Adds remediation/action CRD permissions. |
-| `experimentalExecutor` | Adds executor-like Job and ConfigMap permissions. |
+| `experimentalExecutor` | Adds bounded Deployment `get`/`patch`/`update` permissions for the allowlisted rollout-restart path. |
 
 The design risk is that feature flags and `rbac.profile` can become two sources of truth. For example:
 
@@ -421,6 +438,7 @@ The manager process exposes flags:
 --enable-remediation
 --enable-policy-pack
 --enable-legacy-deployment-risk
+--enable-experimental-executor
 --leader-elect
 --metrics-bind-address
 --health-probe-bind-address

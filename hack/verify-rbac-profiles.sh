@@ -130,8 +130,9 @@ assert_contains "${remediation_clusterrole}" 'resources: ["remediationplans/stat
 assert_not_contains "${remediation_clusterrole}" 'resources: ["jobs"]' "Job mutation absent from remediation-only profile"
 assert_not_contains "${remediation_clusterrole}" 'resources: ["configmaps"]' "ConfigMap mutation absent from remediation-only profile"
 
-assert_contains "${experimental_clusterrole}" 'resources: ["jobs"]' "experimental executor Job permissions"
-assert_contains "${experimental_clusterrole}" 'resources: ["configmaps"]' "experimental executor ConfigMap permissions"
+assert_not_contains "${experimental_clusterrole}" 'resources: ["configmaps"]' "experimental executor does not grant ConfigMap mutation"
+assert_not_contains "${experimental_clusterrole}" 'resources: ["jobs"]' "experimental executor does not grant Job mutation"
+assert_contains "${experimental_clusterrole}" 'resources: ["deployments"]' "experimental executor Deployment permissions"
 assert_contains "${experimental_clusterrole}" 'resources: ["deployments"]' "experimental executor Deployment mutation permissions"
 assert_invalid_experimental_message
 assert_invalid_policy_message
