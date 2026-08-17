@@ -1,0 +1,52 @@
+# NamespaceThreshold
+
+`NamespaceThreshold` limits guarded remediation concurrency for one namespace
+or a set of namespaces. It is used by the Policy Pack threshold enforcer.
+
+```yaml
+apiVersion: aiops.platform/v1alpha1
+kind: NamespaceThreshold
+metadata:
+  name: production-remediation-limits
+  namespace: fluxseer-rca-system
+spec:
+  enabled: true
+  namespaceSelector:
+    matchLabels:
+      environment: production
+  activePlansLimit: 10
+  pendingApprovalsLimit: 5
+  priority: 100
+  protectionLevel: standard
+```
+
+## Implemented fields
+
+- `spec.namespaceSelector`: omitted means the resource's own namespace;
+  an explicit selector can match target namespaces by labels.
+- `spec.activePlansLimit`: maximum active `RemediationPlan` objects. `0` is
+  unlimited.
+- `spec.pendingApprovalsLimit`: maximum waiting or escalated `AgentAction`
+  objects. `0` is unlimited.
+- `spec.priority`: resolves multiple matching thresholds.
+- `spec.enabled`: enables or disables the threshold.
+
+The selected threshold reference and any violations are recorded in the
+remediation decision path. The current beta does not apply
+`defaultTTLSeconds`, `defaultApprovalTimeoutSeconds`, or `protectionLevel` to
+created resources; those fields are schema reservations for a later policy
+iteration.
+
+The CRD includes status fields for future validation and enforcement reporting,
+but the current beta does not run a separate `NamespaceThreshold` reconciler.
+Invalid or explicitly disabled thresholds are ignored by resolution.
+
+## Enabling the policy pack
+
+```yaml
+features:
+  remediation:
+    enabled: true
+  policyPack:
+    enabled: true
+```

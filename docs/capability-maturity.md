@@ -21,7 +21,8 @@ InvestigationRequest
 | Materialization / compatibility | `RiskSignal` | External finding, notification target, and v0.2-compatible output projection. |
 | Guarded experimental | `RemediationPlan`, `AgentAction` | CRDs are installed for compatibility, but controllers and RBAC are disabled by default. |
 | Legacy bootstrap | `DeploymentRiskReconciler` | Annotation-driven Deployment detection path; disabled by default and retained only as explicit opt-in. |
-| Scaffold | OpenTelemetry, CloudWatch datasource adapters | Development skeletons, not supported v0.3 production adapters. |
+| Scaffold | OpenTelemetry, CloudWatch datasource adapters | Development skeletons, not supported v0.4 beta adapters. |
+| Guarded policy pack | `ApprovalPolicy`, `NamespaceThreshold`, `EscalationChain` | Opt-in remediation governance; limits and timeout routing are implemented, while advanced defaults and multi-stage actions remain reserved. |
 
 `RiskRule` and `RiskSignal` are valid public APIs, but they are not required for every RCA. New integrations should treat `InvestigationRequest.status` as the canonical RCA truth.
 
@@ -39,10 +40,10 @@ InvestigationRequest
 | Claude API provider | Beta / opt-in | Requires `ModelProvider`, Secret, and hosted-provider data egress opt-in. |
 | Gemini API provider | Beta / opt-in | Requires `ModelProvider`, Secret, and hosted-provider data egress opt-in. |
 | Normalized snapshot retention | Beta / opt-in | Requires `FLUXSEER_RCA_EVIDENCE_STORE_DIR` and `storageRef.name: local-filesystem`. |
-| Raw snapshot retention | Reserved / unsupported | Contract is present, runtime rejects it in v0.3. |
+| Raw snapshot retention | Reserved / unsupported | Contract is present, runtime rejects it in the current v0.4 beta. |
 | Replay artifacts and comparison | Foundation / library | Terminal CRD export and deterministic bundle comparison exist; no runtime replay runner or controller entrypoint is shipped. |
-| OpenTelemetry adapter | Scaffold | Not part of the supported v0.3 adapter set. |
-| CloudWatch adapter | Scaffold | Not part of the supported v0.3 adapter set. |
+| OpenTelemetry adapter | Scaffold | Not part of the supported v0.4 beta adapter set. |
+| CloudWatch adapter | Scaffold | Not part of the supported v0.4 beta adapter set. |
 | Remediation | Experimental | Requires explicit controller and RBAC opt-in. |
 | Legacy Deployment annotation detection | Legacy / opt-in | Disabled by default. |
 

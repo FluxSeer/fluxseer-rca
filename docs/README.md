@@ -61,7 +61,7 @@ Current maintained architecture:
 - [Action executor](architecture/action-executor.md)
 - [Remediation flow](architecture/remediation-flow.md)
 - [v0.3 investigation experience](architecture/v0.3-investigation-experience.md)
-- [FluxSeer RCA → FluxSeer RCA rename migration plan](architecture/rename-migration-plan.md)
+- [FluxAgent → FluxSeer RCA rename migration plan](architecture/rename-migration-plan.md)
 
 Historical architecture records:
 
@@ -83,6 +83,15 @@ CRD references:
 - [RiskSignal](crd-reference/risksignal.md)
 - [RemediationPlan](crd-reference/remediationplan.md)
 - [AgentAction](crd-reference/agentaction.md)
+- [ApprovalPolicy](crd-reference/approvalpolicy.md)
+- [NamespaceThreshold](crd-reference/namespacethreshold.md)
+- [EscalationChain](crd-reference/escalationchain.md)
+
+Policy Pack samples:
+
+- [ApprovalPolicy sample](../config/samples/approval-policy.yaml)
+- [NamespaceThreshold sample](../config/samples/namespace-threshold.yaml)
+- [EscalationChain sample](../config/samples/escalation-chain.yaml)
 
 Adapter references:
 

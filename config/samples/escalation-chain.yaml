@@ -1,0 +1,10 @@
+apiVersion: aiops.platform/v1alpha1
+kind: EscalationChain
+metadata:
+  name: standard-remediation-escalation
+  namespace: fluxseer-rca-system
+spec:
+  enabled: true
+  priority: 100
+  stages:
+    - name: platform-on-call

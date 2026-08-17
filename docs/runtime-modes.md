@@ -51,6 +51,7 @@ These are the primary mode choices an installer or API user should understand.
 | Evidence retention | `MetadataOnly`, `NormalizedSnapshot`, `RawSnapshot` | `MetadataOnly` | `InvestigationRequest` |
 | Query security | `LegacyUnrestricted`, `TemplatesOnly` | compatibility-dependent | `DataSource` |
 | Rule packs | Kubernetes, Prometheus, Loki baseline | Kubernetes baseline enabled | Helm |
+| Policy pack | Approval policies, namespace thresholds, escalation routing | disabled | Helm + policy CRDs |
 | Approval lifecycle | auto approval, human approval, escalation | disabled with remediation | `RemediationPlan` / `AgentAction` |
 
 ## Runtime Capability
@@ -63,6 +64,8 @@ features:
     enabled: false
   remediation:
     enabled: false
+  policyPack:
+    enabled: false
   experimentalExecutor:
     enabled: false
 ```
@@ -71,6 +74,7 @@ The default read-only RCA mode is not a single boolean. It is the installed stat
 
 ```text
 remediation=false
+policyPack=false
 experimentalExecutor=false
 legacyDeploymentRisk=false
 ```
@@ -82,6 +86,7 @@ Capability semantics:
 | read-only RCA | enabled | Supported | Collect bounded evidence and write FluxSeer RCA CRD status without mutating workloads. |
 | `legacyDeploymentRisk` | disabled | Legacy / opt-in | Enables the annotation-driven Deployment watcher. |
 | `remediation` | disabled | Experimental / opt-in | Enables `RemediationPlan` and `AgentAction` reconciliation. |
+| `policyPack` | disabled | Experimental / opt-in | Enables CRD-based approval policy, namespace threshold, and escalation routing for remediation. Requires remediation. |
 | `experimentalExecutor` | disabled | Experimental / opt-in | Adds executor-like permissions such as Job and ConfigMap mutation. |
 
 ## Approval Lifecycle and Audit
@@ -123,9 +128,46 @@ Dependency rules:
 
 ```text
 experimentalExecutor -> requires remediation
+policyPack           -> requires remediation
 remediation          -> independent from legacyDeploymentRisk
 legacy watcher       -> compatibility only
 ```
+
+## Policy Pack
+
+The policy pack is an opt-in layer for guarded remediation. Enable it together
+with remediation through Helm:
+
+```yaml
+features:
+  remediation:
+    enabled: true
+  policyPack:
+    enabled: true
+```
+
+The current beta implements these policy behaviors:
+
+- `ApprovalPolicy` selects auto, manual, or rejected decisions by action type
+  and severity, and can provide an approval timeout and escalation-chain
+  reference.
+- `NamespaceThreshold` selects the highest-priority applicable policy and
+  enforces `activePlansLimit` and `pendingApprovalsLimit`.
+- `EscalationChain` selects and records an escalation-chain snapshot when an
+  approval timeout notification is emitted.
+
+The following CRD fields are schema contracts but are not applied by the
+current beta controller: `NamespaceThreshold.spec.defaultTTLSeconds`,
+`defaultApprovalTimeoutSeconds`, `protectionLevel`, and the detailed
+stage-by-stage `EscalationChain.spec.stages[].delay`, `condition`, `actions`,
+`assignees`, and `notificationTemplate` behavior. The current escalation path
+notifies and marks the action `Escalated`; it does not auto-reject, reassign,
+or force-execute an action.
+
+The policy resources expose status fields for future validation reporting, but
+the current beta does not run separate reconcilers that populate their
+`Pending`/`Valid`/`Invalid`/`Disabled` status. Invalid or explicitly disabled
+resources are ignored by policy resolution.
 
 ## RCA Entry
 
@@ -375,6 +417,7 @@ The manager process exposes flags:
 
 ```text
 --enable-remediation
+--enable-policy-pack
 --enable-legacy-deployment-risk
 --leader-elect
 --metrics-bind-address
@@ -385,7 +428,7 @@ These split into two groups:
 
 | Group | Flags |
 | --- | --- |
-| Capability flags | `--enable-remediation`, `--enable-legacy-deployment-risk` |
+| Capability flags | `--enable-remediation`, `--enable-policy-pack`, `--enable-legacy-deployment-risk` |
 | Operational flags | `--leader-elect`, `--metrics-bind-address`, `--health-probe-bind-address` |
 
 For normal users, Helm should be the public configuration surface. Container args are the Deployment rendering mechanism, not the preferred user interface.
