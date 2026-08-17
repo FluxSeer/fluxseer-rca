@@ -45,35 +45,48 @@ type Executor interface {
 
 The contract is intentionally additive: the current shape already carries
 execution identity, idempotency, policy snapshot, timeout, attempt, outcome,
-failure, timing, external reference, and retryability fields. The target
-shape still adds backend capability declaration and controller-enforced
-lifecycle recovery without allowing backend code to bypass policy:
+failure, timing, external reference, and retryability fields. Batch 2 now
+derives deterministic identities and guards against re-dispatch while an
+identity-bearing execution is already in progress. The target shape still
+adds backend capability declaration and lookup-based lifecycle recovery
+without allowing backend code to bypass policy:
 
 ```go
-type ExecutionRequest struct {
-    ExecutionID      string
-    IdempotencyKey   string
-    ActionDigest     string
-    ActionType       string
-    Target           domain.ResourceRef
-    Parameters       map[string]string
-    Approval         ApprovalProof
-    PolicySnapshot   PolicySnapshot
-    Timeout          time.Duration
-    RetryPolicy      RetryPolicy
+type ExecutorRequest struct {
+    ExecutionID            string
+    IdempotencyKey         string
+    ActionDigest           string
+    ActionType             string
+    ActionIndex            int
+    Target                 domain.ResourceRef
+    TargetUID              string
+    Parameters             map[string]any
+    ApprovedPolicySnapshot PolicySnapshot
+    Timeout                time.Duration
+    Attempt                int
+}
+
+type ExecutorResult struct {
+    ExecutionID  string
+    Outcome      ExecutionOutcome
+    FailureReason string
+    StartedAt    time.Time
+    FinishedAt   time.Time
+    ExternalRef  string
+    Retryable    bool
 }
 
 type Executor interface {
     Name() string
     Supports(actionType string) bool
-    Execute(ctx context.Context, request ExecutionRequest) (ExecutionResult, error)
+    Execute(ctx context.Context, request ExecutorRequest) (ExecutorResult, error)
 }
 ```
 
-This is a design target, not a claim that the current Go code already
-implements it. `Router` remains responsible for route selection and the
-controller remains responsible for approval, policy revalidation, status
-updates, and verification orchestration.
+The `Supports` method and lookup-based recovery remain future additions.
+`Router` remains responsible for route selection and the controller remains
+responsible for approval, policy revalidation, status updates, and verification
+orchestration.
 
 ## Identity and Idempotency
 

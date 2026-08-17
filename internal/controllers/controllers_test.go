@@ -170,6 +170,9 @@ func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) 
 	if action.Status.Execution == nil || action.Status.Execution.Phase != "Succeeded" || action.Status.Execution.Executor == "" {
 		t.Fatalf("expected execution status, got %#v", action.Status.Execution)
 	}
+	if action.Status.Execution.ExecutionID == "" || action.Status.Execution.IdempotencyKey == "" || action.Status.Execution.Attempt != 1 {
+		t.Fatalf("expected deterministic execution identity, got %#v", action.Status.Execution)
+	}
 	if action.Status.Effectiveness == nil || action.Status.Effectiveness.Phase != "NotVerified" {
 		t.Fatalf("expected NotVerified effectiveness status, got %#v", action.Status.Effectiveness)
 	}
@@ -315,6 +318,49 @@ func (s *spyExecutor) Name() string { return s.name }
 func (s *spyExecutor) Execute(_ context.Context, _ executor.ApprovedAction) (domain.ExecutionResult, error) {
 	s.invoked = true
 	return domain.ExecutionResult{Executor: s.name, Status: "succeeded"}, nil
+}
+
+func TestAgentActionReconcilerDoesNotReexecutePersistedExecution(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	action := &v1alpha1.AgentAction{
+		ObjectMeta: metav1.ObjectMeta{Name: "restart-action", Namespace: "payments", UID: types.UID("action-uid"), Generation: 1},
+		Spec: v1alpha1.AgentActionSpec{
+			Target:     v1alpha1.TargetRef{Namespace: "payments", Kind: "Deployment", Name: "payments-api", APIVersion: "apps/v1"},
+			ActionType: "kubernetes.rolloutRestart",
+		},
+		Status: v1alpha1.AgentActionStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{Phase: v1alpha1.PhaseExecuting},
+			Execution: &v1alpha1.AgentActionExecutionStatus{
+				Phase:          "Executing",
+				ExecutionID:    "exec-existing",
+				IdempotencyKey: "sha256:existing",
+				Attempt:        1,
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.AgentAction{}).
+		WithObjects(action).
+		Build()
+	spy := &spyExecutor{name: "spy-executor"}
+	reconciler := &AgentActionReconciler{
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Executor: executor.NewRouter(spy, spy, spy, spy),
+	}
+
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: action.Name, Namespace: action.Namespace}}); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+	if spy.invoked {
+		t.Fatal("expected persisted Executing identity to prevent duplicate executor invocation")
+	}
 }
 
 func TestAgentActionReconcilerRejectsDirectlyCreatedActionDespiteApprovedBy(t *testing.T) {
