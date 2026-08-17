@@ -16,6 +16,7 @@ remediation_render="${tmpdir}/remediation.yaml"
 policy_render="${tmpdir}/policy.yaml"
 experimental_render="${tmpdir}/experimental.yaml"
 invalid_experimental_render="${tmpdir}/invalid-experimental.yaml"
+invalid_policy_render="${tmpdir}/invalid-policy.yaml"
 default_clusterrole="${tmpdir}/default-clusterrole.yaml"
 legacy_clusterrole="${tmpdir}/legacy-clusterrole.yaml"
 remediation_clusterrole="${tmpdir}/remediation-clusterrole.yaml"
@@ -29,6 +30,7 @@ helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
   --set features.remediation.enabled=true \
   --set rbac.profile=remediation >"${remediation_render}"
 helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
+  --set features.remediation.enabled=true \
   --set features.policyPack.enabled=true >"${policy_render}"
 helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
   --set features.remediation.enabled=true \
@@ -41,10 +43,22 @@ if helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
   echo "expected experimentalExecutor profile to fail without remediation enabled" >&2
   exit 1
 fi
+if helm template fluxseer-rca "${chart}" --namespace fluxseer-rca-system \
+  --set features.policyPack.enabled=true >"${invalid_policy_render}" 2>&1; then
+  echo "expected policy pack to fail without remediation enabled" >&2
+  exit 1
+fi
 assert_invalid_experimental_message() {
   if ! grep -Fq "requires features.remediation.enabled=true" "${invalid_experimental_render}"; then
     echo "invalid experimentalExecutor profile failed with unexpected message:" >&2
     cat "${invalid_experimental_render}" >&2
+    exit 1
+  fi
+}
+assert_invalid_policy_message() {
+  if ! grep -Fq "policy pack requires features.remediation.enabled=true" "${invalid_policy_render}"; then
+    echo "policy pack failed with unexpected message:" >&2
+    cat "${invalid_policy_render}" >&2
     exit 1
   fi
 }
@@ -99,6 +113,7 @@ assert_not_contains "${default_clusterrole}" 'resources: ["remediationplans/stat
 assert_not_contains "${default_clusterrole}" 'resources: ["approvalpolicies", "namespacethresholds", "escalationchains"]' "policy pack read permissions in default ClusterRole"
 
 assert_contains "${policy_render}" "--enable-policy-pack=true" "policy pack opt-in"
+assert_contains "${policy_render}" "--enable-remediation=true" "policy pack requires remediation"
 assert_contains "${policy_clusterrole}" 'resources: ["approvalpolicies", "namespacethresholds", "escalationchains"]' "policy pack read permissions"
 
 assert_contains "${legacy_render}" "--enable-legacy-deployment-risk=true" "legacy deployment watcher opt-in"
@@ -117,5 +132,6 @@ assert_not_contains "${remediation_clusterrole}" 'resources: ["configmaps"]' "Co
 assert_contains "${experimental_clusterrole}" 'resources: ["jobs"]' "experimental executor Job permissions"
 assert_contains "${experimental_clusterrole}" 'resources: ["configmaps"]' "experimental executor ConfigMap permissions"
 assert_invalid_experimental_message
+assert_invalid_policy_message
 
 echo "RBAC profile verification passed"
