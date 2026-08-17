@@ -3,9 +3,9 @@
 - Run ID: `20260811T034237Z`
 - Source commit: `4c64b5e86521d13a2f52e6d478d71bf35c38651f`
 - Source dirty: `false`
-- Kubernetes context: `admin@homelab-test`
+- Kubernetes context: `synthetic-validation-context` (private context redacted)
 - Namespace: `fluxseer-rca-test`
-- Controller image: `test-harbor.fluxseer.com/fluxseer/fluxseer-rca/operator:runtime-p0-4c64b5e`
+- Controller image: `registry.example.com/fluxseer/fluxseer-rca/operator:runtime-p0-4c64b5e` (private registry redacted)
 - Image digest: `sha256:5a8d69b2c7896b56aba8678fea339bcbf4de2ad1264cf2f0f73fd7f6584cb68f`
 - Result: `PASS` (`15/15`)
 

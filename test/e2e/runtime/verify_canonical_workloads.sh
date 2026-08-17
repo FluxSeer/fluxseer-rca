@@ -14,6 +14,7 @@ oom_request="runtime-canonical-oom-event-only"
 image_request="runtime-canonical-imagepull"
 oom_rule="${oom_request}"
 image_rule="${image_request}"
+runtime_test_image="${FLUXSEER_RCA_RUNTIME_TEST_IMAGE:-registry.example.com/fluxseer/runtime-canonical:bad}"
 cli_dir=""
 cli_bin=""
 
@@ -292,7 +293,7 @@ involvedObject:
   namespace: ${namespace}
   uid: ${image_uid}
 reason: ErrImagePull
-message: failed to pull image test-harbor.fluxseer.com/runtime/canonical:bad
+message: failed to pull image ${runtime_test_image}
 source:
   component: runtime-canonical-matrix
 type: Warning

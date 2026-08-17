@@ -4,9 +4,9 @@
 - Result: `PASS` (2/2)
 - Source commit: `a77adfbc63a0777056c3b2de62e3e07aa8243fdf`
 - Source dirty: `false`
-- Kubernetes context: `admin@homelab-test`
+- Kubernetes context: `synthetic-validation-context` (private context redacted)
 - Namespace: `fluxseer-rca-test`
-- Controller image: `test-harbor.fluxseer.com/fluxseer/fluxseer-rca/operator:runtime-canonical-a77adfb`
+- Controller image: `registry.example.com/fluxseer/fluxseer-rca/operator:runtime-canonical-a77adfb` (private registry redacted)
 - Image digest: `sha256:dba5ff8f1f8dd95cd55b554da54a3fbd48dd33eafd3b121f8992e6fd247e46b3`
 
 | Scenario | Terminal contract | Provider access | Projected objects | Forbidden side effects |

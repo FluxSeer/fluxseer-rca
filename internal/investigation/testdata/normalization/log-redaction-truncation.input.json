@@ -10,7 +10,7 @@
       "app": "checkout"
     },
     "target": {
-      "cluster": "homelab-test",
+      "cluster": "synthetic-cluster",
       "namespace": "prod",
       "kind": "Deployment",
       "name": "checkout",

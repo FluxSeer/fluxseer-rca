@@ -10,6 +10,7 @@ run_id="${FLUXSEER_RCA_RUNTIME_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 report_dir="${report_root}/fluxseer-rca-riskrule-incidents-${run_id}"
 run_label="$(tr '[:upper:]' '[:lower:]' <<<"${run_id}" | tr -cd 'a-z0-9.-' | cut -c1-50)"
 target_label_key="fluxseer.com/runtime-anomaly"
+runtime_test_image="${FLUXSEER_RCA_RUNTIME_TEST_IMAGE:-registry.example.com/fluxseer/runtime-anomaly:does-not-exist}"
 rules=(
   runtime-anomaly-event-direct
   runtime-anomaly-condition-direct
@@ -98,7 +99,7 @@ spec:
       securityContext: {seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: unavailable
-          image: test-harbor.fluxseer.com/fluxseer/runtime-anomaly:does-not-exist
+          image: ${runtime_test_image}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: {drop: ["ALL"]}

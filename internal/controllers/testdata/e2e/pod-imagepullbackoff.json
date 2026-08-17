@@ -14,7 +14,7 @@
       "records": [
         {
           "reason": "ErrImagePull",
-          "message": "failed to pull image test-harbor.fluxseer.com/checkout/api:bad"
+          "message": "failed to pull image registry.example.com/checkout/api:bad"
         }
       ]
     }

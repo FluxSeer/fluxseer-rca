@@ -4,10 +4,10 @@
 - Result: `PASS` (5/5)
 - Source commit: `76838241c44afa1bc6adb12d6e2f285bb1c12e8a`
 - Source dirty: `true`
-- Kubernetes context: `admin@homelab-test`
+- Kubernetes context: `synthetic-validation-context` (private context redacted)
 - Control namespace: `fluxseer-rca-test`
 - Target namespace: `database-test`
-- Controller image: `test-harbor.fluxseer.com/fluxseer/fluxseer-rca/operator:ci-20260808081237-5a432ee`
+- Controller image: `registry.example.com/fluxseer/fluxseer-rca/operator:ci-20260808081237-5a432ee` (private registry redacted)
 - User-report contract: `fluxseer-riskrule-report/v1`
 - Test-report contract: `fluxseer-test-report/v1`
 
