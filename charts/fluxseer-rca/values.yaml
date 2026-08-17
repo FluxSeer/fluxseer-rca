@@ -1,5 +1,5 @@
 image:
-  repository: fluxseer/fluxseer-rca/operator
+  repository: ghcr.io/fluxseer/fluxseer-rca/operator
   tag: ""
   pullPolicy: IfNotPresent
 

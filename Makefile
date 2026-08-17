@@ -2,7 +2,7 @@ APP=fluxseer
 GO=GOWORK=off go
 DEMO_PAUSE_SECONDS ?= 4
 VERSION ?= dev
-RELEASE_VERSION ?= $(if $(filter dev,$(VERSION)),v0.2.0-beta.1,$(VERSION))
+RELEASE_VERSION ?= $(if $(filter dev,$(VERSION)),v0.4.0-beta.3,$(VERSION))
 V0_3_RELEASE_VERSION ?= v0.3.0-beta.3
 V0_3_PREVIOUS_RELEASE_VERSION ?= v0.3.0-beta.2
 V0_3_PUBLISHED_CHART_OCI ?= oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca

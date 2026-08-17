@@ -11,10 +11,9 @@ Current release: `v0.4.0-beta.3`
 Status: `v0.4.0-beta.3 published, lifecycle cleanup and canonical RCA runtime semantics verified`
 
 FluxSeer RCA is the project's product name. Source code, binaries, Helm
-artifacts, CRDs, metrics, and Kubernetes resource naming were renamed from the
-earlier `fluxagent` identity to `fluxseer` / `fluxseer-rca` ahead of the next
-release. The current `v0.4.0-beta.3` release uses the FluxSeer RCA identity;
-older `fluxagent` releases remain compatibility and migration references.
+artifacts, CRDs, metrics, and Kubernetes resource naming use the `fluxseer` /
+`fluxseer-rca` identity in the current `v0.4.0-beta.3` release. Older
+`fluxagent` releases remain compatibility and migration references.
 
 FluxSeer RCA turns production signals and operator questions into governed, evidence-verifiable RCA workflows with replay-oriented audit artifacts in Kubernetes.
 
@@ -404,18 +403,16 @@ See:
 
 ### Install The Beta Chart
 
-The `v0.3.0-beta.3` chart is currently published under the pre-rename
-`fluxagent` name (see [architecture/rename-migration-plan.md](docs/architecture/rename-migration-plan.md)).
-Use these names until a rename release is published:
+The current `v0.4.0-beta.3` chart is published under the `fluxseer-rca` name:
 
 ```bash
-helm install fluxagent \
-  oci://ghcr.io/fluxseer/fluxagent/charts/fluxagent \
-  --version 0.3.0-beta.3 \
-  --namespace fluxagent-system \
+helm install fluxseer-rca \
+  oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca \
+  --version 0.4.0-beta.3 \
+  --namespace fluxseer-rca-system \
   --create-namespace
 
-kubectl -n fluxagent-system rollout status deployment/fluxagent-controller-manager
+kubectl -n fluxseer-rca-system rollout status deployment/fluxseer-rca-controller-manager
 ```
 
 ### Install Smoke Investigation
@@ -428,20 +425,20 @@ apiVersion: aiops.platform/v1alpha1
 kind: DataSource
 metadata:
   name: kubernetes-events
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   type: kubernetesEvents
 ---
 apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
-  name: investigate-fluxagent
-  namespace: fluxagent-system
+  name: investigate-fluxseer-rca
+  namespace: fluxseer-rca-system
 spec:
   target:
-    namespace: fluxagent-system
+    namespace: fluxseer-rca-system
     kind: Deployment
-    name: fluxagent-controller-manager
+    name: fluxseer-rca-controller-manager
     apiVersion: apps/v1
   timeRange:
     lookback: 15m
@@ -452,11 +449,11 @@ spec:
   mode: readOnly
 EOF
 
-kubectl -n fluxagent-system wait investigationrequest/investigate-fluxagent \
+kubectl -n fluxseer-rca-system wait investigationrequest/investigate-fluxseer-rca \
   --for=condition=Ready \
   --timeout=120s
 
-kubectl -n fluxagent-system get investigationrequest investigate-fluxagent -o yaml
+kubectl -n fluxseer-rca-system get investigationrequest investigate-fluxseer-rca -o yaml
 ```
 
 This writes an `InvestigationRequest`, collects bounded Kubernetes evidence, and stores the RCA in compatibility status fields plus compact `status.evidenceRefs`.
@@ -468,9 +465,9 @@ This writes an `InvestigationRequest`, collects bounded Kubernetes evidence, and
 For a more useful first RCA, create a workload with a deterministic readiness failure:
 
 ```bash
-kubectl create namespace fluxagent-demo
+kubectl create namespace fluxseer-rca-demo
 
-kubectl -n fluxagent-demo apply -f - <<'EOF'
+kubectl -n fluxseer-rca-demo apply -f - <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -498,17 +495,17 @@ spec:
             failureThreshold: 1
 EOF
 
-kubectl -n fluxagent-demo rollout status deployment/broken-checkout --timeout=45s || true
+kubectl -n fluxseer-rca-demo rollout status deployment/broken-checkout --timeout=45s || true
 
 kubectl apply -f - <<'EOF'
 apiVersion: aiops.platform/v1alpha1
 kind: InvestigationRequest
 metadata:
   name: investigate-broken-checkout
-  namespace: fluxagent-system
+  namespace: fluxseer-rca-system
 spec:
   target:
-    namespace: fluxagent-demo
+    namespace: fluxseer-rca-demo
     kind: Deployment
     name: broken-checkout
     apiVersion: apps/v1
@@ -521,11 +518,11 @@ spec:
   mode: readOnly
 EOF
 
-kubectl -n fluxagent-system wait investigationrequest/investigate-broken-checkout \
+kubectl -n fluxseer-rca-system wait investigationrequest/investigate-broken-checkout \
   --for=condition=Ready \
   --timeout=120s
 
-kubectl -n fluxagent-system get investigationrequest investigate-broken-checkout -o yaml
+kubectl -n fluxseer-rca-system get investigationrequest investigate-broken-checkout -o yaml
 ```
 
 See:
@@ -546,6 +543,31 @@ make verify-v0.3-schema-freeze
 Hosted OpenAI, Gemini, and Claude provider usage is documented in:
 
 - [docs/tutorials/enable-hosted-model-providers.md](docs/tutorials/enable-hosted-model-providers.md)
+
+### Enable Guarded Policy Pack
+
+Policy Pack is an opt-in remediation governance layer. It must be enabled
+together with remediation:
+
+```bash
+helm upgrade fluxseer-rca \
+  oci://ghcr.io/fluxseer/fluxseer-rca/charts/fluxseer-rca \
+  --version 0.4.0-beta.3 \
+  --namespace fluxseer-rca-system \
+  --reuse-values \
+  --set features.remediation.enabled=true \
+  --set features.policyPack.enabled=true
+
+kubectl apply -f config/samples/escalation-chain.yaml
+kubectl apply -f config/samples/approval-policy.yaml
+kubectl apply -f config/samples/namespace-threshold.yaml
+```
+
+The current beta enforces approval decisions and namespace concurrency limits
+and records escalation timeout notifications. Detailed multi-stage escalation
+actions and namespace default TTL/protection behavior remain reserved. See
+the [Policy Pack runtime contract](docs/runtime-modes.md#policy-pack) and the
+[CRD references](docs/README.md#reference).
 
 ## kind Demo
 

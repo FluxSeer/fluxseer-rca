@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: manager
-          image: fluxseer/fluxseer-rca/operator:v0.2.0-beta.1
+          image: ghcr.io/fluxseer/fluxseer-rca/operator:v0.4.0-beta.3
           env:
             - name: FLUXSEER_RCA_WEBHOOK_URL
               value: http://fluxseer-rca-observability:8080/demo/webhook

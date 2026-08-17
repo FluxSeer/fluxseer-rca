@@ -21,12 +21,14 @@ spec:
       serviceAccountName: fluxseer-rca-controller-manager
       containers:
         - name: manager
-          image: fluxseer/fluxseer-rca/operator:v0.2.0-beta.1
+          image: ghcr.io/fluxseer/fluxseer-rca/operator:v0.4.0-beta.3
           imagePullPolicy: IfNotPresent
           command:
             - /fluxseer-rca-operator
           args:
             - --leader-elect
+            - --enable-remediation=false
+            - --enable-legacy-deployment-risk=false
             - --enable-policy-pack=false
           ports:
             - containerPort: 8080
