@@ -32,10 +32,11 @@ spec:
 - `spec.enabled`: enables or disables the threshold.
 
 The selected threshold reference and any violations are recorded in the
-remediation decision path. The current beta does not apply
-`defaultTTLSeconds`, `defaultApprovalTimeoutSeconds`, or `protectionLevel` to
-created resources; those fields are schema reservations for a later policy
-iteration.
+remediation decision path. When a `RemediationPlan` omits `ttlSeconds` or
+`approvalTimeoutSeconds`, the threshold's `defaultTTLSeconds` and
+`defaultApprovalTimeoutSeconds` are persisted onto the plan and generated
+`AgentAction`. Explicit plan values take precedence. `protectionLevel` remains
+a schema reservation and is not applied by the current beta controller.
 
 The CRD includes status fields for future validation and enforcement reporting,
 but the current beta does not run a separate `NamespaceThreshold` reconciler.

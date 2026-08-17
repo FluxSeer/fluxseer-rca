@@ -563,9 +563,10 @@ kubectl apply -f config/samples/approval-policy.yaml
 kubectl apply -f config/samples/namespace-threshold.yaml
 ```
 
-The current beta enforces approval decisions and namespace concurrency limits
-and records escalation timeout notifications. Detailed multi-stage escalation
-actions and namespace default TTL/protection behavior remain reserved. See
+The current beta enforces approval decisions, namespace concurrency limits, and
+namespace TTL/approval-timeout defaults and records escalation timeout
+notifications. Detailed multi-stage escalation actions and protection-level
+behavior remain reserved. See
 the [Policy Pack runtime contract](docs/runtime-modes.md#policy-pack) and the
 [CRD references](docs/README.md#reference).
 

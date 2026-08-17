@@ -152,17 +152,19 @@ The current beta implements these policy behaviors:
   and severity, and can provide an approval timeout and escalation-chain
   reference.
 - `NamespaceThreshold` selects the highest-priority applicable policy and
-  enforces `activePlansLimit` and `pendingApprovalsLimit`.
+  enforces `activePlansLimit` and `pendingApprovalsLimit`. When a plan omits
+  TTL or approval timeout values, `defaultTTLSeconds` and
+  `defaultApprovalTimeoutSeconds` are persisted onto the plan and generated
+  action; explicit plan values take precedence.
 - `EscalationChain` selects and records an escalation-chain snapshot when an
   approval timeout notification is emitted.
 
-The following CRD fields are schema contracts but are not applied by the
-current beta controller: `NamespaceThreshold.spec.defaultTTLSeconds`,
-`defaultApprovalTimeoutSeconds`, `protectionLevel`, and the detailed
-stage-by-stage `EscalationChain.spec.stages[].delay`, `condition`, `actions`,
-`assignees`, and `notificationTemplate` behavior. The current escalation path
-notifies and marks the action `Escalated`; it does not auto-reject, reassign,
-or force-execute an action.
+The following CRD fields remain schema contracts that are not applied by the
+current beta controller: `NamespaceThreshold.spec.protectionLevel` and the
+detailed stage-by-stage `EscalationChain.spec.stages[].delay`, `condition`,
+`actions`, `assignees`, and `notificationTemplate` behavior. The current
+escalation path notifies and marks the action `Escalated`; it does not
+auto-reject, reassign, or force-execute an action.
 
 The policy resources expose status fields for future validation reporting, but
 the current beta does not run separate reconcilers that populate their

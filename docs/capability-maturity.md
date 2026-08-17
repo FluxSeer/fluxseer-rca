@@ -22,7 +22,7 @@ InvestigationRequest
 | Guarded experimental | `RemediationPlan`, `AgentAction` | CRDs are installed for compatibility, but controllers and RBAC are disabled by default. |
 | Legacy bootstrap | `DeploymentRiskReconciler` | Annotation-driven Deployment detection path; disabled by default and retained only as explicit opt-in. |
 | Scaffold | OpenTelemetry, CloudWatch datasource adapters | Development skeletons, not supported v0.4 beta adapters. |
-| Guarded policy pack | `ApprovalPolicy`, `NamespaceThreshold`, `EscalationChain` | Opt-in remediation governance; limits and timeout routing are implemented, while advanced defaults and multi-stage actions remain reserved. |
+| Guarded policy pack | `ApprovalPolicy`, `NamespaceThreshold`, `EscalationChain` | Opt-in remediation governance; limits and TTL/approval defaults are implemented, while protection levels and multi-stage actions remain reserved. |
 
 `RiskRule` and `RiskSignal` are valid public APIs, but they are not required for every RCA. New integrations should treat `InvestigationRequest.status` as the canonical RCA truth.
 
