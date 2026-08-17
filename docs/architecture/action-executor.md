@@ -107,4 +107,6 @@ Live executors should eventually support:
 
 The executors expose the right interfaces, but only notification has a real outbound path in the current repo. Kubernetes, GitOps, and runbook execution are still simulation-oriented.
 
-That is intentional for `v0.1` because the project should lead with safe contracts, auditable flow, and local demoability.
+That remains the current `v0.4.0-beta.3` posture: the project leads with safe
+contracts, auditable approval flow, and local demoability while v0.5 defines
+the production action-executor boundary.

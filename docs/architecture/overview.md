@@ -409,7 +409,7 @@ Together these CRDs form the workflow contract for the operator:
 
 ## Current Implementation Status
 
-Current `v0.3` implementation is intentionally uneven by design.
+Current `v0.4.0-beta.3` implementation is intentionally uneven by design.
 
 Implemented and runnable:
 
@@ -418,6 +418,9 @@ Implemented and runnable:
 - optional `RiskSignal` materialization and compatibility projection
 - webhook notification
 - Prometheus, Loki, and Kubernetes Events demo path
+- guarded approval lifecycle, audit tracking, escalation timeout notification,
+  and terminal-state TTL cleanup
+- opt-in Policy Pack resolution for approval rules and namespace limits
 
 Established as contracts or scaffolds:
 
@@ -426,7 +429,7 @@ Established as contracts or scaffolds:
 - guarded remediation controller chain
 - multi-backend executor routing
 
-Current `v0.3` investigation layer:
+Current investigation layer in `v0.4.0-beta.3`:
 
 - `InvestigationRequest`
 - reusable investigation service orchestration

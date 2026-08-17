@@ -224,7 +224,7 @@ Runtime contract:
 
 ## Status
 
-### Implemented In `v0.2.0-beta.1`
+### Historical fields introduced in `v0.2.0-beta.1`
 
 Implemented status fields:
 

@@ -1,6 +1,6 @@
 # FluxSeer RCA Product Requirements Baseline
 
-Last updated: 2026-07-30
+Last updated: 2026-08-17
 
 This document consolidates the product requirements that should guide README, architecture, CRD, and release-scope wording.
 
@@ -10,7 +10,7 @@ FluxSeer RCA is the product name for the Kubernetes-native control plane for
 evidence-verifiable root cause analysis. Source code and build artifacts now
 use matching `fluxseer` / `fluxseer-rca` naming.
 
-Compatibility name (last published release, `v0.3.0-beta.3`):
+Historical compatibility name (`v0.3.0-beta.3`):
 
 ```text
 FluxAgent
@@ -47,7 +47,11 @@ history, or individual responder memory.
 Current release scope:
 
 ```text
-v0.3.0-beta.3 is a beta hardening prerelease with canonical RCA preflight semantics, evidence gating, direct RiskRule compatibility, hardened read-only defaults, least-privilege default RBAC, GHCR images, Helm OCI packaging, and verified provenance.
+v0.4.0-beta.3 is the current beta release. It retains the frozen v0.3
+canonical RCA contract and adds approval lifecycle governance, audit timestamps,
+notification retry tracking, and terminal-state TTL cleanup for guarded
+remediation resources. Policy Pack resources are implemented as opt-in
+governance foundations; autonomous production remediation is not included.
 ```
 
 The long-term product positioning is intentionally narrower than a general AI SRE agent. Future remediation, multi-cluster, and policy workflows should extend the product without redefining it. The product rename must not be used as a shortcut for breaking the current v1alpha1 API, metric, annotation, or release-artifact compatibility surfaces once real external installs depend on them. (The `fluxagent` -> `fluxseer` / `fluxseer-rca` metric, annotation, and schema/digest identifier rename was an exception made before any external cluster ran this product; see [architecture/rename-migration-plan.md](architecture/rename-migration-plan.md).)
@@ -268,7 +272,12 @@ The current published beta release includes:
 - `fluxseer investigate` as a CLI wrapper around `InvestigationRequest`
 - optional discovered `RiskSignal` materialization from `InvestigationRequest`
 - webhook notification
-- TTL cleanup for `RiskSignal` and `InvestigationRequest`
+- approval lifecycle, audit timestamps, and notification retry tracking for
+  guarded remediation
+- TTL cleanup for `RiskSignal`, `InvestigationRequest`, `RemediationPlan`, and
+  `AgentAction`
+- opt-in `ApprovalPolicy`, `NamespaceThreshold`, and `EscalationChain`
+  governance foundations
 - read-only Helm default with the legacy Deployment watcher disabled
 - least-privilege default RBAC without remediation or executor mutation permissions
 
@@ -693,4 +702,6 @@ For release tags, freeze and confirm:
 - upgrade and uninstall paths have at least smoke-test coverage or are explicitly documented as pending
 - `make verify-release-v0.2-beta` or its documented equivalent passes against the intended release image reference
 
-`v0.2.0-beta.1` passed this gate before it was tagged and published as a prerelease. The release must remain framed as a read-only RCA beta, not as a production remediation platform.
+Historical `v0.2.0-beta.1` passed this gate before it was tagged and published
+as a prerelease. That historical release remained framed as a read-only RCA
+beta, not as a production remediation platform.
