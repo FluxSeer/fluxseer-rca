@@ -101,6 +101,7 @@ assert_not_contains() {
 
 assert_contains "${default_render}" "--enable-legacy-deployment-risk=false" "legacy deployment watcher disabled by default"
 assert_contains "${default_render}" "--enable-remediation=false" "remediation disabled by default"
+assert_contains "${default_render}" "--enable-experimental-executor=false" "experimental executor disabled by default"
 assert_contains "${default_render}" "--enable-policy-pack=false" "policy pack disabled by default"
 assert_contains "${default_render}" "kind: Role" "namespaced provider Secret reader Role"
 assert_contains "${default_render}" "name: fluxseer-rca-provider-secret-reader" "provider Secret reader RoleBinding"
@@ -131,6 +132,7 @@ assert_not_contains "${remediation_clusterrole}" 'resources: ["configmaps"]' "Co
 
 assert_contains "${experimental_clusterrole}" 'resources: ["jobs"]' "experimental executor Job permissions"
 assert_contains "${experimental_clusterrole}" 'resources: ["configmaps"]' "experimental executor ConfigMap permissions"
+assert_contains "${experimental_clusterrole}" 'resources: ["deployments"]' "experimental executor Deployment mutation permissions"
 assert_invalid_experimental_message
 assert_invalid_policy_message
 

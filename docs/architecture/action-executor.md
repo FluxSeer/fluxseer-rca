@@ -43,8 +43,12 @@ This means controllers and model providers do not need to know how a Kubernetes 
 
 ### Kubernetes Executor
 
-- simulates rollout pause, scale, or other Kubernetes-style actions
-- returns execution metadata instead of mutating a live workload
+- simulates unsupported or non-alpha Kubernetes-style actions by default
+- executes only the allowlisted `kubernetes.rolloutRestart` Deployment path
+  when `--enable-experimental-executor=true` and the matching RBAC profile are
+  enabled
+- validates target UID and records the execution identity on the Pod template
+- resolves uncertain results through read-after-write lookup
 
 ### GitOps Executor
 
@@ -112,7 +116,9 @@ Live executors should eventually support:
 
 ## Current Production Posture
 
-The executors expose the right interfaces, but only notification has a real outbound path in the current repo. Kubernetes, GitOps, and runbook execution are still simulation-oriented.
+The executors expose the shared contract. Notification has a real outbound
+path, and Kubernetes now has one explicitly gated `rolloutRestart` path;
+GitOps, Runbook, and all other Kubernetes actions remain simulation-oriented.
 
 That remains the current `v0.4.0-beta.3` posture: the project leads with safe
 contracts, auditable approval flow, and local demoability. The next milestone

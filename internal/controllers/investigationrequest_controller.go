@@ -2125,6 +2125,9 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 		riskSignal.Annotations[annotationTargetRef] = preflight.Target.Namespace + "/" + preflight.Target.Name
 		riskSignal.Annotations[annotationDetectionSource] = "investigation-request"
 		riskSignal.Annotations["fluxseer-rca.aiops.platform/investigation-request"] = request.Namespace + "/" + request.Name
+		if request.Status.Lineage != nil && request.Status.Lineage.TargetUID != "" {
+			riskSignal.Annotations[annotationTargetUID] = request.Status.Lineage.TargetUID
+		}
 		if request.Status.Lineage != nil {
 			applyFindingIdentityAnnotations(riskSignal.Annotations, request.Status.Lineage.FindingIdentity)
 		}

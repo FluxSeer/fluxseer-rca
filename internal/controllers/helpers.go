@@ -113,6 +113,8 @@ func targetRefString(target v1alpha1.TargetRef) string {
 
 func defaultRollbackPlan(actionType string) []string {
 	switch actionType {
+	case "kubernetes.rolloutRestart":
+		return []string{"verify the restarted Deployment rollout and revert the triggering workload change if health does not recover"}
 	case "kubernetes.rolloutPause":
 		return []string{"resume rollout after validation", "revert deployment image if crash loop persists"}
 	case "kubernetes.scaleDeployment":

@@ -330,6 +330,7 @@ func (r *RiskRuleReconciler) upsertRiskSignal(ctx context.Context, riskRule *v1a
 		riskSignal.Labels[labelRiskRule] = riskRule.Name
 		riskSignal.Annotations[annotationTargetRef] = target.Resource.Namespace + "/" + target.Resource.Name
 		riskSignal.Annotations[annotationDetectionSource] = "risk-rule"
+		riskSignal.Annotations[annotationTargetUID] = targetUID(target)
 		applyFindingIdentityAnnotations(riskSignal.Annotations, identity)
 
 		riskSignal.Spec.Target = resourceToTargetRef(target.Resource)

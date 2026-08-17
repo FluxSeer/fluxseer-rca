@@ -95,6 +95,7 @@ Default allowlisted action types:
 
 - `kubernetes.scaleDeployment`
 - `kubernetes.rolloutPause`
+- `kubernetes.rolloutRestart` (v0.5-alpha.1 allowlisted slice)
 - `gitops.createPullRequest`
 - `runbook.triggerWorkflow`
 - `notification.sendSlack`

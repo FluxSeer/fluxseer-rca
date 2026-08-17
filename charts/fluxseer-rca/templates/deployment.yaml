@@ -28,6 +28,7 @@ spec:
             - --health-probe-bind-address={{ .Values.controller.healthProbeBindAddress }}
             - --leader-elect={{ .Values.controller.enableLeaderElection }}
             - --enable-remediation={{ or .Values.controller.enableRemediation .Values.features.remediation.enabled }}
+            - --enable-experimental-executor={{ .Values.features.experimentalExecutor.enabled }}
             - --enable-legacy-deployment-risk={{ or .Values.controller.enableLegacyDeploymentRisk .Values.features.legacyDeploymentRisk.enabled }}
             - --enable-policy-pack={{ or .Values.controller.enablePolicyPack .Values.features.policyPack.enabled }}
             {{- range .Values.controller.extraArgs }}

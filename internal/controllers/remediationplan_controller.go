@@ -127,6 +127,9 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if evaluation.Escalation != nil && evaluation.Escalation.EscalationChainRef != "" {
 			action.Annotations[annotationEscalationChainRef] = evaluation.Escalation.EscalationChainRef
 		}
+		if targetUID := plan.Annotations[annotationTargetUID]; targetUID != "" {
+			action.Annotations[annotationTargetUID] = targetUID
+		}
 		action.Spec.Target = plan.Spec.Target
 		action.Spec.ActionType = step.ActionType
 		action.Spec.Parameters = step.Parameters

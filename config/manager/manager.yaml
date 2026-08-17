@@ -28,6 +28,7 @@ spec:
           args:
             - --leader-elect
             - --enable-remediation=false
+            - --enable-experimental-executor=false
             - --enable-legacy-deployment-risk=false
             - --enable-policy-pack=false
           ports:

@@ -53,12 +53,14 @@ func Run(args []string, out io.Writer) error {
 	var probeAddr string
 	var enableLeaderElection bool
 	var enableRemediation bool
+	var enableExperimentalExecutor bool
 	var enableLegacyDeploymentRisk bool
 	var enablePolicyPack bool
 	fs.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	fs.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	fs.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	fs.BoolVar(&enableRemediation, "enable-remediation", false, "Enable RemediationPlan and AgentAction reconciliation.")
+	fs.BoolVar(&enableExperimentalExecutor, "enable-experimental-executor", false, "Enable real allowlisted executor backends.")
 	fs.BoolVar(&enableLegacyDeploymentRisk, "enable-legacy-deployment-risk", false, "Enable legacy annotation-driven Deployment risk reconciliation.")
 	fs.BoolVar(&enablePolicyPack, "enable-policy-pack", false, "Enable CRD-based ApprovalPolicy evaluation for remediation plans.")
 	if err := fs.Parse(args); err != nil {
@@ -89,6 +91,7 @@ func Run(args []string, out io.Writer) error {
 		AllowedActionTypes: []string{
 			"kubernetes.scaleDeployment",
 			"kubernetes.rolloutPause",
+			"kubernetes.rolloutRestart",
 			"gitops.createPullRequest",
 			"runbook.triggerWorkflow",
 			"notification.sendSlack",
@@ -105,8 +108,12 @@ func Run(args []string, out io.Writer) error {
 		thresholdEnforcer = thresholds.NewEnforcer(mgr.GetAPIReader())
 	}
 
+	kubernetesExecutor := executor.KubernetesExecutor{}
+	if enableExperimentalExecutor {
+		kubernetesExecutor.Client = mgr.GetClient()
+	}
 	executorRouter := executor.NewRouter(
-		executor.KubernetesExecutor{},
+		kubernetesExecutor,
 		executor.GitOpsExecutor{},
 		executor.RunbookExecutor{},
 		executor.NotificationExecutor{WebhookURL: os.Getenv("FLUXSEER_RCA_WEBHOOK_URL")},

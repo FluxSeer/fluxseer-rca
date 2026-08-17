@@ -13,3 +13,4 @@ spec:
               value: http://fluxseer-rca-observability:8080/demo/webhook
           args:
             - --enable-remediation=false
+            - --enable-experimental-executor=false

@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -111,8 +112,18 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if action.Status.Phase == v1alpha1.PhaseExecuting && action.Status.Execution != nil && action.Status.Execution.ExecutionID != "" {
 		// The dispatch identity was durably recorded before the backend call.
 		// A resync or controller restart must not issue a second side effect;
-		// Batch 3 will add backend read-after-write recovery for this state.
-		return ctrl.Result{}, nil
+		// ask an identity-aware backend to recover the external result instead.
+		request := executorRequestForPersistedAction(&action)
+		if r.Executor != nil {
+			result, found, err := r.Executor.Resolve(ctx, request)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if found {
+				return r.recordExecutionSuccess(ctx, &action, request, result, now())
+			}
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	if !isAgentActionApproved(&action) {
@@ -122,12 +133,17 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	executionTarget := targetToResource(action.Spec.Target)
 	executionParameters := executor.StringParameters(action.Spec.Parameters)
 	actionDigest := agentActionSpecDigest(&action)
+	targetUID := ""
+	if action.Annotations != nil {
+		targetUID = strings.TrimSpace(action.Annotations[annotationTargetUID])
+	}
 	identity := executor.BuildExecutionIdentity(executor.IdentityInput{
 		ActionRef:      action.Namespace + "/" + action.Name,
 		AgentActionUID: string(action.UID),
 		Generation:     action.Generation,
 		ActionIndex:    0,
 		Target:         executionTarget,
+		TargetUID:      targetUID,
 		ActionDigest:   actionDigest,
 		ActionType:     action.Spec.ActionType,
 		Parameters:     executionParameters,
@@ -167,6 +183,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		ActionType:     action.Spec.ActionType,
 		ActionIndex:    0,
 		Target:         executionTarget,
+		TargetUID:      targetUID,
 		Parameters:     executionParameters,
 		ApprovedBy:     approvedBy,
 		DryRunResult:   action.Spec.DryRunResult,
@@ -195,6 +212,28 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 		finishedAt := metav1.NewTime(now())
+		if result.Outcome == executor.ExecutionOutcomeUnknown {
+			setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseExecuting, "execution outcome is unknown; waiting for backend recovery", action.Generation, finishedAt.Time)
+			executionStatus := action.Status.Execution
+			if executionStatus == nil {
+				executionStatus = &v1alpha1.AgentActionExecutionStatus{}
+			}
+			executionStatus.Phase = "Unknown"
+			executionStatus.Outcome = string(result.Outcome)
+			executionStatus.FailureReason = result.FailureReason
+			if executionStatus.FailureReason == "" {
+				executionStatus.FailureReason = err.Error()
+			}
+			executionStatus.Summary = err.Error()
+			executionStatus.FinishedAt = &finishedAt
+			executionStatus.Retryable = false
+			action.Status.Execution = executionStatus
+			if updateErr := r.Status().Update(ctx, &action); updateErr != nil {
+				recordStatusUpdateConflict("AgentAction", updateErr)
+				return ctrl.Result{}, updateErr
+			}
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 		setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseFailed, err.Error(), action.Generation, finishedAt.Time)
 		originalExecution := action.Status.Phase
 		action.Status.FinishedAt = &finishedAt
@@ -221,13 +260,42 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.Get(ctx, req.NamespacedName, &action); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	return r.recordExecutionSuccess(ctx, &action, executionRequest, result, now())
+}
+
+func executorRequestForPersistedAction(action *v1alpha1.AgentAction) executor.ExecutorRequest {
+	request := executor.ExecutorRequest{
+		ActionType:   action.Spec.ActionType,
+		Target:       targetToResource(action.Spec.Target),
+		Parameters:   executor.StringParameters(action.Spec.Parameters),
+		ApprovedBy:   action.Spec.ApprovedBy,
+		DryRunResult: action.Spec.DryRunResult,
+		RollbackPlan: action.Spec.RollbackPlan,
+		Attempt:      1,
+	}
+	if action.Status.Approval != nil {
+		request.ActionDigest = action.Status.Approval.ActionDigest
+		request.ApprovedBy = action.Status.Approval.ApprovedBy
+	}
+	if action.Status.Execution != nil {
+		request.ExecutionID = action.Status.Execution.ExecutionID
+		request.IdempotencyKey = action.Status.Execution.IdempotencyKey
+		request.Attempt = int(action.Status.Execution.Attempt)
+	}
+	if action.Annotations != nil {
+		request.TargetUID = strings.TrimSpace(action.Annotations[annotationTargetUID])
+	}
+	return request
+}
+
+func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, action *v1alpha1.AgentAction, request executor.ExecutorRequest, result executor.ExecutorResult, now time.Time) (ctrl.Result, error) {
 	originalPhase := action.Status.Phase
-	finishedAt := metav1.NewTime(now())
+	finishedAt := metav1.NewTime(now)
 	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, finishedAt.Time)
 	action.Status.FinishedAt = &finishedAt
 	executionID := result.ExecutionID
 	if executionID == "" {
-		executionID = executionRequest.ExecutionID
+		executionID = request.ExecutionID
 	}
 	executionStatus := &v1alpha1.AgentActionExecutionStatus{
 		Phase:          "Succeeded",
@@ -239,8 +307,8 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		FinishedAt:     &finishedAt,
 		ExternalRef:    result.ExternalRef,
 		Retryable:      result.Retryable,
-		IdempotencyKey: executionRequest.IdempotencyKey,
-		Attempt:        int32(executionRequest.Attempt),
+		IdempotencyKey: request.IdempotencyKey,
+		Attempt:        int32(request.Attempt),
 	}
 	if executionStatus.Outcome == "" {
 		executionStatus.Outcome = string(executor.ExecutionOutcomeSucceeded)
@@ -248,19 +316,19 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if !result.StartedAt.IsZero() {
 		startedAt := metav1.NewTime(result.StartedAt)
 		executionStatus.StartedAt = &startedAt
+	} else if action.Status.Execution != nil {
+		executionStatus.StartedAt = action.Status.Execution.StartedAt
 	}
 	action.Status.Execution = executionStatus
 	action.Status.Effectiveness = &v1alpha1.AgentActionEffectivenessStatus{
 		Phase:   "NotVerified",
 		Message: "post-action remediation effectiveness verification is not configured for this experimental action",
 	}
-	if err := r.Status().Update(ctx, &action); err != nil {
+	if err := r.Status().Update(ctx, action); err != nil {
 		recordStatusUpdateConflict("AgentAction", err)
 		return ctrl.Result{}, err
 	}
-	// Emit Event only after successful status update
-	recordPhaseTransition(r.EventRecorder, &action, originalPhase, action.Status.Phase)
-
+	recordPhaseTransition(r.EventRecorder, action, originalPhase, action.Status.Phase)
 	return ctrl.Result{}, nil
 }
 

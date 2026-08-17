@@ -22,6 +22,7 @@ The current manager policy allowlists:
 
 - `kubernetes.scaleDeployment`
 - `kubernetes.rolloutPause`
+- `kubernetes.rolloutRestart` (the first real alpha.1 Kubernetes backend)
 - `gitops.createPullRequest`
 - `runbook.triggerWorkflow`
 - `notification.sendSlack`
@@ -40,4 +41,16 @@ Protected namespaces:
 
 ## Important Limitation
 
-This mode demonstrates the controller flow and approval boundary, but only notification has a real outbound path today. Other executors are still simulation-oriented.
+This mode demonstrates the controller flow and approval boundary. It keeps
+Kubernetes, GitOps, and Runbook routes simulation-oriented unless the
+experimental executor flag and matching RBAC profile are explicitly enabled:
+
+```bash
+GOWORK=off go run ./cmd/manager \
+  --enable-remediation=true \
+  --enable-experimental-executor=true
+```
+
+The first real Kubernetes path is the allowlisted `kubernetes.rolloutRestart`
+action for a Deployment with a verified target UID. Notification remains the
+only real outbound path outside that alpha.1 Kubernetes slice.

@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -94,6 +95,12 @@ type ApprovedAction = ExecutorRequest
 
 // ExecutorResult is the executor-facing name for the shared result contract.
 type ExecutorResult = domain.ExecutionResult
+
+// ExecutionResolver is an optional recovery contract for executors that can
+// read back an external side effect after an uncertain result.
+type ExecutionResolver interface {
+	Resolve(ctx context.Context, request ExecutorRequest) (ExecutorResult, bool, error)
+}
 
 // StringParameters converts the CRD's compatibility map[string]string
 // representation into the executor contract's structured parameter map.

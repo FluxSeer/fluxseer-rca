@@ -20,6 +20,10 @@ Approved AgentAction
 GitOps uses the same contract in a later v0.5 increment. Runbook execution and
 arbitrary autonomous mutation are not covered by this design.
 
+Implementation status: the typed request/result contract, deterministic
+identity guard, and the gated Kubernetes Deployment restart backend are now
+present. Effectiveness verification remains the next alpha.1 batch.
+
 ## Ownership Boundary
 
 | Concern | Owner | Rule |

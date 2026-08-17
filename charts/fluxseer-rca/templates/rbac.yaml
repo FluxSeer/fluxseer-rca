@@ -38,6 +38,9 @@ rules:
     verbs: ["get", "update", "patch"]
   {{- end }}
   {{- if eq $profile "experimentalExecutor" }}
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch", "update"]
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

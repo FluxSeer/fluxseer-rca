@@ -2,9 +2,15 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Executor interface {
@@ -31,35 +37,138 @@ func NewRouter(kubernetes Executor, gitops Executor, runbook Executor, notify Ex
 }
 
 func (r *Router) Execute(ctx context.Context, request ExecutorRequest) (ExecutorResult, error) {
+	backend, err := r.executorFor(request.ActionType)
+	if err != nil {
+		return ExecutorResult{}, err
+	}
+	return backend.Execute(ctx, request)
+}
+
+// Resolve asks a backend to recover an uncertain external side effect. A
+// backend that cannot resolve an action returns found=false; the controller
+// must not fall back to a second Execute call.
+func (r *Router) Resolve(ctx context.Context, request ExecutorRequest) (ExecutorResult, bool, error) {
+	backend, err := r.executorFor(request.ActionType)
+	if err != nil {
+		return ExecutorResult{}, false, err
+	}
+	resolver, ok := backend.(ExecutionResolver)
+	if !ok {
+		return ExecutorResult{}, false, nil
+	}
+	return resolver.Resolve(ctx, request)
+}
+
+func (r *Router) executorFor(actionType string) (Executor, error) {
 	switch {
-	case strings.HasPrefix(request.ActionType, "kubernetes."):
-		return r.Kubernetes.Execute(ctx, request)
-	case strings.HasPrefix(request.ActionType, "gitops."):
-		return r.GitOps.Execute(ctx, request)
-	case strings.HasPrefix(request.ActionType, "runbook."):
-		return r.Runbook.Execute(ctx, request)
-	case strings.HasPrefix(request.ActionType, "notification."):
-		return r.Notify.Execute(ctx, request)
+	case strings.HasPrefix(actionType, "kubernetes."):
+		return r.Kubernetes, nil
+	case strings.HasPrefix(actionType, "gitops."):
+		return r.GitOps, nil
+	case strings.HasPrefix(actionType, "runbook."):
+		return r.Runbook, nil
+	case strings.HasPrefix(actionType, "notification."):
+		return r.Notify, nil
 	default:
-		return ExecutorResult{}, fmt.Errorf("no executor registered for action type %q", request.ActionType)
+		return nil, fmt.Errorf("no executor registered for action type %q", actionType)
 	}
 }
 
 type KubernetesExecutor struct {
-	Now func() time.Time
+	Client client.Client
+	Now    func() time.Time
 }
+
+const (
+	KubernetesRolloutRestartAction  = "kubernetes.rolloutRestart"
+	kubernetesRestartedByAnnotation = "fluxseer.io/restarted-by"
+	KubernetesExecutionIDAnnotation = "fluxseer.io/execution-id"
+	kubernetesExecutionIDAnnotation = KubernetesExecutionIDAnnotation
+)
 
 func (e KubernetesExecutor) Name() string {
 	return "kubernetes-executor"
 }
 
-func (e KubernetesExecutor) Execute(_ context.Context, action ExecutorRequest) (ExecutorResult, error) {
+func (e KubernetesExecutor) Execute(ctx context.Context, action ExecutorRequest) (ExecutorResult, error) {
 	now := time.Now
 	if e.Now != nil {
 		now = e.Now
 	}
 	startedAt := now()
-	finishedAt := now()
+
+	if e.Client == nil {
+		return e.simulatedResult(action, startedAt, now()), nil
+	}
+	if err := validateKubernetesRestartRequest(action); err != nil {
+		return kubernetesFailureResult(e.Name(), action, startedAt, now(), "ValidationFailed", err), err
+	}
+
+	var deployment appsv1.Deployment
+	if err := e.Client.Get(ctx, types.NamespacedName{Namespace: action.Target.Namespace, Name: action.Target.Name}, &deployment); err != nil {
+		result := kubernetesFailureResult(e.Name(), action, startedAt, now(), "TargetNotFound", err)
+		return result, fmt.Errorf("get deployment %s/%s: %w", action.Target.Namespace, action.Target.Name, err)
+	}
+	if string(deployment.UID) != action.TargetUID {
+		err := fmt.Errorf("target UID mismatch: expected %q, got %q", action.TargetUID, deployment.UID)
+		return kubernetesFailureResult(e.Name(), action, startedAt, now(), "TargetUIDMismatch", err), err
+	}
+	if deployment.Spec.Template.Annotations != nil && deployment.Spec.Template.Annotations[kubernetesExecutionIDAnnotation] == action.ExecutionID {
+		return kubernetesSuccessResult(e.Name(), action, startedAt, now(), &deployment, "rollout restart already recorded for execution identity"), nil
+	}
+
+	original := deployment.DeepCopy()
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = map[string]string{}
+	}
+	deployment.Spec.Template.Annotations[kubernetesRestartedByAnnotation] = "fluxseer-rca"
+	deployment.Spec.Template.Annotations[kubernetesExecutionIDAnnotation] = action.ExecutionID
+	if err := e.Client.Patch(ctx, &deployment, client.MergeFrom(original)); err != nil {
+		reason := "KubernetesPatchFailed"
+		outcome := ExecutionOutcomeFailed
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			reason = "TimeoutAfterDispatch"
+			outcome = ExecutionOutcomeUnknown
+		}
+		result := kubernetesFailureResult(e.Name(), action, startedAt, now(), reason, err)
+		result.Outcome = outcome
+		return result, fmt.Errorf("patch deployment %s/%s: %w", action.Target.Namespace, action.Target.Name, err)
+	}
+
+	return kubernetesSuccessResult(e.Name(), action, startedAt, now(), &deployment, "rollout restart annotation applied"), nil
+}
+
+// Resolve implements read-after-write recovery for an uncertain Kubernetes
+// mutation. It never patches the target and never falls back to Execute.
+func (e KubernetesExecutor) Resolve(ctx context.Context, action ExecutorRequest) (ExecutorResult, bool, error) {
+	if e.Client == nil {
+		return ExecutorResult{}, false, nil
+	}
+	if action.ActionType != KubernetesRolloutRestartAction {
+		return ExecutorResult{}, false, nil
+	}
+	if err := validateKubernetesRestartRequest(action); err != nil {
+		return kubernetesFailureResult(e.Name(), action, time.Time{}, time.Time{}, "ValidationFailed", err), false, err
+	}
+
+	var deployment appsv1.Deployment
+	if err := e.Client.Get(ctx, types.NamespacedName{Namespace: action.Target.Namespace, Name: action.Target.Name}, &deployment); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ExecutorResult{}, false, nil
+		}
+		return ExecutorResult{}, false, err
+	}
+	if string(deployment.UID) != action.TargetUID {
+		err := fmt.Errorf("target UID mismatch: expected %q, got %q", action.TargetUID, deployment.UID)
+		return kubernetesFailureResult(e.Name(), action, time.Time{}, time.Time{}, "TargetUIDMismatch", err), false, err
+	}
+	if deployment.Spec.Template.Annotations == nil || deployment.Spec.Template.Annotations[kubernetesExecutionIDAnnotation] != action.ExecutionID {
+		return ExecutorResult{}, false, nil
+	}
+	return kubernetesSuccessResult(e.Name(), action, time.Time{}, time.Now(), &deployment, "rollout restart recovered by read-after-write"), true, nil
+}
+
+func (e KubernetesExecutor) simulatedResult(action ExecutorRequest, startedAt, finishedAt time.Time) ExecutorResult {
 
 	summary := fmt.Sprintf(
 		"Simulated %s on %s/%s approved by %s",
@@ -78,7 +187,67 @@ func (e KubernetesExecutor) Execute(_ context.Context, action ExecutorRequest) (
 		Outputs:     map[string]string{"target": action.Target.Name, "dryRun": action.DryRunResult},
 		StartedAt:   startedAt,
 		FinishedAt:  finishedAt,
-	}, nil
+	}
+}
+
+func validateKubernetesRestartRequest(action ExecutorRequest) error {
+	if action.ActionType != KubernetesRolloutRestartAction {
+		return fmt.Errorf("unsupported Kubernetes action type %q", action.ActionType)
+	}
+	if action.Target.Kind != "Deployment" {
+		return fmt.Errorf("rollout restart requires Deployment target, got %q", action.Target.Kind)
+	}
+	if action.Target.APIVersion != "" && action.Target.APIVersion != "apps/v1" {
+		return fmt.Errorf("rollout restart requires apps/v1 target, got %q", action.Target.APIVersion)
+	}
+	if action.Target.Namespace == "" || action.Target.Name == "" {
+		return fmt.Errorf("rollout restart requires namespace and name")
+	}
+	if action.TargetUID == "" {
+		return fmt.Errorf("rollout restart requires target UID")
+	}
+	if action.ExecutionID == "" || action.IdempotencyKey == "" {
+		return fmt.Errorf("rollout restart requires execution and idempotency identity")
+	}
+	return nil
+}
+
+func kubernetesSuccessResult(executorName string, action ExecutorRequest, startedAt, finishedAt time.Time, deployment *appsv1.Deployment, summary string) ExecutorResult {
+	result := ExecutorResult{
+		ExecutionID: action.ExecutionID,
+		Outcome:     ExecutionOutcomeSucceeded,
+		Executor:    executorName,
+		Status:      "succeeded",
+		Summary:     summary,
+		ExternalRef: fmt.Sprintf("apps/v1/Deployment/%s/%s", deployment.Namespace, deployment.Name),
+		FinishedAt:  finishedAt,
+		Outputs: map[string]string{
+			"target":      deployment.Name,
+			"targetUID":   string(deployment.UID),
+			"executionID": action.ExecutionID,
+		},
+	}
+	if !startedAt.IsZero() {
+		result.StartedAt = startedAt
+	}
+	return result
+}
+
+func kubernetesFailureResult(executorName string, action ExecutorRequest, startedAt, finishedAt time.Time, reason string, err error) ExecutorResult {
+	result := ExecutorResult{
+		ExecutionID:   action.ExecutionID,
+		Outcome:       ExecutionOutcomeFailed,
+		FailureReason: reason,
+		Executor:      executorName,
+		Status:        "failed",
+		Summary:       err.Error(),
+		FinishedAt:    finishedAt,
+		Retryable:     false,
+	}
+	if !startedAt.IsZero() {
+		result.StartedAt = startedAt
+	}
+	return result
 }
 
 type GitOpsExecutor struct {
