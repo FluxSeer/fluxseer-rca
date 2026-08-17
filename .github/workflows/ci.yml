@@ -39,7 +39,7 @@ env:
 jobs:
   verify:
     name: Verify Source And Packaging
-    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","fluxseer-rca-test"]') }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -120,7 +120,7 @@ jobs:
 
   image-identity:
     name: Verify Image Identity
-    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","fluxseer-rca-test"]') }}
+    runs-on: ubuntu-latest
     needs: [verify]
     steps:
       - name: Checkout
@@ -177,7 +177,7 @@ jobs:
 
   publish-test-image:
     name: Publish Test Artifacts
-    runs-on: [self-hosted, Linux, X64, fluxseer-rca-test]
+    runs-on: ubuntu-latest
     needs: [verify, image-identity]
     if: github.event_name == 'push' && github.ref == 'refs/heads/test'
     env:
