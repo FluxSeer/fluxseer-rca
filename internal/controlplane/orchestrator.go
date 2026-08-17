@@ -88,10 +88,10 @@ func (o *Orchestrator) Run(ctx context.Context, req ingestion.Request) (Result, 
 		return result, nil
 	}
 
-	executed, err := o.Executor.Execute(ctx, executor.ApprovedAction{
-		Resource:     ingested.Context.Resource,
+	executed, err := o.Executor.Execute(ctx, executor.ExecutorRequest{
+		Target:       ingested.Context.Resource,
 		ActionType:   reasoned.Remediation.ActionType,
-		Parameters:   reasoned.Remediation.Parameters,
+		Parameters:   executor.StringParameters(reasoned.Remediation.Parameters),
 		ApprovedBy:   decision.ApprovedBy,
 		DryRunResult: decision.DryRunResult,
 		RollbackPlan: reasoned.Remediation.RollbackPlan,

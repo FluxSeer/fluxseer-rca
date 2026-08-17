@@ -214,12 +214,32 @@ type ApprovalDecision struct {
 	DryRunResult string         `json:"dryRunResult,omitempty"`
 }
 
+type ExecutionOutcome string
+
+const (
+	ExecutionOutcomeSucceeded          ExecutionOutcome = "Succeeded"
+	ExecutionOutcomeFailed             ExecutionOutcome = "Failed"
+	ExecutionOutcomeTimedOut           ExecutionOutcome = "TimedOut"
+	ExecutionOutcomeUnknown            ExecutionOutcome = "Unknown"
+	ExecutionOutcomePartiallySucceeded ExecutionOutcome = "PartiallySucceeded"
+)
+
+// ExecutionResult is the backend-neutral result contract for an executor.
+// Status, Summary, and Outputs are retained as compatibility fields while
+// Outcome, identity, timing, and retry semantics become the authoritative
+// v0.5 execution contract.
 type ExecutionResult struct {
-	Executor   string            `json:"executor"`
-	Status     string            `json:"status"`
-	Summary    string            `json:"summary"`
-	Outputs    map[string]string `json:"outputs,omitempty"`
-	FinishedAt time.Time         `json:"finishedAt"`
+	ExecutionID   string            `json:"executionID,omitempty"`
+	Outcome       ExecutionOutcome  `json:"outcome,omitempty"`
+	FailureReason string            `json:"failureReason,omitempty"`
+	StartedAt     time.Time         `json:"startedAt,omitempty"`
+	FinishedAt    time.Time         `json:"finishedAt,omitempty"`
+	ExternalRef   string            `json:"externalRef,omitempty"`
+	Retryable     bool              `json:"retryable,omitempty"`
+	Executor      string            `json:"executor"`
+	Status        string            `json:"status"`
+	Summary       string            `json:"summary"`
+	Outputs       map[string]string `json:"outputs,omitempty"`
 }
 
 type ModelMessage struct {

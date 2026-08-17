@@ -153,14 +153,15 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		recordPhaseTransition(r.EventRecorder, &action, original.Status.Phase, action.Status.Phase)
 	}
 
-	result, err := r.Executor.Execute(ctx, executor.ApprovedAction{
-		Resource:     targetToResource(action.Spec.Target),
+	executionRequest := executor.ExecutorRequest{
+		Target:       targetToResource(action.Spec.Target),
 		ActionType:   action.Spec.ActionType,
-		Parameters:   action.Spec.Parameters,
+		Parameters:   executor.StringParameters(action.Spec.Parameters),
 		ApprovedBy:   approvedBy,
 		DryRunResult: action.Spec.DryRunResult,
 		RollbackPlan: action.Spec.RollbackPlan,
-	})
+	}
+	result, err := r.Executor.Execute(ctx, executionRequest)
 	if err != nil {
 		if err := r.Get(ctx, req.NamespacedName, &action); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -190,12 +191,27 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	finishedAt := metav1.NewTime(now())
 	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, finishedAt.Time)
 	action.Status.FinishedAt = &finishedAt
-	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
-		Phase:      "Succeeded",
-		Executor:   result.Executor,
-		Summary:    result.Summary,
-		FinishedAt: &finishedAt,
+	executionStatus := &v1alpha1.AgentActionExecutionStatus{
+		Phase:          "Succeeded",
+		Outcome:        string(result.Outcome),
+		ExecutionID:    result.ExecutionID,
+		FailureReason:  result.FailureReason,
+		Executor:       result.Executor,
+		Summary:        result.Summary,
+		FinishedAt:     &finishedAt,
+		ExternalRef:    result.ExternalRef,
+		Retryable:      result.Retryable,
+		IdempotencyKey: executionRequest.IdempotencyKey,
+		Attempt:        int32(executionRequest.Attempt),
 	}
+	if executionStatus.Outcome == "" {
+		executionStatus.Outcome = string(executor.ExecutionOutcomeSucceeded)
+	}
+	if !result.StartedAt.IsZero() {
+		startedAt := metav1.NewTime(result.StartedAt)
+		executionStatus.StartedAt = &startedAt
+	}
+	action.Status.Execution = executionStatus
 	action.Status.Effectiveness = &v1alpha1.AgentActionEffectivenessStatus{
 		Phase:   "NotVerified",
 		Message: "post-action remediation effectiveness verification is not configured for this experimental action",

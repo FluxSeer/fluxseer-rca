@@ -214,10 +214,18 @@ type AgentActionDryRunStatus struct {
 }
 
 type AgentActionExecutionStatus struct {
-	Phase      string       `json:"phase,omitempty"`
-	Executor   string       `json:"executor,omitempty"`
-	Summary    string       `json:"summary,omitempty"`
-	FinishedAt *metav1.Time `json:"finishedAt,omitempty"`
+	Phase          string       `json:"phase,omitempty"`
+	Outcome        string       `json:"outcome,omitempty"`
+	ExecutionID    string       `json:"executionID,omitempty"`
+	IdempotencyKey string       `json:"idempotencyKey,omitempty"`
+	Attempt        int32        `json:"attempt,omitempty"`
+	FailureReason  string       `json:"failureReason,omitempty"`
+	Executor       string       `json:"executor,omitempty"`
+	Summary        string       `json:"summary,omitempty"`
+	StartedAt      *metav1.Time `json:"startedAt,omitempty"`
+	FinishedAt     *metav1.Time `json:"finishedAt,omitempty"`
+	ExternalRef    string       `json:"externalRef,omitempty"`
+	Retryable      bool         `json:"retryable,omitempty"`
 }
 
 type AgentActionEffectivenessStatus struct {

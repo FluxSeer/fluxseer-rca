@@ -7,9 +7,11 @@ FluxSeer RCA separates decision-making from execution. The executor layer only r
 Source: [internal/executor/router.go](../../internal/executor/router.go)
 
 The target v0.5 contract and lifecycle are defined in the
-[Executor safety contract](executor-safety-contract.md). The current Go
-interface is intentionally smaller than that target and remains simulation
-oriented until the `v0.5-alpha.1` contract is implemented.
+[Executor safety contract](executor-safety-contract.md). Batch 1 now exposes
+the typed `ExecutorRequest` and `ExecutorResult` contract; identity
+generation, idempotency enforcement, lifecycle recovery, and real side
+effects remain alpha.1 work. The bundled backends are still simulation
+oriented.
 
 The router dispatches by action prefix:
 

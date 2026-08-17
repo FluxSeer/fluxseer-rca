@@ -51,7 +51,7 @@ Represent one executable action after policy review and, when required, human ap
 | `status.approval` | object | no | Controller-observed approval state, including decision, approval, escalation, timestamps, source, generation, and action digest. |
 | `status.notification` | object | no | Escalation notification attempt state. |
 | `status.dryRunResult` | object | no | Controller-owned dry-run or guardrail result. |
-| `status.execution` | object | no | Executor phase, executor name, summary, and finish time. |
+| `status.execution` | object | no | Executor phase/outcome, execution and idempotency identity, attempt, failure reason, executor name, timing, external reference, retryability, and summary. |
 | `status.effectiveness` | object | no | Post-action effectiveness status. `NotVerified` means execution succeeded but remediation impact was not verified. |
 
 ## Field Notes
@@ -164,6 +164,21 @@ status.effectiveness.phase=NotVerified
 ```
 
 `Succeeded` means the executor completed the requested action. It does not mean the underlying incident was resolved.
+
+The v0.5 contract adds these execution fields to `status.execution`:
+
+| Field | Meaning |
+| --- | --- |
+| `executionID` | Stable identity for the execution record. |
+| `idempotencyKey` | Stable identity used to prevent duplicate backend side effects. |
+| `outcome` | Backend outcome such as `Succeeded`, `Failed`, `TimedOut`, or `Unknown`. |
+| `failureReason` | Machine-readable terminal or diagnostic reason. |
+| `startedAt` / `finishedAt` | Backend execution timing. |
+| `externalRef` | Backend-side reference, when one exists. |
+| `retryable` | Whether the result may be retried under the controller's bounded policy. |
+
+Batch 1 defines and persists this shape. Batch 2 will populate deterministic
+execution/idempotency identities and enforce the lifecycle semantics.
 
 The current `v0.4.0-beta.3` controller stops at `NotVerified`. The v0.5
 `Safe Remediation` target is defined in the

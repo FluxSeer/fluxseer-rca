@@ -80,9 +80,17 @@ spec:
                   type: object
                   properties:
                     phase: {type: string}
+                    outcome: {type: string}
+                    executionID: {type: string}
+                    idempotencyKey: {type: string}
+                    attempt: {type: integer, format: int32}
+                    failureReason: {type: string}
                     executor: {type: string}
                     summary: {type: string}
+                    startedAt: {type: string, format: date-time}
                     finishedAt: {type: string, format: date-time}
+                    externalRef: {type: string}
+                    retryable: {type: boolean}
                 effectiveness:
                   type: object
                   properties:

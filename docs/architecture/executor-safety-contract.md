@@ -33,18 +33,21 @@ arbitrary autonomous mutation are not covered by this design.
 
 ## Target Interface
 
-The current interface in `internal/executor/router.go` is a compatibility
-starting point:
+Batch 1 now provides the typed request/result starting point in
+`internal/executor/router.go`:
 
 ```go
 type Executor interface {
     Name() string
-    Execute(ctx context.Context, action ApprovedAction) (domain.ExecutionResult, error)
+    Execute(ctx context.Context, request ExecutorRequest) (ExecutorResult, error)
 }
 ```
 
-For v0.5, the request/result contract must grow without allowing backend code
-to bypass policy. The target shape is conceptually:
+The contract is intentionally additive: the current shape already carries
+execution identity, idempotency, policy snapshot, timeout, attempt, outcome,
+failure, timing, external reference, and retryability fields. The target
+shape still adds backend capability declaration and controller-enforced
+lifecycle recovery without allowing backend code to bypass policy:
 
 ```go
 type ExecutionRequest struct {
