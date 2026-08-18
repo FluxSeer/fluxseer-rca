@@ -141,6 +141,7 @@ Current planning:
 
 - [Backlog execution ledger](backlog/README.md)
 - [v0.5 Safe Remediation](backlog/v0.5-safe-remediation.md)
+- [v0.5 SRE RCA scenario portfolio](backlog/v0.5-sre-rca-scenario-portfolio.md)
 - [v0.4 workload target coverage gate](backlog/v0.4-workload-target-coverage.md)
 - [FluxSeer RCA product rename](backlog/v0.3-product-rename.md)
 - [v0.3 product direction](backlog/v0.3-product-direction.md)
