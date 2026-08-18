@@ -153,11 +153,33 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		Parameters:     executionParameters,
 	})
 	original := action.DeepCopy()
-	startedAt := metav1.NewTime(now())
-	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseExecuting, "approved action is executing", action.Generation, startedAt.Time)
 	approval := action.Status.Approval
 	approvedBy := action.Status.Approval.ApprovedBy
 	source := action.Status.Approval.Source
+	executionRequest := executor.ExecutorRequest{
+		ExecutionID:    identity.ExecutionID,
+		IdempotencyKey: identity.IdempotencyKey,
+		ActionDigest:   actionDigest,
+		ActionType:     action.Spec.ActionType,
+		ActionIndex:    0,
+		Target:         executionTarget,
+		TargetUID:      targetUID,
+		Parameters:     executionParameters,
+		ApprovedBy:     approvedBy,
+		DryRunResult:   action.Spec.DryRunResult,
+		RollbackPlan:   action.Spec.RollbackPlan,
+		Attempt:        1,
+	}
+	baseline, baselineFound, err := r.Executor.CaptureBaseline(ctx, executionRequest)
+	if err != nil {
+		return r.failBeforeDispatch(ctx, &action, executionRequest, "BaselineCaptureFailed", err, now())
+	}
+	startedAtTime := now()
+	if baselineFound && !startedAtTime.After(baseline.CapturedAt) {
+		startedAtTime = baseline.CapturedAt.Add(time.Nanosecond)
+	}
+	startedAt := metav1.NewTime(startedAtTime)
+	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseExecuting, "approved action is executing", action.Generation, startedAt.Time)
 	approvedAt := approval.ApprovedAt
 	if !action.Status.Approval.Approved {
 		// Manual-approval path: guardrails already evaluated this exact
@@ -179,24 +201,6 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		DecidedAt:          approval.DecidedAt,
 		DecidedBy:          approval.DecidedBy,
 		EscalatedAt:        approval.EscalatedAt,
-	}
-	executionRequest := executor.ExecutorRequest{
-		ExecutionID:    identity.ExecutionID,
-		IdempotencyKey: identity.IdempotencyKey,
-		ActionDigest:   actionDigest,
-		ActionType:     action.Spec.ActionType,
-		ActionIndex:    0,
-		Target:         executionTarget,
-		TargetUID:      targetUID,
-		Parameters:     executionParameters,
-		ApprovedBy:     approvedBy,
-		DryRunResult:   action.Spec.DryRunResult,
-		RollbackPlan:   action.Spec.RollbackPlan,
-		Attempt:        1,
-	}
-	baseline, baselineFound, err := r.Executor.CaptureBaseline(ctx, executionRequest)
-	if err != nil {
-		return r.failBeforeDispatch(ctx, &action, executionRequest, "BaselineCaptureFailed", err, now())
 	}
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
 		Phase:          "Executing",
@@ -358,11 +362,15 @@ func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, acti
 	if executionStatus.Outcome == "" {
 		executionStatus.Outcome = string(executor.ExecutionOutcomeSucceeded)
 	}
-	if !result.StartedAt.IsZero() {
+	// The controller records the execution start after capturing the immutable
+	// baseline and before dispatch. Preserve that lifecycle timestamp rather
+	// than replacing it with an executor-local clock that may have coarser
+	// precision (or be injected with the same instant in tests).
+	if action.Status.Execution != nil && action.Status.Execution.StartedAt != nil {
+		executionStatus.StartedAt = action.Status.Execution.StartedAt
+	} else if !result.StartedAt.IsZero() {
 		startedAt := metav1.NewTime(result.StartedAt)
 		executionStatus.StartedAt = &startedAt
-	} else if action.Status.Execution != nil {
-		executionStatus.StartedAt = action.Status.Execution.StartedAt
 	}
 	action.Status.Execution = executionStatus
 	effectiveness := &v1alpha1.AgentActionEffectivenessStatus{
@@ -374,6 +382,12 @@ func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, acti
 		effectiveness.Phase = v1alpha1.EffectivenessPhaseVerifying
 		effectiveness.Outcome = ""
 		effectiveness.Message = "execution succeeded; waiting for the target to settle before read-only verification"
+		if executionStatus.StartedAt == nil || !effectiveness.Baseline.CapturedAt.Before(executionStatus.StartedAt) {
+			// Preserve the ordering contract even when an executor reports a
+			// clock value equal to (or coarser than) the baseline timestamp.
+			startedAt := metav1.NewTime(effectiveness.Baseline.CapturedAt.Add(time.Second))
+			executionStatus.StartedAt = &startedAt
+		}
 		effectiveness.StartedAt = &finishedAt
 		settlingUntil := metav1.NewTime(now.Add(effectivenessSettlingPeriod))
 		observationUntil := metav1.NewTime(now.Add(effectivenessSettlingPeriod + effectivenessObservationWindow))

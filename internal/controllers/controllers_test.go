@@ -580,6 +580,9 @@ func TestAgentActionReconcilerCreatesSettledReadOnlyVerification(t *testing.T) {
 	if updated.Status.Effectiveness.Baseline.Health.AvailableReplicas != 0 || updated.Status.Effectiveness.Baseline.Health.DesiredReplicas != 3 {
 		t.Fatalf("unexpected pre-action health baseline: %#v", updated.Status.Effectiveness.Baseline.Health)
 	}
+	if !updated.Status.Effectiveness.Baseline.CapturedAt.Before(updated.Status.Execution.StartedAt) {
+		t.Fatalf("expected baseline capture before execution start, baseline=%s (%d) execution=%s (%d)", updated.Status.Effectiveness.Baseline.CapturedAt, updated.Status.Effectiveness.Baseline.CapturedAt.UnixNano(), updated.Status.Execution.StartedAt, updated.Status.Execution.StartedAt.UnixNano())
+	}
 
 	now = updated.Status.Effectiveness.SettlingUntil.Add(time.Second)
 	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
