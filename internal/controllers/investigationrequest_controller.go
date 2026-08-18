@@ -284,7 +284,7 @@ func requiredEvidenceChecksForProfile(profile string) []string {
 		return []string{"serviceConfiguration:ServicePortMismatch"}
 	case "probefailure":
 		return []string{"event:Unhealthy", "probeConfiguration:ProbeConfigurationMismatch"}
-	case "highhttperror":
+	case "highhttperror", "highhttperrorrate":
 		return []string{"metric:HTTP5xx", "log:CausalDependency"}
 	default:
 		return nil
@@ -461,12 +461,30 @@ func missingSemanticEvidenceCoverage(profile string, spec v1alpha1.Investigation
 			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeProbeConfiguration), Reason: "ProbeConfigurationEvidenceMissing"})
 		}
 		return missing
-	case "highhttperror":
+	case "highhttperror", "highhttperrorrate":
 		missing := make([]v1alpha1.RCAMissingEvidence, 0, 2)
-		if !http5xxMetricEvidencePresent(evidence) {
+		metricKindPresent := false
+		logKindPresent := false
+		for _, query := range spec.Queries {
+			switch strings.ToLower(strings.TrimSpace(query.QueryType)) {
+			case string(domain.QueryTypeMetric):
+				metricKindPresent = true
+			case string(domain.QueryTypeLog):
+				logKindPresent = true
+			}
+		}
+		for _, ref := range evidence.EvidenceRefs {
+			switch strings.ToLower(strings.TrimSpace(ref.Kind)) {
+			case string(domain.QueryTypeMetric):
+				metricKindPresent = true
+			case string(domain.QueryTypeLog):
+				logKindPresent = true
+			}
+		}
+		if metricKindPresent && !http5xxMetricEvidencePresent(evidence) {
 			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeMetric), Reason: "HTTP5xxMetricEvidenceMissing"})
 		}
-		if !causalDependencyLogEvidencePresent(evidence) {
+		if logKindPresent && !causalDependencyLogEvidencePresent(evidence) {
 			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeLog), Reason: "HTTPErrorCausalLogEvidenceMissing"})
 		}
 		return missing
@@ -519,7 +537,7 @@ func requiredEvidenceKindsForProfile(profile string) []string {
 		return []string{string(domain.QueryTypeMetric)}
 	case "rolloutlatencyregression":
 		return []string{string(domain.QueryTypeMetric), "deploymentCondition"}
-	case "highhttperror":
+	case "highhttperror", "highhttperrorrate":
 		return []string{string(domain.QueryTypeMetric), string(domain.QueryTypeLog)}
 	case "serviceportmismatch":
 		return []string{string(domain.QueryTypeServiceConfiguration)}
@@ -553,7 +571,7 @@ func evidenceProfileHasNoIssue(profile string, spec v1alpha1.InvestigationReques
 		return eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
 	case "oomkilled":
 		return eventCoveragePresent(spec, evidence, "oomkilled", "out of memory", "memory pressure", "memory limit")
-	case "highhttperror":
+	case "highhttperror", "highhttperrorrate":
 		return http5xxMetricEvidencePresent(evidence) && causalDependencyLogEvidencePresent(evidence)
 	default:
 		return false
@@ -577,7 +595,7 @@ func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) boo
 		return kind == strings.ToLower(string(domain.QueryTypeServiceConfiguration))
 	case "probefailure":
 		return kind == string(domain.QueryTypeEvent) || kind == strings.ToLower(string(domain.QueryTypeProbeConfiguration))
-	case "highhttperror":
+	case "highhttperror", "highhttperrorrate":
 		return kind == string(domain.QueryTypeMetric) || kind == string(domain.QueryTypeLog)
 	default:
 		return false
@@ -591,7 +609,7 @@ func evidenceRefMatchesProfileIssue(profile string, ref v1alpha1.EvidenceRef) bo
 		return containsAny(text, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
 	case "crashloopbackoff":
 		return containsAny(text, "crashloopbackoff", "backoff", "back-off", "container crashed", "unhealthy", "killing", "panic", "fatal", "startup error", "startup failure", "failed to initialize", "invalid configuration", "configuration error", "exception", "segmentation fault")
-	case "highhttperror":
+	case "highhttperror", "highhttperrorrate":
 		return containsAny(text, "http", "5xx", "error rate", "error ratio", "connection refused", "upstream unavailable", "dependency unavailable", "service unavailable", "upstream timeout", "failed to connect", "dial tcp", "connection reset")
 	case "oomkilled":
 		return containsAny(text, "oomkilled", "out of memory", "memory pressure", "memory limit") || metricEvidenceValueAboveZero(ref)
