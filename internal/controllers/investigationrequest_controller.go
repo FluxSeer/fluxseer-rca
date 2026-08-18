@@ -1306,6 +1306,14 @@ func inferRootCauseTypeFromClaims(claims []v1alpha1.RCAClaim) string {
 	switch {
 	case containsAny(text, "imagepullbackoff", "errimagepull", "image pull", "pull image", "failed to pull"):
 		return "ImagePullFailure"
+	case containsAny(text, "failedscheduling", "failed scheduling", "unschedulable", "untolerated taint", "insufficient cpu", "insufficient memory"):
+		return "SchedulingFailure"
+	case containsAny(text, "targetport", "target port", "service port", "container port", "port mismatch", "listener port", "targets port", "listens on port"):
+		return "ConfigurationMismatch"
+	case containsAny(text, "readiness probe", "liveness probe", "probe failure", "probe failed", "unhealthy probe"):
+		return "ProbeFailure"
+	case containsAny(text, "high http error", "http 5xx", "5xx error", "5xx rate", "error rate"):
+		return "HighHTTPErrorRate"
 	case containsAny(text, "memory", "oom", "resource pressure", "safe threshold"):
 		return "ResourcePressure"
 	case containsAny(text, "latency", "timeout", "http", "5xx"):

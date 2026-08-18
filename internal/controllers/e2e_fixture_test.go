@@ -274,8 +274,8 @@ func TestRawToFinalE2EFixtureReplay(t *testing.T) {
 			}
 		})
 	}
-	if len(baselineResults) != 12 {
-		t.Fatalf("expected twelve baseline fixtures, got %d", len(baselineResults))
+	if len(baselineResults) != 14 {
+		t.Fatalf("expected fourteen baseline fixtures, got %d", len(baselineResults))
 	}
 	report := aggregateFixtureBaseline(baselineResults)
 	if reportPath := os.Getenv("FLUXSEER_RCA_EVALUATION_REPORT"); reportPath != "" {
@@ -700,7 +700,7 @@ func aggregateFixtureBaseline(results []fixtureBaselineResult) fixtureBaselineRe
 		SchemaVersion:      "fluxseer-test-report/v1",
 		SuiteSchemaVersion: "fluxseer-rca-quality-baseline/v3",
 		Suite:              fixtureReportSuite{ID: "rca-quality-baseline", Name: "RCA Quality Baseline", Tier: "replay"},
-		Run:                fixtureReportRun{ID: "operations-twelve-v3", SourceCommit: reportSourceCommit(), SourceDirty: os.Getenv("FLUXSEER_REPORT_SOURCE_DIRTY") == "true", Environment: map[string]any{"runtime": "controller-runtime-fake-client", "hostedProvider": false}},
+		Run:                fixtureReportRun{ID: "operations-fourteen-v4", SourceCommit: reportSourceCommit(), SourceDirty: os.Getenv("FLUXSEER_REPORT_SOURCE_DIRTY") == "true", Environment: map[string]any{"runtime": "controller-runtime-fake-client", "hostedProvider": false}},
 		Summary:            fixtureReportSummary{Result: reportResult, Total: len(results), Passed: passedScenarios, Failed: len(results) - passedScenarios},
 		Metrics: map[string]any{
 			"rootCauseTypeAccuracy":        ratio(rootCauseTypeCorrect, len(results)),
@@ -713,7 +713,7 @@ func aggregateFixtureBaseline(results []fixtureBaselineResult) fixtureBaselineRe
 			"totalProviderRequests":        totalProviderRequests,
 			"tokenUsageAvailableScenarios": tokenUsageAvailable,
 		},
-		Corpus:                       "operations-twelve-v3",
+		Corpus:                       "operations-fourteen-v4",
 		Result:                       reportResult,
 		ScenarioCount:                len(results),
 		RootCauseTypeAccuracy:        ratio(rootCauseTypeCorrect, len(results)),

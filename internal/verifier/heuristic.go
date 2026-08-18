@@ -230,8 +230,16 @@ func domainProfile(statement string) string {
 		return "registryunavailable"
 	case containsAny(statement, "imagepullbackoff", "errimagepull", "image pull", "pull image", "failed to pull"):
 		return "imagepullbackoff"
+	case containsAny(statement, "failedscheduling", "failed scheduling", "unschedulable", "untolerated taint", "insufficient cpu", "insufficient memory"):
+		return "schedulingsuccess"
 	case containsAny(statement, "crashloopbackoff", "crash loop", "crashloop", "backoff", "restarting", "restart"):
 		return "crashloopbackoff"
+	case containsAny(statement, "readiness probe", "liveness probe", "probe failure", "probe failed", "unhealthy probe"):
+		return "probefailure"
+	case containsAny(statement, "targetport", "target port", "service port", "container port", "port mismatch", "listener port", "targets port", "listens on port"):
+		return "serviceportmismatch"
+	case containsAny(statement, "high http error", "http 5xx", "5xx error", "5xx rate", "error rate"):
+		return "highhttperror"
 	case containsAny(statement, "oomkilled", "out of memory", "memory limit", "memory pressure", "memory usage", "memory threshold", "safe threshold"):
 		return "memorypressure"
 	case containsAny(statement, "latency regression", "high latency", "p95 latency", "p99 latency", "timeout", "slow response"):
@@ -247,6 +255,10 @@ func requiredDomainKinds(profile string) []string {
 	switch profile {
 	case "imagepullbackoff", "imagepullmissing", "registryauth", "registrydns", "registryunavailable", "crashloopbackoff":
 		return []string{"event"}
+	case "schedulingsuccess", "probefailure", "serviceportmismatch":
+		return []string{"event"}
+	case "highhttperror":
+		return []string{"metric"}
 	case "memorypressure":
 		return []string{"event", "metric"}
 	case "latencyregression":
@@ -274,6 +286,14 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 		return kind == "event" && containsAny(text, "connection refused", "i/o timeout", "registry unavailable", "service unavailable", "registry timeout")
 	case "crashloopbackoff":
 		return kind == "event" && containsAny(text, "crashloopbackoff", "backoff", "back off", "container crashed", "restarting failed container")
+	case "schedulingsuccess":
+		return kind == "event" && containsAny(text, "failedscheduling", "failed scheduling", "unschedulable", "untolerated taint", "insufficient cpu", "insufficient memory")
+	case "probefailure":
+		return kind == "event" && containsAny(text, "unhealthy", "readiness", "liveness", "probe", "not ready")
+	case "serviceportmismatch":
+		return kind == "event" && containsAny(text, "service", "targetport", "target port", "container port", "port mismatch", "listener", "connection refused", "targets port", "listens on port")
+	case "highhttperror":
+		return kind == "metric" && containsAny(text, "http", "5xx", "error rate", "error ratio")
 	case "memorypressure":
 		switch kind {
 		case "event":

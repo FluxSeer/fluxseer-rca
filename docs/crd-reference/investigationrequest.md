@@ -275,7 +275,7 @@ These fields are the v0.3 target contract. New integrations should check the gen
 - `outcome`: RCA result semantics such as `Confirmed`, `Inconclusive`, `NoIssueFound`, or `Unknown`
 - `summary`: compact human-readable conclusion
 - `rootCauseEntity`: Kubernetes target most directly associated with the conclusion
-- `rootCauseType`: coarse category such as `CrashLoop`, `LatencyRegression`, `ResourcePressure`, `ConfigurationMismatch`, or `WorkloadDegradation`
+- `rootCauseType`: coarse category such as `CrashLoop`, `ProbeFailure`, `SchedulingFailure`, `ConfigurationMismatch`, `HighHTTPErrorRate`, `LatencyRegression`, `ResourcePressure`, or `WorkloadDegradation`
 - `confidence`: compatibility normalized score from `0.0` to `1.0`; this is a ranking score, not a calibrated probability
 - `confidenceDetail`: provider, verifier, confidence band, and scoring-method metadata
 

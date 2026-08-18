@@ -33,7 +33,7 @@
   "expected": {
     "phase": "Completed",
     "outcome": "Confirmed",
-    "rootCauseType": "WorkloadDegradation",
+    "rootCauseType": "ProbeFailure",
     "claimVerification": "Supported",
     "providerCalls": 1
   },

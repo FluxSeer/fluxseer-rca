@@ -37,7 +37,7 @@
   "expected": {
     "phase": "Completed",
     "outcome": "Confirmed",
-    "rootCauseType": "WorkloadDegradation",
+    "rootCauseType": "ConfigurationMismatch",
     "claimVerification": "Supported",
     "providerCalls": 1
   },
