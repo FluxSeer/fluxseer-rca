@@ -262,8 +262,10 @@ func domainProfile(statement string) string {
 
 func requiredDomainKinds(profile string) []string {
 	switch profile {
-	case "imagepullbackoff", "imagepullmissing", "registryauth", "registrydns", "registryunavailable", "crashloopbackoff":
+	case "imagepullbackoff", "imagepullmissing", "registryauth", "registrydns", "registryunavailable":
 		return []string{"event"}
+	case "crashloopbackoff":
+		return []string{"event", "log"}
 	case "schedulingsuccess":
 		return []string{"event"}
 	case "probefailure":
@@ -298,7 +300,10 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 	case "registryunavailable":
 		return kind == "event" && containsAny(text, "connection refused", "i/o timeout", "registry unavailable", "service unavailable", "registry timeout")
 	case "crashloopbackoff":
-		return kind == "event" && containsAny(text, "crashloopbackoff", "backoff", "back off", "container crashed", "restarting failed container")
+		if kind == "event" {
+			return containsAny(text, "crashloopbackoff", "backoff", "back off", "container crashed", "restarting failed container")
+		}
+		return kind == "log" && containsAny(text, "panic", "fatal", "startup error", "startup failure", "failed to initialize", "invalid configuration", "configuration error", "exception", "segmentation fault")
 	case "schedulingsuccess":
 		return kind == "event" && containsAny(text, "failedscheduling", "failed scheduling", "unschedulable", "untolerated taint", "insufficient cpu", "insufficient memory")
 	case "probefailure":

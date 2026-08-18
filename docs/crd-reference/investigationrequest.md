@@ -181,7 +181,7 @@ Current required evidence profiles:
 | Profile | Required Evidence | Strongest profile-level conclusion |
 | --- | --- | --- |
 | `ImagePullBackOff` | Kubernetes event evidence | Image pull failure |
-| `CrashLoopBackOff` | Kubernetes event evidence | Repeated container start or restart failure |
+| `CrashLoopBackOff` | Kubernetes event evidence and application log evidence from Loki | Repeated container start or restart failure with a bounded application cause |
 | `OOMKilled` | Kubernetes event evidence and metric evidence | Memory-related termination supported by memory evidence |
 | `LatencyRegression` | Metric evidence | Latency regression |
 | `RolloutLatencyRegression` | Metric evidence and deployment condition evidence | Rollout-associated latency regression |

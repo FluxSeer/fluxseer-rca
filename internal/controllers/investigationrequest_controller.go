@@ -271,7 +271,7 @@ func evidenceCoverageAudit(profile string, spec v1alpha1.InvestigationRequestSpe
 func requiredEvidenceChecksForProfile(profile string) []string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
 	case "crashloopbackoff":
-		return []string{"event:CrashLoopBackOff"}
+		return []string{"event:CrashLoopBackOff", "log:ApplicationFailure"}
 	case "imagepullbackoff":
 		return []string{"event:ImagePullBackOff"}
 	case "oomkilled":
@@ -294,6 +294,9 @@ func evidenceCoverageCheckComplete(check string, spec v1alpha1.InvestigationRequ
 	case "event:CrashLoopBackOff":
 		return !missingReasonPresent(missing, "CrashLoopEvidenceCoverageMissing") &&
 			eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed")
+	case "log:ApplicationFailure":
+		return !missingReasonPresent(missing, "CrashLoopApplicationEvidenceMissing") &&
+			applicationLogEvidencePresent(spec, evidence)
 	case "event:ImagePullBackOff":
 		return !missingReasonPresent(missing, "ImagePullEvidenceCoverageMissing") &&
 			eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
@@ -394,10 +397,14 @@ func missingSemanticEvidenceCoverage(profile string, spec v1alpha1.Investigation
 	profileKey := strings.ToLower(strings.TrimSpace(profile))
 	switch profileKey {
 	case "crashloopbackoff":
-		if eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") {
-			return nil
+		missing := make([]v1alpha1.RCAMissingEvidence, 0, 2)
+		if !eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") {
+			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeEvent), Reason: "CrashLoopEvidenceCoverageMissing"})
 		}
-		return []v1alpha1.RCAMissingEvidence{{Source: string(domain.QueryTypeEvent), Reason: "CrashLoopEvidenceCoverageMissing"}}
+		if !applicationLogEvidencePresent(spec, evidence) {
+			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeLog), Reason: "CrashLoopApplicationEvidenceMissing"})
+		}
+		return missing
 	case "imagepullbackoff":
 		if eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied") {
 			return nil
@@ -448,6 +455,19 @@ func eventCoveragePresent(spec v1alpha1.InvestigationRequestSpec, evidence inves
 	return false
 }
 
+func applicationLogEvidencePresent(_ v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult) bool {
+	for _, ref := range evidence.EvidenceRefs {
+		if !strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeLog)) {
+			continue
+		}
+		text := strings.ToLower(strings.Join([]string{ref.Source, ref.Reason, ref.Summary}, " "))
+		if containsAny(text, "panic", "fatal", "startup error", "startup failure", "failed to initialize", "invalid configuration", "configuration error", "exception", "segmentation fault") {
+			return true
+		}
+	}
+	return false
+}
+
 func requiredEvidenceKindsForProfile(profile string) []string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
 	case "crashloopbackoff", "imagepullbackoff":
@@ -485,7 +505,7 @@ func evidenceProfileHasNoIssue(profile string, spec v1alpha1.InvestigationReques
 	}
 	switch profileKey {
 	case "crashloopbackoff":
-		return eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed")
+		return eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") && applicationLogEvidencePresent(spec, evidence)
 	case "imagepullbackoff":
 		return eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
 	case "oomkilled":
@@ -498,7 +518,9 @@ func evidenceProfileHasNoIssue(profile string, spec v1alpha1.InvestigationReques
 func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) bool {
 	kind := strings.ToLower(strings.TrimSpace(ref.Kind))
 	switch profile {
-	case "crashloopbackoff", "imagepullbackoff":
+	case "crashloopbackoff":
+		return kind == string(domain.QueryTypeEvent) || kind == string(domain.QueryTypeLog)
+	case "imagepullbackoff":
 		return kind == string(domain.QueryTypeEvent)
 	case "oomkilled":
 		return kind == string(domain.QueryTypeEvent) || kind == string(domain.QueryTypeMetric)
@@ -521,7 +543,7 @@ func evidenceRefMatchesProfileIssue(profile string, ref v1alpha1.EvidenceRef) bo
 	case "imagepullbackoff":
 		return containsAny(text, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
 	case "crashloopbackoff":
-		return containsAny(text, "crashloopbackoff", "backoff", "back-off", "container crashed", "unhealthy", "killing")
+		return containsAny(text, "crashloopbackoff", "backoff", "back-off", "container crashed", "unhealthy", "killing", "panic", "fatal", "startup error", "startup failure", "failed to initialize", "invalid configuration", "configuration error", "exception", "segmentation fault")
 	case "oomkilled":
 		return containsAny(text, "oomkilled", "out of memory", "memory pressure", "memory limit") || metricEvidenceValueAboveZero(ref)
 	case "latencyregression":
@@ -1463,7 +1485,10 @@ func missingEvidenceForClaim(statement string) []v1alpha1.RCAMissingEvidence {
 	case containsAny(text, "memory", "oom", "resource pressure"):
 		return []v1alpha1.RCAMissingEvidence{{Source: "prometheus", Reason: "MemoryMetricsRequired"}, {Source: "kubernetes-events", Reason: "OOMEventRequired"}}
 	case containsAny(text, "crash", "restart", "backoff"):
-		return []v1alpha1.RCAMissingEvidence{{Source: "kubernetes-events", Reason: "CrashLoopEventRequired"}}
+		return []v1alpha1.RCAMissingEvidence{
+			{Source: "kubernetes-events", Reason: "CrashLoopEventRequired"},
+			{Source: "loki", Reason: "CrashLoopApplicationLogRequired"},
+		}
 	case containsAny(text, "latency", "timeout", "http", "5xx"):
 		return []v1alpha1.RCAMissingEvidence{{Source: "prometheus", Reason: "LatencyMetricsRequired"}, {Source: "loki", Reason: "ErrorLogEvidenceRequired"}}
 	default:

@@ -11,6 +11,7 @@ func TestVerifyClaimsMarksRelevantEvidenceSupported(t *testing.T) {
 		[]EvidenceRef{
 			{ID: "evidence-001", Kind: "event", Summary: "BackOff restarting failed container"},
 			{ID: "evidence-002", Kind: "metric", Summary: "cpu usage sustained above threshold"},
+			{ID: "evidence-003", Kind: "log", Source: "loki", Summary: "fatal startup error: invalid configuration"},
 		},
 	)
 
@@ -48,14 +49,14 @@ func TestVerifyClaimsDoesNotPromoteBackOffEventTextToCausalEvidence(t *testing.T
 		}},
 	)
 
-	if result.CoverageScore != 1.0/3.0 {
-		t.Fatalf("expected only the BackOff symptom claim to be covered, got %#v", result)
+	if result.CoverageScore != 0 {
+		t.Fatalf("expected no CrashLoop claim to be covered without application evidence, got %#v", result)
 	}
 	for _, claim := range result.Claims {
 		switch claim.ID {
 		case "claim-001":
-			if claim.Verification != VerificationSupported || len(claim.EvidenceRefs) != 1 {
-				t.Fatalf("expected BackOff symptom supported, got %#v", claim)
+			if claim.Verification != VerificationUnsupported || len(claim.EvidenceRefs) != 0 {
+				t.Fatalf("expected BackOff symptom unsupported without application evidence, got %#v", claim)
 			}
 		case "claim-002", "claim-003":
 			if claim.Verification != VerificationUnsupported || len(claim.EvidenceRefs) != 0 {
@@ -73,6 +74,7 @@ func TestVerifyClaimsMarksUnsupportedWhenEvidenceIsIrrelevant(t *testing.T) {
 		},
 		[]EvidenceRef{
 			{ID: "evidence-001", Kind: "event", Summary: "BackOff restarting failed container"},
+			{ID: "evidence-002", Kind: "log", Source: "loki", Summary: "panic during startup: invalid configuration"},
 		},
 	)
 
@@ -82,7 +84,7 @@ func TestVerifyClaimsMarksUnsupportedWhenEvidenceIsIrrelevant(t *testing.T) {
 	if result.Claims[0].Verification != VerificationUnsupported || len(result.Claims[0].EvidenceRefs) != 0 {
 		t.Fatalf("expected unrelated claim to be unsupported, got %#v", result.Claims[0])
 	}
-	if result.Claims[1].Verification != VerificationSupported || len(result.Claims[1].EvidenceRefs) != 1 {
+	if result.Claims[1].Verification != VerificationSupported || len(result.Claims[1].EvidenceRefs) != 2 {
 		t.Fatalf("expected restart claim to be supported, got %#v", result.Claims[1])
 	}
 }
@@ -272,13 +274,23 @@ func TestVerifyClaimsAppliesDomainSpecificSupportRequirements(t *testing.T) {
 			wantRefs:   1,
 		},
 		{
-			name:  "crash loop requires crashloop event",
+			name:  "crash loop requires event and application log",
+			claim: "CrashLoopBackOff is causing repeated pod restarts",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "BackOff", Summary: "container crashed repeatedly"},
+				{ID: "evidence-002", Kind: "log", Source: "loki", Summary: "fatal startup error: invalid configuration"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   2,
+		},
+		{
+			name:  "crash loop event alone is insufficient",
 			claim: "CrashLoopBackOff is causing repeated pod restarts",
 			evidence: []EvidenceRef{
 				{ID: "evidence-001", Kind: "event", Reason: "BackOff", Summary: "container crashed repeatedly"},
 			},
-			wantStatus: VerificationSupported,
-			wantRefs:   1,
+			wantStatus: VerificationUnsupported,
+			wantRefs:   0,
 		},
 		{
 			name:  "memory pressure requires event and memory metric",

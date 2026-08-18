@@ -2078,14 +2078,16 @@ func TestInvestigationRequestReconcilerDoesNotMarkCrashLoopNoIssueFromScheduledO
 	if stored.Status.Phase != v1alpha1.PhaseCompleted || stored.Status.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
 		t.Fatalf("expected inconclusive status for scheduled-only CrashLoop profile evidence, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
 	}
-	if len(stored.Status.MissingEvidence) != 1 || stored.Status.MissingEvidence[0].Reason != "CrashLoopEvidenceCoverageMissing" {
+	if len(stored.Status.MissingEvidence) != 2 ||
+		stored.Status.MissingEvidence[0].Reason != "CrashLoopEvidenceCoverageMissing" ||
+		stored.Status.MissingEvidence[1].Reason != "CrashLoopApplicationEvidenceMissing" {
 		t.Fatalf("expected missing CrashLoop semantic coverage, got %#v", stored.Status.MissingEvidence)
 	}
 	if stored.Status.EvidenceCoverage == nil ||
 		stored.Status.EvidenceCoverage.Profile != "CrashLoopBackOff" ||
-		!stringSlicesEqual(stored.Status.EvidenceCoverage.RequiredChecks, []string{"event:CrashLoopBackOff"}) ||
+		!stringSlicesEqual(stored.Status.EvidenceCoverage.RequiredChecks, []string{"event:CrashLoopBackOff", "log:ApplicationFailure"}) ||
 		len(stored.Status.EvidenceCoverage.CompletedChecks) != 0 ||
-		!stringSlicesEqual(stored.Status.EvidenceCoverage.IncompleteChecks, []string{"event:CrashLoopBackOff"}) ||
+		!stringSlicesEqual(stored.Status.EvidenceCoverage.IncompleteChecks, []string{"event:CrashLoopBackOff", "log:ApplicationFailure"}) ||
 		stored.Status.EvidenceCoverage.IssueMatches != 0 {
 		t.Fatalf("expected incomplete CrashLoop evidence coverage audit, got %#v", stored.Status.EvidenceCoverage)
 	}
@@ -2174,13 +2176,14 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 			wantMissing:  []string{"deploymentCondition"},
 		},
 		{
-			name:    "crashloop event complete with abnormal evidence",
+			name:    "crashloop requires application evidence",
 			profile: "CrashLoopBackOff",
 			refs: []v1alpha1.EvidenceRef{
 				{Kind: string(domain.QueryTypeEvent), Reason: "BackOff", Summary: "container crashed repeatedly"},
 			},
-			wantComplete: true,
+			wantComplete: false,
 			wantNoIssue:  false,
+			wantMissing:  []string{string(domain.QueryTypeLog)},
 		},
 		{
 			name:    "latency metric complete and normal",
@@ -2201,8 +2204,9 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 					Reasons:   []string{"BackOff"},
 				},
 			},
-			wantComplete: true,
-			wantNoIssue:  true,
+			wantComplete: false,
+			wantNoIssue:  false,
+			wantMissing:  []string{string(domain.QueryTypeLog)},
 		},
 	}
 	for _, tt := range tests {
