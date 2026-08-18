@@ -2247,6 +2247,25 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 			wantMissing:  []string{string(domain.QueryTypeLog)},
 		},
 		{
+			name:    "failed scheduling requires supported predicate",
+			profile: "FailedScheduling",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeEvent), Reason: "FailedScheduling", Summary: "0/1 nodes are available: 1 Insufficient memory"},
+			},
+			wantComplete: true,
+			wantNoIssue:  false,
+		},
+		{
+			name:    "failed scheduling without supported predicate is incomplete",
+			profile: "FailedScheduling",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeEvent), Reason: "FailedScheduling", Summary: "0/1 nodes are blocked: reason code redacted"},
+			},
+			wantComplete: false,
+			wantNoIssue:  false,
+			wantMissing:  []string{string(domain.QueryTypeEvent)},
+		},
+		{
 			name:    "crashloop explicit backoff query complete with no matching records",
 			profile: "CrashLoopBackOff",
 			queries: []v1alpha1.InvestigationQuery{

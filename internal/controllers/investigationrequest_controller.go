@@ -282,6 +282,8 @@ func requiredEvidenceChecksForProfile(profile string) []string {
 		return []string{"metric:Latency", "deploymentCondition:Rollout"}
 	case "serviceportmismatch":
 		return []string{"serviceConfiguration:ServicePortMismatch"}
+	case "failedscheduling", "schedulingsuccess":
+		return []string{"event:FailedScheduling"}
 	case "probefailure":
 		return []string{"event:Unhealthy", "probeConfiguration:ProbeConfigurationMismatch"}
 	case "highhttperror", "highhttperrorrate":
@@ -313,6 +315,8 @@ func evidenceCoverageCheckComplete(check string, spec v1alpha1.InvestigationRequ
 		return evidenceKindPresent(spec, evidence, "deploymentCondition", "rollout", "deployment", "progressing", "available")
 	case "serviceConfiguration:ServicePortMismatch":
 		return servicePortMismatchEvidencePresent(evidence)
+	case "event:FailedScheduling":
+		return failedSchedulingEvidencePresent(evidence)
 	case "event:Unhealthy":
 		return eventCoveragePresent(spec, evidence, "unhealthy", "readiness probe", "liveness probe", "probe failed")
 	case "probeConfiguration:ProbeConfigurationMismatch":
@@ -363,8 +367,30 @@ func servicePortMismatchEvidencePresent(evidence investigation.EvidenceCollectio
 			continue
 		}
 		text := strings.ToLower(strings.Join([]string{ref.Reason, ref.Summary}, " "))
-		if strings.EqualFold(strings.TrimSpace(ref.Reason), "ServicePortMismatch") ||
-			containsAny(text, "serviceportmismatch", "service port mismatch") && containsAny(text, "mismatchconfirmed", "targetport", "target port", "container port") {
+		if strings.EqualFold(strings.TrimSpace(ref.Reason), "ServicePortMismatch") {
+			return true
+		}
+		if containsAny(text, "serviceportmismatch", "service port mismatch", "mismatchconfirmed=true") {
+			return true
+		}
+		if containsAny(text, "mismatchconfirmed=false") {
+			continue
+		}
+		if containsAny(text, "does not match", "doesn't match", "not match", "mismatch") &&
+			containsAny(text, "targetport", "target port") && containsAny(text, "containerport", "container port") {
+			return true
+		}
+	}
+	return false
+}
+
+func failedSchedulingEvidencePresent(evidence investigation.EvidenceCollectionResult) bool {
+	for _, ref := range evidence.EvidenceRefs {
+		if !strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeEvent)) {
+			continue
+		}
+		text := strings.ToLower(strings.Join([]string{ref.Reason, ref.Summary}, " "))
+		if containsAny(text, "failedscheduling", "failed scheduling") && containsAny(text, "insufficient memory", "insufficient cpu") {
 			return true
 		}
 	}
@@ -452,6 +478,11 @@ func missingSemanticEvidenceCoverage(profile string, spec v1alpha1.Investigation
 			return nil
 		}
 		return []v1alpha1.RCAMissingEvidence{{Source: string(domain.QueryTypeServiceConfiguration), Reason: "ServicePortEvidenceMissing"}}
+	case "failedscheduling", "schedulingsuccess":
+		if failedSchedulingEvidencePresent(evidence) {
+			return nil
+		}
+		return []v1alpha1.RCAMissingEvidence{{Source: string(domain.QueryTypeEvent), Reason: "SchedulingPredicateEvidenceMissing"}}
 	case "probefailure":
 		missing := make([]v1alpha1.RCAMissingEvidence, 0, 2)
 		if !eventCoveragePresent(spec, evidence, "unhealthy", "readiness probe", "liveness probe", "probe failed") {
@@ -541,6 +572,8 @@ func requiredEvidenceKindsForProfile(profile string) []string {
 		return []string{string(domain.QueryTypeMetric), string(domain.QueryTypeLog)}
 	case "serviceportmismatch":
 		return []string{string(domain.QueryTypeServiceConfiguration)}
+	case "failedscheduling", "schedulingsuccess":
+		return []string{string(domain.QueryTypeEvent)}
 	default:
 		return nil
 	}
@@ -593,6 +626,8 @@ func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) boo
 		return kind == string(domain.QueryTypeMetric) || kind == strings.ToLower("deploymentCondition")
 	case "serviceportmismatch":
 		return kind == strings.ToLower(string(domain.QueryTypeServiceConfiguration))
+	case "failedscheduling", "schedulingsuccess":
+		return kind == string(domain.QueryTypeEvent)
 	case "probefailure":
 		return kind == string(domain.QueryTypeEvent) || kind == strings.ToLower(string(domain.QueryTypeProbeConfiguration))
 	case "highhttperror", "highhttperrorrate":
@@ -620,6 +655,8 @@ func evidenceRefMatchesProfileIssue(profile string, ref v1alpha1.EvidenceRef) bo
 			containsAny(text, "progressdeadlinexceeded", "unavailable", "replicafailure", "available=false", "progressing=false")
 	case "serviceportmismatch":
 		return containsAny(text, "serviceportmismatch", "service port mismatch", "mismatchconfirmed", "targetport", "target port", "container port")
+	case "failedscheduling", "schedulingsuccess":
+		return containsAny(text, "failedscheduling", "failed scheduling") && containsAny(text, "insufficient memory", "insufficient cpu")
 	case "probefailure":
 		return containsAny(text, "probeconfigurationmismatch", "probe configuration mismatch", "mismatchconfirmed")
 	default:
@@ -1285,7 +1322,7 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	}
 
 	confidence := float64(rca.Reasoning.Confidence.Score) / 100.0
-	claims, verification := buildRCAClaims(rca, evidence)
+	claims, verification := buildRCAClaims(rca, evidence, request.Spec.EvidenceRequirements.Profile)
 	for _, claim := range claims {
 		rcametrics.RecordClaimVerification(claim.Verification)
 	}
@@ -2145,8 +2182,8 @@ func splitNamespacedName(value string) (string, string) {
 	return parts[0], parts[1]
 }
 
-func buildRCAClaims(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult) ([]v1alpha1.RCAClaim, verifier.Result) {
-	claims := make([]v1alpha1.RCAClaim, 0, 1+len(rca.Reasoning.RCA.Causes))
+func buildRCAClaims(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult, profile string) ([]v1alpha1.RCAClaim, verifier.Result) {
+	claims := make([]v1alpha1.RCAClaim, 0, 2+len(rca.Reasoning.RCA.Causes))
 	if strings.TrimSpace(rca.Reasoning.RiskSummary) != "" {
 		claims = append(claims, v1alpha1.RCAClaim{
 			ID:        "claim-001",
@@ -2162,8 +2199,54 @@ func buildRCAClaims(rca investigation.RCAResult, evidence investigation.Evidence
 			Statement: cause,
 		})
 	}
+	if statement, ok := profileBackedRCAClaim(profile, evidence); ok {
+		claims = append(claims, v1alpha1.RCAClaim{
+			ID:        claimID(len(claims) + 1),
+			Statement: statement,
+		})
+	}
 	verification := verifier.VerifyClaims(verifierClaims(claims), verifierEvidenceRefs(evidence.EvidenceRefs))
 	return applyClaimVerification(claims, verification), verification
+}
+
+// profileBackedRCAClaim adds a bounded canonical claim only when the collected
+// evidence itself satisfies a supported root-cause profile. This keeps the
+// provider's hypotheses advisory: a generic provider claim cannot become a
+// confirmed RCA merely because an evidence query was declared, while a
+// profile-specific evidence relationship can establish the corresponding
+// bounded claim.
+func profileBackedRCAClaim(profile string, evidence investigation.EvidenceCollectionResult) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "serviceportmismatch":
+		if servicePortMismatchEvidencePresent(evidence) {
+			return "ServicePortMismatch is confirmed by Kubernetes Service targetPort and resolved workload/container port evidence.", true
+		}
+	case "failedscheduling", "schedulingsuccess":
+		if failedSchedulingEvidencePresent(evidence) {
+			return "SchedulingFailure is confirmed by a FailedScheduling event with a supported insufficient-resource predicate.", true
+		}
+	case "probefailure":
+		if eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "unhealthy", "readiness probe", "liveness probe", "probe failed") && probeConfigurationMismatchEvidencePresent(evidence) {
+			return "ProbeConfigurationMismatch is confirmed by probe failure and workload probe configuration evidence.", true
+		}
+	case "crashloopbackoff":
+		if eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") && applicationLogEvidencePresent(v1alpha1.InvestigationRequestSpec{}, evidence) {
+			return "CrashLoopBackOff is confirmed by a workload restart symptom and application failure evidence.", true
+		}
+	case "imagepullbackoff":
+		if eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied") {
+			return "ImagePullBackOff is confirmed by Kubernetes image pull failure event evidence.", true
+		}
+	case "oomkilled":
+		if eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "oomkilled", "out of memory", "memory pressure", "memory limit") && evidenceKindPresent(v1alpha1.InvestigationRequestSpec{}, evidence, string(domain.QueryTypeMetric), "memory", "oom", "container_memory") {
+			return "OOMKilled is confirmed by Kubernetes OOM event and memory pressure evidence.", true
+		}
+	case "highhttperror", "highhttperrorrate":
+		if http5xxMetricEvidencePresent(evidence) && causalDependencyLogEvidencePresent(evidence) {
+			return "HighHTTPErrorRate is confirmed by HTTP 5xx metric and causal dependency evidence.", true
+		}
+	}
+	return "", false
 }
 
 func verifierClaims(claims []v1alpha1.RCAClaim) []verifier.Claim {
