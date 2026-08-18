@@ -224,6 +224,8 @@ func queryTypeForKind(kind string) domain.QueryType {
 		return domain.QueryTypeEvent
 	case "deploymentcondition":
 		return domain.QueryTypeDeploymentCondition
+	case "serviceconfiguration":
+		return domain.QueryTypeServiceConfiguration
 	default:
 		return domain.QueryTypeEvent
 	}

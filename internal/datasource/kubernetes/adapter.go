@@ -10,7 +10,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
@@ -33,6 +35,7 @@ func (a Adapter) Capabilities() datasource.Capabilities {
 	return datasource.Capabilities{
 		Events:               true,
 		DeploymentConditions: true,
+		ServiceConfiguration: true,
 	}
 }
 
@@ -42,6 +45,9 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 	}
 	if req.QueryType == domain.QueryTypeDeploymentCondition {
 		return a.queryDeploymentConditions(ctx, req)
+	}
+	if req.QueryType == domain.QueryTypeServiceConfiguration {
+		return a.queryServiceConfiguration(ctx, req)
 	}
 
 	var events corev1.EventList
@@ -110,6 +116,170 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 		result.Summary = fmt.Sprintf("%s; native records limit retained %d of %d", result.Summary, limit.RetainedCount, limit.OriginalCount)
 	}
 	return result, nil
+}
+
+type workloadContainerPort struct {
+	WorkloadKind      string
+	WorkloadName      string
+	ContainerName     string
+	ContainerPortName string
+	ContainerPort     int32
+}
+
+// queryServiceConfiguration returns the raw Service targetPort and its
+// resolution against the selected workload's declared container ports. A
+// named targetPort is resolved by name; an unresolved name is evidence
+// insufficiency, not a confirmed mismatch.
+func (a Adapter) queryServiceConfiguration(ctx context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {
+	service, err := a.findService(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	ports, err := a.workloadContainerPorts(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]map[string]any, 0, len(service.Spec.Ports))
+	for _, servicePort := range service.Spec.Ports {
+		targetRaw := servicePort.TargetPort.String()
+		targetNamed := servicePort.TargetPort.Type == intstr.String
+		resolved := int32(0)
+		if !targetNamed {
+			resolved = servicePort.TargetPort.IntVal
+		}
+		matched := make([]workloadContainerPort, 0)
+		for _, port := range ports {
+			if targetNamed && port.ContainerPortName == servicePort.TargetPort.StrVal {
+				matched = append(matched, port)
+			}
+			if !targetNamed && port.ContainerPort == resolved {
+				matched = append(matched, port)
+			}
+		}
+		if len(matched) == 0 {
+			if targetNamed {
+				records = append(records, serviceConfigurationRecord(service, servicePort, targetRaw, resolved, true, "UnresolvedNamedTargetPort", workloadContainerPort{}))
+				continue
+			}
+			if len(ports) == 0 {
+				records = append(records, serviceConfigurationRecord(service, servicePort, targetRaw, resolved, true, "NoDeclaredContainerPort", workloadContainerPort{}))
+				continue
+			}
+			fallback := ports[0]
+			records = append(records, serviceConfigurationRecord(service, servicePort, targetRaw, resolved, false, "NumericTargetPortDoesNotMatchContainerPort", fallback))
+			continue
+		}
+		for _, port := range matched {
+			if targetNamed {
+				resolved = port.ContainerPort
+			}
+			records = append(records, serviceConfigurationRecord(service, servicePort, targetRaw, resolved, false, "Resolved", port))
+		}
+	}
+	return &datasource.QueryResult{
+		Source:       a.Name(),
+		QueryType:    domain.QueryTypeServiceConfiguration,
+		Summary:      fmt.Sprintf("Kubernetes resolved %d Service ports for %s %s/%s", len(records), req.Target.Kind, req.Target.Namespace, req.Target.Name),
+		Records:      records,
+		NativeCounts: datasource.NativeResultCounts{ResultType: "serviceConfiguration", Records: len(records)},
+	}, nil
+}
+
+func (a Adapter) findService(ctx context.Context, req datasource.QueryRequest) (*corev1.Service, error) {
+	serviceName := strings.TrimSpace(req.Target.Service)
+	if serviceName == "" {
+		serviceName = req.Target.Name
+	}
+	var service corev1.Service
+	if err := a.Client.Get(ctx, types.NamespacedName{Namespace: req.Target.Namespace, Name: serviceName}, &service); err == nil {
+		return &service, nil
+	} else if !apierrors.IsNotFound(err) {
+		return nil, fmt.Errorf("get Service %s/%s: %w", req.Target.Namespace, serviceName, err)
+	}
+	var services corev1.ServiceList
+	if err := a.Client.List(ctx, &services, client.InNamespace(req.Target.Namespace)); err != nil {
+		return nil, fmt.Errorf("list Services in %s: %w", req.Target.Namespace, err)
+	}
+	for i := range services.Items {
+		if len(services.Items[i].Spec.Selector) == 0 {
+			continue
+		}
+		if labelsMatch(req.Labels, services.Items[i].Spec.Selector) {
+			return &services.Items[i], nil
+		}
+	}
+	return nil, fmt.Errorf("Service %s/%s was not found for workload %s", req.Target.Namespace, serviceName, req.Target.Name)
+}
+
+func (a Adapter) workloadContainerPorts(ctx context.Context, req datasource.QueryRequest) ([]workloadContainerPort, error) {
+	key := types.NamespacedName{Namespace: req.Target.Namespace, Name: req.Target.Name}
+	ports := make([]workloadContainerPort, 0)
+	appendPorts := func(kind, name string, containers []corev1.Container) {
+		for _, container := range containers {
+			for _, port := range container.Ports {
+				ports = append(ports, workloadContainerPort{WorkloadKind: kind, WorkloadName: name, ContainerName: container.Name, ContainerPortName: port.Name, ContainerPort: port.ContainerPort})
+			}
+		}
+	}
+	switch normalizeKind(req.Target.Kind) {
+	case "deployment":
+		var workload appsv1.Deployment
+		if err := a.Client.Get(ctx, key, &workload); err != nil {
+			return nil, fmt.Errorf("get Deployment ports: %w", err)
+		}
+		appendPorts("Deployment", workload.Name, workload.Spec.Template.Spec.Containers)
+	case "statefulset":
+		var workload appsv1.StatefulSet
+		if err := a.Client.Get(ctx, key, &workload); err != nil {
+			return nil, fmt.Errorf("get StatefulSet ports: %w", err)
+		}
+		appendPorts("StatefulSet", workload.Name, workload.Spec.Template.Spec.Containers)
+	case "daemonset":
+		var workload appsv1.DaemonSet
+		if err := a.Client.Get(ctx, key, &workload); err != nil {
+			return nil, fmt.Errorf("get DaemonSet ports: %w", err)
+		}
+		appendPorts("DaemonSet", workload.Name, workload.Spec.Template.Spec.Containers)
+	case "pod":
+		var workload corev1.Pod
+		if err := a.Client.Get(ctx, key, &workload); err != nil {
+			return nil, fmt.Errorf("get Pod ports: %w", err)
+		}
+		appendPorts("Pod", workload.Name, workload.Spec.Containers)
+	default:
+		return nil, fmt.Errorf("workload kind %q does not expose container ports", req.Target.Kind)
+	}
+	return ports, nil
+}
+
+func serviceConfigurationRecord(service *corev1.Service, servicePort corev1.ServicePort, targetRaw string, resolved int32, unresolved bool, resolution string, port workloadContainerPort) map[string]any {
+	mismatch := !unresolved && resolution == "NumericTargetPortDoesNotMatchContainerPort"
+	return map[string]any{
+		"serviceName":        service.Name,
+		"servicePortName":    servicePort.Name,
+		"servicePort":        servicePort.Port,
+		"targetPortRaw":      targetRaw,
+		"targetPortResolved": resolved,
+		"targetPortNamed":    servicePort.TargetPort.Type == intstr.String,
+		"workloadKind":       port.WorkloadKind,
+		"workloadName":       port.WorkloadName,
+		"containerName":      port.ContainerName,
+		"containerPortName":  port.ContainerPortName,
+		"containerPort":      port.ContainerPort,
+		"resolution":         resolution,
+		"mismatchConfirmed":  mismatch,
+		"reason":             servicePortReason(mismatch, unresolved),
+	}
+}
+
+func servicePortReason(mismatch, unresolved bool) string {
+	if mismatch {
+		return "ServicePortMismatch"
+	}
+	if unresolved {
+		return "TargetPortUnresolved"
+	}
+	return "ServicePortResolved"
 }
 
 func (a Adapter) queryDeploymentConditions(ctx context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {

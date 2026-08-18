@@ -2170,3 +2170,43 @@ func stringSliceContains(items []string, want string) bool {
 	}
 	return false
 }
+
+func TestNormalizeServiceConfigurationProducesTraceableEvidence(t *testing.T) {
+	req := datasource.QueryRequest{
+		Query:     "service-port-configuration",
+		StartTime: time.Date(2026, 7, 6, 11, 50, 0, 0, time.UTC),
+		EndTime:   time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC),
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout", Service: "checkout"},
+		QueryType: domain.QueryTypeServiceConfiguration,
+	}
+	result := &datasource.QueryResult{
+		Source:    "kubernetes-events",
+		QueryType: domain.QueryTypeServiceConfiguration,
+		Records: []map[string]any{{
+			"serviceName":        "checkout",
+			"servicePort":        int32(80),
+			"targetPortRaw":      "8080",
+			"targetPortResolved": int32(8080),
+			"targetPortNamed":    false,
+			"workloadKind":       "Deployment",
+			"workloadName":       "checkout",
+			"containerName":      "app",
+			"containerPort":      int32(3000),
+			"resolution":         "NumericTargetPortDoesNotMatchContainerPort",
+			"mismatchConfirmed":  true,
+			"reason":             "ServicePortMismatch",
+		}},
+	}
+
+	observation := normalizeObservations(result, req, 0, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))[0]
+	if observation.Type != domain.ObservationTypeServiceConfiguration || observation.Value.ServiceConfiguration == nil {
+		t.Fatalf("expected service configuration observation, got %#v", observation)
+	}
+	if !observation.Value.ServiceConfiguration.MismatchConfirmed {
+		t.Fatalf("expected mismatch confirmation in normalized value, got %#v", observation.Value.ServiceConfiguration)
+	}
+	ref := evidenceRefsFromObservations([]domain.Observation{observation}, req, v1alpha1.QueryRetentionPolicy{})[0]
+	if ref.Kind != "serviceConfiguration" || ref.Reason != "ServicePortMismatch" || ref.ContentDigest == "" {
+		t.Fatalf("expected traceable service configuration evidence ref, got %#v", ref)
+	}
+}

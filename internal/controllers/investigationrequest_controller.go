@@ -280,6 +280,8 @@ func requiredEvidenceChecksForProfile(profile string) []string {
 		return []string{"metric:Latency"}
 	case "rolloutlatencyregression":
 		return []string{"metric:Latency", "deploymentCondition:Rollout"}
+	case "serviceportmismatch":
+		return []string{"serviceConfiguration:ServicePortMismatch"}
 	default:
 		return nil
 	}
@@ -302,6 +304,8 @@ func evidenceCoverageCheckComplete(check string, spec v1alpha1.InvestigationRequ
 		return evidenceKindPresent(spec, evidence, string(domain.QueryTypeMetric), "latency", "duration", "http_request")
 	case "deploymentCondition:Rollout":
 		return evidenceKindPresent(spec, evidence, "deploymentCondition", "rollout", "deployment", "progressing", "available")
+	case "serviceConfiguration:ServicePortMismatch":
+		return servicePortMismatchEvidencePresent(evidence)
 	default:
 		return false
 	}
@@ -332,6 +336,20 @@ func evidenceKindPresent(spec v1alpha1.InvestigationRequestSpec, evidence invest
 		}
 		values := append([]string{query.Name, query.Query, query.QueryTemplate}, query.Reasons...)
 		if len(needles) == 0 || containsAny(strings.ToLower(strings.Join(values, " ")), needles...) {
+			return true
+		}
+	}
+	return false
+}
+
+func servicePortMismatchEvidencePresent(evidence investigation.EvidenceCollectionResult) bool {
+	for _, ref := range evidence.EvidenceRefs {
+		if !strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeServiceConfiguration)) {
+			continue
+		}
+		text := strings.ToLower(strings.Join([]string{ref.Reason, ref.Summary}, " "))
+		if strings.EqualFold(strings.TrimSpace(ref.Reason), "ServicePortMismatch") ||
+			containsAny(text, "serviceportmismatch", "service port mismatch") && containsAny(text, "mismatchconfirmed", "targetport", "target port", "container port") {
 			return true
 		}
 	}
@@ -370,6 +388,11 @@ func missingSemanticEvidenceCoverage(profile string, spec v1alpha1.Investigation
 			return nil
 		}
 		return []v1alpha1.RCAMissingEvidence{{Source: string(domain.QueryTypeEvent), Reason: "OOMEventEvidenceCoverageMissing"}}
+	case "serviceportmismatch":
+		if servicePortMismatchEvidencePresent(evidence) {
+			return nil
+		}
+		return []v1alpha1.RCAMissingEvidence{{Source: string(domain.QueryTypeServiceConfiguration), Reason: "ServicePortEvidenceMissing"}}
 	default:
 		return nil
 	}
@@ -406,6 +429,8 @@ func requiredEvidenceKindsForProfile(profile string) []string {
 		return []string{string(domain.QueryTypeMetric)}
 	case "rolloutlatencyregression":
 		return []string{string(domain.QueryTypeMetric), "deploymentCondition"}
+	case "serviceportmismatch":
+		return []string{string(domain.QueryTypeServiceConfiguration)}
 	default:
 		return nil
 	}
@@ -452,6 +477,8 @@ func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) boo
 		return kind == string(domain.QueryTypeMetric)
 	case "rolloutlatencyregression":
 		return kind == string(domain.QueryTypeMetric) || kind == strings.ToLower("deploymentCondition")
+	case "serviceportmismatch":
+		return kind == strings.ToLower(string(domain.QueryTypeServiceConfiguration))
 	default:
 		return false
 	}
@@ -471,6 +498,8 @@ func evidenceRefMatchesProfileIssue(profile string, ref v1alpha1.EvidenceRef) bo
 	case "rolloutlatencyregression":
 		return metricEvidenceValueAboveZero(ref) ||
 			containsAny(text, "progressdeadlinexceeded", "unavailable", "replicafailure", "available=false", "progressing=false")
+	case "serviceportmismatch":
+		return containsAny(text, "serviceportmismatch", "service port mismatch", "mismatchconfirmed", "targetport", "target port", "container port")
 	default:
 		return false
 	}
@@ -1187,7 +1216,7 @@ func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigatio
 	evaluation := canonicalVerdictEvaluation{
 		Outcome:       v1alpha1.InvestigationOutcomeConfirmed,
 		Summary:       verifiedRCASummary(evidence, supportedClaims),
-		RootCauseType: inferRootCauseTypeFromClaims(supportedClaims),
+		RootCauseType: inferRootCauseTypeFromClaims(supportedClaims, evidence),
 		Confidence:    verifiedScore,
 		VerifiedScore: verifiedScore,
 	}
@@ -1297,7 +1326,7 @@ func countVerifiedRootCauseClaims(claims []v1alpha1.RCAClaim) (int, int) {
 	return supported, contradicted
 }
 
-func inferRootCauseTypeFromClaims(claims []v1alpha1.RCAClaim) string {
+func inferRootCauseTypeFromClaims(claims []v1alpha1.RCAClaim, evidence investigation.EvidenceCollectionResult) string {
 	statements := make([]string, 0, len(claims))
 	for _, claim := range claims {
 		statements = append(statements, claim.Statement)
@@ -1308,6 +1337,8 @@ func inferRootCauseTypeFromClaims(claims []v1alpha1.RCAClaim) string {
 		return "ImagePullFailure"
 	case containsAny(text, "failedscheduling", "failed scheduling", "unschedulable", "untolerated taint", "insufficient cpu", "insufficient memory"):
 		return "SchedulingFailure"
+	case servicePortMismatchEvidencePresent(evidence) && containsAny(text, "serviceportmismatch", "service port mismatch", "targetport", "target port", "service port", "container port", "port mismatch", "listener port", "targets port", "listens on port"):
+		return "ServicePortMismatch"
 	case containsAny(text, "targetport", "target port", "service port", "container port", "port mismatch", "listener port", "targets port", "listens on port"):
 		return "ConfigurationMismatch"
 	case containsAny(text, "readiness probe", "liveness probe", "probe failure", "probe failed", "unhealthy probe"):

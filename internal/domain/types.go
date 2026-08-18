@@ -38,11 +38,12 @@ type Signal struct {
 type QueryType string
 
 const (
-	QueryTypeMetric              QueryType = "metric"
-	QueryTypeLog                 QueryType = "log"
-	QueryTypeTrace               QueryType = "trace"
-	QueryTypeEvent               QueryType = "event"
-	QueryTypeDeploymentCondition QueryType = "deploymentCondition"
+	QueryTypeMetric               QueryType = "metric"
+	QueryTypeLog                  QueryType = "log"
+	QueryTypeTrace                QueryType = "trace"
+	QueryTypeEvent                QueryType = "event"
+	QueryTypeDeploymentCondition  QueryType = "deploymentCondition"
+	QueryTypeServiceConfiguration QueryType = "serviceConfiguration"
 )
 
 type TimelineEvent struct {
@@ -68,17 +69,19 @@ type TimeRange struct {
 type ObservationType string
 
 const (
-	ObservationTypeMetric              ObservationType = "metric"
-	ObservationTypeLog                 ObservationType = "log"
-	ObservationTypeEvent               ObservationType = "event"
-	ObservationTypeDeploymentCondition ObservationType = "deploymentCondition"
+	ObservationTypeMetric               ObservationType = "metric"
+	ObservationTypeLog                  ObservationType = "log"
+	ObservationTypeEvent                ObservationType = "event"
+	ObservationTypeDeploymentCondition  ObservationType = "deploymentCondition"
+	ObservationTypeServiceConfiguration ObservationType = "serviceConfiguration"
 )
 
 type ObservationValue struct {
-	Metric              *MetricObservation              `json:"metric,omitempty"`
-	Log                 *LogObservation                 `json:"log,omitempty"`
-	Event               *EventObservation               `json:"event,omitempty"`
-	DeploymentCondition *DeploymentConditionObservation `json:"deploymentCondition,omitempty"`
+	Metric               *MetricObservation               `json:"metric,omitempty"`
+	Log                  *LogObservation                  `json:"log,omitempty"`
+	Event                *EventObservation                `json:"event,omitempty"`
+	DeploymentCondition  *DeploymentConditionObservation  `json:"deploymentCondition,omitempty"`
+	ServiceConfiguration *ServiceConfigurationObservation `json:"serviceConfiguration,omitempty"`
 }
 
 type MetricObservation struct {
@@ -103,6 +106,23 @@ type DeploymentConditionObservation struct {
 	Message           string `json:"message,omitempty"`
 	AvailableReplicas int32  `json:"availableReplicas,omitempty"`
 	DesiredReplicas   int32  `json:"desiredReplicas,omitempty"`
+}
+
+type ServiceConfigurationObservation struct {
+	ServiceName        string `json:"serviceName,omitempty"`
+	ServicePortName    string `json:"servicePortName,omitempty"`
+	ServicePort        int32  `json:"servicePort,omitempty"`
+	TargetPortRaw      string `json:"targetPortRaw,omitempty"`
+	TargetPortResolved int32  `json:"targetPortResolved,omitempty"`
+	TargetPortNamed    bool   `json:"targetPortNamed,omitempty"`
+	WorkloadKind       string `json:"workloadKind,omitempty"`
+	WorkloadName       string `json:"workloadName,omitempty"`
+	ContainerName      string `json:"containerName,omitempty"`
+	ContainerPortName  string `json:"containerPortName,omitempty"`
+	ContainerPort      int32  `json:"containerPort,omitempty"`
+	Resolution         string `json:"resolution,omitempty"`
+	MismatchConfirmed  bool   `json:"mismatchConfirmed,omitempty"`
+	Reason             string `json:"reason,omitempty"`
 }
 
 type Observation struct {
