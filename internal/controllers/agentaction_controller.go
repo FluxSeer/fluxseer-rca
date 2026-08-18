@@ -579,6 +579,7 @@ func (r *AgentActionReconciler) createEffectivenessVerification(ctx context.Cont
 			BaselineDigest: action.Status.Effectiveness.Baseline.Digest,
 		}
 		verification.Spec.TimeRange = v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: effectivenessObservationWindow}}
+		verification.Spec.EvidenceRequirements.Profile = "effectivenessverification"
 		verification.Spec.Question = fmt.Sprintf("Verify whether %s recovered after execution %s", targetRefString(action.Spec.Target), action.Status.Execution.ExecutionID)
 		verification.Spec.Queries = []v1alpha1.InvestigationQuery{{
 			Name:          "post-action-workload-events",

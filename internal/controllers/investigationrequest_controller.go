@@ -574,6 +574,8 @@ func requiredEvidenceKindsForProfile(profile string) []string {
 		return []string{string(domain.QueryTypeServiceConfiguration)}
 	case "failedscheduling", "schedulingsuccess":
 		return []string{string(domain.QueryTypeEvent)}
+	case "effectivenessverification":
+		return []string{string(domain.QueryTypeEvent)}
 	default:
 		return nil
 	}
@@ -583,6 +585,14 @@ func evidenceProfileHasNoIssue(profile string, spec v1alpha1.InvestigationReques
 	profileKey := strings.ToLower(strings.TrimSpace(profile))
 	if profileKey == "" {
 		return false
+	}
+	if profileKey == "effectivenessverification" {
+		for _, ref := range evidence.EvidenceRefs {
+			if strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeEvent)) {
+				return false
+			}
+		}
+		return true
 	}
 	relevant := 0
 	for _, ref := range evidence.EvidenceRefs {
@@ -628,6 +638,8 @@ func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) boo
 		return kind == strings.ToLower(string(domain.QueryTypeServiceConfiguration))
 	case "failedscheduling", "schedulingsuccess":
 		return kind == string(domain.QueryTypeEvent)
+	case "effectivenessverification":
+		return kind == string(domain.QueryTypeEvent)
 	case "probefailure":
 		return kind == string(domain.QueryTypeEvent) || kind == strings.ToLower(string(domain.QueryTypeProbeConfiguration))
 	case "highhttperror", "highhttperrorrate":
@@ -657,6 +669,8 @@ func evidenceRefMatchesProfileIssue(profile string, ref v1alpha1.EvidenceRef) bo
 		return containsAny(text, "serviceportmismatch", "service port mismatch", "mismatchconfirmed", "targetport", "target port", "container port")
 	case "failedscheduling", "schedulingsuccess":
 		return containsAny(text, "failedscheduling", "failed scheduling") && containsAny(text, "insufficient memory", "insufficient cpu")
+	case "effectivenessverification":
+		return strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeEvent))
 	case "probefailure":
 		return containsAny(text, "probeconfigurationmismatch", "probe configuration mismatch", "mismatchconfirmed")
 	default:
@@ -2244,6 +2258,12 @@ func profileBackedRCAClaim(profile string, evidence investigation.EvidenceCollec
 	case "highhttperror", "highhttperrorrate":
 		if http5xxMetricEvidencePresent(evidence) && causalDependencyLogEvidencePresent(evidence) {
 			return "HighHTTPErrorRate is confirmed by HTTP 5xx metric and causal dependency evidence.", true
+		}
+	case "effectivenessverification":
+		for _, ref := range evidence.EvidenceRefs {
+			if strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeEvent)) {
+				return "A post-action workload event remains observed during effectiveness verification.", true
+			}
 		}
 	}
 	return "", false

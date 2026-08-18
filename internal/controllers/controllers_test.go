@@ -598,6 +598,9 @@ func TestAgentActionReconcilerCreatesSettledReadOnlyVerification(t *testing.T) {
 	if verification.Spec.Purpose != v1alpha1.InvestigationPurposeEffectivenessVerification || verification.Spec.Mode != v1alpha1.InvestigationModeReadOnly || verification.Spec.CreateRiskSignal {
 		t.Fatalf("expected read-only effectiveness request, got %#v", verification.Spec)
 	}
+	if verification.Spec.EvidenceRequirements.Profile != "effectivenessverification" {
+		t.Fatalf("expected effectiveness verification evidence profile, got %q", verification.Spec.EvidenceRequirements.Profile)
+	}
 	if verification.Spec.Correlation == nil || verification.Spec.Correlation.ExecutionID != updated.Status.Execution.ExecutionID || verification.Spec.Correlation.BaselineDigest != updated.Status.Effectiveness.Baseline.Digest {
 		t.Fatalf("expected execution/baseline correlation, got %#v", verification.Spec.Correlation)
 	}
