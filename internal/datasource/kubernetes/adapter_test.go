@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -48,6 +49,42 @@ func TestAdapterQueryFiltersEventsByTarget(t *testing.T) {
 	}
 	if result.NativeCounts.Records != 1 {
 		t.Fatalf("expected native event count, got %#v", result.NativeCounts)
+	}
+}
+
+func TestAdapterQueryHonorsEventTimeRange(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&corev1.Event{
+			ObjectMeta:     metav1.ObjectMeta{Name: "old-event", Namespace: "demo", CreationTimestamp: metav1.NewTime(time.Date(2026, 8, 18, 7, 0, 0, 0, time.UTC))},
+			InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "demo-app-123"},
+			Reason:         "Unhealthy",
+			Message:        "readiness probe failed",
+			LastTimestamp:  metav1.NewTime(time.Date(2026, 8, 18, 7, 0, 0, 0, time.UTC)),
+		},
+		&corev1.Event{
+			ObjectMeta:     metav1.ObjectMeta{Name: "new-event", Namespace: "demo", CreationTimestamp: metav1.NewTime(time.Date(2026, 8, 18, 7, 9, 0, 0, time.UTC))},
+			InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "demo-app-123"},
+			Reason:         "Unhealthy",
+			Message:        "readiness probe failed",
+			LastTimestamp:  metav1.NewTime(time.Date(2026, 8, 18, 7, 9, 0, 0, time.UTC)),
+		},
+	).Build()
+
+	result, err := (Adapter{Client: client}).Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "demo-app"},
+		QueryType: domain.QueryTypeEvent,
+		StartTime: time.Date(2026, 8, 18, 7, 5, 0, 0, time.UTC),
+		EndTime:   time.Date(2026, 8, 18, 7, 10, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("query events: %v", err)
+	}
+	if len(result.Records) != 1 || result.Records[0]["eventName"] != "new-event" {
+		t.Fatalf("expected only in-range event, got %#v", result.Records)
 	}
 }
 
@@ -165,8 +202,8 @@ func TestAdapterQueryProbeConfigurationConfirmsNumericPortMismatch(t *testing.T)
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
 			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
-				Name: "app",
-				Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: 3000}},
+				Name:           "app",
+				Ports:          []corev1.ContainerPort{{Name: "http", ContainerPort: 3000}},
 				ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/ready", Port: intstr.FromInt(8080), Scheme: corev1.URISchemeHTTP}}},
 			}}}}},
 		},
@@ -200,8 +237,8 @@ func TestAdapterQueryProbeConfigurationDoesNotFabricateUnresolvedNamedMismatch(t
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
 			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
-				Name: "app",
-				Ports: []corev1.ContainerPort{{Name: "metrics", ContainerPort: 3000}},
+				Name:           "app",
+				Ports:          []corev1.ContainerPort{{Name: "metrics", ContainerPort: 3000}},
 				ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/ready", Port: intstr.FromString("http"), Scheme: corev1.URISchemeHTTP}}},
 			}}}}},
 		},

@@ -162,12 +162,11 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		finishedAt := metav1.NewTime(now())
 		plan.Status.FinishedAt = &finishedAt
 	}
-	if statusChangedPlan(originalPlan, &plan) {
-		if err := r.Status().Update(ctx, &plan); err != nil && !recordStatusUpdateConflict("RemediationPlan", err) {
-			return ctrl.Result{}, err
-		}
-	}
-
+	// Persist the plan decision after the owned AgentAction status. The
+	// action controller can observe the newly-created action before this
+	// reconcile has recorded the policy decision; updating the plan first
+	// would make the plan look decided while a resource-version conflict
+	// could silently leave the action in its transient Pending state.
 	originalAction := action.DeepCopy()
 	recordedAt := metav1.NewTime(now())
 	action.Status.DryRunResult = &v1alpha1.AgentActionDryRunStatus{
@@ -209,11 +208,18 @@ func (r *RemediationPlanReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 	if statusChangedAction(originalAction, action) {
-		if err := r.Status().Update(ctx, action); err != nil && !recordStatusUpdateConflict("AgentAction", err) {
+		if err := r.Status().Update(ctx, action); err != nil {
+			recordStatusUpdateConflict("AgentAction", err)
 			return ctrl.Result{}, err
 		}
 		// Emit Event only after successful status update (using nil-safe helper)
 		recordPhaseTransition(r.EventRecorder, action, originalAction.Status.Phase, action.Status.Phase)
+	}
+	if statusChangedPlan(originalPlan, &plan) {
+		if err := r.Status().Update(ctx, &plan); err != nil {
+			recordStatusUpdateConflict("RemediationPlan", err)
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil

@@ -65,6 +65,9 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 		if !eventMatchesTarget(event, req.Target, relatedNames) {
 			continue
 		}
+		if !eventWithinTimeRange(event, req.StartTime, req.EndTime) {
+			continue
+		}
 		if !eventReasonAllowed(event.Reason, req.Reasons) {
 			continue
 		}
@@ -120,6 +123,33 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 		result.Summary = fmt.Sprintf("%s; native records limit retained %d of %d", result.Summary, limit.RetainedCount, limit.OriginalCount)
 	}
 	return result, nil
+}
+
+func eventWithinTimeRange(event corev1.Event, start, end time.Time) bool {
+	if start.IsZero() && end.IsZero() {
+		return true
+	}
+
+	eventTime := event.EventTime.Time
+	if eventTime.IsZero() {
+		eventTime = event.LastTimestamp.Time
+	}
+	if eventTime.IsZero() {
+		eventTime = event.FirstTimestamp.Time
+	}
+	if eventTime.IsZero() {
+		eventTime = event.CreationTimestamp.Time
+	}
+	if eventTime.IsZero() {
+		return false
+	}
+	if !start.IsZero() && eventTime.Before(start) {
+		return false
+	}
+	if !end.IsZero() && eventTime.After(end) {
+		return false
+	}
+	return true
 }
 
 type workloadContainerPort struct {

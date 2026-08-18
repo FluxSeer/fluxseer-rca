@@ -24,6 +24,80 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
 
+func TestRemediationPlanReconcilerRepairsTransientPendingActionApproval(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
+	plan := &v1alpha1.RemediationPlan{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout-risk-plan", Namespace: "remediation"},
+		Spec: v1alpha1.RemediationPlanSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "remediation",
+				Kind:       "Deployment",
+				Name:       "checkout",
+				APIVersion: "apps/v1",
+			},
+			Severity:   "high",
+			Confidence: 95,
+			Steps: []v1alpha1.RemediationStep{{
+				Name:       "restart-workload",
+				ActionType: "kubernetes.rolloutRestart",
+			}},
+		},
+	}
+	action := &v1alpha1.AgentAction{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout-risk-plan-action", Namespace: "remediation"},
+		Status: v1alpha1.AgentActionStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{Phase: v1alpha1.PhaseWaitingApproval},
+			Approval: &v1alpha1.AgentActionApprovalStatus{
+				Approved: false,
+				Source:   "Pending",
+			},
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RemediationPlan{}, &v1alpha1.AgentAction{}).
+		WithObjects(plan, action).
+		Build()
+
+	reconciler := &RemediationPlanReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Guardrails: guardrails.NewEngine(guardrails.Policy{
+			AllowedActionTypes:       []string{"kubernetes.rolloutRestart"},
+			AutoApproveMaxSeverity:   domain.SeverityLow,
+			RequireApprovalAtOrAbove: domain.SeverityMedium,
+		}),
+		Now: func() time.Time { return now },
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: plan.Name, Namespace: plan.Namespace}}); err != nil {
+		t.Fatalf("remediation plan reconcile failed: %v", err)
+	}
+
+	var storedPlan v1alpha1.RemediationPlan
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: plan.Name, Namespace: plan.Namespace}, &storedPlan); err != nil {
+		t.Fatalf("get remediation plan: %v", err)
+	}
+	if storedPlan.Status.Phase != v1alpha1.PhaseWaitingApproval {
+		t.Fatalf("expected plan WaitingApproval, got %s", storedPlan.Status.Phase)
+	}
+
+	var storedAction v1alpha1.AgentAction
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: action.Name, Namespace: action.Namespace}, &storedAction); err != nil {
+		t.Fatalf("get agent action: %v", err)
+	}
+	if storedAction.Status.Phase != v1alpha1.PhaseWaitingApproval || storedAction.Status.Approval == nil || storedAction.Status.Approval.Approved || storedAction.Status.Approval.Source != "ManualApprovalRequired" {
+		t.Fatalf("expected transient Pending approval to be repaired, got phase=%s approval=%#v", storedAction.Status.Phase, storedAction.Status.Approval)
+	}
+	if storedAction.Status.Approval.ActionDigest == "" {
+		t.Fatal("expected repaired approval to carry an action digest")
+	}
+}
+
 func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -489,8 +563,12 @@ func TestAgentActionReconcilerCreatesSettledReadOnlyVerification(t *testing.T) {
 		Now: func() time.Time { return now },
 	}
 	key := types.NamespacedName{Name: action.Name, Namespace: action.Namespace}
-	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key})
+	if err != nil {
 		t.Fatalf("initial restart reconcile failed: %v", err)
+	}
+	if result.RequeueAfter != effectivenessSettlingPeriod {
+		t.Fatalf("expected settling requeue after %s, got %s", effectivenessSettlingPeriod, result.RequeueAfter)
 	}
 	var updated v1alpha1.AgentAction
 	if err := fakeClient.Get(context.Background(), key, &updated); err != nil {

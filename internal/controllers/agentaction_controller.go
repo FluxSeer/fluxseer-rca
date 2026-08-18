@@ -386,6 +386,13 @@ func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, acti
 		return ctrl.Result{}, err
 	}
 	recordPhaseTransition(r.EventRecorder, action, originalPhase, action.Status.Phase)
+	if effectiveness.SettlingUntil != nil {
+		requeueAfter := effectiveness.SettlingUntil.Sub(now)
+		if requeueAfter < 0 {
+			requeueAfter = 0
+		}
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
