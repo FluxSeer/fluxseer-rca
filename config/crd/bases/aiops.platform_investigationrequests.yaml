@@ -685,6 +685,23 @@ spec:
                         type: string
                       link:
                         type: string
+                      relatedTargets:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            cluster:
+                              type: string
+                            namespace:
+                              type: string
+                            kind:
+                              type: string
+                            name:
+                              type: string
+                            apiVersion:
+                              type: string
+                            service:
+                              type: string
                 lineage:
                   type: object
                   properties:

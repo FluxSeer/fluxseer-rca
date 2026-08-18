@@ -1225,6 +1225,7 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 		RetainedCount:    retainedCount,
 		CollectedAt:      collectedAt.UTC(),
 	}
+	obs.RelatedTargets = relatedTargetsFromRecord(record, req)
 	switch result.QueryType {
 	case domain.QueryTypeMetric:
 		metricName, _ := record["metric"].(string)
@@ -1375,6 +1376,9 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 	if obs.Limit != 0 {
 		digestPayload["limit"] = obs.Limit
 	}
+	if len(obs.RelatedTargets) > 0 {
+		digestPayload["relatedTargets"] = obs.RelatedTargets
+	}
 	obs.ContentDigest = canonicaldigest.String(canonicaldigest.ObservationJSONV1, digestPayload)
 	return obs
 }
@@ -1404,6 +1408,7 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 			OriginalBytes:          int32(observation.OriginalBytes),
 			RetainedBytes:          int32(observation.RetainedBytes),
 			CollectedAt:            &collectedAt,
+			RelatedTargets:         targetRefsFromResourceRefs(observation.RelatedTargets),
 		}
 		if observation.Value.Event != nil {
 			ref.Reason = observation.Value.Event.Reason
@@ -1548,6 +1553,69 @@ func observationRecordString(record map[string]any, key string) string {
 		return strings.TrimSpace(fmt.Sprint(value))
 	}
 	return ""
+}
+
+func relatedTargetsFromRecord(record map[string]any, req datasource.QueryRequest) []domain.ResourceRef {
+	labels, ok := record["labels"].(map[string]any)
+	if !ok {
+		if stringLabels, ok := record["labels"].(map[string]string); ok {
+			labels = make(map[string]any, len(stringLabels))
+			for key, value := range stringLabels {
+				labels[key] = value
+			}
+		}
+	}
+	if labels == nil {
+		return nil
+	}
+	kind := firstLabelValue(labels, "dependency_kind", "causal_dependency_kind")
+	name := firstLabelValue(labels, "dependency_name", "causal_dependency_name")
+	if kind == "" || name == "" {
+		return nil
+	}
+	namespace := firstLabelValue(labels, "dependency_namespace", "causal_dependency_namespace")
+	if namespace == "" {
+		namespace = req.Target.Namespace
+	}
+	apiVersion := firstLabelValue(labels, "dependency_api_version", "causal_dependency_api_version")
+	if apiVersion == "" {
+		apiVersion = "v1"
+	}
+	return []domain.ResourceRef{{
+		Cluster:    req.Target.Cluster,
+		Namespace:  namespace,
+		Kind:       kind,
+		Name:       name,
+		APIVersion: apiVersion,
+	}}
+}
+
+func firstLabelValue(labels map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := labels[key]; ok && value != nil {
+			if text := strings.TrimSpace(fmt.Sprint(value)); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func targetRefsFromResourceRefs(targets []domain.ResourceRef) []v1alpha1.TargetRef {
+	if len(targets) == 0 {
+		return nil
+	}
+	refs := make([]v1alpha1.TargetRef, 0, len(targets))
+	for _, target := range targets {
+		refs = append(refs, v1alpha1.TargetRef{
+			Cluster:    target.Cluster,
+			Namespace:  target.Namespace,
+			Kind:       target.Kind,
+			Name:       target.Name,
+			APIVersion: target.APIVersion,
+		})
+	}
+	return refs
 }
 
 func observationRecordInt32(record map[string]any, key string) int32 {

@@ -2147,6 +2147,38 @@ func TestUnverifiedRCASummaryPrefersIssueMatchingEvidence(t *testing.T) {
 	}
 }
 
+func TestCausalRootCauseEntityUsesLinkedDependencyEvidence(t *testing.T) {
+	dependency := v1alpha1.TargetRef{APIVersion: "v1", Kind: "Service", Namespace: "prod", Name: "inventory"}
+	entity := causalRootCauseEntity(
+		[]v1alpha1.RCAClaim{{
+			Verification: verifier.VerificationSupported,
+			EvidenceRefs: []string{"evidence-002"},
+		}},
+		investigation.EvidenceCollectionResult{EvidenceRefs: []v1alpha1.EvidenceRef{
+			{ID: "evidence-001", Kind: string(domain.QueryTypeMetric), Source: "prometheus"},
+			{ID: "evidence-002", Kind: string(domain.QueryTypeLog), Source: "loki", RelatedTargets: []v1alpha1.TargetRef{dependency}},
+		}},
+	)
+	if entity == nil || !sameTargetRef(*entity, dependency) {
+		t.Fatalf("expected linked dependency entity, got %#v", entity)
+	}
+}
+
+func TestCausalRootCauseEntityDoesNotInferUnlinkedDependency(t *testing.T) {
+	entity := causalRootCauseEntity(
+		[]v1alpha1.RCAClaim{{
+			Verification: verifier.VerificationSupported,
+			EvidenceRefs: []string{"evidence-001"},
+		}},
+		investigation.EvidenceCollectionResult{EvidenceRefs: []v1alpha1.EvidenceRef{
+			{ID: "evidence-001", Kind: string(domain.QueryTypeLog), Source: "loki", Summary: "connection refused"},
+		}},
+	)
+	if entity != nil {
+		t.Fatalf("expected no inferred dependency without related target metadata, got %#v", entity)
+	}
+}
+
 func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -2193,6 +2225,26 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 			},
 			wantComplete: true,
 			wantNoIssue:  true,
+		},
+		{
+			name:    "high HTTP error requires metric and causal dependency log",
+			profile: "HighHTTPErrorRate",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeMetric), Source: "prometheus", Summary: "http 5xx error rate returned value 0.42"},
+				{Kind: string(domain.QueryTypeLog), Source: "loki", Summary: "upstream inventory unavailable: connection refused", RelatedTargets: []v1alpha1.TargetRef{{APIVersion: "v1", Kind: "Service", Namespace: "prod", Name: "inventory"}}},
+			},
+			wantComplete: true,
+			wantNoIssue:  false,
+		},
+		{
+			name:    "high HTTP error metric alone is insufficient",
+			profile: "HighHTTPErrorRate",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeMetric), Source: "prometheus", Summary: "http 5xx error rate returned value 0.42"},
+			},
+			wantComplete: false,
+			wantNoIssue:  false,
+			wantMissing:  []string{string(domain.QueryTypeLog)},
 		},
 		{
 			name:    "crashloop explicit backoff query complete with no matching records",

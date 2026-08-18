@@ -98,6 +98,7 @@ type EvidenceRef struct {
 	PayloadRef             *PayloadRef         `json:"payloadRef,omitempty"`
 	Reason                 string              `json:"reason,omitempty"`
 	Link                   string              `json:"link,omitempty"`
+	RelatedTargets         []TargetRef         `json:"relatedTargets,omitempty"`
 }
 
 type PayloadRef struct {
@@ -379,6 +380,9 @@ func deepcopyEvidenceRefs(in []EvidenceRef) []EvidenceRef {
 	out := make([]EvidenceRef, len(in))
 	copy(out, in)
 	for index := range out {
+		if in[index].RelatedTargets != nil {
+			out[index].RelatedTargets = append([]TargetRef(nil), in[index].RelatedTargets...)
+		}
 		if in[index].Classification != nil {
 			classification := *in[index].Classification
 			if in[index].Classification.SensitivityTags != nil {

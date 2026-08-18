@@ -273,7 +273,7 @@ func requiredDomainKinds(profile string) []string {
 	case "serviceportmismatch":
 		return []string{"serviceConfiguration"}
 	case "highhttperror":
-		return []string{"metric"}
+		return []string{"metric", "log"}
 	case "memorypressure":
 		return []string{"event", "metric"}
 	case "latencyregression":
@@ -312,7 +312,10 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 	case "serviceportmismatch":
 		return (kind == "serviceconfiguration" || kind == "event") && containsAny(text, "serviceportmismatch", "service port mismatch", "mismatchconfirmed", "targetport", "target port", "targets port", "container port", "listens on port", "port mismatch", "connection refused")
 	case "highhttperror":
-		return kind == "metric" && containsAny(text, "http", "5xx", "error rate", "error ratio")
+		if kind == "metric" {
+			return containsAny(text, "http", "5xx", "error rate", "error ratio")
+		}
+		return kind == "log" && containsAny(text, "connection refused", "upstream unavailable", "dependency unavailable", "service unavailable", "upstream timeout", "failed to connect", "dial tcp", "connection reset")
 	case "memorypressure":
 		switch kind {
 		case "event":

@@ -169,6 +169,7 @@ type Observation struct {
 	OriginalBytes          int                          `json:"originalBytes"`
 	RetainedBytes          int                          `json:"retainedBytes"`
 	CollectedAt            time.Time                    `json:"collectedAt"`
+	RelatedTargets         []ResourceRef                `json:"relatedTargets,omitempty"`
 }
 
 type IncidentContext struct {

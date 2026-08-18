@@ -16,7 +16,7 @@ import (
 
 func TestAdapterQueryParsesLokiStreams(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"streams","result":[{"stream":{"app":"demo"},"values":[["1718614800000000000","error timeout"]]}]}}`))
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"streams","result":[{"stream":{"app":"demo","dependency_kind":"Service","dependency_name":"inventory"},"values":[["1718614800000000000","error timeout"]]}]}}`))
 	}))
 	defer server.Close()
 
@@ -33,6 +33,10 @@ func TestAdapterQueryParsesLokiStreams(t *testing.T) {
 	}
 	if len(result.Records) != 1 {
 		t.Fatalf("expected one record, got %d", len(result.Records))
+	}
+	labels, ok := result.Records[0]["labels"].(map[string]any)
+	if !ok || labels["dependency_kind"] != "Service" || labels["dependency_name"] != "inventory" {
+		t.Fatalf("expected causal dependency labels to survive adapter normalization, got %#v", result.Records[0]["labels"])
 	}
 	if result.NativeCounts.ResultType != "streams" || result.NativeCounts.Streams != 1 || result.NativeCounts.Entries != 1 {
 		t.Fatalf("expected native stream counts, got %#v", result.NativeCounts)

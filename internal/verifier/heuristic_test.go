@@ -106,6 +106,24 @@ func TestVerifyClaimsMarksContradictedEvidence(t *testing.T) {
 	}
 }
 
+func TestVerifyClaimsRequiresMetricAndCausalLogForHighHTTPError(t *testing.T) {
+	claim := Claim{ID: "claim-001", Statement: "High HTTP error rate is caused by the inventory dependency being unavailable"}
+	positive := VerifyClaims([]Claim{claim}, []EvidenceRef{
+		{ID: "evidence-001", Kind: "metric", Source: "prometheus", Summary: "HTTP 5xx error rate elevated above threshold"},
+		{ID: "evidence-002", Kind: "log", Source: "loki", Summary: "inventory dependency unavailable: connection refused"},
+	})
+	if positive.Claims[0].Verification != VerificationSupported || len(positive.Claims[0].EvidenceRefs) != 2 {
+		t.Fatalf("expected high HTTP causal claim to link metric and log evidence, got %#v", positive.Claims[0])
+	}
+
+	metricOnly := VerifyClaims([]Claim{claim}, []EvidenceRef{
+		{ID: "evidence-001", Kind: "metric", Source: "prometheus", Summary: "HTTP 5xx error rate elevated above threshold"},
+	})
+	if metricOnly.Claims[0].Verification != VerificationUnsupported || len(metricOnly.Claims[0].EvidenceRefs) != 0 {
+		t.Fatalf("expected metric-only high HTTP causal claim to remain unsupported, got %#v", metricOnly.Claims[0])
+	}
+}
+
 func TestVerifyClaimsDoesNotTreatUnhealthyAsHealthyContradiction(t *testing.T) {
 	result := VerifyClaims(
 		[]Claim{
