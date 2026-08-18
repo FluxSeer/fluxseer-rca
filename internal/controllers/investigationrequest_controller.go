@@ -149,7 +149,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 			}
 		}
 		applyInvestigationExecutionStatus(&investigation, preflight, evidence, rca, message, now())
-		if rca.Reasoning != nil && investigation.Spec.CreateRiskSignal {
+		if rca.Reasoning != nil && investigation.Spec.CreateRiskSignal && investigationOutcomeAllowsRiskSignalProjection(investigation.Status.Outcome) {
 			link, promoteErr := r.promoteToRiskSignal(ctx, &investigation, preflight, evidence, rca, now())
 			if promoteErr != nil {
 				return ctrl.Result{}, promoteErr
@@ -1171,7 +1171,7 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	request.Status.Verdict = &v1alpha1.RCAVerdict{
 		Outcome:         evaluation.Outcome,
 		Summary:         evaluation.Summary,
-		RootCauseEntity: resourceToTargetRef(preflight.Target),
+		RootCauseEntity: rootCauseEntityForInvestigationOutcome(evaluation.Outcome, preflight.Target),
 		RootCauseType:   evaluation.RootCauseType,
 		Confidence:      evaluation.Confidence,
 		ConfidenceDetail: &v1alpha1.RCAConfidence{
@@ -1190,6 +1190,17 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
 	request.Status.Execution = buildRCAExecution(request, preflight, evidence, rca, investigationExecutionID(request, preflight, evidence), executionStateFinalized, now)
 	request.Status.Execution.VerifierVersion = verification.Method
+}
+
+func investigationOutcomeAllowsRiskSignalProjection(outcome string) bool {
+	return outcome == v1alpha1.InvestigationOutcomeConfirmed
+}
+
+func rootCauseEntityForInvestigationOutcome(outcome string, target domain.ResourceRef) v1alpha1.TargetRef {
+	if !investigationOutcomeAllowsRiskSignalProjection(outcome) {
+		return v1alpha1.TargetRef{}
+	}
+	return resourceToTargetRef(target)
 }
 
 type canonicalVerdictEvaluation struct {
@@ -2154,7 +2165,7 @@ func investigationExpiryTime(request *v1alpha1.InvestigationRequest, now time.Ti
 }
 
 func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context, request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, rca investigation.RCAResult, now time.Time) (*v1alpha1.NamespacedObjectReference, error) {
-	if rca.Reasoning == nil {
+	if rca.Reasoning == nil || !investigationOutcomeAllowsRiskSignalProjection(request.Status.Outcome) {
 		return nil, nil
 	}
 

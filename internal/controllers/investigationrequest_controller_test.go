@@ -167,8 +167,11 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Verdict.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
 		t.Fatalf("expected inconclusive verdict outcome, got %#v", stored.Status.Verdict)
 	}
-	if stored.Status.Verdict.RootCauseEntity.Name != "open-api" {
-		t.Fatalf("expected root cause entity open-api, got %#v", stored.Status.Verdict.RootCauseEntity)
+	if stored.Status.Verdict.RootCauseEntity != (v1alpha1.TargetRef{}) {
+		t.Fatalf("expected empty root cause entity for unverified RCA, got %#v", stored.Status.Verdict.RootCauseEntity)
+	}
+	if stored.Spec.Target.Name != "open-api" {
+		t.Fatalf("expected investigation target to remain open-api, got %#v", stored.Spec.Target)
 	}
 	if stored.Status.Verdict.RootCauseType != "" {
 		t.Fatalf("expected no root cause type for unverified RCA, got %#v", stored.Status.Verdict)
@@ -282,7 +285,7 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	}
 }
 
-func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *testing.T) {
+func TestInvestigationRequestReconcilerDoesNotPromoteUnverifiedRCA(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add apps scheme: %v", err)
@@ -361,39 +364,15 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &storedRequest); err != nil {
 		t.Fatalf("get request: %v", err)
 	}
-	if storedRequest.Status.LinkedRiskSignalRef == nil {
-		t.Fatal("expected linked risk signal ref")
+	if storedRequest.Status.LinkedRiskSignalRef != nil {
+		t.Fatalf("expected no linked risk signal ref for inconclusive RCA, got %#v", storedRequest.Status.LinkedRiskSignalRef)
 	}
-
-	var riskSignal v1alpha1.RiskSignal
-	if err := client.Get(context.Background(), types.NamespacedName{
-		Name:      storedRequest.Status.LinkedRiskSignalRef.Name,
-		Namespace: storedRequest.Status.LinkedRiskSignalRef.Namespace,
-	}, &riskSignal); err != nil {
-		t.Fatalf("get promoted risk signal: %v", err)
+	var riskSignals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &riskSignals); err != nil {
+		t.Fatalf("list risk signals: %v", err)
 	}
-	if riskSignal.Spec.Target.Name != "open-api" {
-		t.Fatalf("unexpected risk signal target %#v", riskSignal.Spec.Target)
-	}
-	if riskSignal.Spec.InvestigationRef == nil ||
-		riskSignal.Spec.InvestigationRef.Name != storedRequest.Name ||
-		riskSignal.Spec.InvestigationRef.Namespace != storedRequest.Namespace {
-		t.Fatalf("expected promoted risk signal to reference canonical investigation, got %#v", riskSignal.Spec.InvestigationRef)
-	}
-	if riskSignal.Status.Phase != v1alpha1.InvestigationOutcomeInconclusive ||
-		riskSignal.Status.RCASummary == "" ||
-		riskSignal.Status.RCAHypothesis != "" ||
-		len(riskSignal.Status.RCACauses) != 0 {
-		t.Fatalf("expected inconclusive RCA projection on promoted risk signal, got %#v", riskSignal.Status)
-	}
-	if riskSignal.Status.Projection == nil ||
-		riskSignal.Status.Projection.Mode != "InvestigationRequestProjection" ||
-		riskSignal.Status.Projection.ProjectedFrom == nil ||
-		riskSignal.Status.Projection.ProjectedFrom.Name != storedRequest.Name {
-		t.Fatalf("expected investigation projection metadata, got %#v", riskSignal.Status.Projection)
-	}
-	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
-		t.Fatalf("expected RCAReady false on promoted risk signal, got %#v", cond)
+	if len(riskSignals.Items) != 0 {
+		t.Fatalf("expected no investigation-projected risk signals for inconclusive RCA, got %#v", riskSignals.Items)
 	}
 }
 
@@ -599,41 +578,15 @@ func TestInvestigationRequestReconcilerKeepsUnverifiedUnhealthyEventInconclusive
 	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
 		t.Fatalf("expected RCAReady false RCAUnverified, got %#v", cond)
 	}
-	if stored.Status.LinkedRiskSignalRef == nil {
-		t.Fatal("expected linked risk signal ref")
+	if stored.Status.LinkedRiskSignalRef != nil {
+		t.Fatalf("expected no linked risk signal ref for inconclusive RCA, got %#v", stored.Status.LinkedRiskSignalRef)
 	}
-
-	var riskSignal v1alpha1.RiskSignal
-	if err := client.Get(context.Background(), types.NamespacedName{
-		Name:      stored.Status.LinkedRiskSignalRef.Name,
-		Namespace: stored.Status.LinkedRiskSignalRef.Namespace,
-	}, &riskSignal); err != nil {
-		t.Fatalf("get promoted risk signal: %v", err)
+	var riskSignals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &riskSignals); err != nil {
+		t.Fatalf("list risk signals: %v", err)
 	}
-	if riskSignal.Status.Phase != v1alpha1.InvestigationOutcomeInconclusive ||
-		riskSignal.Status.RCAHypothesis != "" ||
-		len(riskSignal.Status.RCACauses) != 0 {
-		t.Fatalf("expected promoted risk signal to project inconclusive canonical RCA, got %#v", riskSignal.Status)
-	}
-	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
-		t.Fatalf("expected RCAReady false on promoted risk signal, got %#v", cond)
-	}
-
-	riskReconciler := &RiskSignalReconciler{
-		Client:  client,
-		Scheme:  scheme,
-		Enabled: true,
-		Now:     func() time.Time { return now },
-	}
-	if _, err := riskReconciler.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: riskSignal.Name, Namespace: riskSignal.Namespace},
-	}); err != nil {
-		t.Fatalf("risk signal reconcile failed: %v", err)
-	}
-	var plan v1alpha1.RemediationPlan
-	err := client.Get(context.Background(), types.NamespacedName{Name: riskSignal.Name + "-plan", Namespace: riskSignal.Namespace}, &plan)
-	if !apierrors.IsNotFound(err) {
-		t.Fatalf("expected no remediation plan for unverified investigation projection, got plan=%#v err=%v", plan, err)
+	if len(riskSignals.Items) != 0 {
+		t.Fatalf("expected no investigation-projected risk signals for inconclusive RCA, got %#v", riskSignals.Items)
 	}
 }
 

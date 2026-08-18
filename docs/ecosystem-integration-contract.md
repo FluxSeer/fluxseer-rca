@@ -57,7 +57,13 @@ lastTransitionTime
 
 `Verified=Unknown` with reason `RCAUnavailable` means verification did not run because RCA execution was blocked. `Verified=False` means verification ran and did not support the proposed root-cause claims.
 
-For `RiskSignal`, `status.phase` describes the finding lifecycle only. A `Confirmed` phase means the finding was materialized, not that root-cause evidence was verified. Consumers should use:
+For a direct `RiskSignal`, `status.phase` describes the finding lifecycle only. A
+`Confirmed` phase means the finding was materialized, not that root-cause
+evidence was verified. The canonical investigation projection has a stricter
+boundary: FluxSeer creates a public investigation-projected `RiskSignal` only
+when `InvestigationRequest.status.outcome=Confirmed`. `Inconclusive`,
+`NoIssueFound`, and failed/unknown investigations retain their canonical status
+without creating a public investigation-projected signal. Consumers should use:
 
 ```text
 FindingReady=True -> display or notify the finding
