@@ -58,6 +58,35 @@ func TestWriteRiskRuleReportJSON(t *testing.T) {
 	}
 }
 
+func TestBuildAgentActionReportIncludesPublicRemediationChain(t *testing.T) {
+	action := &v1alpha1.AgentAction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "checkout-restart-plan-action",
+			Namespace:       "prod",
+			Annotations:     map[string]string{riskSignalRefAnnotation: "prod/checkout-risk"},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "RemediationPlan", Name: "checkout-restart-plan"}},
+		},
+		Status: v1alpha1.AgentActionStatus{Effectiveness: &v1alpha1.AgentActionEffectivenessStatus{
+			VerificationRef: &v1alpha1.NamespacedObjectReference{Name: "checkout-restart-verify", Namespace: "prod"},
+		}},
+	}
+	plan := &v1alpha1.RemediationPlan{ObjectMeta: metav1.ObjectMeta{Name: "checkout-restart-plan", Namespace: "prod"}}
+	signal := &v1alpha1.RiskSignal{ObjectMeta: metav1.ObjectMeta{Name: "checkout-risk", Namespace: "prod"}}
+	verification := &v1alpha1.InvestigationRequest{ObjectMeta: metav1.ObjectMeta{Name: "checkout-restart-verify", Namespace: "prod"}}
+	kubeClient := fake.NewClientBuilder().WithScheme(buildScheme()).WithObjects(action, plan, signal, verification).Build()
+
+	report, err := buildAgentActionReport(context.Background(), kubeClient, "prod", action.Name)
+	if err != nil {
+		t.Fatalf("build AgentAction report: %v", err)
+	}
+	if report.SchemaVersion != agentActionReportSchemaVersion || report.RemediationPlan == nil || report.RiskSignal == nil || report.Verification == nil {
+		t.Fatalf("expected complete public remediation chain, got %#v", report)
+	}
+	if report.AgentAction.Kind != "AgentAction" || report.RemediationPlan.Kind != "RemediationPlan" || report.RiskSignal.Kind != "RiskSignal" || report.Verification.Kind != "InvestigationRequest" {
+		t.Fatalf("expected public Kubernetes type identities, got action=%#v plan=%#v signal=%#v verification=%#v", report.AgentAction.TypeMeta, report.RemediationPlan.TypeMeta, report.RiskSignal.TypeMeta, report.Verification.TypeMeta)
+	}
+}
+
 func TestParseReportArgsRejectsUnsupportedOutput(t *testing.T) {
 	_, _, _, err := parseReportArgs([]string{"riskrule", "latency", "--output=xml"}, &bytes.Buffer{})
 	if err == nil {

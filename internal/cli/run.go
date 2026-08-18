@@ -39,5 +39,6 @@ func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "  fluxseer demo")
 	_, _ = fmt.Fprintln(w, "  fluxseer investigate <kind> <name> [flags]")
 	_, _ = fmt.Fprintln(w, "  fluxseer report riskrule <name> [flags]")
+	_, _ = fmt.Fprintln(w, "  fluxseer report agentaction <name> [flags]")
 	_, _ = fmt.Fprintln(w, "  fluxseer version [--output=json]")
 }

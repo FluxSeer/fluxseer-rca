@@ -14,6 +14,17 @@ Source schema: [api/v1alpha1/types.go](../../api/v1alpha1/types.go)
 
 Represent one executable action after policy review and, when required, human approval.
 
+The supported user-facing export is:
+
+```text
+fluxseer report agentaction <name> --namespace <namespace>
+```
+
+It emits `fluxseer-agentaction-report/v1` and includes the public
+`AgentAction`, its owning `RemediationPlan`, the source `RiskSignal`, and the
+owned verification `InvestigationRequest` when those references exist. Harness
+assertions and internal runtime snapshots are not part of this report.
+
 ## YAML Schema
 
 ### `spec`
@@ -174,6 +185,11 @@ status.effectiveness.phase=Verifying
 ```
 
 `Succeeded` means the executor completed the requested action. It does not mean the underlying incident was resolved.
+
+Public reports must preserve this distinction: `status.execution.outcome` is
+the backend execution result, while `status.effectiveness.outcome` is the
+post-action verification result. A successful execution must not be presented
+as `Effective` without completed verification evidence.
 
 The v0.5 contract adds these execution fields to `status.execution`:
 
