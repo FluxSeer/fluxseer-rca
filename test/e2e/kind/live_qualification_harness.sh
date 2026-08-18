@@ -16,9 +16,11 @@ LIVE_HARNESS_IMAGE_REPOSITORY="${LIVE_HARNESS_IMAGE_REPOSITORY:-${IMAGE_REPOSITO
 LIVE_HARNESS_CLUSTER_CONFIG="${LIVE_HARNESS_CLUSTER_CONFIG:-${live_harness_repo_root}/examples/kind/kind-config.yaml}"
 LIVE_HARNESS_TIMEOUT_SECONDS="${LIVE_HARNESS_TIMEOUT_SECONDS:-${FLUXSEER_RCA_E2E_TIMEOUT_SECONDS:-300}}"
 LIVE_HARNESS_POLL_SECONDS="${LIVE_HARNESS_POLL_SECONDS:-${FLUXSEER_RCA_E2E_POLL_SECONDS:-3}}"
+LIVE_HARNESS_SNAPSHOT_REQUEST_TIMEOUT="${LIVE_HARNESS_SNAPSHOT_REQUEST_TIMEOUT:-10s}"
 LIVE_HARNESS_KEEP_CLUSTER="${LIVE_HARNESS_KEEP_CLUSTER:-false}"
 LIVE_HARNESS_ARTIFACT_ROOT="${LIVE_HARNESS_ARTIFACT_ROOT:-${live_harness_repo_root}/reports/runtime/v0.5-alpha1-kind-live/${LIVE_HARNESS_RUN_ID}}"
 LIVE_HARNESS_CONTEXT="kind-${LIVE_HARNESS_CLUSTER_NAME}"
+LIVE_HARNESS_KUBECONFIG="${LIVE_HARNESS_KUBECONFIG:-${LIVE_HARNESS_ARTIFACT_ROOT}/kind.kubeconfig}"
 LIVE_HARNESS_OPERATOR_IMAGE_REF="${LIVE_HARNESS_IMAGE_REPOSITORY}:${LIVE_HARNESS_IMAGE_TAG}"
 LIVE_HARNESS_CLUSTER_CREATED=false
 
@@ -80,6 +82,8 @@ live_harness_create_cluster() {
     --config "${LIVE_HARNESS_CLUSTER_CONFIG}" \
     --wait 120s
   LIVE_HARNESS_CLUSTER_CREATED=true
+  kind get kubeconfig --name "${LIVE_HARNESS_CLUSTER_NAME}" >"${LIVE_HARNESS_KUBECONFIG}"
+  export KUBECONFIG="${LIVE_HARNESS_KUBECONFIG}"
   live_harness_kubectl cluster-info
 }
 
@@ -204,7 +208,7 @@ live_harness_collect_json() {
   local output_path="$1"
   shift
 
-  if ! live_harness_kubectl "$@" -o json >"${output_path}"; then
+  if ! live_harness_kubectl --request-timeout="${LIVE_HARNESS_SNAPSHOT_REQUEST_TIMEOUT}" "$@" -o json >"${output_path}"; then
     echo "failed to collect Kubernetes object snapshot: kubectl $*" >&2
     return 1
   fi
@@ -292,7 +296,8 @@ live_harness_run() {
 
   live_harness_require_tools
   live_harness_prepare_artifacts
-  trap live_harness_cleanup EXIT INT TERM
+  trap live_harness_cleanup EXIT
+  trap 'exit 130' INT TERM
   live_harness_create_cluster
   live_harness_build_and_load_image
   live_harness_install
