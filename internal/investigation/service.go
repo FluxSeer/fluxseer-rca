@@ -442,7 +442,7 @@ func maxQueryResultRecords(queryType domain.QueryType, limits v1alpha1.QueryResu
 		return minPositiveLimit(limits.Metrics.MaxSamples, limits.Metrics.MaxSeries)
 	case domain.QueryTypeLog:
 		return firstPositiveLimit(limits.Logs.MaxEntries, limits.Logs.MaxLines)
-	case domain.QueryTypeEvent, domain.QueryTypeDeploymentCondition, domain.QueryTypeServiceConfiguration:
+	case domain.QueryTypeEvent, domain.QueryTypeDeploymentCondition, domain.QueryTypeServiceConfiguration, domain.QueryTypeProbeConfiguration:
 		return limits.Events.MaxRecords
 	default:
 		return 0
@@ -1134,6 +1134,13 @@ func buildDefaultCollectionStep(source datasource.DataSource, target domain.Reso
 			QueryType:      domain.QueryTypeLog,
 			Query:          fmt.Sprintf(`{namespace="%s",app="%s"} |= "error"`, target.Namespace, labelApp(labels, target)),
 		}, nil
+	case source.Capabilities().ProbeConfiguration:
+		return CollectionStep{
+			Name:           source.Name(),
+			DatasourceName: source.Name(),
+			QueryType:      domain.QueryTypeProbeConfiguration,
+			Query:          "probe-configuration",
+		}, nil
 	default:
 		return CollectionStep{}, &Issue{
 			Reason:  "CapabilityMismatch",
@@ -1158,6 +1165,8 @@ func investigationQueryText(querySpec v1alpha1.InvestigationQuery, queryType dom
 		return "recent-events"
 	case domain.QueryTypeServiceConfiguration:
 		return "service-port-configuration"
+	case domain.QueryTypeProbeConfiguration:
+		return "probe-configuration"
 	default:
 		return ""
 	}
@@ -1291,6 +1300,34 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 			MismatchConfirmed:  mismatchConfirmed,
 			Reason:             reason,
 		}}
+	case domain.QueryTypeProbeConfiguration:
+		workloadKind := observationRecordString(record, "workloadKind")
+		workloadName := observationRecordString(record, "workloadName")
+		containerName := observationRecordString(record, "containerName")
+		probeType := observationRecordString(record, "probeType")
+		probeScheme := observationRecordString(record, "probeScheme")
+		probePath := observationRecordString(record, "probePath")
+		probePortRaw := observationRecordString(record, "probePortRaw")
+		probePortResolved := observationRecordInt32(record, "probePortResolved")
+		containerPortName := observationRecordString(record, "containerPortName")
+		containerPort := observationRecordInt32(record, "containerPort")
+		resolution := observationRecordString(record, "resolution")
+		reason := observationRecordString(record, "reason")
+		mismatchConfirmed := observationRecordBool(record, "mismatchConfirmed")
+		obs.Type = domain.ObservationTypeProbeConfiguration
+		obs.Summary = redactor.RedactText(fmt.Sprintf(
+			"%s/%s container %s %s probe %s://%s:%s; resolved=%d; container %s=%d; resolution=%s; mismatchConfirmed=%t",
+			workloadKind, workloadName, containerName, probeType, probeScheme, probePath, probePortRaw,
+			probePortResolved, containerPortName, containerPort, resolution, mismatchConfirmed,
+		))
+		obs.Value = domain.ObservationValue{ProbeConfiguration: &domain.ProbeConfigurationObservation{
+			WorkloadKind: workloadKind, WorkloadName: workloadName, ContainerName: containerName,
+			ProbeType: probeType, ProbeScheme: probeScheme, ProbePath: probePath,
+			ProbePortRaw: probePortRaw, ProbePortResolved: probePortResolved,
+			ProbePortNamed:    observationRecordBool(record, "probePortNamed"),
+			ContainerPortName: containerPortName, ContainerPort: containerPort,
+			Resolution: resolution, MismatchConfirmed: mismatchConfirmed, Reason: reason,
+		}}
 	default:
 		obs.Type = domain.ObservationTypeEvent
 		obs.Summary = redactor.RedactText(result.Summary)
@@ -1376,6 +1413,9 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 		}
 		if observation.Value.ServiceConfiguration != nil {
 			ref.Reason = observation.Value.ServiceConfiguration.Reason
+		}
+		if observation.Value.ProbeConfiguration != nil {
+			ref.Reason = observation.Value.ProbeConfiguration.Reason
 		}
 		refs = append(refs, ref)
 	}
@@ -1616,6 +1656,8 @@ func buildInvestigationIngestionOutput(spec v1alpha1.InvestigationRequestSpec, p
 			events = append(events, firstNonEmpty(evidenceRef.Reason, evidenceRef.Summary))
 		case "serviceConfiguration":
 			events = append(events, firstNonEmpty(evidenceRef.Reason, evidenceRef.Summary))
+		case "probeConfiguration":
+			events = append(events, firstNonEmpty(evidenceRef.Reason, evidenceRef.Summary))
 		}
 	}
 
@@ -1664,6 +1706,8 @@ func normalizeEvidenceKind(kind string) string {
 		return "event"
 	case "serviceconfiguration":
 		return "serviceConfiguration"
+	case "probeconfiguration":
+		return "probeConfiguration"
 	default:
 		return "signal"
 	}

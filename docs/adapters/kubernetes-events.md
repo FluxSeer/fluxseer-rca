@@ -25,6 +25,14 @@ Deployment condition behavior:
 - return condition `type`, `status`, `reason`, and `message`
 - support `queryType: deploymentCondition`
 
+Probe configuration behavior:
+
+- read HTTP readiness/liveness probe configuration from the selected workload
+- resolve numeric and named probe ports against declared container ports
+- emit `queryType: probeConfiguration` evidence with path, port resolution,
+  container port, and `mismatchConfirmed`
+- unresolved named ports and unsupported probe handlers remain unconfirmed
+
 The Kubernetes adapter stays read-only and does not require a separate in-cluster service.
 
 ## Event Keywords

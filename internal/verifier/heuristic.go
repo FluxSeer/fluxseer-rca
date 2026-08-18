@@ -264,8 +264,10 @@ func requiredDomainKinds(profile string) []string {
 	switch profile {
 	case "imagepullbackoff", "imagepullmissing", "registryauth", "registrydns", "registryunavailable", "crashloopbackoff":
 		return []string{"event"}
-	case "schedulingsuccess", "probefailure":
+	case "schedulingsuccess":
 		return []string{"event"}
+	case "probefailure":
+		return []string{"event", "probeconfiguration"}
 	case "serviceportmismatch":
 		return []string{"serviceConfiguration"}
 	case "highhttperror":
@@ -300,7 +302,8 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 	case "schedulingsuccess":
 		return kind == "event" && containsAny(text, "failedscheduling", "failed scheduling", "unschedulable", "untolerated taint", "insufficient cpu", "insufficient memory")
 	case "probefailure":
-		return kind == "event" && containsAny(text, "unhealthy", "readiness", "liveness", "probe", "not ready")
+		return (kind == "event" && containsAny(text, "unhealthy", "readiness", "liveness", "probe", "not ready")) ||
+			(kind == "probeconfiguration" && containsAny(text, "probeconfigurationmismatch", "probe configuration mismatch", "mismatchconfirmed"))
 	case "serviceportmismatch":
 		return (kind == "serviceconfiguration" || kind == "event") && containsAny(text, "serviceportmismatch", "service port mismatch", "mismatchconfirmed", "targetport", "target port", "targets port", "container port", "listens on port", "port mismatch", "connection refused")
 	case "highhttperror":

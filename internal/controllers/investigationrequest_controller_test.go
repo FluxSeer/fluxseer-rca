@@ -2883,6 +2883,8 @@ func (f fakeInvestigationDataSource) Capabilities() datasource.Capabilities {
 		return datasource.Capabilities{Logs: true}
 	case domain.QueryTypeEvent:
 		return datasource.Capabilities{Events: true}
+	case domain.QueryTypeProbeConfiguration:
+		return datasource.Capabilities{ProbeConfiguration: true}
 	default:
 		return datasource.Capabilities{}
 	}
@@ -2906,6 +2908,8 @@ func (f fakeInvestigationDataSource) Query(context.Context, datasource.QueryRequ
 		records = []map[string]any{
 			{"line": "error timeout"},
 		}
+	case domain.QueryTypeProbeConfiguration:
+		records = []map[string]any{}
 	}
 	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: records}, nil
 }

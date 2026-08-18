@@ -156,6 +156,69 @@ func TestAdapterQueryServiceConfigurationDoesNotFabricateUnresolvedNamedMismatch
 	}
 }
 
+func TestAdapterQueryProbeConfigurationConfirmsNumericPortMismatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Name: "app",
+				Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: 3000}},
+				ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/ready", Port: intstr.FromInt(8080), Scheme: corev1.URISchemeHTTP}}},
+			}}}}},
+		},
+	).Build()
+
+	result, err := (Adapter{Client: client}).Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout"},
+		QueryType: domain.QueryTypeProbeConfiguration,
+	})
+	if err != nil {
+		t.Fatalf("query probe configuration: %v", err)
+	}
+	if len(result.Records) != 1 {
+		t.Fatalf("expected one probe record, got %#v", result.Records)
+	}
+	record := result.Records[0]
+	if record["probeType"] != "readiness" || record["probePath"] != "/ready" || record["probePortRaw"] != "8080" {
+		t.Fatalf("expected probe configuration evidence, got %#v", record)
+	}
+	if record["probePortResolved"] != int32(8080) || record["containerPort"] != int32(3000) || record["mismatchConfirmed"] != true || record["reason"] != "ProbeConfigurationMismatch" {
+		t.Fatalf("expected bounded probe mismatch evidence, got %#v", record)
+	}
+}
+
+func TestAdapterQueryProbeConfigurationDoesNotFabricateUnresolvedNamedMismatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Name: "app",
+				Ports: []corev1.ContainerPort{{Name: "metrics", ContainerPort: 3000}},
+				ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/ready", Port: intstr.FromString("http"), Scheme: corev1.URISchemeHTTP}}},
+			}}}}},
+		},
+	).Build()
+
+	result, err := (Adapter{Client: client}).Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout"},
+		QueryType: domain.QueryTypeProbeConfiguration,
+	})
+	if err != nil {
+		t.Fatalf("query probe configuration: %v", err)
+	}
+	if len(result.Records) != 1 || result.Records[0]["resolution"] != "UnresolvedNamedProbePort" || result.Records[0]["mismatchConfirmed"] != false {
+		t.Fatalf("expected unresolved named probe port without fabricated mismatch, got %#v", result.Records)
+	}
+}
+
 func TestAdapterQueryMatchesWorkloadEventsThroughRelatedPods(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {

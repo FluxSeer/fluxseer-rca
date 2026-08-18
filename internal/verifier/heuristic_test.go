@@ -131,6 +131,24 @@ func TestVerifyClaimsDoesNotTreatUnhealthyAsHealthyContradiction(t *testing.T) {
 	}
 }
 
+func TestVerifyProbeFailureRequiresConfigurationEvidence(t *testing.T) {
+	claim := Claim{ID: "probe-claim", Statement: "The readiness probe failed because the configured probe port does not match the container port."}
+	eventOnly := VerifyClaims([]Claim{claim}, []EvidenceRef{{
+		ID: "event-001", Kind: "event", Reason: "Unhealthy", Summary: "Readiness probe failed",
+	}})
+	if eventOnly.Claims[0].Verification != VerificationUnsupported {
+		t.Fatalf("expected event-only probe claim to remain unsupported, got %#v", eventOnly.Claims[0])
+	}
+
+	withConfiguration := VerifyClaims([]Claim{claim}, []EvidenceRef{
+		{ID: "event-001", Kind: "event", Reason: "Unhealthy", Summary: "Readiness probe failed"},
+		{ID: "probe-001", Kind: "probeConfiguration", Reason: "ProbeConfigurationMismatch", Summary: "readiness probe port 8080 does not match container port 3000; mismatchConfirmed=true"},
+	})
+	if withConfiguration.Claims[0].Verification != VerificationSupported || len(withConfiguration.Claims[0].EvidenceRefs) != 2 {
+		t.Fatalf("expected probe claim to require and link both evidence types, got %#v", withConfiguration.Claims[0])
+	}
+}
+
 func TestVerifyClaimsDoesNotTreatNegativeHealthStatesAsContradictions(t *testing.T) {
 	tests := []struct {
 		name      string

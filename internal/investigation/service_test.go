@@ -2210,3 +2210,45 @@ func TestNormalizeServiceConfigurationProducesTraceableEvidence(t *testing.T) {
 		t.Fatalf("expected traceable service configuration evidence ref, got %#v", ref)
 	}
 }
+
+func TestNormalizeProbeConfigurationProducesTraceableEvidence(t *testing.T) {
+	req := datasource.QueryRequest{
+		Query:     "probe-configuration",
+		StartTime: time.Date(2026, 7, 6, 11, 50, 0, 0, time.UTC),
+		EndTime:   time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC),
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout"},
+		QueryType: domain.QueryTypeProbeConfiguration,
+	}
+	result := &datasource.QueryResult{
+		Source:    "kubernetes-events",
+		QueryType: domain.QueryTypeProbeConfiguration,
+		Records: []map[string]any{{
+			"workloadKind":       "Deployment",
+			"workloadName":       "checkout",
+			"containerName":      "app",
+			"probeType":          "readiness",
+			"probeScheme":        "HTTP",
+			"probePath":          "/ready",
+			"probePortRaw":       "8080",
+			"probePortResolved":  int32(8080),
+			"probePortNamed":     false,
+			"containerPortName":  "http",
+			"containerPort":      int32(3000),
+			"resolution":         "NumericProbePortDoesNotMatchContainerPort",
+			"mismatchConfirmed":  true,
+			"reason":              "ProbeConfigurationMismatch",
+		}},
+	}
+
+	observation := normalizeObservations(result, req, 0, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))[0]
+	if observation.Type != domain.ObservationTypeProbeConfiguration || observation.Value.ProbeConfiguration == nil {
+		t.Fatalf("expected probe configuration observation, got %#v", observation)
+	}
+	if !observation.Value.ProbeConfiguration.MismatchConfirmed || observation.Value.ProbeConfiguration.ProbePath != "/ready" {
+		t.Fatalf("expected bounded probe configuration mismatch, got %#v", observation.Value.ProbeConfiguration)
+	}
+	ref := evidenceRefsFromObservations([]domain.Observation{observation}, req, v1alpha1.QueryRetentionPolicy{})[0]
+	if ref.Kind != "probeConfiguration" || ref.Reason != "ProbeConfigurationMismatch" || ref.ContentDigest == "" {
+		t.Fatalf("expected traceable probe configuration evidence ref, got %#v", ref)
+	}
+}

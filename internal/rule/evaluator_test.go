@@ -187,3 +187,44 @@ func TestParseServiceConfigurationQueryType(t *testing.T) {
 		t.Fatalf("expected serviceConfiguration query type, got %q, %t", queryType, ok)
 	}
 }
+
+func TestEvaluateProbeConfigurationSignalRequiresConfirmedMismatch(t *testing.T) {
+	signal := v1alpha1.RiskRuleSignal{
+		Name:      "probe-configuration-mismatch",
+		QueryType: "probeConfiguration",
+		Threshold: v1alpha1.RiskThreshold{Operator: "count_gt", Value: 0},
+	}
+	match := EvaluateSignal(signal, domain.QueryTypeProbeConfiguration, &datasource.QueryResult{
+		Source:    "kubernetes-events",
+		QueryType: domain.QueryTypeProbeConfiguration,
+		Records: []map[string]any{{
+			"probeType":          "readiness",
+			"probePath":          "/ready",
+			"probeScheme":        "HTTP",
+			"probePortRaw":       "8080",
+			"containerPort":      int32(3000),
+			"resolution":         "NumericProbePortDoesNotMatchContainerPort",
+			"mismatchConfirmed":  true,
+			"reason":              "ProbeConfigurationMismatch",
+		}},
+	}, domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout"}, "high")
+	if match == nil || len(match.Evidence) != 1 || match.Evidence[0].Kind != "probeConfiguration" || match.Evidence[0].Reason != "ProbeConfigurationMismatch" {
+		t.Fatalf("expected confirmed probe configuration match, got %#v", match)
+	}
+
+	noMatch := EvaluateSignal(signal, domain.QueryTypeProbeConfiguration, &datasource.QueryResult{
+		Source:    "kubernetes-events",
+		QueryType: domain.QueryTypeProbeConfiguration,
+		Records:   []map[string]any{{"mismatchConfirmed": false, "reason": "ProbeConfigurationResolved"}},
+	}, domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout"}, "high")
+	if noMatch != nil {
+		t.Fatalf("expected resolved probe configuration not to trigger mismatch, got %#v", noMatch)
+	}
+}
+
+func TestParseProbeConfigurationQueryType(t *testing.T) {
+	queryType, ok := ParseQueryType("probeConfiguration")
+	if !ok || queryType != domain.QueryTypeProbeConfiguration {
+		t.Fatalf("expected probeConfiguration query type, got %q, %t", queryType, ok)
+	}
+}

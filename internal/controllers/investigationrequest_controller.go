@@ -282,6 +282,8 @@ func requiredEvidenceChecksForProfile(profile string) []string {
 		return []string{"metric:Latency", "deploymentCondition:Rollout"}
 	case "serviceportmismatch":
 		return []string{"serviceConfiguration:ServicePortMismatch"}
+	case "probefailure":
+		return []string{"event:Unhealthy", "probeConfiguration:ProbeConfigurationMismatch"}
 	default:
 		return nil
 	}
@@ -306,6 +308,10 @@ func evidenceCoverageCheckComplete(check string, spec v1alpha1.InvestigationRequ
 		return evidenceKindPresent(spec, evidence, "deploymentCondition", "rollout", "deployment", "progressing", "available")
 	case "serviceConfiguration:ServicePortMismatch":
 		return servicePortMismatchEvidencePresent(evidence)
+	case "event:Unhealthy":
+		return eventCoveragePresent(spec, evidence, "unhealthy", "readiness probe", "liveness probe", "probe failed")
+	case "probeConfiguration:ProbeConfigurationMismatch":
+		return probeConfigurationMismatchEvidencePresent(evidence)
 	default:
 		return false
 	}
@@ -356,6 +362,20 @@ func servicePortMismatchEvidencePresent(evidence investigation.EvidenceCollectio
 	return false
 }
 
+func probeConfigurationMismatchEvidencePresent(evidence investigation.EvidenceCollectionResult) bool {
+	for _, ref := range evidence.EvidenceRefs {
+		if !strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeProbeConfiguration)) {
+			continue
+		}
+		text := strings.ToLower(strings.Join([]string{ref.Reason, ref.Summary}, " "))
+		if strings.EqualFold(strings.TrimSpace(ref.Reason), "ProbeConfigurationMismatch") ||
+			containsAny(text, "probeconfigurationmismatch", "probe configuration mismatch", "mismatchconfirmed") {
+			return true
+		}
+	}
+	return false
+}
+
 func evidenceProfileIssueMatchCount(profile string, evidence investigation.EvidenceCollectionResult) int {
 	profileKey := strings.ToLower(strings.TrimSpace(profile))
 	if profileKey == "" {
@@ -393,6 +413,15 @@ func missingSemanticEvidenceCoverage(profile string, spec v1alpha1.Investigation
 			return nil
 		}
 		return []v1alpha1.RCAMissingEvidence{{Source: string(domain.QueryTypeServiceConfiguration), Reason: "ServicePortEvidenceMissing"}}
+	case "probefailure":
+		missing := make([]v1alpha1.RCAMissingEvidence, 0, 2)
+		if !eventCoveragePresent(spec, evidence, "unhealthy", "readiness probe", "liveness probe", "probe failed") {
+			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeEvent), Reason: "ProbeFailureEventEvidenceMissing"})
+		}
+		if !probeConfigurationMismatchEvidencePresent(evidence) {
+			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeProbeConfiguration), Reason: "ProbeConfigurationEvidenceMissing"})
+		}
+		return missing
 	default:
 		return nil
 	}
@@ -479,6 +508,8 @@ func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) boo
 		return kind == string(domain.QueryTypeMetric) || kind == strings.ToLower("deploymentCondition")
 	case "serviceportmismatch":
 		return kind == strings.ToLower(string(domain.QueryTypeServiceConfiguration))
+	case "probefailure":
+		return kind == string(domain.QueryTypeEvent) || kind == strings.ToLower(string(domain.QueryTypeProbeConfiguration))
 	default:
 		return false
 	}
@@ -500,6 +531,8 @@ func evidenceRefMatchesProfileIssue(profile string, ref v1alpha1.EvidenceRef) bo
 			containsAny(text, "progressdeadlinexceeded", "unavailable", "replicafailure", "available=false", "progressing=false")
 	case "serviceportmismatch":
 		return containsAny(text, "serviceportmismatch", "service port mismatch", "mismatchconfirmed", "targetport", "target port", "container port")
+	case "probefailure":
+		return containsAny(text, "probeconfigurationmismatch", "probe configuration mismatch", "mismatchconfirmed")
 	default:
 		return false
 	}

@@ -145,7 +145,12 @@ Query field behavior:
 - `queryTemplate`: templated query rendered against target metadata
 - `reasons[]`: optional exact Kubernetes event `reason` filter for `queryType: event`; matching is case-insensitive and does not search event messages
 - `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
-- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `OOMKilled`, `LatencyRegression`, and `RolloutLatencyRegression`.
+- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `OOMKilled`, `LatencyRegression`, `RolloutLatencyRegression`, and `ProbeFailure`.
+
+The Kubernetes datasource also supports `queryType: probeConfiguration` for
+HTTP readiness/liveness probe configuration and declared container-port
+resolution. A `ProbeFailure` claim requires both probe symptom evidence and
+bounded probe configuration evidence before it can become `Confirmed`.
 - `evidenceRetention.mode`: external evidence retention mode. Current supported runtime behavior is `MetadataOnly` or `NormalizedSnapshot` with the built-in `local-filesystem` store.
 - `evidenceRetention.retention`: requested external payload retention duration for retained normalized snapshots.
 - `evidenceRetention.storageRef.name`: external evidence storage configuration reference. Current supported value for `NormalizedSnapshot` is `local-filesystem`.

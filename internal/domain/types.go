@@ -44,6 +44,7 @@ const (
 	QueryTypeEvent                QueryType = "event"
 	QueryTypeDeploymentCondition  QueryType = "deploymentCondition"
 	QueryTypeServiceConfiguration QueryType = "serviceConfiguration"
+	QueryTypeProbeConfiguration   QueryType = "probeConfiguration"
 )
 
 type TimelineEvent struct {
@@ -74,6 +75,7 @@ const (
 	ObservationTypeEvent                ObservationType = "event"
 	ObservationTypeDeploymentCondition  ObservationType = "deploymentCondition"
 	ObservationTypeServiceConfiguration ObservationType = "serviceConfiguration"
+	ObservationTypeProbeConfiguration   ObservationType = "probeConfiguration"
 )
 
 type ObservationValue struct {
@@ -82,6 +84,7 @@ type ObservationValue struct {
 	Event                *EventObservation                `json:"event,omitempty"`
 	DeploymentCondition  *DeploymentConditionObservation  `json:"deploymentCondition,omitempty"`
 	ServiceConfiguration *ServiceConfigurationObservation `json:"serviceConfiguration,omitempty"`
+	ProbeConfiguration   *ProbeConfigurationObservation   `json:"probeConfiguration,omitempty"`
 }
 
 type MetricObservation struct {
@@ -123,6 +126,23 @@ type ServiceConfigurationObservation struct {
 	Resolution         string `json:"resolution,omitempty"`
 	MismatchConfirmed  bool   `json:"mismatchConfirmed,omitempty"`
 	Reason             string `json:"reason,omitempty"`
+}
+
+type ProbeConfigurationObservation struct {
+	WorkloadKind      string `json:"workloadKind,omitempty"`
+	WorkloadName      string `json:"workloadName,omitempty"`
+	ContainerName     string `json:"containerName,omitempty"`
+	ProbeType         string `json:"probeType,omitempty"`
+	ProbeScheme       string `json:"probeScheme,omitempty"`
+	ProbePath         string `json:"probePath,omitempty"`
+	ProbePortRaw      string `json:"probePortRaw,omitempty"`
+	ProbePortResolved int32  `json:"probePortResolved,omitempty"`
+	ProbePortNamed    bool   `json:"probePortNamed,omitempty"`
+	ContainerPortName string `json:"containerPortName,omitempty"`
+	ContainerPort     int32  `json:"containerPort,omitempty"`
+	Resolution        string `json:"resolution,omitempty"`
+	MismatchConfirmed bool   `json:"mismatchConfirmed,omitempty"`
+	Reason            string `json:"reason,omitempty"`
 }
 
 type Observation struct {

@@ -36,6 +36,7 @@ func (a Adapter) Capabilities() datasource.Capabilities {
 		Events:               true,
 		DeploymentConditions: true,
 		ServiceConfiguration: true,
+		ProbeConfiguration:   true,
 	}
 }
 
@@ -48,6 +49,9 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 	}
 	if req.QueryType == domain.QueryTypeServiceConfiguration {
 		return a.queryServiceConfiguration(ctx, req)
+	}
+	if req.QueryType == domain.QueryTypeProbeConfiguration {
+		return a.queryProbeConfiguration(ctx, req)
 	}
 
 	var events corev1.EventList
@@ -124,6 +128,116 @@ type workloadContainerPort struct {
 	ContainerName     string
 	ContainerPortName string
 	ContainerPort     int32
+}
+
+type workloadContainerSet struct {
+	Kind       string
+	Name       string
+	Containers []corev1.Container
+}
+
+// queryProbeConfiguration returns declared HTTP probe configuration and its
+// resolution against the selected container ports. An unresolved named probe
+// port is evidence insufficiency, not a confirmed mismatch.
+func (a Adapter) queryProbeConfiguration(ctx context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {
+	workload, err := a.workloadContainers(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]map[string]any, 0)
+	for _, container := range workload.Containers {
+		probes := []struct {
+			name  string
+			probe *corev1.Probe
+		}{
+			{name: "readiness", probe: container.ReadinessProbe},
+			{name: "liveness", probe: container.LivenessProbe},
+		}
+		for _, item := range probes {
+			if item.probe == nil {
+				continue
+			}
+			if item.probe.HTTPGet == nil {
+				records = append(records, probeConfigurationRecord(workload, container, item.name, nil, 0, false, "UnsupportedProbeHandler", false, "ProbeHandlerUnsupported"))
+				continue
+			}
+			httpGet := item.probe.HTTPGet
+			probePortNamed := httpGet.Port.Type == intstr.String
+			resolved := int32(0)
+			matched := make([]corev1.ContainerPort, 0)
+			if !probePortNamed {
+				resolved = httpGet.Port.IntVal
+			}
+			for _, port := range container.Ports {
+				if probePortNamed && port.Name == httpGet.Port.StrVal {
+					matched = append(matched, port)
+				}
+				if !probePortNamed && port.ContainerPort == resolved {
+					matched = append(matched, port)
+				}
+			}
+			if len(matched) == 0 {
+				if probePortNamed {
+					records = append(records, probeConfigurationRecord(workload, container, item.name, httpGet, resolved, probePortNamed, "UnresolvedNamedProbePort", false, "ProbePortUnresolved"))
+					continue
+				}
+				records = append(records, probeConfigurationRecord(workload, container, item.name, httpGet, resolved, probePortNamed, "NumericProbePortDoesNotMatchContainerPort", true, "ProbeConfigurationMismatch"))
+				continue
+			}
+			for _, port := range matched {
+				if probePortNamed {
+					resolved = port.ContainerPort
+				}
+				records = append(records, probeConfigurationRecord(workload, container, item.name, httpGet, resolved, probePortNamed, "Resolved", false, "ProbeConfigurationResolved"))
+			}
+		}
+	}
+	return &datasource.QueryResult{
+		Source:       a.Name(),
+		QueryType:    domain.QueryTypeProbeConfiguration,
+		Summary:      fmt.Sprintf("Kubernetes inspected %d HTTP probe configurations for %s %s/%s", len(records), workload.Kind, workload.Name, req.Target.Namespace),
+		Records:      records,
+		NativeCounts: datasource.NativeResultCounts{ResultType: "probeConfiguration", Records: len(records)},
+	}, nil
+}
+
+func probeConfigurationRecord(workload workloadContainerSet, container corev1.Container, probeType string, httpGet *corev1.HTTPGetAction, resolved int32, named bool, resolution string, mismatch bool, reason string) map[string]any {
+	path, scheme, portRaw := "", "", ""
+	if httpGet != nil {
+		path = httpGet.Path
+		scheme = string(httpGet.Scheme)
+		portRaw = httpGet.Port.String()
+	}
+	return map[string]any{
+		"workloadKind":      workload.Kind,
+		"workloadName":      workload.Name,
+		"containerName":     container.Name,
+		"probeType":         probeType,
+		"probeScheme":       scheme,
+		"probePath":         path,
+		"probePortRaw":      portRaw,
+		"probePortResolved": resolved,
+		"probePortNamed":    named,
+		"containerPortName": firstContainerPortName(container.Ports),
+		"containerPort":     firstContainerPort(container.Ports),
+		"resolution":        resolution,
+		"mismatchConfirmed": mismatch,
+		"reason":            reason,
+	}
+}
+
+func firstContainerPortName(ports []corev1.ContainerPort) string {
+	if len(ports) == 0 {
+		return ""
+	}
+	return ports[0].Name
+}
+
+func firstContainerPort(ports []corev1.ContainerPort) int32 {
+	if len(ports) == 0 {
+		return 0
+	}
+	return ports[0].ContainerPort
 }
 
 // queryServiceConfiguration returns the raw Service targetPort and its
@@ -212,7 +326,10 @@ func (a Adapter) findService(ctx context.Context, req datasource.QueryRequest) (
 }
 
 func (a Adapter) workloadContainerPorts(ctx context.Context, req datasource.QueryRequest) ([]workloadContainerPort, error) {
-	key := types.NamespacedName{Namespace: req.Target.Namespace, Name: req.Target.Name}
+	workload, err := a.workloadContainers(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	ports := make([]workloadContainerPort, 0)
 	appendPorts := func(kind, name string, containers []corev1.Container) {
 		for _, container := range containers {
@@ -221,35 +338,40 @@ func (a Adapter) workloadContainerPorts(ctx context.Context, req datasource.Quer
 			}
 		}
 	}
+	appendPorts(workload.Kind, workload.Name, workload.Containers)
+	return ports, nil
+}
+
+func (a Adapter) workloadContainers(ctx context.Context, req datasource.QueryRequest) (workloadContainerSet, error) {
+	key := types.NamespacedName{Namespace: req.Target.Namespace, Name: req.Target.Name}
 	switch normalizeKind(req.Target.Kind) {
 	case "deployment":
 		var workload appsv1.Deployment
 		if err := a.Client.Get(ctx, key, &workload); err != nil {
-			return nil, fmt.Errorf("get Deployment ports: %w", err)
+			return workloadContainerSet{}, fmt.Errorf("get Deployment configuration: %w", err)
 		}
-		appendPorts("Deployment", workload.Name, workload.Spec.Template.Spec.Containers)
+		return workloadContainerSet{Kind: "Deployment", Name: workload.Name, Containers: workload.Spec.Template.Spec.Containers}, nil
 	case "statefulset":
 		var workload appsv1.StatefulSet
 		if err := a.Client.Get(ctx, key, &workload); err != nil {
-			return nil, fmt.Errorf("get StatefulSet ports: %w", err)
+			return workloadContainerSet{}, fmt.Errorf("get StatefulSet configuration: %w", err)
 		}
-		appendPorts("StatefulSet", workload.Name, workload.Spec.Template.Spec.Containers)
+		return workloadContainerSet{Kind: "StatefulSet", Name: workload.Name, Containers: workload.Spec.Template.Spec.Containers}, nil
 	case "daemonset":
 		var workload appsv1.DaemonSet
 		if err := a.Client.Get(ctx, key, &workload); err != nil {
-			return nil, fmt.Errorf("get DaemonSet ports: %w", err)
+			return workloadContainerSet{}, fmt.Errorf("get DaemonSet configuration: %w", err)
 		}
-		appendPorts("DaemonSet", workload.Name, workload.Spec.Template.Spec.Containers)
+		return workloadContainerSet{Kind: "DaemonSet", Name: workload.Name, Containers: workload.Spec.Template.Spec.Containers}, nil
 	case "pod":
 		var workload corev1.Pod
 		if err := a.Client.Get(ctx, key, &workload); err != nil {
-			return nil, fmt.Errorf("get Pod ports: %w", err)
+			return workloadContainerSet{}, fmt.Errorf("get Pod configuration: %w", err)
 		}
-		appendPorts("Pod", workload.Name, workload.Spec.Containers)
+		return workloadContainerSet{Kind: "Pod", Name: workload.Name, Containers: workload.Spec.Containers}, nil
 	default:
-		return nil, fmt.Errorf("workload kind %q does not expose container ports", req.Target.Kind)
+		return workloadContainerSet{}, fmt.Errorf("workload kind %q does not expose probe configuration", req.Target.Kind)
 	}
-	return ports, nil
 }
 
 func serviceConfigurationRecord(service *corev1.Service, servicePort corev1.ServicePort, targetRaw string, resolved int32, unresolved bool, resolution string, port workloadContainerPort) map[string]any {
