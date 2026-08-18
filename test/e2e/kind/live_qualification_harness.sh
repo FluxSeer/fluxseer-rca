@@ -18,6 +18,11 @@ LIVE_HARNESS_TIMEOUT_SECONDS="${LIVE_HARNESS_TIMEOUT_SECONDS:-${FLUXSEER_RCA_E2E
 LIVE_HARNESS_POLL_SECONDS="${LIVE_HARNESS_POLL_SECONDS:-${FLUXSEER_RCA_E2E_POLL_SECONDS:-3}}"
 LIVE_HARNESS_SNAPSHOT_REQUEST_TIMEOUT="${LIVE_HARNESS_SNAPSHOT_REQUEST_TIMEOUT:-10s}"
 LIVE_HARNESS_KEEP_CLUSTER="${LIVE_HARNESS_KEEP_CLUSTER:-false}"
+LIVE_HARNESS_RBAC_PROFILE="${LIVE_HARNESS_RBAC_PROFILE:-readOnlyRCA}"
+LIVE_HARNESS_ENABLE_REMEDIATION="${LIVE_HARNESS_ENABLE_REMEDIATION:-false}"
+LIVE_HARNESS_ENABLE_POLICY_PACK="${LIVE_HARNESS_ENABLE_POLICY_PACK:-false}"
+LIVE_HARNESS_ENABLE_EXPERIMENTAL_EXECUTOR="${LIVE_HARNESS_ENABLE_EXPERIMENTAL_EXECUTOR:-false}"
+LIVE_HARNESS_VERIFY_READ_ONLY="${LIVE_HARNESS_VERIFY_READ_ONLY:-true}"
 LIVE_HARNESS_ARTIFACT_ROOT="${LIVE_HARNESS_ARTIFACT_ROOT:-${live_harness_repo_root}/reports/runtime/v0.5-alpha1-kind-live/${LIVE_HARNESS_RUN_ID}}"
 LIVE_HARNESS_CONTEXT="kind-${LIVE_HARNESS_CLUSTER_NAME}"
 LIVE_HARNESS_KUBECONFIG="${LIVE_HARNESS_KUBECONFIG:-${LIVE_HARNESS_ARTIFACT_ROOT}/kind.kubeconfig}"
@@ -154,7 +159,7 @@ live_harness_wait_for_crds() {
 }
 
 live_harness_install() {
-  log_section "Install Read-Only FluxSeer"
+  log_section "Install FluxSeer (${LIVE_HARNESS_RBAC_PROFILE})"
   live_harness_helm upgrade --install "${LIVE_HARNESS_RELEASE_NAME}" "${live_harness_repo_root}/charts/fluxseer-rca" \
     --namespace "${LIVE_HARNESS_RELEASE_NAMESPACE}" \
     --create-namespace \
@@ -163,12 +168,12 @@ live_harness_install() {
     --set image.repository="${LIVE_HARNESS_IMAGE_REPOSITORY}" \
     --set image.tag="${LIVE_HARNESS_IMAGE_TAG}" \
     --set image.pullPolicy=IfNotPresent \
-    --set rbac.profile=readOnlyRCA \
-    --set controller.enableRemediation=false \
-    --set controller.enablePolicyPack=false \
-    --set features.remediation.enabled=false \
-    --set features.experimentalExecutor.enabled=false \
-    --set features.policyPack.enabled=false \
+    --set rbac.profile="${LIVE_HARNESS_RBAC_PROFILE}" \
+    --set controller.enableRemediation="${LIVE_HARNESS_ENABLE_REMEDIATION}" \
+    --set controller.enablePolicyPack="${LIVE_HARNESS_ENABLE_POLICY_PACK}" \
+    --set features.remediation.enabled="${LIVE_HARNESS_ENABLE_REMEDIATION}" \
+    --set features.experimentalExecutor.enabled="${LIVE_HARNESS_ENABLE_EXPERIMENTAL_EXECUTOR}" \
+    --set features.policyPack.enabled="${LIVE_HARNESS_ENABLE_POLICY_PACK}" \
     --set rulePacks.kubernetesBaseline.enabled=false \
     --set rulePacks.prometheusBaseline.enabled=false \
     --set rulePacks.lokiBaseline.enabled=false \
@@ -301,7 +306,9 @@ live_harness_run() {
   live_harness_create_cluster
   live_harness_build_and_load_image
   live_harness_install
-  live_harness_verify_read_only_profile
+  if [[ "${LIVE_HARNESS_VERIFY_READ_ONLY}" == "true" ]]; then
+    live_harness_verify_read_only_profile
+  fi
 
   if [[ -n "${scenario_function}" ]]; then
     if ! declare -F "${scenario_function}" >/dev/null; then
