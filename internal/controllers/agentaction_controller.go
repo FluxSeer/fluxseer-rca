@@ -234,7 +234,7 @@ func (r *AgentActionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Get(ctx, req.NamespacedName, &action); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
-		finishedAt := metav1.NewTime(now())
+		finishedAt := executionFinishedAt(action.Status.Execution, now())
 		if result.Outcome == executor.ExecutionOutcomeUnknown {
 			setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseExecuting, "execution outcome is unknown; waiting for backend recovery", action.Generation, finishedAt.Time)
 			executionStatus := action.Status.Execution
@@ -312,7 +312,7 @@ func executorRequestForPersistedAction(action *v1alpha1.AgentAction) executor.Ex
 }
 
 func (r *AgentActionReconciler) failBeforeDispatch(ctx context.Context, action *v1alpha1.AgentAction, request executor.ExecutorRequest, reason string, dispatchErr error, now time.Time) (ctrl.Result, error) {
-	finishedAt := metav1.NewTime(now)
+	finishedAt := executionFinishedAt(action.Status.Execution, now)
 	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseFailed, dispatchErr.Error(), action.Generation, finishedAt.Time)
 	action.Status.FinishedAt = &finishedAt
 	action.Status.Execution = &v1alpha1.AgentActionExecutionStatus{
@@ -408,6 +408,13 @@ func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, acti
 		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+func executionFinishedAt(execution *v1alpha1.AgentActionExecutionStatus, now time.Time) metav1.Time {
+	if execution != nil && execution.StartedAt != nil && !now.After(execution.StartedAt.Time) {
+		now = execution.StartedAt.Time.Add(time.Nanosecond)
+	}
+	return metav1.NewTime(now)
 }
 
 const (

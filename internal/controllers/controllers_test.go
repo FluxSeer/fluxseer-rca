@@ -24,6 +24,21 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
 
+func TestExecutionFinishedAtPreservesOrdering(t *testing.T) {
+	startedAt := metav1.NewTime(time.Date(2026, 8, 19, 1, 56, 17, 0, time.UTC))
+	execution := &v1alpha1.AgentActionExecutionStatus{StartedAt: &startedAt}
+
+	finishedAt := executionFinishedAt(execution, startedAt.Time.Add(-time.Second))
+	if !finishedAt.After(startedAt.Time) {
+		t.Fatalf("expected finishedAt after startedAt, got startedAt=%s finishedAt=%s", startedAt.Time, finishedAt.Time)
+	}
+
+	currentFinishedAt := executionFinishedAt(execution, startedAt.Time.Add(time.Second))
+	if !currentFinishedAt.Equal(&metav1.Time{Time: startedAt.Time.Add(time.Second)}) {
+		t.Fatalf("expected current time to be preserved, got %s", currentFinishedAt.Time)
+	}
+}
+
 func TestRemediationPlanReconcilerRepairsTransientPendingActionApproval(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
