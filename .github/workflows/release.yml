@@ -7,10 +7,25 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Existing annotated tag to publish"
+        description: "Immutable artifact version to publish"
         required: true
         default: "v0.4.0-beta.3"
         type: string
+      source_ref:
+        description: "Exact commit or ref to publish; required for candidates"
+        required: false
+        default: ""
+        type: string
+      candidate:
+        description: "Publish a pre-release candidate without creating a GitHub Release"
+        required: false
+        default: false
+        type: boolean
+      create_github_release:
+        description: "Create the GitHub prerelease and upload release assets"
+        required: false
+        default: true
+        type: boolean
       release_only:
         description: "Skip immutable artifact publication and create the GitHub release from existing artifacts"
         required: false
@@ -45,8 +60,28 @@ jobs:
           set -euo pipefail
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             version="${{ inputs.version }}"
+            source_ref="${{ inputs.source_ref }}"
+            candidate="${{ inputs.candidate }}"
+            if [ "$candidate" = "true" ]; then
+              if [ -z "$source_ref" ]; then
+                echo "source_ref is required for candidate publication" >&2
+                exit 1
+              fi
+              if [[ ! "$source_ref" =~ ^[0-9a-fA-F]{40}$ ]]; then
+                echo "candidate source_ref must be a full commit SHA: $source_ref" >&2
+                exit 1
+              fi
+              if [[ ! "$version" =~ -rc\. ]]; then
+                echo "candidate version must contain -rc.: $version" >&2
+                exit 1
+              fi
+            elif [ -z "$source_ref" ]; then
+              source_ref="$version"
+            fi
           else
             version="${GITHUB_REF_NAME}"
+            source_ref="$version"
+            candidate="false"
           fi
           if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid release version: $version" >&2
@@ -54,11 +89,13 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "chart_version=${version#v}" >> "$GITHUB_OUTPUT"
+          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout tag
+      - name: Checkout release source
         uses: actions/checkout@v5
         with:
-          ref: ${{ steps.release.outputs.version }}
+          ref: ${{ steps.release.outputs.source_ref }}
           fetch-depth: 0
 
       - name: Install runner prerequisites
@@ -93,11 +130,20 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ steps.release.outputs.version }}"
-          tag_commit="$(git rev-list -n 1 "$version")"
+          source_ref="${{ steps.release.outputs.source_ref }}"
+          candidate="${{ steps.release.outputs.candidate }}"
+          source_commit="$(git rev-parse "${source_ref}^{commit}")"
           head_commit="$(git rev-parse HEAD)"
-          if [ "$tag_commit" != "$head_commit" ]; then
-            echo "Tag commit $tag_commit does not match HEAD $head_commit" >&2
+          if [ "$source_commit" != "$head_commit" ]; then
+            echo "Source ref $source_ref resolves to $source_commit but HEAD is $head_commit" >&2
             exit 1
+          fi
+          if [ "$candidate" != "true" ]; then
+            tag_ref="refs/tags/$version"
+            if ! git show-ref --verify --quiet "$tag_ref" || [ "$(git cat-file -t "$tag_ref")" != "tag" ]; then
+              echo "final release source must be an annotated tag: $version" >&2
+              exit 1
+            fi
           fi
           if [ -n "$(git status --porcelain)" ]; then
             git status --short
@@ -106,7 +152,7 @@ jobs:
           fi
           source_date_epoch="$(git show -s --format=%ct HEAD)"
           build_date="$(./hack/source-date.sh "$source_date_epoch")"
-          echo "git_commit=$tag_commit" >> "$GITHUB_OUTPUT"
+          echo "git_commit=$source_commit" >> "$GITHUB_OUTPUT"
           echo "source_date_epoch=$source_date_epoch" >> "$GITHUB_OUTPUT"
           echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
 
@@ -258,7 +304,10 @@ jobs:
           chart_version="${{ steps.release.outputs.chart_version }}"
           mkdir -p "dist/release-$version"
           helm lint charts/fluxseer-rca
-          helm package charts/fluxseer-rca --destination "dist/release-$version"
+          helm package charts/fluxseer-rca \
+            --version "$chart_version" \
+            --app-version "$version" \
+            --destination "dist/release-$version"
           package="dist/release-$version/${CHART_NAME}-$chart_version.tgz"
           package_abs="$PWD/$package"
           shasum -a 256 "$package" | sed "s#  dist/release-$version/#  #" > "dist/release-$version/SHA256SUMS"
@@ -367,6 +416,7 @@ jobs:
           echo "notes=$out_dir/RELEASE_NOTES.md" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub prerelease and upload assets
+        if: ${{ github.event_name == 'push' || (inputs.create_github_release && steps.release.outputs.candidate != 'true') }}
         uses: actions/github-script@v8
         with:
           script: |
