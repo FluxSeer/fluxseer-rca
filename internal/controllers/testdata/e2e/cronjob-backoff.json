@@ -17,6 +17,15 @@
           "message": "Back-off restarting failed container from nightly-backup Job"
         }
       ]
+    },
+    {
+      "name": "loki",
+      "queryType": "log",
+      "records": [
+        {
+          "line": "fatal startup failure: failed to initialize nightly-backup configuration"
+        }
+      ]
     }
   ],
   "providerResponse": {

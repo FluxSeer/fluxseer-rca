@@ -165,6 +165,12 @@ Fields that should not be persisted:
 
 `spec.investigationRef` is set when a `RiskSignal` is materialized from a canonical `InvestigationRequest`. It points consumers back to the authoritative RCA execution record.
 
+An investigation-projected `RiskSignal` is created only for a canonical
+`InvestigationRequest` with `status.outcome=Confirmed`. Inconclusive,
+NoIssueFound, and failed/unknown investigations keep their result on
+`InvestigationRequest.status` and do not create a public investigation
+projection. Direct `RiskRule` detection remains a separate compatibility path.
+
 `status.projection` describes how the RCA compatibility fields were produced:
 
 - `mode: InvestigationRequestProjection`: `RiskSignal` contains a compact projection of `InvestigationRequest.status`.

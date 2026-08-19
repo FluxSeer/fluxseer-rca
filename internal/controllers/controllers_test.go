@@ -24,6 +24,95 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/notifier"
 )
 
+func TestExecutionFinishedAtPreservesOrdering(t *testing.T) {
+	startedAt := metav1.NewTime(time.Date(2026, 8, 19, 1, 56, 17, 0, time.UTC))
+	execution := &v1alpha1.AgentActionExecutionStatus{StartedAt: &startedAt}
+
+	finishedAt := executionFinishedAt(execution, startedAt.Add(-time.Second))
+	if !finishedAt.After(startedAt.Time) {
+		t.Fatalf("expected finishedAt after startedAt, got startedAt=%s finishedAt=%s", startedAt, finishedAt)
+	}
+
+	currentFinishedAt := executionFinishedAt(execution, startedAt.Add(time.Second))
+	if !currentFinishedAt.Equal(&metav1.Time{Time: startedAt.Add(time.Second)}) {
+		t.Fatalf("expected current time to be preserved, got %s", currentFinishedAt)
+	}
+}
+
+func TestRemediationPlanReconcilerRepairsTransientPendingActionApproval(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	now := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
+	plan := &v1alpha1.RemediationPlan{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout-risk-plan", Namespace: "remediation"},
+		Spec: v1alpha1.RemediationPlanSpec{
+			Target: v1alpha1.TargetRef{
+				Namespace:  "remediation",
+				Kind:       "Deployment",
+				Name:       "checkout",
+				APIVersion: "apps/v1",
+			},
+			Severity:   "high",
+			Confidence: 95,
+			Steps: []v1alpha1.RemediationStep{{
+				Name:       "restart-workload",
+				ActionType: "kubernetes.rolloutRestart",
+			}},
+		},
+	}
+	action := &v1alpha1.AgentAction{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout-risk-plan-action", Namespace: "remediation"},
+		Status: v1alpha1.AgentActionStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{Phase: v1alpha1.PhaseWaitingApproval},
+			Approval: &v1alpha1.AgentActionApprovalStatus{
+				Approved: false,
+				Source:   "Pending",
+			},
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.RemediationPlan{}, &v1alpha1.AgentAction{}).
+		WithObjects(plan, action).
+		Build()
+
+	reconciler := &RemediationPlanReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Guardrails: guardrails.NewEngine(guardrails.Policy{
+			AllowedActionTypes:       []string{"kubernetes.rolloutRestart"},
+			AutoApproveMaxSeverity:   domain.SeverityLow,
+			RequireApprovalAtOrAbove: domain.SeverityMedium,
+		}),
+		Now: func() time.Time { return now },
+	}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: plan.Name, Namespace: plan.Namespace}}); err != nil {
+		t.Fatalf("remediation plan reconcile failed: %v", err)
+	}
+
+	var storedPlan v1alpha1.RemediationPlan
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: plan.Name, Namespace: plan.Namespace}, &storedPlan); err != nil {
+		t.Fatalf("get remediation plan: %v", err)
+	}
+	if storedPlan.Status.Phase != v1alpha1.PhaseWaitingApproval {
+		t.Fatalf("expected plan WaitingApproval, got %s", storedPlan.Status.Phase)
+	}
+
+	var storedAction v1alpha1.AgentAction
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: action.Name, Namespace: action.Namespace}, &storedAction); err != nil {
+		t.Fatalf("get agent action: %v", err)
+	}
+	if storedAction.Status.Phase != v1alpha1.PhaseWaitingApproval || storedAction.Status.Approval == nil || storedAction.Status.Approval.Approved || storedAction.Status.Approval.Source != "ManualApprovalRequired" {
+		t.Fatalf("expected transient Pending approval to be repaired, got phase=%s approval=%#v", storedAction.Status.Phase, storedAction.Status.Approval)
+	}
+	if storedAction.Status.Approval.ActionDigest == "" {
+		t.Fatal("expected repaired approval to carry an action digest")
+	}
+}
+
 func TestControllerChainCreatesPlanActionAndExecutesAfterApproval(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
@@ -489,8 +578,12 @@ func TestAgentActionReconcilerCreatesSettledReadOnlyVerification(t *testing.T) {
 		Now: func() time.Time { return now },
 	}
 	key := types.NamespacedName{Name: action.Name, Namespace: action.Namespace}
-	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
+	result, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key})
+	if err != nil {
 		t.Fatalf("initial restart reconcile failed: %v", err)
+	}
+	if result.RequeueAfter != effectivenessSettlingPeriod {
+		t.Fatalf("expected settling requeue after %s, got %s", effectivenessSettlingPeriod, result.RequeueAfter)
 	}
 	var updated v1alpha1.AgentAction
 	if err := fakeClient.Get(context.Background(), key, &updated); err != nil {
@@ -501,6 +594,9 @@ func TestAgentActionReconcilerCreatesSettledReadOnlyVerification(t *testing.T) {
 	}
 	if updated.Status.Effectiveness.Baseline.Health.AvailableReplicas != 0 || updated.Status.Effectiveness.Baseline.Health.DesiredReplicas != 3 {
 		t.Fatalf("unexpected pre-action health baseline: %#v", updated.Status.Effectiveness.Baseline.Health)
+	}
+	if !updated.Status.Effectiveness.Baseline.CapturedAt.Before(updated.Status.Execution.StartedAt) {
+		t.Fatalf("expected baseline capture before execution start, baseline=%s (%d) execution=%s (%d)", updated.Status.Effectiveness.Baseline.CapturedAt, updated.Status.Effectiveness.Baseline.CapturedAt.UnixNano(), updated.Status.Execution.StartedAt, updated.Status.Execution.StartedAt.UnixNano())
 	}
 
 	now = updated.Status.Effectiveness.SettlingUntil.Add(time.Second)
@@ -519,6 +615,9 @@ func TestAgentActionReconcilerCreatesSettledReadOnlyVerification(t *testing.T) {
 	}
 	if verification.Spec.Purpose != v1alpha1.InvestigationPurposeEffectivenessVerification || verification.Spec.Mode != v1alpha1.InvestigationModeReadOnly || verification.Spec.CreateRiskSignal {
 		t.Fatalf("expected read-only effectiveness request, got %#v", verification.Spec)
+	}
+	if verification.Spec.EvidenceRequirements.Profile != "effectivenessverification" {
+		t.Fatalf("expected effectiveness verification evidence profile, got %q", verification.Spec.EvidenceRequirements.Profile)
 	}
 	if verification.Spec.Correlation == nil || verification.Spec.Correlation.ExecutionID != updated.Status.Execution.ExecutionID || verification.Spec.Correlation.BaselineDigest != updated.Status.Effectiveness.Baseline.Digest {
 		t.Fatalf("expected execution/baseline correlation, got %#v", verification.Spec.Correlation)
@@ -557,6 +656,100 @@ func TestAgentActionReconcilerCreatesSettledReadOnlyVerification(t *testing.T) {
 	}
 	if updated.Status.Effectiveness.PostActionHealth == nil || updated.Status.Effectiveness.PostActionHealth.AvailableReplicas != 3 {
 		t.Fatalf("expected persisted post-action health, got %#v", updated.Status.Effectiveness.PostActionHealth)
+	}
+}
+
+func TestAgentActionReconcilerRecordsIneffectiveRemediation(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add FluxSeer scheme: %v", err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add apps scheme: %v", err)
+	}
+
+	now := time.Date(2026, 8, 17, 13, 0, 0, 0, time.UTC)
+	replicas := int32(3)
+	action := &v1alpha1.AgentAction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "restart-action-ineffective",
+			Namespace:  "payments",
+			UID:        types.UID("action-ineffective-uid"),
+			Generation: 1,
+			Annotations: map[string]string{
+				annotationTargetUID: "deployment-ineffective-uid",
+			},
+		},
+		Spec: v1alpha1.AgentActionSpec{
+			Target:     v1alpha1.TargetRef{Namespace: "payments", Kind: "Deployment", Name: "payments-api", APIVersion: "apps/v1"},
+			ActionType: executor.KubernetesRolloutRestartAction,
+		},
+		Status: v1alpha1.AgentActionStatus{ResourceStatus: v1alpha1.ResourceStatus{Phase: v1alpha1.PhaseApproved}},
+	}
+	action.Status.Approval = &v1alpha1.AgentActionApprovalStatus{Approved: true, ApprovedBy: "policy", Source: "GuardrailsAutoApproval", ActionDigest: agentActionSpecDigest(action)}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "payments", Name: "payments-api", UID: types.UID("deployment-ineffective-uid")},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+		Status:     appsv1.DeploymentStatus{AvailableReplicas: 0, ReadyReplicas: 0},
+	}
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&v1alpha1.AgentAction{}, &v1alpha1.InvestigationRequest{}).WithObjects(action, deployment).Build()
+	reconciler := &AgentActionReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		Executor: executor.NewRouter(
+			executor.KubernetesExecutor{Client: fakeClient, Now: func() time.Time { return now }},
+			executor.GitOpsExecutor{}, executor.RunbookExecutor{}, executor.NotificationExecutor{},
+		),
+		Now: func() time.Time { return now },
+	}
+	key := types.NamespacedName{Name: action.Name, Namespace: action.Namespace}
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
+		t.Fatalf("initial restart reconcile failed: %v", err)
+	}
+
+	var updated v1alpha1.AgentAction
+	if err := fakeClient.Get(context.Background(), key, &updated); err != nil {
+		t.Fatalf("get updated action: %v", err)
+	}
+	if updated.Status.Effectiveness == nil || updated.Status.Effectiveness.Phase != v1alpha1.EffectivenessPhaseVerifying {
+		t.Fatalf("expected verifying status, got %#v", updated.Status.Effectiveness)
+	}
+
+	now = updated.Status.Effectiveness.SettlingUntil.Add(time.Second)
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
+		t.Fatalf("verification creation reconcile failed: %v", err)
+	}
+	if err := fakeClient.Get(context.Background(), key, &updated); err != nil {
+		t.Fatalf("get action after verification creation: %v", err)
+	}
+	if updated.Status.Effectiveness.VerificationRef == nil {
+		t.Fatal("expected durable verification reference")
+	}
+
+	var verification v1alpha1.InvestigationRequest
+	verificationKey := types.NamespacedName{Name: updated.Status.Effectiveness.VerificationRef.Name, Namespace: "payments"}
+	if err := fakeClient.Get(context.Background(), verificationKey, &verification); err != nil {
+		t.Fatalf("get verification request: %v", err)
+	}
+	verification.Status.Phase = v1alpha1.PhaseCompleted
+	verification.Status.Outcome = v1alpha1.InvestigationOutcomeConfirmed
+	verification.Status.Summary = "deployment remains unavailable after restart"
+	if err := fakeClient.Status().Update(context.Background(), &verification); err != nil {
+		t.Fatalf("update verification result: %v", err)
+	}
+
+	now = updated.Status.Effectiveness.ObservationUntil.Add(time.Second)
+	if _, err := reconciler.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
+		t.Fatalf("effectiveness evaluation reconcile failed: %v", err)
+	}
+	if err := fakeClient.Get(context.Background(), key, &updated); err != nil {
+		t.Fatalf("get action after effectiveness evaluation: %v", err)
+	}
+	if updated.Status.Effectiveness.Phase != v1alpha1.EffectivenessPhaseCompleted || updated.Status.Effectiveness.Outcome != v1alpha1.EffectivenessOutcomeIneffective {
+		t.Fatalf("expected ineffective remediation, got %#v", updated.Status.Effectiveness)
+	}
+	if updated.Status.Effectiveness.PostActionHealth == nil || updated.Status.Effectiveness.PostActionHealth.AvailableReplicas != 0 {
+		t.Fatalf("expected persisted unhealthy post-action health, got %#v", updated.Status.Effectiveness.PostActionHealth)
 	}
 }
 

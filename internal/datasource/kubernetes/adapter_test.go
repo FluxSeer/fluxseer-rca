@@ -3,12 +3,14 @@ package kubernetes
 import (
 	"context"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
@@ -47,6 +49,210 @@ func TestAdapterQueryFiltersEventsByTarget(t *testing.T) {
 	}
 	if result.NativeCounts.Records != 1 {
 		t.Fatalf("expected native event count, got %#v", result.NativeCounts)
+	}
+}
+
+func TestAdapterQueryHonorsEventTimeRange(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&corev1.Event{
+			ObjectMeta:     metav1.ObjectMeta{Name: "old-event", Namespace: "demo", CreationTimestamp: metav1.NewTime(time.Date(2026, 8, 18, 7, 0, 0, 0, time.UTC))},
+			InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "demo-app-123"},
+			Reason:         "Unhealthy",
+			Message:        "readiness probe failed",
+			LastTimestamp:  metav1.NewTime(time.Date(2026, 8, 18, 7, 0, 0, 0, time.UTC)),
+		},
+		&corev1.Event{
+			ObjectMeta:     metav1.ObjectMeta{Name: "new-event", Namespace: "demo", CreationTimestamp: metav1.NewTime(time.Date(2026, 8, 18, 7, 9, 0, 0, time.UTC))},
+			InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "demo-app-123"},
+			Reason:         "Unhealthy",
+			Message:        "readiness probe failed",
+			LastTimestamp:  metav1.NewTime(time.Date(2026, 8, 18, 7, 9, 0, 0, time.UTC)),
+		},
+	).Build()
+
+	result, err := (Adapter{Client: client}).Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "demo-app"},
+		QueryType: domain.QueryTypeEvent,
+		StartTime: time.Date(2026, 8, 18, 7, 5, 0, 0, time.UTC),
+		EndTime:   time.Date(2026, 8, 18, 7, 10, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("query events: %v", err)
+	}
+	if len(result.Records) != 1 || result.Records[0]["eventName"] != "new-event" {
+		t.Fatalf("expected only in-range event, got %#v", result.Records)
+	}
+}
+
+func TestAdapterQueryServiceConfigurationConfirmsNumericPortMismatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
+			Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Name: "http", Port: 80, TargetPort: intstr.FromInt(8080)}}},
+		},
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
+			Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: 3000}}}}}}},
+		},
+	).Build()
+
+	result, err := (Adapter{Client: client}).Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout", Service: "checkout"},
+		QueryType: domain.QueryTypeServiceConfiguration,
+	})
+	if err != nil {
+		t.Fatalf("query service configuration: %v", err)
+	}
+	if len(result.Records) != 1 {
+		t.Fatalf("expected one service port record, got %#v", result.Records)
+	}
+	record := result.Records[0]
+	if record["targetPortRaw"] != "8080" || record["targetPortResolved"] != int32(8080) || record["containerPort"] != int32(3000) {
+		t.Fatalf("expected raw/resolved/container port evidence, got %#v", record)
+	}
+	if record["mismatchConfirmed"] != true || record["reason"] != "ServicePortMismatch" {
+		t.Fatalf("expected confirmed ServicePortMismatch, got %#v", record)
+	}
+}
+
+func TestAdapterQueryServiceConfigurationResolvesNamedPort(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
+			Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Name: "http", Port: 80, TargetPort: intstr.FromString("http")}}},
+		},
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
+			Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: 8080}}}}}}},
+		},
+	).Build()
+
+	result, err := (Adapter{Client: client}).Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout", Service: "checkout"},
+		QueryType: domain.QueryTypeServiceConfiguration,
+	})
+	if err != nil {
+		t.Fatalf("query service configuration: %v", err)
+	}
+	record := result.Records[0]
+	if record["targetPortRaw"] != "http" || record["targetPortNamed"] != true || record["targetPortResolved"] != int32(8080) {
+		t.Fatalf("expected named targetPort resolution, got %#v", record)
+	}
+	if record["mismatchConfirmed"] != false || record["reason"] != "ServicePortResolved" {
+		t.Fatalf("expected resolved named port without mismatch, got %#v", record)
+	}
+}
+
+func TestAdapterQueryServiceConfigurationDoesNotFabricateUnresolvedNamedMismatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
+			Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Name: "http", Port: 80, TargetPort: intstr.FromString("missing")}}},
+		},
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
+			Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: 8080}}}}}}},
+		},
+	).Build()
+
+	result, err := (Adapter{Client: client}).Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout", Service: "checkout"},
+		QueryType: domain.QueryTypeServiceConfiguration,
+	})
+	if err != nil {
+		t.Fatalf("query service configuration: %v", err)
+	}
+	record := result.Records[0]
+	if record["resolution"] != "UnresolvedNamedTargetPort" || record["mismatchConfirmed"] != false {
+		t.Fatalf("expected unresolved evidence without fabricated mismatch, got %#v", record)
+	}
+}
+
+func TestAdapterQueryProbeConfigurationConfirmsNumericPortMismatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Name:           "app",
+				Ports:          []corev1.ContainerPort{{Name: "http", ContainerPort: 3000}},
+				ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/ready", Port: intstr.FromInt(8080), Scheme: corev1.URISchemeHTTP}}},
+			}}}}},
+		},
+	).Build()
+
+	result, err := (Adapter{Client: client}).Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout"},
+		QueryType: domain.QueryTypeProbeConfiguration,
+	})
+	if err != nil {
+		t.Fatalf("query probe configuration: %v", err)
+	}
+	if len(result.Records) != 1 {
+		t.Fatalf("expected one probe record, got %#v", result.Records)
+	}
+	record := result.Records[0]
+	if record["probeType"] != "readiness" || record["probePath"] != "/ready" || record["probePortRaw"] != "8080" {
+		t.Fatalf("expected probe configuration evidence, got %#v", record)
+	}
+	if record["probePortResolved"] != int32(8080) || record["containerPort"] != int32(3000) || record["mismatchConfirmed"] != true || record["reason"] != "ProbeConfigurationMismatch" {
+		t.Fatalf("expected bounded probe mismatch evidence, got %#v", record)
+	}
+}
+
+func TestAdapterQueryProbeConfigurationDoesNotFabricateUnresolvedNamedMismatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo"},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Name:           "app",
+				Ports:          []corev1.ContainerPort{{Name: "metrics", ContainerPort: 3000}},
+				ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/ready", Port: intstr.FromString("http"), Scheme: corev1.URISchemeHTTP}}},
+			}}}}},
+		},
+	).Build()
+
+	result, err := (Adapter{Client: client}).Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout"},
+		QueryType: domain.QueryTypeProbeConfiguration,
+	})
+	if err != nil {
+		t.Fatalf("query probe configuration: %v", err)
+	}
+	if len(result.Records) != 1 || result.Records[0]["resolution"] != "UnresolvedNamedProbePort" || result.Records[0]["mismatchConfirmed"] != false {
+		t.Fatalf("expected unresolved named probe port without fabricated mismatch, got %#v", result.Records)
 	}
 }
 

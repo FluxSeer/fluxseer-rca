@@ -1924,6 +1924,15 @@ func TestRiskRuleReconcilerUsesReferencedOpenAIModelProvider(t *testing.T) {
 			Records:   []map[string]any{{"reason": "BackOff", "message": "BackOff restarting failed container"}},
 		},
 	}
+	logSource := &fakeRuleDataSource{
+		name:      "loki",
+		queryType: domain.QueryTypeLog,
+		result: &datasource.QueryResult{
+			Source:    "loki",
+			QueryType: domain.QueryTypeLog,
+			Records:   []map[string]any{{"line": "panic during startup: failed to initialize configuration"}},
+		},
+	}
 
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -1933,7 +1942,7 @@ func TestRiskRuleReconcilerUsesReferencedOpenAIModelProvider(t *testing.T) {
 	reconciler := &RiskRuleReconciler{
 		Client:   client,
 		Scheme:   scheme,
-		Registry: datasource.NewRegistry(eventSource),
+		Registry: datasource.NewRegistry(eventSource, logSource),
 		Resolver: modelgateway.KubeResolver{Client: client},
 		Gateway: &modelgateway.Gateway{
 			Base:      knowledge.NewBase(),

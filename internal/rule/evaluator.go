@@ -43,6 +43,10 @@ func ParseQueryType(raw string) (domain.QueryType, bool) {
 		return domain.QueryTypeEvent, true
 	case "deploymentcondition", "deploymentconditions":
 		return domain.QueryTypeDeploymentCondition, true
+	case "serviceconfiguration", "serviceconfig", "kubernetesserviceconfiguration":
+		return domain.QueryTypeServiceConfiguration, true
+	case "probeconfiguration", "probeconfig", "kubernetesprobeconfiguration":
+		return domain.QueryTypeProbeConfiguration, true
 	case "trace", "traces", "opentelemetry":
 		return domain.QueryTypeTrace, true
 	default:
@@ -99,6 +103,10 @@ func EvaluateSignal(signal v1alpha1.RiskRuleSignal, queryType domain.QueryType, 
 		return evaluateKubernetesEventSignal(signal, result, target, severity)
 	case domain.QueryTypeDeploymentCondition:
 		return evaluateDeploymentConditionSignal(signal, result, target, severity)
+	case domain.QueryTypeServiceConfiguration:
+		return evaluateServiceConfigurationSignal(signal, result, target, severity)
+	case domain.QueryTypeProbeConfiguration:
+		return evaluateProbeConfigurationSignal(signal, result, target, severity)
 	default:
 		return nil
 	}
@@ -332,6 +340,87 @@ func evaluateDeploymentConditionSignal(signal v1alpha1.RiskRuleSignal, result *d
 		Summary:  fmt.Sprintf("%s detected %d matching deployment conditions for %s", signal.Name, matchCount, target.Name),
 		Evidence: evidence,
 	}
+}
+
+func evaluateServiceConfigurationSignal(signal v1alpha1.RiskRuleSignal, result *datasource.QueryResult, target domain.ResourceRef, severity string) *Match {
+	evidence := make([]v1alpha1.EvidenceRef, 0, 3)
+	matchCount := 0
+	for _, record := range result.Records {
+		if !strings.EqualFold(recordString(record, "mismatchConfirmed"), "true") {
+			continue
+		}
+		matchCount++
+		if len(evidence) < 3 {
+			evidence = append(evidence, v1alpha1.EvidenceRef{
+				Kind:    "serviceConfiguration",
+				Source:  result.Source,
+				Reason:  recordString(record, "reason"),
+				Summary: serviceConfigurationEvidenceSummary(record),
+			})
+		}
+	}
+	if matchCount == 0 || !compareThreshold(float64(matchCount), normalizeCountThreshold(signal.Threshold)) {
+		return nil
+	}
+	return &Match{
+		Signal:   signal,
+		Severity: severity,
+		Summary:  fmt.Sprintf("%s detected %d confirmed Service/targetPort mismatches for %s", signal.Name, matchCount, target.Name),
+		Evidence: evidence,
+	}
+}
+
+func serviceConfigurationEvidenceSummary(record map[string]any) string {
+	return fmt.Sprintf("Service %s targetPort=%s resolved=%s; %s/%s container %s port=%s; mismatchConfirmed=true",
+		recordString(record, "serviceName"),
+		recordString(record, "targetPortRaw"),
+		recordString(record, "targetPortResolved"),
+		recordString(record, "workloadKind"),
+		recordString(record, "workloadName"),
+		recordString(record, "containerName"),
+		recordString(record, "containerPort"),
+	)
+}
+
+func evaluateProbeConfigurationSignal(signal v1alpha1.RiskRuleSignal, result *datasource.QueryResult, target domain.ResourceRef, severity string) *Match {
+	evidence := make([]v1alpha1.EvidenceRef, 0, 3)
+	matchCount := 0
+	for _, record := range result.Records {
+		if !strings.EqualFold(recordString(record, "mismatchConfirmed"), "true") {
+			continue
+		}
+		matchCount++
+		if len(evidence) < 3 {
+			evidence = append(evidence, v1alpha1.EvidenceRef{
+				Kind:    "probeConfiguration",
+				Source:  result.Source,
+				Reason:  recordString(record, "reason"),
+				Summary: probeConfigurationEvidenceSummary(record),
+			})
+		}
+	}
+	if matchCount == 0 || !compareThreshold(float64(matchCount), normalizeCountThreshold(signal.Threshold)) {
+		return nil
+	}
+	return &Match{
+		Signal:   signal,
+		Severity: severity,
+		Summary:  fmt.Sprintf("%s detected %d confirmed probe configuration mismatches for %s", signal.Name, matchCount, target.Name),
+		Evidence: evidence,
+	}
+}
+
+func probeConfigurationEvidenceSummary(record map[string]any) string {
+	return fmt.Sprintf("%s/%s %s probe %s://%s:%s; container port=%s; resolution=%s; mismatchConfirmed=true",
+		recordString(record, "workloadKind"),
+		recordString(record, "workloadName"),
+		recordString(record, "probeType"),
+		recordString(record, "probeScheme"),
+		recordString(record, "probePath"),
+		recordString(record, "probePortRaw"),
+		recordString(record, "containerPort"),
+		recordString(record, "resolution"),
+	)
 }
 
 func compareThreshold(value float64, threshold v1alpha1.RiskThreshold) bool {

@@ -1139,6 +1139,34 @@ func TestNormalizeObservationContentDigestExcludesCollectedAt(t *testing.T) {
 	}
 }
 
+func TestNormalizeLogObservationPreservesCausalDependencyTarget(t *testing.T) {
+	req := datasource.QueryRequest{
+		Query:     `{namespace="prod",app="checkout"} |= "connection refused"`,
+		StartTime: time.Date(2026, 7, 6, 11, 50, 0, 0, time.UTC),
+		EndTime:   time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC),
+		Target:    domain.ResourceRef{Namespace: "prod", Name: "checkout", Cluster: "in-cluster"},
+		QueryType: domain.QueryTypeLog,
+	}
+	result := &datasource.QueryResult{Source: "loki", QueryType: domain.QueryTypeLog, Records: []map[string]any{{
+		"labels": map[string]any{
+			"dependency_kind":        "Service",
+			"dependency_name":        "inventory",
+			"dependency_namespace":   "prod",
+			"dependency_api_version": "v1",
+		},
+		"line": "upstream inventory unavailable: connection refused",
+	}}}
+
+	observation := normalizeObservations(result, req, 0, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))[0]
+	if len(observation.RelatedTargets) != 1 || observation.RelatedTargets[0].Kind != "Service" || observation.RelatedTargets[0].Name != "inventory" {
+		t.Fatalf("expected normalized causal dependency target, got %#v", observation.RelatedTargets)
+	}
+	ref := evidenceRefsFromObservations([]domain.Observation{observation}, req, v1alpha1.QueryRetentionPolicy{})[0]
+	if len(ref.RelatedTargets) != 1 || ref.RelatedTargets[0].Namespace != "prod" || ref.RelatedTargets[0].Name != "inventory" {
+		t.Fatalf("expected evidence ref causal dependency target, got %#v", ref.RelatedTargets)
+	}
+}
+
 func TestNormalizeObservationTruncatesLargeLogEvidence(t *testing.T) {
 	req := datasource.QueryRequest{
 		Query:     `{namespace="prod"} |= "timeout"`,
@@ -2169,4 +2197,86 @@ func stringSliceContains(items []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestNormalizeServiceConfigurationProducesTraceableEvidence(t *testing.T) {
+	req := datasource.QueryRequest{
+		Query:     "service-port-configuration",
+		StartTime: time.Date(2026, 7, 6, 11, 50, 0, 0, time.UTC),
+		EndTime:   time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC),
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout", Service: "checkout"},
+		QueryType: domain.QueryTypeServiceConfiguration,
+	}
+	result := &datasource.QueryResult{
+		Source:    "kubernetes-events",
+		QueryType: domain.QueryTypeServiceConfiguration,
+		Records: []map[string]any{{
+			"serviceName":        "checkout",
+			"servicePort":        int32(80),
+			"targetPortRaw":      "8080",
+			"targetPortResolved": int32(8080),
+			"targetPortNamed":    false,
+			"workloadKind":       "Deployment",
+			"workloadName":       "checkout",
+			"containerName":      "app",
+			"containerPort":      int32(3000),
+			"resolution":         "NumericTargetPortDoesNotMatchContainerPort",
+			"mismatchConfirmed":  true,
+			"reason":             "ServicePortMismatch",
+		}},
+	}
+
+	observation := normalizeObservations(result, req, 0, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))[0]
+	if observation.Type != domain.ObservationTypeServiceConfiguration || observation.Value.ServiceConfiguration == nil {
+		t.Fatalf("expected service configuration observation, got %#v", observation)
+	}
+	if !observation.Value.ServiceConfiguration.MismatchConfirmed {
+		t.Fatalf("expected mismatch confirmation in normalized value, got %#v", observation.Value.ServiceConfiguration)
+	}
+	ref := evidenceRefsFromObservations([]domain.Observation{observation}, req, v1alpha1.QueryRetentionPolicy{})[0]
+	if ref.Kind != "serviceConfiguration" || ref.Reason != "ServicePortMismatch" || ref.ContentDigest == "" {
+		t.Fatalf("expected traceable service configuration evidence ref, got %#v", ref)
+	}
+}
+
+func TestNormalizeProbeConfigurationProducesTraceableEvidence(t *testing.T) {
+	req := datasource.QueryRequest{
+		Query:     "probe-configuration",
+		StartTime: time.Date(2026, 7, 6, 11, 50, 0, 0, time.UTC),
+		EndTime:   time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC),
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout"},
+		QueryType: domain.QueryTypeProbeConfiguration,
+	}
+	result := &datasource.QueryResult{
+		Source:    "kubernetes-events",
+		QueryType: domain.QueryTypeProbeConfiguration,
+		Records: []map[string]any{{
+			"workloadKind":      "Deployment",
+			"workloadName":      "checkout",
+			"containerName":     "app",
+			"probeType":         "readiness",
+			"probeScheme":       "HTTP",
+			"probePath":         "/ready",
+			"probePortRaw":      "8080",
+			"probePortResolved": int32(8080),
+			"probePortNamed":    false,
+			"containerPortName": "http",
+			"containerPort":     int32(3000),
+			"resolution":        "NumericProbePortDoesNotMatchContainerPort",
+			"mismatchConfirmed": true,
+			"reason":            "ProbeConfigurationMismatch",
+		}},
+	}
+
+	observation := normalizeObservations(result, req, 0, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))[0]
+	if observation.Type != domain.ObservationTypeProbeConfiguration || observation.Value.ProbeConfiguration == nil {
+		t.Fatalf("expected probe configuration observation, got %#v", observation)
+	}
+	if !observation.Value.ProbeConfiguration.MismatchConfirmed || observation.Value.ProbeConfiguration.ProbePath != "/ready" {
+		t.Fatalf("expected bounded probe configuration mismatch, got %#v", observation.Value.ProbeConfiguration)
+	}
+	ref := evidenceRefsFromObservations([]domain.Observation{observation}, req, v1alpha1.QueryRetentionPolicy{})[0]
+	if ref.Kind != "probeConfiguration" || ref.Reason != "ProbeConfigurationMismatch" || ref.ContentDigest == "" {
+		t.Fatalf("expected traceable probe configuration evidence ref, got %#v", ref)
+	}
 }

@@ -58,6 +58,8 @@ type Capabilities struct {
 	Logs                 bool
 	Events               bool
 	DeploymentConditions bool
+	ServiceConfiguration bool
+	ProbeConfiguration   bool
 	Traces               bool
 	RangeQuery           bool
 	InstantQuery         bool
@@ -74,6 +76,10 @@ func (c Capabilities) SupportsQueryType(queryType domain.QueryType) bool {
 		return c.Events
 	case domain.QueryTypeDeploymentCondition:
 		return c.DeploymentConditions
+	case domain.QueryTypeServiceConfiguration:
+		return c.ServiceConfiguration
+	case domain.QueryTypeProbeConfiguration:
+		return c.ProbeConfiguration
 	case domain.QueryTypeTrace:
 		return c.Traces
 	default:

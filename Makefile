@@ -28,7 +28,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-runtime-canonical-workloads-cluster verify-runtime-riskrule-incidents-cluster verify-runtime-traffic-pattern-conformance-cluster verify-runtime-prometheus-pattern-conformance-cluster verify-runtime-public-report-catalog export-runtime-public-reports verify-rbac-profiles verify-rule-packs verify-detection-pattern-catalog verify-traffic-pattern-promql verify-prometheus-pattern-promql verify-docs-contract verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
+.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.5-alpha1-live-harness verify-v0.5-alpha1-kind-rca verify-v0.5-alpha1-kind-remediation verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-runtime-canonical-workloads-cluster verify-runtime-riskrule-incidents-cluster verify-runtime-traffic-pattern-conformance-cluster verify-runtime-prometheus-pattern-conformance-cluster verify-runtime-public-report-catalog export-runtime-public-reports verify-rbac-profiles verify-rule-packs verify-detection-pattern-catalog verify-traffic-pattern-promql verify-prometheus-pattern-promql verify-docs-contract verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -144,6 +144,15 @@ verify-investigation-kind:
 
 verify-lifecycle-kind:
 	VERSION=$(VERSION) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) bash test/e2e/kind/verify_lifecycle_kind.sh
+
+verify-v0.5-alpha1-live-harness:
+	VERSION=$(VERSION) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) bash test/e2e/kind/verify_v0_5_alpha1_live_harness.sh
+
+verify-v0.5-alpha1-kind-rca:
+	VERSION=$(VERSION) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) bash test/e2e/kind/verify_v0_5_alpha1_kind_rca.sh
+
+verify-v0.5-alpha1-kind-remediation:
+	VERSION=$(VERSION) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) bash test/e2e/kind/verify_v0_5_alpha1_kind_remediation.sh
 
 verify-v0.3-beta-upgrade-kind:
 	VERSION=$(V0_3_RELEASE_VERSION) PREVIOUS_VERSION=$(V0_3_PREVIOUS_RELEASE_VERSION) PUBLISHED_CHART_OCI=$(V0_3_PUBLISHED_CHART_OCI) PUBLISHED_IMAGE_REPOSITORY=$(V0_3_PUBLISHED_IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) bash test/e2e/kind/verify_v0_3_beta_upgrade_kind.sh

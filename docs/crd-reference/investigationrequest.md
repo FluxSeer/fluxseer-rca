@@ -145,7 +145,12 @@ Query field behavior:
 - `queryTemplate`: templated query rendered against target metadata
 - `reasons[]`: optional exact Kubernetes event `reason` filter for `queryType: event`; matching is case-insensitive and does not search event messages
 - `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
-- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `OOMKilled`, `LatencyRegression`, and `RolloutLatencyRegression`.
+- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `OOMKilled`, `LatencyRegression`, `RolloutLatencyRegression`, `ProbeFailure`, and `HighHTTPErrorRate`.
+
+The Kubernetes datasource also supports `queryType: probeConfiguration` for
+HTTP readiness/liveness probe configuration and declared container-port
+resolution. A `ProbeFailure` claim requires both probe symptom evidence and
+bounded probe configuration evidence before it can become `Confirmed`.
 - `evidenceRetention.mode`: external evidence retention mode. Current supported runtime behavior is `MetadataOnly` or `NormalizedSnapshot` with the built-in `local-filesystem` store.
 - `evidenceRetention.retention`: requested external payload retention duration for retained normalized snapshots.
 - `evidenceRetention.storageRef.name`: external evidence storage configuration reference. Current supported value for `NormalizedSnapshot` is `local-filesystem`.
@@ -176,10 +181,12 @@ Current required evidence profiles:
 | Profile | Required Evidence | Strongest profile-level conclusion |
 | --- | --- | --- |
 | `ImagePullBackOff` | Kubernetes event evidence | Image pull failure |
-| `CrashLoopBackOff` | Kubernetes event evidence | Repeated container start or restart failure |
+| `CrashLoopBackOff` | Kubernetes event evidence and application log evidence from Loki | Repeated container start or restart failure with a bounded application cause |
 | `OOMKilled` | Kubernetes event evidence and metric evidence | Memory-related termination supported by memory evidence |
 | `LatencyRegression` | Metric evidence | Latency regression |
 | `RolloutLatencyRegression` | Metric evidence and deployment condition evidence | Rollout-associated latency regression |
+| `ProbeFailure` | Unhealthy probe event and probe configuration evidence | Bounded probe configuration failure |
+| `HighHTTPErrorRate` | Prometheus HTTP 5xx metric and Loki causal log evidence with an explicit related target | Confirmed HTTP error-rate incident linked to the named dependency |
 
 An evidence profile defines minimum sufficiency and an abstraction boundary;
 it does not authorize a more specific causal claim than the evidence supports.
@@ -274,8 +281,8 @@ These fields are the v0.3 target contract. New integrations should check the gen
 
 - `outcome`: RCA result semantics such as `Confirmed`, `Inconclusive`, `NoIssueFound`, or `Unknown`
 - `summary`: compact human-readable conclusion
-- `rootCauseEntity`: Kubernetes target most directly associated with the conclusion
-- `rootCauseType`: coarse category such as `CrashLoop`, `LatencyRegression`, `ResourcePressure`, `ConfigurationMismatch`, or `WorkloadDegradation`
+- `rootCauseEntity`: Kubernetes target most directly associated with the conclusion. For a bounded multi-source causal finding such as `HighHTTPErrorRate`, this may be an explicitly identified dependency rather than the investigation target; the original `spec.target` remains the investigated workload.
+- `rootCauseType`: coarse category such as `CrashLoop`, `ProbeFailure`, `SchedulingFailure`, `ConfigurationMismatch`, `HighHTTPErrorRate`, `LatencyRegression`, `ResourcePressure`, or `WorkloadDegradation`
 - `confidence`: compatibility normalized score from `0.0` to `1.0`; this is a ranking score, not a calibrated probability
 - `confidenceDetail`: provider, verifier, confidence band, and scoring-method metadata
 
@@ -321,6 +328,7 @@ FluxSeer RCA applies a deterministic heuristic verifier before writing claims. I
 - `payloadRef`
 - `reason`
 - `link`
+- `relatedTargets`: explicit Kubernetes targets named by the observation provenance, such as a Loki dependency label set; this field is not inferred from free-form log text
 
 These fields are compact normalized-observation metadata. They let consumers audit which query and redacted observation supported the RCA without storing raw Prometheus payloads, large Loki excerpts, or unredacted Kubernetes objects in status.
 

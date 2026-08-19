@@ -283,6 +283,35 @@ The current published beta release includes:
 
 The current scope does not include production-grade autonomous remediation.
 
+## SRE Scenario Portfolio And Coverage Boundary
+
+The User-facing Report catalog is a curated product-output portfolio, not a
+claim that every Kubernetes failure mode is supported. The current 15-case
+catalog proves the core read-only RCA contract across workload signals,
+evidence insufficiency, `NoIssueFound`, query/provider policy failures, and
+provider resolution failures. It does not cover the complete 21-pattern rule
+catalog or complete cluster infrastructure RCA.
+
+The v0.5-alpha.1 expansion prioritizes seven bounded scenarios:
+
+- CrashLoopBackOff;
+- readiness/liveness probe failure;
+- one bounded FailedScheduling cause;
+- Service port/`targetPort` mismatch;
+- one complete high HTTP error-rate User-facing RCA case; and
+- Safe Remediation `Effective` and `Ineffective` verification outcomes.
+
+These cases are selected for SRE frequency, evidence verifiability, and
+architectural value. They must not be expanded into a one-pattern/one-report
+quota. The scenario acceptance contract, v0.5 beta follow-up areas, and v0.6+
+Node/network/dependency deferrals are maintained in the
+[v0.5 SRE RCA Scenario Portfolio](backlog/v0.5-sre-rca-scenario-portfolio.md).
+
+The supported product claim remains **Kubernetes workload RCA**. Node, PVC/PV,
+Service, EndpointSlice, Ingress, HPA, PDB, CNI, and broad dependency-graph
+investigation may appear as future evidence or root-cause entities, but they
+are not current first-class cluster-wide RCA coverage.
+
 The current scope includes the frozen v0.3 structured `InvestigationRequest.status` contract. Future stabilization should improve runtime coverage, fixtures, dashboards, provider accuracy, and compatibility tests without changing the frozen schema unless an explicit schema-freeze exception is accepted.
 
 ## Baseline Rule Pack Contract

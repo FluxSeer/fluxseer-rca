@@ -17,6 +17,15 @@
           "message": "Back-off restarting failed backup container"
         }
       ]
+    },
+    {
+      "name": "loki",
+      "queryType": "log",
+      "records": [
+        {
+          "line": "fatal startup error: invalid configuration for backup target"
+        }
+      ]
     }
   ],
   "providerResponse": {

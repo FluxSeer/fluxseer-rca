@@ -20,6 +20,8 @@ Status meanings:
 | --- | --- | --- | --- |
 | P0 | [Runtime error matrix](v0.3-runtime-error-matrix.md) | `Complete` | No remaining P0 runtime scenario is queued; new cases require a named public contract. |
 | P0 | [v0.5 Safe Remediation](v0.5-safe-remediation.md) | `Active` | `v0.5-alpha.1` proves the safety contract, one real Kubernetes action, and post-action verification; GitOps follows as a second backend. |
+| P0 | [v0.5 SRE RCA scenario portfolio](v0.5-sre-rca-scenario-portfolio.md) | `Active` | Five high-frequency RCA cases plus `Effective`/`Ineffective` remediation verification have deterministic contracts before `v0.5-alpha.1`. |
+| P0 | [v0.5 Runtime RCA qualification contracts](v0.5-runtime-rca-qualification.md) | `Active` | `v0.5-runtime-rca-matrix/v1` and `v0.5-safe-remediation-matrix/v1` define public report, evidence, failure, and side-effect acceptance gates before runtime implementation. |
 | P0 | [Beta stabilization and RCA quality baseline](v0.3-beta-stabilization.md) | `Active` | Expand replay quality, verifier, provider, diagnostics, and real-cluster compatibility evidence. |
 | P1 | [Production-readiness expansion](v0.3-production-readiness.md) | `Active` | Scenario and target coverage extends beyond the first E2E matrix. |
 | P1 | [Architecture hardening follow-ups](v0.3-architecture-hardening.md) | `Active` | Post-action effectiveness verification and the selected durable evidence backend are complete. |
@@ -72,7 +74,11 @@ remaining actionable workstreams:
 P0 runtime validation, canonical workload coverage, v0.4 approval lifecycle,
 the 15-case User-facing Report catalog, request-rate-surge conformance, and the
 Prometheus high-error-rate/high-latency conformance slice are complete for their
-declared scopes. They should not be counted as open tickets.
+declared scopes. They should not be counted as open tickets. The next catalog
+expansion is intentionally tracked separately in the active
+[v0.5 SRE RCA scenario portfolio](v0.5-sre-rca-scenario-portfolio.md); it is
+not a request to make the 21 built-in patterns or all Kubernetes resources
+pass through one release gate.
 
 Local and mock-runtime completion checkpoint:
 

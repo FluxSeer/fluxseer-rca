@@ -1,0 +1,68 @@
+{
+  "name": "high-http-error-rate",
+  "profile": null,
+  "target": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "namespace": "prod",
+    "name": "checkout-api"
+  },
+  "datasources": [
+    {
+      "name": "prometheus",
+      "queryType": "metric",
+      "records": [
+        {
+          "metric": "http_5xx_error_rate",
+          "value": "0.25",
+          "summary": "HTTP 5xx error rate increased above the configured threshold"
+        }
+      ]
+    },
+    {
+      "name": "loki",
+      "queryType": "log",
+      "records": [
+        {
+          "line": "checkout-api upstream connection refused while calling inventory-api"
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Checkout HTTP error rate increased",
+    "riskSummary": "The checkout-api is returning elevated HTTP 5xx responses while an upstream connection is being refused.",
+    "severity": "high",
+    "confidenceScore": 88,
+    "rationale": "Prometheus reports an elevated HTTP 5xx rate and Loki contains a correlated upstream connection-refused error.",
+    "rcaHypothesis": "The checkout-api high HTTP error rate is associated with refused connections to inventory-api.",
+    "rcaCauses": [
+      "HTTP 5xx error rate increased above the configured threshold",
+      "Loki recorded checkout-api upstream connection refused errors while calling inventory-api"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "HighHTTPErrorRate",
+    "claimVerification": "Supported",
+    "providerCalls": 1
+  },
+  "baseline": {
+    "scenario": "HighHTTPErrorRateWithUpstreamEvidence",
+    "expectedDiagnosis": "The checkout-api has an elevated HTTP 5xx rate with correlated upstream connection-refused log evidence.",
+    "expectedEvidence": [
+      {
+        "kind": "metric",
+        "source": "prometheus"
+      },
+      {
+        "kind": "log",
+        "source": "loki"
+      }
+    ],
+    "expectedIncident": true,
+    "humanJudgment": "Correct when the HighHTTPErrorRate claim is supported by Prometheus and the upstream connection error remains linked to Loki evidence."
+  }
+}

@@ -11,6 +11,7 @@ func TestVerifyClaimsMarksRelevantEvidenceSupported(t *testing.T) {
 		[]EvidenceRef{
 			{ID: "evidence-001", Kind: "event", Summary: "BackOff restarting failed container"},
 			{ID: "evidence-002", Kind: "metric", Summary: "cpu usage sustained above threshold"},
+			{ID: "evidence-003", Kind: "log", Source: "loki", Summary: "fatal startup error: invalid configuration"},
 		},
 	)
 
@@ -48,14 +49,14 @@ func TestVerifyClaimsDoesNotPromoteBackOffEventTextToCausalEvidence(t *testing.T
 		}},
 	)
 
-	if result.CoverageScore != 1.0/3.0 {
-		t.Fatalf("expected only the BackOff symptom claim to be covered, got %#v", result)
+	if result.CoverageScore != 0 {
+		t.Fatalf("expected no CrashLoop claim to be covered without application evidence, got %#v", result)
 	}
 	for _, claim := range result.Claims {
 		switch claim.ID {
 		case "claim-001":
-			if claim.Verification != VerificationSupported || len(claim.EvidenceRefs) != 1 {
-				t.Fatalf("expected BackOff symptom supported, got %#v", claim)
+			if claim.Verification != VerificationUnsupported || len(claim.EvidenceRefs) != 0 {
+				t.Fatalf("expected BackOff symptom unsupported without application evidence, got %#v", claim)
 			}
 		case "claim-002", "claim-003":
 			if claim.Verification != VerificationUnsupported || len(claim.EvidenceRefs) != 0 {
@@ -73,6 +74,7 @@ func TestVerifyClaimsMarksUnsupportedWhenEvidenceIsIrrelevant(t *testing.T) {
 		},
 		[]EvidenceRef{
 			{ID: "evidence-001", Kind: "event", Summary: "BackOff restarting failed container"},
+			{ID: "evidence-002", Kind: "log", Source: "loki", Summary: "panic during startup: invalid configuration"},
 		},
 	)
 
@@ -82,7 +84,7 @@ func TestVerifyClaimsMarksUnsupportedWhenEvidenceIsIrrelevant(t *testing.T) {
 	if result.Claims[0].Verification != VerificationUnsupported || len(result.Claims[0].EvidenceRefs) != 0 {
 		t.Fatalf("expected unrelated claim to be unsupported, got %#v", result.Claims[0])
 	}
-	if result.Claims[1].Verification != VerificationSupported || len(result.Claims[1].EvidenceRefs) != 1 {
+	if result.Claims[1].Verification != VerificationSupported || len(result.Claims[1].EvidenceRefs) != 2 {
 		t.Fatalf("expected restart claim to be supported, got %#v", result.Claims[1])
 	}
 }
@@ -101,6 +103,24 @@ func TestVerifyClaimsMarksContradictedEvidence(t *testing.T) {
 	}
 	if len(result.Claims[0].EvidenceLinks) != 1 || result.Claims[0].EvidenceLinks[0].Role != EvidenceRoleContradicts {
 		t.Fatalf("expected contradictory evidence link, got %#v", result.Claims[0])
+	}
+}
+
+func TestVerifyClaimsRequiresMetricAndCausalLogForHighHTTPError(t *testing.T) {
+	claim := Claim{ID: "claim-001", Statement: "High HTTP error rate is caused by the inventory dependency being unavailable"}
+	positive := VerifyClaims([]Claim{claim}, []EvidenceRef{
+		{ID: "evidence-001", Kind: "metric", Source: "prometheus", Summary: "HTTP 5xx error rate elevated above threshold"},
+		{ID: "evidence-002", Kind: "log", Source: "loki", Summary: "inventory dependency unavailable: connection refused"},
+	})
+	if positive.Claims[0].Verification != VerificationSupported || len(positive.Claims[0].EvidenceRefs) != 2 {
+		t.Fatalf("expected high HTTP causal claim to link metric and log evidence, got %#v", positive.Claims[0])
+	}
+
+	metricOnly := VerifyClaims([]Claim{claim}, []EvidenceRef{
+		{ID: "evidence-001", Kind: "metric", Source: "prometheus", Summary: "HTTP 5xx error rate elevated above threshold"},
+	})
+	if metricOnly.Claims[0].Verification != VerificationUnsupported || len(metricOnly.Claims[0].EvidenceRefs) != 0 {
+		t.Fatalf("expected metric-only high HTTP causal claim to remain unsupported, got %#v", metricOnly.Claims[0])
 	}
 }
 
@@ -128,6 +148,24 @@ func TestVerifyClaimsDoesNotTreatUnhealthyAsHealthyContradiction(t *testing.T) {
 		if len(claim.EvidenceLinks) != 0 {
 			t.Fatalf("expected no contradictory evidence links, got %#v", claim)
 		}
+	}
+}
+
+func TestVerifyProbeFailureRequiresConfigurationEvidence(t *testing.T) {
+	claim := Claim{ID: "probe-claim", Statement: "The readiness probe failed because the configured probe port does not match the container port."}
+	eventOnly := VerifyClaims([]Claim{claim}, []EvidenceRef{{
+		ID: "event-001", Kind: "event", Reason: "Unhealthy", Summary: "Readiness probe failed",
+	}})
+	if eventOnly.Claims[0].Verification != VerificationUnsupported {
+		t.Fatalf("expected event-only probe claim to remain unsupported, got %#v", eventOnly.Claims[0])
+	}
+
+	withConfiguration := VerifyClaims([]Claim{claim}, []EvidenceRef{
+		{ID: "event-001", Kind: "event", Reason: "Unhealthy", Summary: "Readiness probe failed"},
+		{ID: "probe-001", Kind: "probeConfiguration", Reason: "ProbeConfigurationMismatch", Summary: "readiness probe port 8080 does not match container port 3000; mismatchConfirmed=true"},
+	})
+	if withConfiguration.Claims[0].Verification != VerificationSupported || len(withConfiguration.Claims[0].EvidenceRefs) != 2 {
+		t.Fatalf("expected probe claim to require and link both evidence types, got %#v", withConfiguration.Claims[0])
 	}
 }
 
@@ -254,13 +292,23 @@ func TestVerifyClaimsAppliesDomainSpecificSupportRequirements(t *testing.T) {
 			wantRefs:   1,
 		},
 		{
-			name:  "crash loop requires crashloop event",
+			name:  "crash loop requires event and application log",
+			claim: "CrashLoopBackOff is causing repeated pod restarts",
+			evidence: []EvidenceRef{
+				{ID: "evidence-001", Kind: "event", Reason: "BackOff", Summary: "container crashed repeatedly"},
+				{ID: "evidence-002", Kind: "log", Source: "loki", Summary: "fatal startup error: invalid configuration"},
+			},
+			wantStatus: VerificationSupported,
+			wantRefs:   2,
+		},
+		{
+			name:  "crash loop event alone is insufficient",
 			claim: "CrashLoopBackOff is causing repeated pod restarts",
 			evidence: []EvidenceRef{
 				{ID: "evidence-001", Kind: "event", Reason: "BackOff", Summary: "container crashed repeatedly"},
 			},
-			wantStatus: VerificationSupported,
-			wantRefs:   1,
+			wantStatus: VerificationUnsupported,
+			wantRefs:   0,
 		},
 		{
 			name:  "memory pressure requires event and memory metric",

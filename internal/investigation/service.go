@@ -442,7 +442,7 @@ func maxQueryResultRecords(queryType domain.QueryType, limits v1alpha1.QueryResu
 		return minPositiveLimit(limits.Metrics.MaxSamples, limits.Metrics.MaxSeries)
 	case domain.QueryTypeLog:
 		return firstPositiveLimit(limits.Logs.MaxEntries, limits.Logs.MaxLines)
-	case domain.QueryTypeEvent, domain.QueryTypeDeploymentCondition:
+	case domain.QueryTypeEvent, domain.QueryTypeDeploymentCondition, domain.QueryTypeServiceConfiguration, domain.QueryTypeProbeConfiguration:
 		return limits.Events.MaxRecords
 	default:
 		return 0
@@ -1134,6 +1134,13 @@ func buildDefaultCollectionStep(source datasource.DataSource, target domain.Reso
 			QueryType:      domain.QueryTypeLog,
 			Query:          fmt.Sprintf(`{namespace="%s",app="%s"} |= "error"`, target.Namespace, labelApp(labels, target)),
 		}, nil
+	case source.Capabilities().ProbeConfiguration:
+		return CollectionStep{
+			Name:           source.Name(),
+			DatasourceName: source.Name(),
+			QueryType:      domain.QueryTypeProbeConfiguration,
+			Query:          "probe-configuration",
+		}, nil
 	default:
 		return CollectionStep{}, &Issue{
 			Reason:  "CapabilityMismatch",
@@ -1156,6 +1163,10 @@ func investigationQueryText(querySpec v1alpha1.InvestigationQuery, queryType dom
 		return fmt.Sprintf(`{namespace="%s",app="%s"} |= "error"`, target.Namespace, labelApp(labels, target))
 	case domain.QueryTypeEvent:
 		return "recent-events"
+	case domain.QueryTypeServiceConfiguration:
+		return "service-port-configuration"
+	case domain.QueryTypeProbeConfiguration:
+		return "probe-configuration"
 	default:
 		return ""
 	}
@@ -1214,6 +1225,7 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 		RetainedCount:    retainedCount,
 		CollectedAt:      collectedAt.UTC(),
 	}
+	obs.RelatedTargets = relatedTargetsFromRecord(record, req)
 	switch result.QueryType {
 	case domain.QueryTypeMetric:
 		metricName, _ := record["metric"].(string)
@@ -1250,6 +1262,72 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 			Status:  redactor.RedactText(status),
 			Reason:  redactor.RedactText(reason),
 			Message: obs.Summary,
+		}}
+	case domain.QueryTypeServiceConfiguration:
+		serviceName := observationRecordString(record, "serviceName")
+		targetPortRaw := observationRecordString(record, "targetPortRaw")
+		targetPortResolved := observationRecordInt32(record, "targetPortResolved")
+		workloadKind := observationRecordString(record, "workloadKind")
+		workloadName := observationRecordString(record, "workloadName")
+		containerName := observationRecordString(record, "containerName")
+		containerPortName := observationRecordString(record, "containerPortName")
+		containerPort := observationRecordInt32(record, "containerPort")
+		resolution := observationRecordString(record, "resolution")
+		reason := observationRecordString(record, "reason")
+		mismatchConfirmed := observationRecordBool(record, "mismatchConfirmed")
+		containerLabel := containerPortName
+		if containerLabel == "" {
+			containerLabel = "port"
+		}
+		obs.Type = domain.ObservationTypeServiceConfiguration
+		obs.Summary = redactor.RedactText(fmt.Sprintf(
+			"Service %s targetPort=%s resolved=%d; %s/%s container %s %s=%d; resolution=%s; mismatchConfirmed=%t",
+			serviceName, targetPortRaw, targetPortResolved, workloadKind, workloadName,
+			containerName, containerLabel, containerPort, resolution, mismatchConfirmed,
+		))
+		obs.Value = domain.ObservationValue{ServiceConfiguration: &domain.ServiceConfigurationObservation{
+			ServiceName:        serviceName,
+			ServicePortName:    observationRecordString(record, "servicePortName"),
+			ServicePort:        observationRecordInt32(record, "servicePort"),
+			TargetPortRaw:      targetPortRaw,
+			TargetPortResolved: targetPortResolved,
+			TargetPortNamed:    observationRecordBool(record, "targetPortNamed"),
+			WorkloadKind:       workloadKind,
+			WorkloadName:       workloadName,
+			ContainerName:      containerName,
+			ContainerPortName:  containerPortName,
+			ContainerPort:      containerPort,
+			Resolution:         resolution,
+			MismatchConfirmed:  mismatchConfirmed,
+			Reason:             reason,
+		}}
+	case domain.QueryTypeProbeConfiguration:
+		workloadKind := observationRecordString(record, "workloadKind")
+		workloadName := observationRecordString(record, "workloadName")
+		containerName := observationRecordString(record, "containerName")
+		probeType := observationRecordString(record, "probeType")
+		probeScheme := observationRecordString(record, "probeScheme")
+		probePath := observationRecordString(record, "probePath")
+		probePortRaw := observationRecordString(record, "probePortRaw")
+		probePortResolved := observationRecordInt32(record, "probePortResolved")
+		containerPortName := observationRecordString(record, "containerPortName")
+		containerPort := observationRecordInt32(record, "containerPort")
+		resolution := observationRecordString(record, "resolution")
+		reason := observationRecordString(record, "reason")
+		mismatchConfirmed := observationRecordBool(record, "mismatchConfirmed")
+		obs.Type = domain.ObservationTypeProbeConfiguration
+		obs.Summary = redactor.RedactText(fmt.Sprintf(
+			"%s/%s container %s %s probe %s://%s:%s; resolved=%d; container %s=%d; resolution=%s; mismatchConfirmed=%t",
+			workloadKind, workloadName, containerName, probeType, probeScheme, probePath, probePortRaw,
+			probePortResolved, containerPortName, containerPort, resolution, mismatchConfirmed,
+		))
+		obs.Value = domain.ObservationValue{ProbeConfiguration: &domain.ProbeConfigurationObservation{
+			WorkloadKind: workloadKind, WorkloadName: workloadName, ContainerName: containerName,
+			ProbeType: probeType, ProbeScheme: probeScheme, ProbePath: probePath,
+			ProbePortRaw: probePortRaw, ProbePortResolved: probePortResolved,
+			ProbePortNamed:    observationRecordBool(record, "probePortNamed"),
+			ContainerPortName: containerPortName, ContainerPort: containerPort,
+			Resolution: resolution, MismatchConfirmed: mismatchConfirmed, Reason: reason,
 		}}
 	default:
 		obs.Type = domain.ObservationTypeEvent
@@ -1298,6 +1376,9 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 	if obs.Limit != 0 {
 		digestPayload["limit"] = obs.Limit
 	}
+	if len(obs.RelatedTargets) > 0 {
+		digestPayload["relatedTargets"] = obs.RelatedTargets
+	}
 	obs.ContentDigest = canonicaldigest.String(canonicaldigest.ObservationJSONV1, digestPayload)
 	return obs
 }
@@ -1327,12 +1408,19 @@ func evidenceRefsFromObservations(observations []domain.Observation, req datasou
 			OriginalBytes:          int32(observation.OriginalBytes),
 			RetainedBytes:          int32(observation.RetainedBytes),
 			CollectedAt:            &collectedAt,
+			RelatedTargets:         targetRefsFromResourceRefs(observation.RelatedTargets),
 		}
 		if observation.Value.Event != nil {
 			ref.Reason = observation.Value.Event.Reason
 		}
 		if observation.Value.DeploymentCondition != nil {
 			ref.Reason = observation.Value.DeploymentCondition.Reason
+		}
+		if observation.Value.ServiceConfiguration != nil {
+			ref.Reason = observation.Value.ServiceConfiguration.Reason
+		}
+		if observation.Value.ProbeConfiguration != nil {
+			ref.Reason = observation.Value.ProbeConfiguration.Reason
 		}
 		refs = append(refs, ref)
 	}
@@ -1449,7 +1537,7 @@ func rawObservationSummary(record map[string]any, result *datasource.QueryResult
 		return result.Summary
 	}
 	parts := make([]string, 0, len(record)+1)
-	for _, key := range []string{"line", "message", "reason", "metric", "value"} {
+	for _, key := range []string{"line", "message", "reason", "metric", "value", "serviceName", "targetPortRaw", "targetPortResolved", "containerPort", "resolution", "mismatchConfirmed"} {
 		if value, ok := record[key]; ok {
 			parts = append(parts, fmt.Sprint(value))
 		}
@@ -1458,6 +1546,112 @@ func rawObservationSummary(record map[string]any, result *datasource.QueryResult
 		parts = append(parts, result.Summary)
 	}
 	return strings.Join(parts, " ")
+}
+
+func observationRecordString(record map[string]any, key string) string {
+	if value, ok := record[key]; ok && value != nil {
+		return strings.TrimSpace(fmt.Sprint(value))
+	}
+	return ""
+}
+
+func relatedTargetsFromRecord(record map[string]any, req datasource.QueryRequest) []domain.ResourceRef {
+	labels, ok := record["labels"].(map[string]any)
+	if !ok {
+		if stringLabels, ok := record["labels"].(map[string]string); ok {
+			labels = make(map[string]any, len(stringLabels))
+			for key, value := range stringLabels {
+				labels[key] = value
+			}
+		}
+	}
+	if labels == nil {
+		return nil
+	}
+	kind := firstLabelValue(labels, "dependency_kind", "causal_dependency_kind")
+	name := firstLabelValue(labels, "dependency_name", "causal_dependency_name")
+	if kind == "" || name == "" {
+		return nil
+	}
+	namespace := firstLabelValue(labels, "dependency_namespace", "causal_dependency_namespace")
+	if namespace == "" {
+		namespace = req.Target.Namespace
+	}
+	apiVersion := firstLabelValue(labels, "dependency_api_version", "causal_dependency_api_version")
+	if apiVersion == "" {
+		apiVersion = "v1"
+	}
+	return []domain.ResourceRef{{
+		Cluster:    req.Target.Cluster,
+		Namespace:  namespace,
+		Kind:       kind,
+		Name:       name,
+		APIVersion: apiVersion,
+	}}
+}
+
+func firstLabelValue(labels map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := labels[key]; ok && value != nil {
+			if text := strings.TrimSpace(fmt.Sprint(value)); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func targetRefsFromResourceRefs(targets []domain.ResourceRef) []v1alpha1.TargetRef {
+	if len(targets) == 0 {
+		return nil
+	}
+	refs := make([]v1alpha1.TargetRef, 0, len(targets))
+	for _, target := range targets {
+		refs = append(refs, v1alpha1.TargetRef{
+			Cluster:    target.Cluster,
+			Namespace:  target.Namespace,
+			Kind:       target.Kind,
+			Name:       target.Name,
+			APIVersion: target.APIVersion,
+		})
+	}
+	return refs
+}
+
+func observationRecordInt32(record map[string]any, key string) int32 {
+	value, ok := record[key]
+	if !ok || value == nil {
+		return 0
+	}
+	switch typed := value.(type) {
+	case int32:
+		return typed
+	case int:
+		return int32(typed)
+	case int64:
+		return int32(typed)
+	case float64:
+		return int32(typed)
+	case float32:
+		return int32(typed)
+	}
+	parsed, err := strconv.ParseInt(strings.TrimSpace(fmt.Sprint(value)), 10, 32)
+	if err != nil {
+		return 0
+	}
+	return int32(parsed)
+}
+
+func observationRecordBool(record map[string]any, key string) bool {
+	value, ok := record[key]
+	if !ok || value == nil {
+		return false
+	}
+	if typed, ok := value.(bool); ok {
+		return typed
+	}
+	parsed, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprint(value)))
+	return err == nil && parsed
 }
 
 func copyClassification(in *v1alpha1.DataClassification) *v1alpha1.DataClassification {
@@ -1528,6 +1722,10 @@ func buildInvestigationIngestionOutput(spec v1alpha1.InvestigationRequestSpec, p
 			logs = append(logs, evidenceRef.Summary)
 		case "event":
 			events = append(events, firstNonEmpty(evidenceRef.Reason, evidenceRef.Summary))
+		case "serviceConfiguration":
+			events = append(events, firstNonEmpty(evidenceRef.Reason, evidenceRef.Summary))
+		case "probeConfiguration":
+			events = append(events, firstNonEmpty(evidenceRef.Reason, evidenceRef.Summary))
 		}
 	}
 
@@ -1574,6 +1772,10 @@ func normalizeEvidenceKind(kind string) string {
 		return "log"
 	case "event":
 		return "event"
+	case "serviceconfiguration":
+		return "serviceConfiguration"
+	case "probeconfiguration":
+		return "probeConfiguration"
 	default:
 		return "signal"
 	}

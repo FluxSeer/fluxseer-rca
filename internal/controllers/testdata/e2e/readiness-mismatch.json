@@ -16,6 +16,28 @@
           "message": "readiness probe failed and the checkout-api pod is not ready"
         }
       ]
+    },
+    {
+      "name": "kubernetes-probe-config",
+      "queryType": "probeConfiguration",
+      "records": [
+        {
+          "workloadKind": "Deployment",
+          "workloadName": "checkout-api",
+          "containerName": "app",
+          "probeType": "readiness",
+          "probeScheme": "HTTP",
+          "probePath": "/ready",
+          "probePortRaw": "8080",
+          "probePortResolved": 8080,
+          "probePortNamed": false,
+          "containerPortName": "http",
+          "containerPort": 3000,
+          "resolution": "NumericProbePortDoesNotMatchContainerPort",
+          "mismatchConfirmed": true,
+          "reason": "ProbeConfigurationMismatch"
+        }
+      ]
     }
   ],
   "providerResponse": {
@@ -33,7 +55,7 @@
   "expected": {
     "phase": "Completed",
     "outcome": "Confirmed",
-    "rootCauseType": "WorkloadDegradation",
+    "rootCauseType": "ProbeFailure",
     "claimVerification": "Supported",
     "providerCalls": 1
   },
@@ -41,7 +63,8 @@
     "scenario": "ReadinessMismatch",
     "expectedDiagnosis": "The Deployment is unavailable because its pod readiness probe is failing.",
     "expectedEvidence": [
-      {"kind": "event", "source": "kubernetes-events", "reason": "Unhealthy"}
+      {"kind": "event", "source": "kubernetes-events", "reason": "Unhealthy"},
+      {"kind": "probeConfiguration", "source": "kubernetes-probe-config", "reason": "ProbeConfigurationMismatch"}
     ],
     "expectedIncident": true,
     "humanJudgment": "Correct when the readiness diagnosis is linked to the Unhealthy probe event."

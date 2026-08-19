@@ -1,0 +1,54 @@
+{
+  "name": "failed-scheduling",
+  "profile": null,
+  "target": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "namespace": "prod",
+    "name": "checkout-api-7d9f8c6d7f-abcde"
+  },
+  "datasources": [
+    {
+      "name": "kubernetes-events",
+      "queryType": "event",
+      "records": [
+        {
+          "reason": "FailedScheduling",
+          "message": "0/3 nodes are available: 3 Insufficient cpu."
+        }
+      ]
+    }
+  ],
+  "providerResponse": {
+    "riskTitle": "Checkout pod cannot be scheduled",
+    "riskSummary": "The checkout pod remains Pending because no node has enough CPU capacity.",
+    "severity": "high",
+    "confidenceScore": 91,
+    "rationale": "FailedScheduling evidence reports insufficient CPU on every eligible node.",
+    "rcaHypothesis": "The pod cannot be scheduled because the cluster has insufficient CPU capacity.",
+    "rcaCauses": [
+      "FailedScheduling events report insufficient CPU on all eligible nodes"
+    ],
+    "actionType": "notification.sendSlack"
+  },
+  "expected": {
+    "phase": "Completed",
+    "outcome": "Confirmed",
+    "rootCauseType": "SchedulingFailure",
+    "claimVerification": "Supported",
+    "providerCalls": 1
+  },
+  "baseline": {
+    "scenario": "FailedSchedulingInsufficientCPU",
+    "expectedDiagnosis": "The checkout pod cannot be scheduled because eligible nodes have insufficient CPU capacity.",
+    "expectedEvidence": [
+      {
+        "kind": "event",
+        "source": "kubernetes-events",
+        "reason": "FailedScheduling"
+      }
+    ],
+    "expectedIncident": true,
+    "humanJudgment": "Correct when SchedulingFailure remains bounded to the FailedScheduling event and insufficient CPU evidence."
+  }
+}

@@ -19,8 +19,10 @@ import (
 )
 
 const (
-	riskRuleReportSchemaVersion = "fluxseer-riskrule-report/v1"
-	riskRuleLabelKey            = "fluxseer-rca.aiops.platform/risk-rule"
+	riskRuleReportSchemaVersion    = "fluxseer-riskrule-report/v1"
+	agentActionReportSchemaVersion = "fluxseer-agentaction-report/v1"
+	riskRuleLabelKey               = "fluxseer-rca.aiops.platform/risk-rule"
+	riskSignalRefAnnotation        = "fluxseer-rca.aiops.platform/risk-signal-ref"
 )
 
 type reportOptions struct {
@@ -41,13 +43,27 @@ type riskRuleReport struct {
 	RiskSignals           []v1alpha1.RiskSignal           `json:"riskSignals"`
 }
 
+type agentActionReportSelection struct {
+	Namespace   string `json:"namespace"`
+	AgentAction string `json:"agentAction"`
+}
+
+type agentActionReport struct {
+	SchemaVersion   string                         `json:"schemaVersion"`
+	Selection       agentActionReportSelection     `json:"selection"`
+	AgentAction     v1alpha1.AgentAction           `json:"agentAction"`
+	RemediationPlan *v1alpha1.RemediationPlan      `json:"remediationPlan,omitempty"`
+	RiskSignal      *v1alpha1.RiskSignal           `json:"riskSignal,omitempty"`
+	Verification    *v1alpha1.InvestigationRequest `json:"verification,omitempty"`
+}
+
 func runReport(args []string, stdout, stderr io.Writer) error {
 	opts, resource, name, err := parseReportArgs(args, stderr)
 	if err != nil {
 		return err
 	}
-	if resource != "riskrule" {
-		return fmt.Errorf("unsupported report resource %q; only riskrule is supported", resource)
+	if resource != "riskrule" && resource != "agentaction" {
+		return fmt.Errorf("unsupported report resource %q; use riskrule or agentaction", resource)
 	}
 
 	cfg, err := ctrl.GetConfig()
@@ -58,17 +74,27 @@ func runReport(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}
-	report, err := buildRiskRuleReport(context.Background(), kubeClient, opts.namespace, name)
-	if err != nil {
-		return err
+	var output any
+	if resource == "agentaction" {
+		report, reportErr := buildAgentActionReport(context.Background(), kubeClient, opts.namespace, name)
+		if reportErr != nil {
+			return reportErr
+		}
+		output = report
+	} else {
+		report, reportErr := buildRiskRuleReport(context.Background(), kubeClient, opts.namespace, name)
+		if reportErr != nil {
+			return reportErr
+		}
+		output = report
 	}
-	return writeRiskRuleReport(stdout, report, opts.output)
+	return writeReport(stdout, output, opts.output)
 }
 
 func parseReportArgs(args []string, stderr io.Writer) (reportOptions, string, string, error) {
 	opts := reportOptions{namespace: "fluxseer-rca-system", output: "json"}
 	if len(args) < 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
-		return opts, "", "", errors.New("usage: fluxseer report riskrule <name> [flags]")
+		return opts, "", "", errors.New("usage: fluxseer report <riskrule|agentaction> <name> [flags]")
 	}
 	resource := strings.ToLower(strings.TrimSpace(args[0]))
 	name := strings.TrimSpace(args[1])
@@ -82,13 +108,65 @@ func parseReportArgs(args []string, stderr io.Writer) (reportOptions, string, st
 		return opts, "", "", err
 	}
 	if len(fs.Args()) != 0 || name == "" {
-		return opts, "", "", errors.New("usage: fluxseer report riskrule <name> [flags]")
+		return opts, "", "", errors.New("usage: fluxseer report <riskrule|agentaction> <name> [flags]")
 	}
 	opts.output = strings.ToLower(strings.TrimSpace(opts.output))
 	if opts.output != "json" && opts.output != "yaml" {
 		return opts, "", "", fmt.Errorf("unsupported output format %q; use json or yaml", opts.output)
 	}
 	return opts, resource, name, nil
+}
+
+func buildAgentActionReport(ctx context.Context, kubeClient client.Client, namespace, name string) (agentActionReport, error) {
+	report := agentActionReport{
+		SchemaVersion: agentActionReportSchemaVersion,
+		Selection:     agentActionReportSelection{Namespace: namespace, AgentAction: name},
+	}
+	if err := kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &report.AgentAction); err != nil {
+		return report, fmt.Errorf("get AgentAction %s/%s: %w", namespace, name, err)
+	}
+	report.AgentAction.TypeMeta = metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "AgentAction"}
+	for _, owner := range report.AgentAction.OwnerReferences {
+		if owner.Kind != "RemediationPlan" || owner.Name == "" {
+			continue
+		}
+		var plan v1alpha1.RemediationPlan
+		if err := kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: owner.Name}, &plan); err != nil {
+			return report, fmt.Errorf("get RemediationPlan %s/%s: %w", namespace, owner.Name, err)
+		}
+		plan.TypeMeta = metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "RemediationPlan"}
+		report.RemediationPlan = &plan
+		break
+	}
+	if ref := namespacedReportRef(report.AgentAction.Annotations[riskSignalRefAnnotation], namespace); ref != nil {
+		var signal v1alpha1.RiskSignal
+		if err := kubeClient.Get(ctx, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}, &signal); err != nil {
+			return report, fmt.Errorf("get RiskSignal %s/%s: %w", ref.Namespace, ref.Name, err)
+		}
+		signal.TypeMeta = metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "RiskSignal"}
+		report.RiskSignal = &signal
+	}
+	if ref := report.AgentAction.Status.Effectiveness; ref != nil && report.AgentAction.Status.Effectiveness.VerificationRef != nil {
+		verificationRef := report.AgentAction.Status.Effectiveness.VerificationRef
+		var verification v1alpha1.InvestigationRequest
+		if err := kubeClient.Get(ctx, client.ObjectKey{Namespace: verificationRef.Namespace, Name: verificationRef.Name}, &verification); err != nil {
+			return report, fmt.Errorf("get verification InvestigationRequest %s/%s: %w", verificationRef.Namespace, verificationRef.Name, err)
+		}
+		verification.TypeMeta = metav1.TypeMeta{APIVersion: v1alpha1.SchemeGroupVersion.String(), Kind: "InvestigationRequest"}
+		report.Verification = &verification
+	}
+	return report, nil
+}
+
+func namespacedReportRef(value, defaultNamespace string) *v1alpha1.NamespacedObjectReference {
+	parts := strings.SplitN(strings.TrimSpace(value), "/", 2)
+	if len(parts) == 0 || parts[0] == "" {
+		return nil
+	}
+	if len(parts) == 1 {
+		return &v1alpha1.NamespacedObjectReference{Name: parts[0], Namespace: defaultNamespace}
+	}
+	return &v1alpha1.NamespacedObjectReference{Name: parts[1], Namespace: parts[0]}
 }
 
 func buildRiskRuleReport(ctx context.Context, kubeClient client.Client, namespace, name string) (riskRuleReport, error) {
@@ -168,6 +246,10 @@ func containsRiskSignal(items []v1alpha1.RiskSignal, namespace, name string) boo
 }
 
 func writeRiskRuleReport(w io.Writer, report riskRuleReport, output string) error {
+	return writeReport(w, report, output)
+}
+
+func writeReport(w io.Writer, report any, output string) error {
 	var (
 		data []byte
 		err  error
@@ -178,7 +260,7 @@ func writeRiskRuleReport(w io.Writer, report riskRuleReport, output string) erro
 		data, err = json.MarshalIndent(report, "", "  ")
 	}
 	if err != nil {
-		return fmt.Errorf("encode RiskRule report: %w", err)
+		return fmt.Errorf("encode public report: %w", err)
 	}
 	data = append(data, '\n')
 	_, err = w.Write(data)

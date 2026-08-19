@@ -167,8 +167,11 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	if stored.Status.Verdict.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
 		t.Fatalf("expected inconclusive verdict outcome, got %#v", stored.Status.Verdict)
 	}
-	if stored.Status.Verdict.RootCauseEntity.Name != "open-api" {
-		t.Fatalf("expected root cause entity open-api, got %#v", stored.Status.Verdict.RootCauseEntity)
+	if stored.Status.Verdict.RootCauseEntity != (v1alpha1.TargetRef{}) {
+		t.Fatalf("expected empty root cause entity for unverified RCA, got %#v", stored.Status.Verdict.RootCauseEntity)
+	}
+	if stored.Spec.Target.Name != "open-api" {
+		t.Fatalf("expected investigation target to remain open-api, got %#v", stored.Spec.Target)
 	}
 	if stored.Status.Verdict.RootCauseType != "" {
 		t.Fatalf("expected no root cause type for unverified RCA, got %#v", stored.Status.Verdict)
@@ -282,7 +285,7 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	}
 }
 
-func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *testing.T) {
+func TestInvestigationRequestReconcilerDoesNotPromoteUnverifiedRCA(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add apps scheme: %v", err)
@@ -361,39 +364,15 @@ func TestInvestigationRequestReconcilerPromotesToRiskSignalWhenRequested(t *test
 	if err := client.Get(context.Background(), types.NamespacedName{Name: request.Name, Namespace: request.Namespace}, &storedRequest); err != nil {
 		t.Fatalf("get request: %v", err)
 	}
-	if storedRequest.Status.LinkedRiskSignalRef == nil {
-		t.Fatal("expected linked risk signal ref")
+	if storedRequest.Status.LinkedRiskSignalRef != nil {
+		t.Fatalf("expected no linked risk signal ref for inconclusive RCA, got %#v", storedRequest.Status.LinkedRiskSignalRef)
 	}
-
-	var riskSignal v1alpha1.RiskSignal
-	if err := client.Get(context.Background(), types.NamespacedName{
-		Name:      storedRequest.Status.LinkedRiskSignalRef.Name,
-		Namespace: storedRequest.Status.LinkedRiskSignalRef.Namespace,
-	}, &riskSignal); err != nil {
-		t.Fatalf("get promoted risk signal: %v", err)
+	var riskSignals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &riskSignals); err != nil {
+		t.Fatalf("list risk signals: %v", err)
 	}
-	if riskSignal.Spec.Target.Name != "open-api" {
-		t.Fatalf("unexpected risk signal target %#v", riskSignal.Spec.Target)
-	}
-	if riskSignal.Spec.InvestigationRef == nil ||
-		riskSignal.Spec.InvestigationRef.Name != storedRequest.Name ||
-		riskSignal.Spec.InvestigationRef.Namespace != storedRequest.Namespace {
-		t.Fatalf("expected promoted risk signal to reference canonical investigation, got %#v", riskSignal.Spec.InvestigationRef)
-	}
-	if riskSignal.Status.Phase != v1alpha1.InvestigationOutcomeInconclusive ||
-		riskSignal.Status.RCASummary == "" ||
-		riskSignal.Status.RCAHypothesis != "" ||
-		len(riskSignal.Status.RCACauses) != 0 {
-		t.Fatalf("expected inconclusive RCA projection on promoted risk signal, got %#v", riskSignal.Status)
-	}
-	if riskSignal.Status.Projection == nil ||
-		riskSignal.Status.Projection.Mode != "InvestigationRequestProjection" ||
-		riskSignal.Status.Projection.ProjectedFrom == nil ||
-		riskSignal.Status.Projection.ProjectedFrom.Name != storedRequest.Name {
-		t.Fatalf("expected investigation projection metadata, got %#v", riskSignal.Status.Projection)
-	}
-	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
-		t.Fatalf("expected RCAReady false on promoted risk signal, got %#v", cond)
+	if len(riskSignals.Items) != 0 {
+		t.Fatalf("expected no investigation-projected risk signals for inconclusive RCA, got %#v", riskSignals.Items)
 	}
 }
 
@@ -599,41 +578,15 @@ func TestInvestigationRequestReconcilerKeepsUnverifiedUnhealthyEventInconclusive
 	if cond := findCondition(stored.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
 		t.Fatalf("expected RCAReady false RCAUnverified, got %#v", cond)
 	}
-	if stored.Status.LinkedRiskSignalRef == nil {
-		t.Fatal("expected linked risk signal ref")
+	if stored.Status.LinkedRiskSignalRef != nil {
+		t.Fatalf("expected no linked risk signal ref for inconclusive RCA, got %#v", stored.Status.LinkedRiskSignalRef)
 	}
-
-	var riskSignal v1alpha1.RiskSignal
-	if err := client.Get(context.Background(), types.NamespacedName{
-		Name:      stored.Status.LinkedRiskSignalRef.Name,
-		Namespace: stored.Status.LinkedRiskSignalRef.Namespace,
-	}, &riskSignal); err != nil {
-		t.Fatalf("get promoted risk signal: %v", err)
+	var riskSignals v1alpha1.RiskSignalList
+	if err := client.List(context.Background(), &riskSignals); err != nil {
+		t.Fatalf("list risk signals: %v", err)
 	}
-	if riskSignal.Status.Phase != v1alpha1.InvestigationOutcomeInconclusive ||
-		riskSignal.Status.RCAHypothesis != "" ||
-		len(riskSignal.Status.RCACauses) != 0 {
-		t.Fatalf("expected promoted risk signal to project inconclusive canonical RCA, got %#v", riskSignal.Status)
-	}
-	if cond := findCondition(riskSignal.Status.Conditions, conditionRCAReady); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "RCAUnverified" {
-		t.Fatalf("expected RCAReady false on promoted risk signal, got %#v", cond)
-	}
-
-	riskReconciler := &RiskSignalReconciler{
-		Client:  client,
-		Scheme:  scheme,
-		Enabled: true,
-		Now:     func() time.Time { return now },
-	}
-	if _, err := riskReconciler.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: riskSignal.Name, Namespace: riskSignal.Namespace},
-	}); err != nil {
-		t.Fatalf("risk signal reconcile failed: %v", err)
-	}
-	var plan v1alpha1.RemediationPlan
-	err := client.Get(context.Background(), types.NamespacedName{Name: riskSignal.Name + "-plan", Namespace: riskSignal.Namespace}, &plan)
-	if !apierrors.IsNotFound(err) {
-		t.Fatalf("expected no remediation plan for unverified investigation projection, got plan=%#v err=%v", plan, err)
+	if len(riskSignals.Items) != 0 {
+		t.Fatalf("expected no investigation-projected risk signals for inconclusive RCA, got %#v", riskSignals.Items)
 	}
 }
 
@@ -2125,14 +2078,16 @@ func TestInvestigationRequestReconcilerDoesNotMarkCrashLoopNoIssueFromScheduledO
 	if stored.Status.Phase != v1alpha1.PhaseCompleted || stored.Status.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
 		t.Fatalf("expected inconclusive status for scheduled-only CrashLoop profile evidence, got phase=%s outcome=%s", stored.Status.Phase, stored.Status.Outcome)
 	}
-	if len(stored.Status.MissingEvidence) != 1 || stored.Status.MissingEvidence[0].Reason != "CrashLoopEvidenceCoverageMissing" {
+	if len(stored.Status.MissingEvidence) != 2 ||
+		stored.Status.MissingEvidence[0].Reason != "CrashLoopEvidenceCoverageMissing" ||
+		stored.Status.MissingEvidence[1].Reason != "CrashLoopApplicationEvidenceMissing" {
 		t.Fatalf("expected missing CrashLoop semantic coverage, got %#v", stored.Status.MissingEvidence)
 	}
 	if stored.Status.EvidenceCoverage == nil ||
 		stored.Status.EvidenceCoverage.Profile != "CrashLoopBackOff" ||
-		!stringSlicesEqual(stored.Status.EvidenceCoverage.RequiredChecks, []string{"event:CrashLoopBackOff"}) ||
+		!stringSlicesEqual(stored.Status.EvidenceCoverage.RequiredChecks, []string{"event:CrashLoopBackOff", "log:ApplicationFailure"}) ||
 		len(stored.Status.EvidenceCoverage.CompletedChecks) != 0 ||
-		!stringSlicesEqual(stored.Status.EvidenceCoverage.IncompleteChecks, []string{"event:CrashLoopBackOff"}) ||
+		!stringSlicesEqual(stored.Status.EvidenceCoverage.IncompleteChecks, []string{"event:CrashLoopBackOff", "log:ApplicationFailure"}) ||
 		stored.Status.EvidenceCoverage.IssueMatches != 0 {
 		t.Fatalf("expected incomplete CrashLoop evidence coverage audit, got %#v", stored.Status.EvidenceCoverage)
 	}
@@ -2192,6 +2147,38 @@ func TestUnverifiedRCASummaryPrefersIssueMatchingEvidence(t *testing.T) {
 	}
 }
 
+func TestCausalRootCauseEntityUsesLinkedDependencyEvidence(t *testing.T) {
+	dependency := v1alpha1.TargetRef{APIVersion: "v1", Kind: "Service", Namespace: "prod", Name: "inventory"}
+	entity := causalRootCauseEntity(
+		[]v1alpha1.RCAClaim{{
+			Verification: verifier.VerificationSupported,
+			EvidenceRefs: []string{"evidence-002"},
+		}},
+		investigation.EvidenceCollectionResult{EvidenceRefs: []v1alpha1.EvidenceRef{
+			{ID: "evidence-001", Kind: string(domain.QueryTypeMetric), Source: "prometheus"},
+			{ID: "evidence-002", Kind: string(domain.QueryTypeLog), Source: "loki", RelatedTargets: []v1alpha1.TargetRef{dependency}},
+		}},
+	)
+	if entity == nil || !sameTargetRef(*entity, dependency) {
+		t.Fatalf("expected linked dependency entity, got %#v", entity)
+	}
+}
+
+func TestCausalRootCauseEntityDoesNotInferUnlinkedDependency(t *testing.T) {
+	entity := causalRootCauseEntity(
+		[]v1alpha1.RCAClaim{{
+			Verification: verifier.VerificationSupported,
+			EvidenceRefs: []string{"evidence-001"},
+		}},
+		investigation.EvidenceCollectionResult{EvidenceRefs: []v1alpha1.EvidenceRef{
+			{ID: "evidence-001", Kind: string(domain.QueryTypeLog), Source: "loki", Summary: "connection refused"},
+		}},
+	)
+	if entity != nil {
+		t.Fatalf("expected no inferred dependency without related target metadata, got %#v", entity)
+	}
+}
+
 func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -2221,13 +2208,14 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 			wantMissing:  []string{"deploymentCondition"},
 		},
 		{
-			name:    "crashloop event complete with abnormal evidence",
+			name:    "crashloop requires application evidence",
 			profile: "CrashLoopBackOff",
 			refs: []v1alpha1.EvidenceRef{
 				{Kind: string(domain.QueryTypeEvent), Reason: "BackOff", Summary: "container crashed repeatedly"},
 			},
-			wantComplete: true,
+			wantComplete: false,
 			wantNoIssue:  false,
+			wantMissing:  []string{string(domain.QueryTypeLog)},
 		},
 		{
 			name:    "latency metric complete and normal",
@@ -2239,6 +2227,45 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 			wantNoIssue:  true,
 		},
 		{
+			name:    "high HTTP error requires metric and causal dependency log",
+			profile: "HighHTTPErrorRate",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeMetric), Source: "prometheus", Summary: "http 5xx error rate returned value 0.42"},
+				{Kind: string(domain.QueryTypeLog), Source: "loki", Summary: "upstream inventory unavailable: connection refused", RelatedTargets: []v1alpha1.TargetRef{{APIVersion: "v1", Kind: "Service", Namespace: "prod", Name: "inventory"}}},
+			},
+			wantComplete: true,
+			wantNoIssue:  false,
+		},
+		{
+			name:    "high HTTP error metric alone is insufficient",
+			profile: "HighHTTPErrorRate",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeMetric), Source: "prometheus", Summary: "http 5xx error rate returned value 0.42"},
+			},
+			wantComplete: false,
+			wantNoIssue:  false,
+			wantMissing:  []string{string(domain.QueryTypeLog)},
+		},
+		{
+			name:    "failed scheduling requires supported predicate",
+			profile: "FailedScheduling",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeEvent), Reason: "FailedScheduling", Summary: "0/1 nodes are available: 1 Insufficient memory"},
+			},
+			wantComplete: true,
+			wantNoIssue:  false,
+		},
+		{
+			name:    "failed scheduling without supported predicate is incomplete",
+			profile: "FailedScheduling",
+			refs: []v1alpha1.EvidenceRef{
+				{Kind: string(domain.QueryTypeEvent), Reason: "FailedScheduling", Summary: "0/1 nodes are blocked: reason code redacted"},
+			},
+			wantComplete: false,
+			wantNoIssue:  false,
+			wantMissing:  []string{string(domain.QueryTypeEvent)},
+		},
+		{
 			name:    "crashloop explicit backoff query complete with no matching records",
 			profile: "CrashLoopBackOff",
 			queries: []v1alpha1.InvestigationQuery{
@@ -2248,8 +2275,9 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 					Reasons:   []string{"BackOff"},
 				},
 			},
-			wantComplete: true,
-			wantNoIssue:  true,
+			wantComplete: false,
+			wantNoIssue:  false,
+			wantMissing:  []string{string(domain.QueryTypeLog)},
 		},
 	}
 	for _, tt := range tests {
@@ -2930,6 +2958,8 @@ func (f fakeInvestigationDataSource) Capabilities() datasource.Capabilities {
 		return datasource.Capabilities{Logs: true}
 	case domain.QueryTypeEvent:
 		return datasource.Capabilities{Events: true}
+	case domain.QueryTypeProbeConfiguration:
+		return datasource.Capabilities{ProbeConfiguration: true}
 	default:
 		return datasource.Capabilities{}
 	}
@@ -2953,6 +2983,8 @@ func (f fakeInvestigationDataSource) Query(context.Context, datasource.QueryRequ
 		records = []map[string]any{
 			{"line": "error timeout"},
 		}
+	case domain.QueryTypeProbeConfiguration:
+		records = []map[string]any{}
 	}
 	return &datasource.QueryResult{Source: f.name, QueryType: f.queryType, Records: records}, nil
 }

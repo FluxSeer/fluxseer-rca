@@ -91,6 +91,7 @@ Focus:
 
 - **Safe Remediation**: prove that FluxSeer can safely execute an approved
   remediation and verify whether it actually fixed the incident
+- high-frequency SRE RCA scenario portfolio with bounded User-facing Reports
 - Kubernetes executor for a small, explicitly allowlisted action set
 - GitOps executor as the preferred mutation path where possible
 - controller-owned policy status and stronger execution auditability
@@ -113,6 +114,8 @@ Target outcomes:
 
 The detailed scope, dependency order, and acceptance gates are tracked in
 [`docs/backlog/v0.5-safe-remediation.md`](docs/backlog/v0.5-safe-remediation.md).
+The companion RCA scenario scope is tracked in
+[`docs/backlog/v0.5-sre-rca-scenario-portfolio.md`](docs/backlog/v0.5-sre-rca-scenario-portfolio.md).
 
 The first release checkpoint is `v0.5-alpha.1`:
 
@@ -120,6 +123,7 @@ The first release checkpoint is `v0.5-alpha.1`:
 Executor safety contract
 + one real allowlisted Kubernetes remediation path
 + post-action effectiveness verification
++ five high-frequency RCA scenarios
 ```
 
 GitOps is a follow-up v0.5 backend. It is not an `alpha.1` acceptance gate.
@@ -170,7 +174,8 @@ The following are intentionally not committed to the v0.5 MVP: a general
 Runbook executor, full multi-stage `EscalationChain` semantics, native
 Slack/Email/PagerDuty receivers, arbitrary alert-ingress automation,
 `NamespaceThreshold.spec.protectionLevel`, RawSnapshot storage, OTel or
-CloudWatch production support, replay execution, and adaptive runtime.
+CloudWatch production support, replay execution, adaptive runtime, complete
+cluster-wide RCA, Node/CNI/storage diagnosis, and a general dependency graph.
 
 ## Workstreams
 

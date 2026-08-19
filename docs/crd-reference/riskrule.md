@@ -38,6 +38,13 @@ Supported query types include:
 - `log`
 - `event`
 - `deploymentCondition`
+- `probeConfiguration`
+
+Target discovery supports `Deployment`, `StatefulSet`, `DaemonSet`, `Job`,
+`CronJob`, and `Pod`. Pod owner chains are canonicalized to their supported
+workload controller when possible. `deploymentCondition` evaluation remains
+specific to Deployment status; other workload kinds can use event, metric, or
+log signals.
 
 Target discovery supports `Deployment`, `StatefulSet`, `DaemonSet`, `Job`,
 `CronJob`, and `Pod`. Pod owner chains are canonicalized to their supported
