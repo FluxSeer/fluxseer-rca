@@ -181,6 +181,7 @@ func setupFailedSchedulingRuntimeCase(ctx context.Context, env *runtimeharness.E
 		Reason:         "FailedScheduling",
 		Message:        testCase.eventMessage,
 		Type:           corev1.EventTypeWarning,
+		LastTimestamp:  metav1.NewTime(now),
 	}); err != nil {
 		return fmt.Errorf("create FailedScheduling Event fixture: %w", err)
 	}

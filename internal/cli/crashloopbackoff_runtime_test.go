@@ -217,6 +217,7 @@ func setupCrashLoopBackOffRuntimeCase(ctx context.Context, env *runtimeharness.E
 		Reason:         "BackOff",
 		Message:        "Back-off restarting failed container",
 		Type:           corev1.EventTypeWarning,
+		LastTimestamp:  metav1.NewTime(now),
 	}); err != nil {
 		return fmt.Errorf("create BackOff Event fixture: %w", err)
 	}

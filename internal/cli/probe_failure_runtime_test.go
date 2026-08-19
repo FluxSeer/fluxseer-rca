@@ -198,6 +198,7 @@ func setupProbeFailureRuntimeCase(ctx context.Context, env *runtimeharness.Envir
 		Reason:         "Unhealthy",
 		Message:        testCase.eventMessage,
 		Type:           corev1.EventTypeWarning,
+		LastTimestamp:  metav1.NewTime(now),
 	}); err != nil {
 		return fmt.Errorf("create Unhealthy Event fixture: %w", err)
 	}
