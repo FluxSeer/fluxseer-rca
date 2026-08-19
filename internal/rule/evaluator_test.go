@@ -198,14 +198,14 @@ func TestEvaluateProbeConfigurationSignalRequiresConfirmedMismatch(t *testing.T)
 		Source:    "kubernetes-events",
 		QueryType: domain.QueryTypeProbeConfiguration,
 		Records: []map[string]any{{
-			"probeType":          "readiness",
-			"probePath":          "/ready",
-			"probeScheme":        "HTTP",
-			"probePortRaw":       "8080",
-			"containerPort":      int32(3000),
-			"resolution":         "NumericProbePortDoesNotMatchContainerPort",
-			"mismatchConfirmed":  true,
-			"reason":              "ProbeConfigurationMismatch",
+			"probeType":         "readiness",
+			"probePath":         "/ready",
+			"probeScheme":       "HTTP",
+			"probePortRaw":      "8080",
+			"containerPort":     int32(3000),
+			"resolution":        "NumericProbePortDoesNotMatchContainerPort",
+			"mismatchConfirmed": true,
+			"reason":            "ProbeConfigurationMismatch",
 		}},
 	}, domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout"}, "high")
 	if match == nil || len(match.Evidence) != 1 || match.Evidence[0].Kind != "probeConfiguration" || match.Evidence[0].Reason != "ProbeConfigurationMismatch" {

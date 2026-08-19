@@ -416,7 +416,7 @@ func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, acti
 
 func executionFinishedAt(execution *v1alpha1.AgentActionExecutionStatus, now time.Time) metav1.Time {
 	if execution != nil && execution.StartedAt != nil && !now.After(execution.StartedAt.Time) {
-		now = execution.StartedAt.Time.Add(time.Nanosecond)
+		now = execution.StartedAt.Add(time.Nanosecond)
 	}
 	return metav1.NewTime(now)
 }

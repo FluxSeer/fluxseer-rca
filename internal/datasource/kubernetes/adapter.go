@@ -352,7 +352,7 @@ func (a Adapter) findService(ctx context.Context, req datasource.QueryRequest) (
 			return &services.Items[i], nil
 		}
 	}
-	return nil, fmt.Errorf("Service %s/%s was not found for workload %s", req.Target.Namespace, serviceName, req.Target.Name)
+	return nil, fmt.Errorf("service %s/%s was not found for workload %s", req.Target.Namespace, serviceName, req.Target.Name)
 }
 
 func (a Adapter) workloadContainerPorts(ctx context.Context, req datasource.QueryRequest) ([]workloadContainerPort, error) {

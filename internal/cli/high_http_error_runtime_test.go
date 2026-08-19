@@ -147,7 +147,7 @@ func TestHighHTTPErrorRuntimeQualification(t *testing.T) {
 					_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"streams","result":[]}}`))
 					return
 				}
-				_, _ = w.Write([]byte(fmt.Sprintf(`{"status":"success","data":{"resultType":"streams","result":[{"stream":{"app":"checkout","dependency_kind":"Service","dependency_name":"inventory","dependency_namespace":%q,"dependency_api_version":"v1"},"values":[["1787058000000000000","upstream inventory unavailable: connection refused"]]}]}}`, namespace)))
+				_, _ = fmt.Fprintf(w, `{"status":"success","data":{"resultType":"streams","result":[{"stream":{"app":"checkout","dependency_kind":"Service","dependency_name":"inventory","dependency_namespace":%q,"dependency_api_version":"v1"},"values":[["1787058000000000000","upstream inventory unavailable: connection refused"]]}]}}`, namespace)
 			}))
 			defer lokiServer.Close()
 
