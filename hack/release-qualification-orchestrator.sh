@@ -237,10 +237,10 @@ verify_artifact_integrity() {
   operator_metadata="$(docker run --rm --platform linux/amd64 --entrypoint /fluxseer-rca-operator "${operator_ref}" version --output=json)"
   demo_metadata="$(docker run --rm --platform linux/amd64 --entrypoint /demo-observability "${demo_ref}" version --output=json)"
   jq -e --arg version "${RELEASE_VERSION}" --arg sourceCommit "${SOURCE_COMMIT}" \
-    '(.version == $version) and (.gitCommit == $sourceCommit) and (.gitDirty == false)' \
+    '(.version == $version) and (.gitCommit == $sourceCommit) and (.gitDirty == "false")' \
     <<<"${operator_metadata}" >/dev/null
   jq -e --arg version "${RELEASE_VERSION}" --arg sourceCommit "${SOURCE_COMMIT}" \
-    '(.version == $version) and (.gitCommit == $sourceCommit) and (.gitDirty == false)' \
+    '(.version == $version) and (.gitCommit == $sourceCommit) and (.gitDirty == "false")' \
     <<<"${demo_metadata}" >/dev/null
 }
 
