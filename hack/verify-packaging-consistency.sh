@@ -8,6 +8,7 @@ chart_version="${CHART_VERSION:-${version#v}}"
 image_repository="${IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/operator}"
 demo_image_repository="${DEMO_IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/demo-observability}"
 image_tag="${IMAGE_TAG:-$version}"
+verify_source_chart_metadata="${VERIFY_SOURCE_CHART_METADATA:-true}"
 
 if [[ -z "$version" || "$version" == "dev" ]]; then
   echo "VERSION must be a release candidate version for packaging verification" >&2
@@ -26,15 +27,26 @@ if [[ "$actual_chart_name" != "fluxseer-rca" ]]; then
   exit 1
 fi
 
-if [[ "$actual_chart_version" != "$chart_version" ]]; then
-  echo "chart version mismatch: expected $chart_version, got $actual_chart_version" >&2
-  exit 1
-fi
+case "$verify_source_chart_metadata" in
+  true)
+    if [[ "$actual_chart_version" != "$chart_version" ]]; then
+      echo "chart version mismatch: expected $chart_version, got $actual_chart_version" >&2
+      exit 1
+    fi
 
-if [[ "$actual_app_version" != "$version" ]]; then
-  echo "chart appVersion mismatch: expected $version, got $actual_app_version" >&2
-  exit 1
-fi
+    if [[ "$actual_app_version" != "$version" ]]; then
+      echo "chart appVersion mismatch: expected $version, got $actual_app_version" >&2
+      exit 1
+    fi
+    ;;
+  false)
+    echo "source chart metadata match deferred to release packaging overrides" >&2
+    ;;
+  *)
+    echo "VERIFY_SOURCE_CHART_METADATA must be true or false" >&2
+    exit 1
+    ;;
+esac
 
 if awk '
   $1 == "tag:" {

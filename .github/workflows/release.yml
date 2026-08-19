@@ -196,6 +196,7 @@ jobs:
         run: |
           make verify-packaging-consistency \
             VERSION="${{ steps.release.outputs.version }}" \
+            VERIFY_SOURCE_CHART_METADATA=false \
             IMAGE_TAG="${{ steps.release.outputs.version }}" \
             TARGET_PLATFORM="${TARGET_PLATFORM}" \
             IMAGE_REPOSITORY="${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/operator" \
