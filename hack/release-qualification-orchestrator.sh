@@ -29,7 +29,7 @@ export RELEASE_VERSION RELEASE_CHART_VERSION RELEASE_CHART_OCI RELEASE_OPERATOR_
 export RELEASE_QUALIFICATION_ARTIFACT_ROOT RELEASE_KIND_RCA_CLUSTER_NAME
 export RELEASE_KIND_REMEDIATION_CLUSTER_NAME
 
-if [[ ! "${RELEASE_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9A-Za-z.-]+$ ]]; then
+if [[ ! "${RELEASE_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]*rc\.[0-9A-Za-z.-]+$ ]]; then
   echo "release qualification requires a candidate version like v0.5.0-alpha.2-rc.<sha>" >&2
   exit 2
 fi
