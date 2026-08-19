@@ -66,7 +66,8 @@ EOF
 
   scenario_wait_jsonpath_equals "Pending Pod observed" "pod/${target_name}" "${namespace}" '{.status.phase}' Pending
   scenario_wait_event_fragment "${namespace}" "${target_name}" FailedScheduling "Insufficient memory"
-  scenario_wait_request_name "${namespace}" "${rule_name}"
+  scenario_wait_request_contract "${namespace}" "${rule_name}" \
+    Confirmed SchedulingFailure kubernetes-events FailedScheduling
   request_name="${SCENARIO_REQUEST_NAME}"
   scenario_wait_request_terminal "${namespace}" "${request_name}"
   scenario_wait_converged "${namespace}" "${rule_name}" "${request_name}"

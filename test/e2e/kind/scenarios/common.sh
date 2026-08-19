@@ -211,21 +211,38 @@ scenario_wait_event_fragment() {
     ".items | any(.[]; .involvedObject.name == \"${involved_name}\" and .reason == \"${reason}\" and (.message | contains(\"${fragment}\")))"
 }
 
-scenario_wait_request_name() {
+scenario_wait_request_contract() {
   local namespace="$1"
   local rule_name="$2"
+  local expected_outcome="$3"
+  local expected_root_type="$4"
+  local evidence_source="$5"
+  local evidence_reason="${6:-}"
   local deadline=$((SECONDS + LIVE_HARNESS_TIMEOUT_SECONDS))
   local name=""
+  local requests_json
 
   until [[ -n "${name}" ]]; do
-    name="$(scenario_kubectl get investigationrequests -n "${namespace}" -l "${SCENARIO_RULE_LABEL}=${rule_name}" -o json 2>/dev/null | jq -r '.items | sort_by(.metadata.creationTimestamp) | last.metadata.name // empty')"
+    requests_json="$(scenario_kubectl get investigationrequests -n "${namespace}" -l "${SCENARIO_RULE_LABEL}=${rule_name}" -o json 2>/dev/null || true)"
+    name="$(jq -r \
+      --arg outcome "${expected_outcome}" \
+      --arg rootType "${expected_root_type}" \
+      --arg source "${evidence_source}" \
+      --arg reason "${evidence_reason}" \
+      '[.items[]? | select(
+        .status.phase == "Completed" and
+        .status.outcome == $outcome and
+        ((.status.verdict.rootCauseType // "") == $rootType) and
+        (any(.status.evidenceRefs[]?; .source == $source and ($reason == "" or (.reason // "") == $reason)))
+      )] | sort_by(.metadata.creationTimestamp) | last.metadata.name // empty' \
+      <<<"${requests_json}" 2>/dev/null || true)"
     if [[ -n "${name}" ]]; then
       SCENARIO_REQUEST_NAME="${name}"
       export SCENARIO_REQUEST_NAME
       return 0
     fi
     if (( SECONDS >= deadline )); then
-      echo "timed out waiting for InvestigationRequest from ${namespace}/${rule_name}" >&2
+      echo "timed out waiting for a matching InvestigationRequest from ${namespace}/${rule_name}: outcome=${expected_outcome}, rootCauseType=${expected_root_type}, evidence=${evidence_source}/${evidence_reason}" >&2
       return 1
     fi
     sleep "${LIVE_HARNESS_POLL_SECONDS}"
