@@ -13,6 +13,7 @@ exit_code="${QUALIFICATION_EXIT_CODE:-1}"
 
 source_status=NOT_RUN
 candidate_publication_status=NOT_RUN
+candidate_publication_mode=not_run
 anonymous_distribution_status=NOT_RUN
 default_clean_room_status=NOT_RUN
 experimental_clean_room_status=NOT_RUN
@@ -20,11 +21,14 @@ artifact_integrity_status=NOT_RUN
 cleanup_status=NOT_RUN
 
 if [[ -f "${state_file}" ]]; then
-  while IFS=$'\t' read -r gate status _; do
+  while IFS=$'\t' read -r gate status _ mode; do
     [[ -n "${gate}" ]] || continue
     case "${gate}" in
       source) source_status="${status}" ;;
-      candidatePublication) candidate_publication_status="${status}" ;;
+      candidatePublication)
+        candidate_publication_status="${status}"
+        candidate_publication_mode="${mode:-not_run}"
+        ;;
       anonymousDistribution) anonymous_distribution_status="${status}" ;;
       defaultCleanRoom) default_clean_room_status="${status}" ;;
       experimentalCleanRoom) experimental_clean_room_status="${status}" ;;
@@ -103,6 +107,8 @@ jq -n \
   --arg version "${RELEASE_VERSION}" \
   --arg sourceCommit "${SOURCE_COMMIT}" \
   --arg result "${result}" \
+  --arg candidatePublicationResult "${candidate_publication_status}" \
+  --arg candidatePublicationMode "${candidate_publication_mode}" \
   --arg anonymousPull "${anonymous_distribution_status}" \
   --arg operatorRef "${operator_ref}" \
   --arg operatorDigest "${operator_digest}" \
@@ -118,7 +124,7 @@ jq -n \
   --arg qualifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg artifactRoot "${RELEASE_QUALIFICATION_ARTIFACT_ROOT}" \
   --argjson gates "${gates_json}" \
-  '{schemaVersion:$schema,version:$version,sourceCommit:$sourceCommit,candidate:true,result:$result,gates:$gates,artifacts:{operator:{ref:$operatorRef,digest:$operatorDigest},demoObservability:{ref:$demoRef,digest:$demoDigest},chart:{oci:$chartOCI,version:$chartVersion,digest:$chartDigest,downloadedPackageSHA256:$chartPackageSHA256}},environment:{kind:$kindVersion,kubectl:$kubectlVersion,helm:$helmVersion},evidence:{artifactRoot:$artifactRoot,anonymousPull:($anonymousPull == "PASS")},qualifiedAt:$qualifiedAt}' \
+  '{schemaVersion:$schema,version:$version,sourceCommit:$sourceCommit,candidate:true,result:$result,gates:$gates,candidatePublication:{result:$candidatePublicationResult,mode:$candidatePublicationMode,publishedThisRun:($candidatePublicationMode == "published"),version:$version,sourceCommit:$sourceCommit,artifacts:{operator:{ref:$operatorRef,digest:$operatorDigest},demoObservability:{ref:$demoRef,digest:$demoDigest},chart:{oci:$chartOCI,version:$chartVersion,digest:$chartDigest}}},artifacts:{operator:{ref:$operatorRef,digest:$operatorDigest},demoObservability:{ref:$demoRef,digest:$demoDigest},chart:{oci:$chartOCI,version:$chartVersion,digest:$chartDigest,downloadedPackageSHA256:$chartPackageSHA256}},environment:{kind:$kindVersion,kubectl:$kubectlVersion,helm:$helmVersion},evidence:{artifactRoot:$artifactRoot,anonymousPull:($anonymousPull == "PASS")},qualifiedAt:$qualifiedAt}' \
   >"${report_file}"
 
 if [[ "${result}" != "PASS" ]]; then

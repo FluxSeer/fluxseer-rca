@@ -20,12 +20,14 @@ RELEASE_WORKFLOW_REF="${RELEASE_WORKFLOW_REF:-main}"
 PUBLISH_CANDIDATE="${PUBLISH_CANDIDATE:-false}"
 RUN_RCA="${RUN_RCA:-true}"
 RUN_REMEDIATION="${RUN_REMEDIATION:-true}"
+CANDIDATE_PUBLICATION_MODE="not_run"
 RELEASE_TIMEOUT_SECONDS="${RELEASE_TIMEOUT_SECONDS:-1800}"
 RELEASE_POLL_SECONDS="${RELEASE_POLL_SECONDS:-10}"
 RELEASE_KIND_RCA_CLUSTER_NAME="${RELEASE_KIND_RCA_CLUSTER_NAME:-fluxseer-release-rca}"
 RELEASE_KIND_REMEDIATION_CLUSTER_NAME="${RELEASE_KIND_REMEDIATION_CLUSTER_NAME:-fluxseer-release-remediation}"
 
 export RELEASE_VERSION RELEASE_CHART_VERSION RELEASE_CHART_OCI RELEASE_OPERATOR_IMAGE_REPOSITORY RELEASE_DEMO_IMAGE_REPOSITORY
+export CANDIDATE_PUBLICATION_MODE
 export RELEASE_QUALIFICATION_ARTIFACT_ROOT RELEASE_KIND_RCA_CLUSTER_NAME
 export RELEASE_KIND_REMEDIATION_CLUSTER_NAME
 
@@ -112,7 +114,11 @@ run_gate() {
   local rc=0
   "$@" || rc=$?
   if (( rc == 0 )); then
-    printf '%s\tPASS\t0\n' "${name}" >>"${state_file}"
+    if [[ "${name}" == "candidatePublication" ]]; then
+      printf '%s\tPASS\t0\t%s\n' "${name}" "${CANDIDATE_PUBLICATION_MODE}" >>"${state_file}"
+    else
+      printf '%s\tPASS\t0\n' "${name}" >>"${state_file}"
+    fi
     echo "PASS ${name}"
   else
     printf '%s\tFAIL\t%s\n' "${name}" "${rc}" >>"${state_file}"
@@ -172,7 +178,15 @@ wait_for_candidate_publication() {
   local conclusion
   conclusion="$(gh run view "${run_id}" --json conclusion --jq '.conclusion')"
   [[ "${conclusion}" == "success" ]]
+  CANDIDATE_PUBLICATION_MODE="published"
+  export CANDIDATE_PUBLICATION_MODE
   echo "candidatePublicationRun=${run_id}"
+}
+
+verify_existing_candidate() {
+  CANDIDATE_PUBLICATION_MODE="existing"
+  export CANDIDATE_PUBLICATION_MODE
+  echo "candidate artifacts already exist; verifying them without republishing"
 }
 
 verify_anonymous_distribution() {
@@ -204,6 +218,11 @@ verify_anonymous_distribution() {
 
 verify_artifact_integrity() {
   local pull_dir="${RELEASE_QUALIFICATION_ARTIFACT_ROOT}/anonymous-pulls"
+  local operator_ref="${RELEASE_OPERATOR_IMAGE_REPOSITORY}:${RELEASE_VERSION}"
+  local demo_ref="${RELEASE_DEMO_IMAGE_REPOSITORY}:${RELEASE_VERSION}"
+  local operator_metadata
+  local demo_metadata
+  local rendered_chart="${pull_dir}/rendered-candidate.yaml"
   [[ -s "${pull_dir}/operator-imagetools.txt" ]]
   [[ -s "${pull_dir}/demo-imagetools.txt" ]]
   [[ -s "${pull_dir}/chart-metadata.txt" ]]
@@ -213,6 +232,20 @@ verify_artifact_integrity() {
   [[ "$(cat "${pull_dir}/chart-oci-digest.txt")" == sha256:* ]]
   grep -Fxq "version: ${RELEASE_CHART_VERSION}" "${pull_dir}/chart-metadata.txt"
   grep -Fxq "appVersion: ${RELEASE_VERSION}" "${pull_dir}/chart-metadata.txt"
+  helm template fluxseer-release "${RELEASE_CHART_OCI}" \
+    --version "${RELEASE_CHART_VERSION}" \
+    --set-string image.repository="${RELEASE_OPERATOR_IMAGE_REPOSITORY}" \
+    --set-string image.tag="${RELEASE_VERSION}" >"${rendered_chart}"
+  grep -Fq "image: \"${operator_ref}\"" "${rendered_chart}"
+
+  operator_metadata="$(docker run --rm --platform linux/amd64 --entrypoint /fluxseer-rca-operator "${operator_ref}" version --output=json)"
+  demo_metadata="$(docker run --rm --platform linux/amd64 --entrypoint /demo-observability "${demo_ref}" version --output=json)"
+  jq -e --arg version "${RELEASE_VERSION}" --arg sourceCommit "${SOURCE_COMMIT}" \
+    '(.version == $version) and (.gitCommit == $sourceCommit) and (.gitDirty == false)' \
+    <<<"${operator_metadata}" >/dev/null
+  jq -e --arg version "${RELEASE_VERSION}" --arg sourceCommit "${SOURCE_COMMIT}" \
+    '(.version == $version) and (.gitCommit == $sourceCommit) and (.gitDirty == false)' \
+    <<<"${demo_metadata}" >/dev/null
 }
 
 run_kind_profile() {
@@ -236,6 +269,9 @@ if [[ "${PUBLISH_CANDIDATE}" == "true" ]]; then
 fi
 run_gate "anonymousDistribution" verify_anonymous_distribution
 run_gate "artifactIntegrity" verify_artifact_integrity
+if [[ "${PUBLISH_CANDIDATE}" == "false" ]]; then
+  run_gate "candidatePublication" verify_existing_candidate
+fi
 if [[ "${RUN_RCA}" == "true" ]]; then
   run_gate "defaultCleanRoom" run_kind_profile rca
 fi
