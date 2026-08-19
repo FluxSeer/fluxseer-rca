@@ -51,7 +51,7 @@ env:
 jobs:
   publish:
     name: Publish Release Artifacts
-    runs-on: [self-hosted, Linux, X64, fluxseer-rca-test]
+    runs-on: ubuntu-latest
     steps:
       - name: Resolve release version
         id: release
