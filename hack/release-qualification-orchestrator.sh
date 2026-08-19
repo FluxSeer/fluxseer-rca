@@ -25,7 +25,7 @@ RELEASE_POLL_SECONDS="${RELEASE_POLL_SECONDS:-10}"
 RELEASE_KIND_RCA_CLUSTER_NAME="${RELEASE_KIND_RCA_CLUSTER_NAME:-fluxseer-release-rca}"
 RELEASE_KIND_REMEDIATION_CLUSTER_NAME="${RELEASE_KIND_REMEDIATION_CLUSTER_NAME:-fluxseer-release-remediation}"
 
-export RELEASE_VERSION RELEASE_CHART_VERSION RELEASE_CHART_OCI RELEASE_OPERATOR_IMAGE_REPOSITORY
+export RELEASE_VERSION RELEASE_CHART_VERSION RELEASE_CHART_OCI RELEASE_OPERATOR_IMAGE_REPOSITORY RELEASE_DEMO_IMAGE_REPOSITORY
 export RELEASE_QUALIFICATION_ARTIFACT_ROOT RELEASE_KIND_RCA_CLUSTER_NAME
 export RELEASE_KIND_REMEDIATION_CLUSTER_NAME
 
@@ -45,6 +45,8 @@ fi
 mkdir -p "${RELEASE_QUALIFICATION_ARTIFACT_ROOT}"
 log_file="${RELEASE_QUALIFICATION_ARTIFACT_ROOT}/orchestrator.log"
 exec > >(tee -a "${log_file}") 2>&1
+state_file="${RELEASE_QUALIFICATION_ARTIFACT_ROOT}/gate-status.tsv"
+: >"${state_file}"
 
 credential_root="$(mktemp -d "${TMPDIR:-/tmp}/fluxseer-release-qualification.XXXXXX")"
 export DOCKER_CONFIG="${credential_root}/docker"
@@ -56,16 +58,22 @@ mkdir -p "${DOCKER_CONFIG}" "${HELM_CONFIG_HOME}/registry" "${HELM_CACHE_HOME}" 
 printf '{}\n' >"${HELM_REGISTRY_CONFIG}"
 unset DOCKER_AUTH_CONFIG
 
+QUALIFICATION_KIND_VERSION="$(kind version --short 2>/dev/null || true)"
+QUALIFICATION_KUBECTL_VERSION="$(kubectl version --client --output=json 2>/dev/null | jq -r '.clientVersion.gitVersion' || true)"
+QUALIFICATION_HELM_VERSION="$(helm version --template '{{.Version}}' 2>/dev/null || true)"
+export QUALIFICATION_KIND_VERSION QUALIFICATION_KUBECTL_VERSION QUALIFICATION_HELM_VERSION
+
 cleanup() {
   local exit_code=$?
   trap - EXIT INT TERM
+  local cleanup_failed=false
 
   if command -v kind >/dev/null 2>&1; then
     for cluster in "${RELEASE_KIND_RCA_CLUSTER_NAME}" "${RELEASE_KIND_REMEDIATION_CLUSTER_NAME}"; do
       kind delete cluster --name "${cluster}" >/dev/null 2>&1 || true
       if kind get clusters 2>/dev/null | grep -qx "${cluster}"; then
         echo "cleanup failed: kind cluster remains: ${cluster}" >&2
-        exit_code=1
+        cleanup_failed=true
       fi
     done
   fi
@@ -75,6 +83,21 @@ cleanup() {
   fi
   if [[ -e "${credential_root}" ]]; then
     echo "cleanup failed: temporary credential state remains: ${credential_root}" >&2
+    cleanup_failed=true
+  fi
+
+  if [[ "${cleanup_failed}" == "true" ]]; then
+    printf 'cleanup\tFAIL\t1\n' >>"${state_file}"
+    exit_code=1
+  else
+    printf 'cleanup\tPASS\t0\n' >>"${state_file}"
+  fi
+
+  if ! RELEASE_VERSION="${RELEASE_VERSION}" \
+    SOURCE_COMMIT="${SOURCE_COMMIT}" \
+    RELEASE_QUALIFICATION_ARTIFACT_ROOT="${RELEASE_QUALIFICATION_ARTIFACT_ROOT}" \
+    QUALIFICATION_EXIT_CODE="${exit_code}" \
+    bash "${script_dir}/release-qualification-report.sh"; then
     exit_code=1
   fi
 
@@ -86,8 +109,16 @@ run_gate() {
   local name="$1"
   shift
   log_section "Release Qualification: ${name}"
-  "$@"
-  echo "PASS ${name}"
+  local rc=0
+  "$@" || rc=$?
+  if (( rc == 0 )); then
+    printf '%s\tPASS\t0\n' "${name}" >>"${state_file}"
+    echo "PASS ${name}"
+  else
+    printf '%s\tFAIL\t%s\n' "${name}" "${rc}" >>"${state_file}"
+    echo "FAIL ${name}" >&2
+    return "${rc}"
+  fi
 }
 
 log_section() {
@@ -159,7 +190,27 @@ verify_anonymous_distribution() {
     --version "${RELEASE_CHART_VERSION}" \
     --destination "${pull_dir}"
   helm show chart "${RELEASE_CHART_OCI}" --version "${RELEASE_CHART_VERSION}" \
-    | tee "${pull_dir}/chart-metadata.txt"
+    | tee "${pull_dir}/chart-metadata.txt" >/dev/null
+
+  local chart_ref="${RELEASE_CHART_OCI#oci://}"
+  local chart_registry="${chart_ref%%/*}"
+  local chart_repository="${chart_ref#*/}"
+  curl -fsS -D - -o /dev/null \
+    -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json' \
+    "https://${chart_registry}/v2/${chart_repository}/manifests/${RELEASE_CHART_VERSION}" \
+    | awk 'tolower($1) == "docker-content-digest:" && digest == "" {digest=$2} END {print digest}' \
+    | tr -d '\r' >"${pull_dir}/chart-oci-digest.txt"
+}
+
+verify_artifact_integrity() {
+  local pull_dir="${RELEASE_QUALIFICATION_ARTIFACT_ROOT}/anonymous-pulls"
+  [[ -s "${pull_dir}/operator-imagetools.txt" ]]
+  [[ -s "${pull_dir}/demo-imagetools.txt" ]]
+  [[ -s "${pull_dir}/chart-metadata.txt" ]]
+  [[ -s "${pull_dir}/chart-oci-digest.txt" ]]
+  [[ -n "$(awk '/Digest:/ {print $2; exit}' "${pull_dir}/operator-imagetools.txt")" ]]
+  [[ -n "$(awk '/Digest:/ {print $2; exit}' "${pull_dir}/demo-imagetools.txt")" ]]
+  [[ "$(cat "${pull_dir}/chart-oci-digest.txt")" == sha256:* ]]
   grep -Fxq "version: ${RELEASE_CHART_VERSION}" "${pull_dir}/chart-metadata.txt"
   grep -Fxq "appVersion: ${RELEASE_VERSION}" "${pull_dir}/chart-metadata.txt"
 }
@@ -181,14 +232,15 @@ echo "chart=${RELEASE_CHART_OCI}:${RELEASE_CHART_VERSION}"
 
 run_gate "source" verify_source
 if [[ "${PUBLISH_CANDIDATE}" == "true" ]]; then
-  run_gate "candidate publication" wait_for_candidate_publication
+  run_gate "candidatePublication" wait_for_candidate_publication
 fi
-run_gate "anonymous distribution" verify_anonymous_distribution
+run_gate "anonymousDistribution" verify_anonymous_distribution
+run_gate "artifactIntegrity" verify_artifact_integrity
 if [[ "${RUN_RCA}" == "true" ]]; then
-  run_gate "default clean-room" run_kind_profile rca
+  run_gate "defaultCleanRoom" run_kind_profile rca
 fi
 if [[ "${RUN_REMEDIATION}" == "true" ]]; then
-  run_gate "experimental clean-room" run_kind_profile experimental
+  run_gate "experimentalCleanRoom" run_kind_profile experimental
 fi
 
 log_section "Release Qualification Orchestrator Completed"
