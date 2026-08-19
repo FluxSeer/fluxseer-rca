@@ -340,8 +340,6 @@ func (r *AgentActionReconciler) failBeforeDispatch(ctx context.Context, action *
 func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, action *v1alpha1.AgentAction, request executor.ExecutorRequest, result executor.ExecutorResult, now time.Time) (ctrl.Result, error) {
 	originalPhase := action.Status.Phase
 	finishedAt := metav1.NewTime(now)
-	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, finishedAt.Time)
-	action.Status.FinishedAt = &finishedAt
 	executionID := result.ExecutionID
 	if executionID == "" {
 		executionID = request.ExecutionID
@@ -388,6 +386,12 @@ func (r *AgentActionReconciler) recordExecutionSuccess(ctx context.Context, acti
 			startedAt := metav1.NewTime(effectiveness.Baseline.CapturedAt.Add(time.Second))
 			executionStatus.StartedAt = &startedAt
 		}
+	}
+	finishedAt = executionFinishedAt(executionStatus, finishedAt.Time)
+	setResourceStatus(&action.Status.ResourceStatus, v1alpha1.PhaseSucceeded, result.Summary, action.Generation, finishedAt.Time)
+	action.Status.FinishedAt = &finishedAt
+	executionStatus.FinishedAt = &finishedAt
+	if effectiveness.Baseline != nil {
 		effectiveness.StartedAt = &finishedAt
 		settlingUntil := metav1.NewTime(now.Add(effectivenessSettlingPeriod))
 		observationUntil := metav1.NewTime(now.Add(effectivenessSettlingPeriod + effectivenessObservationWindow))
