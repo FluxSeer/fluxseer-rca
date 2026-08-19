@@ -60,7 +60,7 @@ mkdir -p "${DOCKER_CONFIG}" "${HELM_CONFIG_HOME}/registry" "${HELM_CACHE_HOME}" 
 printf '{}\n' >"${HELM_REGISTRY_CONFIG}"
 unset DOCKER_AUTH_CONFIG
 
-QUALIFICATION_KIND_VERSION="$(kind version --short 2>/dev/null || true)"
+QUALIFICATION_KIND_VERSION="$(kind version 2>/dev/null | awk 'NR == 1 {print $2}' || true)"
 QUALIFICATION_KUBECTL_VERSION="$(kubectl version --client --output=json 2>/dev/null | jq -r '.clientVersion.gitVersion' || true)"
 QUALIFICATION_HELM_VERSION="$(helm version --template '{{.Version}}' 2>/dev/null || true)"
 export QUALIFICATION_KIND_VERSION QUALIFICATION_KUBECTL_VERSION QUALIFICATION_HELM_VERSION
