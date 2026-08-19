@@ -220,12 +220,30 @@ remediation_assert_chain_contract() {
   local target_uid
   local before_generation
   local after_generation
+  local baseline_captured_at
+  local execution_started_at
+  local execution_finished_at
+  local effectiveness_finished_at
 
   remediation_wait_effectiveness_terminal "${namespace}" "${action_name}" "${expected_outcome}"
   verification_name="$(scenario_kubectl get "agentaction/${action_name}" -n "${namespace}" -o json | jq -r '.status.effectiveness.verificationRef.name')"
   execution_id="$(scenario_kubectl get "agentaction/${action_name}" -n "${namespace}" -o json | jq -r '.status.execution.executionID')"
   idempotency_key="$(scenario_kubectl get "agentaction/${action_name}" -n "${namespace}" -o json | jq -r '.status.execution.idempotencyKey')"
   target_uid="$(scenario_kubectl get "deployment/${target_name}" -n "${namespace}" -o json | jq -r '.metadata.uid')"
+  baseline_captured_at="$(scenario_kubectl get "agentaction/${action_name}" -n "${namespace}" -o json | jq -r '.status.effectiveness.baseline.capturedAt')"
+  execution_started_at="$(scenario_kubectl get "agentaction/${action_name}" -n "${namespace}" -o json | jq -r '.status.execution.startedAt')"
+  execution_finished_at="$(scenario_kubectl get "agentaction/${action_name}" -n "${namespace}" -o json | jq -r '.status.execution.finishedAt')"
+  effectiveness_finished_at="$(scenario_kubectl get "agentaction/${action_name}" -n "${namespace}" -o json | jq -r '.status.effectiveness.finishedAt')"
+
+  jq -n \
+    --arg baselineCapturedAt "${baseline_captured_at}" \
+    --arg executionStartedAt "${execution_started_at}" \
+    --arg executionFinishedAt "${execution_finished_at}" \
+    --arg effectivenessFinishedAt "${effectiveness_finished_at}" \
+    '($baselineCapturedAt | fromdateiso8601) < ($executionStartedAt | fromdateiso8601) and
+     ($executionStartedAt | fromdateiso8601) <= ($executionFinishedAt | fromdateiso8601) and
+     ($executionFinishedAt | fromdateiso8601) < ($effectivenessFinishedAt | fromdateiso8601)' \
+    >/dev/null
 
   scenario_assert_json_jq "agentaction/${action_name}" "${namespace}" \
     --arg expectedOutcome "${expected_outcome}" \
@@ -291,11 +309,11 @@ remediation_assert_chain_contract() {
     --arg executionID "${execution_id}" \
     --arg idempotencyKey "${idempotency_key}" \
     --arg verificationName "${verification_name}" \
-    --arg baselineCapturedAt "$(jq -r '.status.effectiveness.baseline.capturedAt' "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${fixture_mode}/agentaction.json")" \
-    --arg executionStartedAt "$(jq -r '.status.execution.startedAt' "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${fixture_mode}/agentaction.json")" \
-    --arg executionFinishedAt "$(jq -r '.status.execution.finishedAt' "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${fixture_mode}/agentaction.json")" \
+    --arg baselineCapturedAt "${baseline_captured_at}" \
+    --arg executionStartedAt "${execution_started_at}" \
+    --arg executionFinishedAt "${execution_finished_at}" \
     --arg verificationCreatedAt "$(jq -r '.metadata.creationTimestamp' "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${fixture_mode}/verification-request.json")" \
-    --arg verifiedAt "$(jq -r '.status.updatedAt' "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${fixture_mode}/agentaction.json")" \
+    --arg verifiedAt "${effectiveness_finished_at}" \
     '{schemaVersion:$schema,scenario:$scenario,expectedEffectiveness:$expectedOutcome,executionID:$executionID,idempotencyKey:$idempotencyKey,verificationRequest:$verificationName,sideEffects:{deploymentMutations:1,remediationPlans:1,agentActions:1,verificationRemediationPlans:0,verificationAgentActions:0},invariants:{executionSucceededIndependentlyOfEffectiveness:true,targetUIDBound:true,baselineBeforeExecution:true,verificationReadOnly:true,verificationCorrelated:true},timeline:{baselineCapturedAt:$baselineCapturedAt,executionStartedAt:$executionStartedAt,executionFinishedAt:$executionFinishedAt,verificationCreatedAt:$verificationCreatedAt,verifiedAt:$verifiedAt}}' \
     >"${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${fixture_mode}/internal-summary.json"
   cp "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${fixture_mode}/internal-summary.json" "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${fixture_mode}/timeline.json"
