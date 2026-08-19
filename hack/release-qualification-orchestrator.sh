@@ -200,19 +200,15 @@ verify_anonymous_distribution() {
   docker buildx imagetools inspect "${operator_ref}" >"${pull_dir}/operator-imagetools.txt"
   docker buildx imagetools inspect "${demo_ref}" >"${pull_dir}/demo-imagetools.txt"
 
+  local helm_pull_log="${pull_dir}/helm-pull.txt"
   helm pull "${RELEASE_CHART_OCI}" \
     --version "${RELEASE_CHART_VERSION}" \
-    --destination "${pull_dir}"
+    --destination "${pull_dir}" \
+    2>&1 | tee "${helm_pull_log}"
   helm show chart "${RELEASE_CHART_OCI}" --version "${RELEASE_CHART_VERSION}" \
     | tee "${pull_dir}/chart-metadata.txt" >/dev/null
 
-  local chart_ref="${RELEASE_CHART_OCI#oci://}"
-  local chart_registry="${chart_ref%%/*}"
-  local chart_repository="${chart_ref#*/}"
-  curl -fsS -D - -o /dev/null \
-    -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json' \
-    "https://${chart_registry}/v2/${chart_repository}/manifests/${RELEASE_CHART_VERSION}" \
-    | awk 'tolower($1) == "docker-content-digest:" && digest == "" {digest=$2} END {print digest}' \
+  awk '/^Digest:/ {print $2; exit}' "${helm_pull_log}" \
     | tr -d '\r' >"${pull_dir}/chart-oci-digest.txt"
 }
 
