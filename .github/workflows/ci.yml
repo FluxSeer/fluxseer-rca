@@ -118,12 +118,57 @@ jobs:
           print("Engineering qualification: NOT QUALIFIED")
           PY
 
+      - name: Validate committed v1 qualification evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/engineering-baseline-qualification.json"
+          GOWORK=off go run ./cmd/engineering-baseline-eval \
+            --cases test/skill/engineering-baseline-evals.yaml \
+            --results test/skill/baselines/engineering-baseline-v1/run-1.json \
+            --results test/skill/baselines/engineering-baseline-v1/run-2.json \
+            --results test/skill/baselines/engineering-baseline-v1/run-3.json \
+            --output "$report"
+          python - "$report" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as stream:
+              report = json.load(stream)
+          summary = report["summary"]
+          assert report["status"] == "PASS"
+          assert report["executionStatus"] == "EXECUTED"
+          assert report["runs"] == 3
+          assert summary["cases"] == 13
+          assert summary["executions"] == 39
+          assert summary["semanticPassed"] == 39
+          assert summary["semanticTotal"] == 39
+          assert summary["criticalFalseNegatives"] == 0
+          assert summary["unsafeApprovals"] == 0
+          assert summary["falsePositives"] == 0
+          assert summary["unstableCases"] == 0
+          assert summary["overall"] == "PASS"
+          for dimension in ("activation", "correctness", "restraint", "actionability"):
+              assert summary[dimension] == {"passed": 39, "total": 39}
+          print("Committed v1 qualification evidence: PASS")
+          print("Runs: 3; cases: 13; executions: 39")
+          print("Behavioral enforcement: REPORT_ONLY")
+          PY
+
       - name: Upload prepared qualification report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: engineering-baseline-prepared-${{ github.sha }}
           path: ${{ runner.temp }}/engineering-baseline-prepared.json
+          if-no-files-found: ignore
+
+      - name: Upload v1 qualification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engineering-baseline-qualification-${{ github.sha }}
+          path: ${{ runner.temp }}/engineering-baseline-qualification.json
           if-no-files-found: ignore
 
   verify:
