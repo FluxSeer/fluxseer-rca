@@ -36,6 +36,16 @@ func TestEvaluateScoresSemanticChecks(t *testing.T) {
 	if report.Summary.FalseNegatives != 0 || report.Summary.FalsePositives != 0 {
 		t.Fatalf("unexpected error counts: %#v", report.Summary)
 	}
+	for name, dimension := range map[string]DimensionSummary{
+		"activation":    report.Summary.Activation,
+		"correctness":   report.Summary.Correctness,
+		"restraint":     report.Summary.Restraint,
+		"actionability": report.Summary.Actionability,
+	} {
+		if dimension.Passed != dimension.Total || dimension.Total != len(corpus.Cases) {
+			t.Fatalf("%s summary does not cover every case: %#v", name, dimension)
+		}
+	}
 }
 
 func TestEvaluateRejectsRestraintViolation(t *testing.T) {
@@ -82,6 +92,9 @@ func TestEvaluateRunsMarksMixedResultsUnstable(t *testing.T) {
 	}
 	if report.Summary.SemanticPassed != 5 || report.Summary.SemanticTotal != 6 {
 		t.Fatalf("unexpected semantic totals: %#v", report.Summary)
+	}
+	if report.Summary.Executions != 6 {
+		t.Fatalf("expected one execution per case per run, got %#v", report.Summary)
 	}
 }
 

@@ -1,0 +1,166 @@
+{
+  "schemaVersion": "fluxseer-engineering-baseline-qualification/v1",
+  "executionStatus": "EXECUTED",
+  "status": "PASS",
+  "runs": 3,
+  "summary": {
+    "cases": 13,
+    "executions": 39,
+    "activation": {
+      "passed": 39,
+      "total": 39
+    },
+    "correctness": {
+      "passed": 39,
+      "total": 39
+    },
+    "restraint": {
+      "passed": 39,
+      "total": 39
+    },
+    "actionability": {
+      "passed": 39,
+      "total": 39
+    },
+    "classResults": {
+      "safe-counterexample": {
+        "passed": 15,
+        "total": 15
+      },
+      "unrelated": {
+        "passed": 9,
+        "total": 9
+      },
+      "violation": {
+        "passed": 15,
+        "total": 15
+      }
+    },
+    "semanticPassed": 39,
+    "semanticTotal": 39,
+    "criticalFalseNegatives": 0,
+    "unsafeApprovals": 0,
+    "falsePositives": 0,
+    "unstableCases": 0,
+    "overall": "PASS"
+  },
+  "cases": [
+    {
+      "case_id": "provider-boundary-violation",
+      "class": "violation",
+      "critical": true,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "unsafe-performance-optimization",
+      "class": "violation",
+      "critical": true,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "public-crd-removal",
+      "class": "violation",
+      "critical": true,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "unsupported-rca-conclusion",
+      "class": "violation",
+      "critical": true,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "duplicate-kubernetes-client",
+      "class": "violation",
+      "critical": false,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "provider-boundary-valid",
+      "class": "safe-counterexample",
+      "critical": false,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "performance-with-benchmark",
+      "class": "safe-counterexample",
+      "critical": false,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "backward-compatible-crd-extension",
+      "class": "safe-counterexample",
+      "critical": false,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "correctly-inconclusive-rca",
+      "class": "safe-counterexample",
+      "critical": false,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "shared-informer-reuse",
+      "class": "safe-counterexample",
+      "critical": false,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "readme-typo",
+      "class": "unrelated",
+      "critical": false,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "comment-cleanup",
+      "class": "unrelated",
+      "critical": false,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    },
+    {
+      "case_id": "formatting-only",
+      "class": "unrelated",
+      "critical": false,
+      "runs": 3,
+      "passed": 3,
+      "unstable": false,
+      "criticalFailure": false
+    }
+  ]
+}

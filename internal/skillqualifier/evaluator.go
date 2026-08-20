@@ -330,7 +330,7 @@ func EvaluateRuns(corpus Corpus, runs []CapturedRun) (AggregateReport, error) {
 		Runs:            len(perRun),
 		Summary: AggregateSummary{
 			Cases:        len(corpus.Cases),
-			Executions:   len(perRun),
+			Executions:   len(perRun) * len(corpus.Cases),
 			ClassResults: map[string]ClassSummary{},
 		},
 		Cases: make([]StabilityCaseResult, 0, len(corpus.Cases)),
@@ -451,17 +451,10 @@ func evaluateCase(item Case, actual CapturedResult) CaseResult {
 
 func accumulateSummary(summary *Summary, item Case, result CaseResult) {
 	checks := *result.Checks
-	for value, target := range map[bool]*DimensionSummary{
-		checks.Activation:    &summary.Activation,
-		checks.Correctness:   &summary.Correctness,
-		checks.Restraint:     &summary.Restraint,
-		checks.Actionability: &summary.Actionability,
-	} {
-		(*target).Total++
-		if value {
-			(*target).Passed++
-		}
-	}
+	accumulateDimension(&summary.Activation, checks.Activation)
+	accumulateDimension(&summary.Correctness, checks.Correctness)
+	accumulateDimension(&summary.Restraint, checks.Restraint)
+	accumulateDimension(&summary.Actionability, checks.Actionability)
 	class := summary.ClassResults[item.Class]
 	class.Total++
 	if result.Pass != nil && *result.Pass {
@@ -472,6 +465,13 @@ func accumulateSummary(summary *Summary, item Case, result CaseResult) {
 		summary.FalsePositives++
 	}
 	summary.ClassResults[item.Class] = class
+}
+
+func accumulateDimension(summary *DimensionSummary, passed bool) {
+	summary.Total++
+	if passed {
+		summary.Passed++
+	}
 }
 
 func preparedCases(cases []Case) []CaseResult {

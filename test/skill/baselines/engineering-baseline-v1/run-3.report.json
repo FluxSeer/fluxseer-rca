@@ -1,0 +1,610 @@
+{
+  "schemaVersion": "fluxseer-engineering-baseline-qualification/v1",
+  "executionStatus": "EXECUTED",
+  "status": "PASS",
+  "summary": {
+    "cases": 13,
+    "executed": 13,
+    "activation": {
+      "passed": 13,
+      "total": 13
+    },
+    "correctness": {
+      "passed": 13,
+      "total": 13
+    },
+    "restraint": {
+      "passed": 13,
+      "total": 13
+    },
+    "actionability": {
+      "passed": 13,
+      "total": 13
+    },
+    "classResults": {
+      "safe-counterexample": {
+        "passed": 5,
+        "total": 10
+      },
+      "unrelated": {
+        "passed": 3,
+        "total": 6
+      },
+      "violation": {
+        "passed": 5,
+        "total": 10
+      }
+    },
+    "falseNegatives": 0,
+    "falsePositives": 0,
+    "overall": "PASS"
+  },
+  "cases": [
+    {
+      "case_id": "provider-boundary-violation",
+      "class": "violation",
+      "critical": true,
+      "skill_activated": true,
+      "decision": "NEEDS_CHANGES",
+      "expected": {
+        "skillRequired": true,
+        "decision": [
+          "NEEDS_CHANGES"
+        ],
+        "mustIdentify": [
+          "provider_specific_core_coupling",
+          "unsupported_production_claim"
+        ],
+        "mustRecommend": [
+          "provider_adapter_boundary",
+          "compatibility_review"
+        ],
+        "mustNotFlag": []
+      },
+      "actual": {
+        "case_id": "provider-boundary-violation",
+        "skill_activated": true,
+        "decision": "NEEDS_CHANGES",
+        "identified": [
+          "provider_specific_core_coupling",
+          "unsupported_production_claim"
+        ],
+        "recommended": [
+          "provider_adapter_boundary",
+          "compatibility_review"
+        ],
+        "flags": [],
+        "trace_ref": "run-3/provider-boundary-violation"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "unsafe-performance-optimization",
+      "class": "violation",
+      "critical": true,
+      "skill_activated": true,
+      "decision": "NEEDS_CHANGES",
+      "expected": {
+        "skillRequired": true,
+        "decision": [
+          "NEEDS_CHANGES"
+        ],
+        "mustIdentify": [
+          "evidence_correctness_risk",
+          "missing_performance_measurement"
+        ],
+        "mustRecommend": [
+          "benchmark_before_optimization",
+          "preserve_evidence_contract"
+        ],
+        "mustNotFlag": []
+      },
+      "actual": {
+        "case_id": "unsafe-performance-optimization",
+        "skill_activated": true,
+        "decision": "NEEDS_CHANGES",
+        "identified": [
+          "evidence_correctness_risk",
+          "missing_performance_measurement"
+        ],
+        "recommended": [
+          "benchmark_before_optimization",
+          "preserve_evidence_contract"
+        ],
+        "flags": [],
+        "trace_ref": "run-3/unsafe-performance-optimization"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "public-crd-removal",
+      "class": "violation",
+      "critical": true,
+      "skill_activated": true,
+      "decision": "NEEDS_CHANGES",
+      "expected": {
+        "skillRequired": true,
+        "decision": [
+          "NEEDS_CHANGES"
+        ],
+        "mustIdentify": [
+          "public_contract",
+          "breaking_change"
+        ],
+        "mustRecommend": [
+          "deprecation_migration",
+          "compatibility_verification"
+        ],
+        "mustNotFlag": []
+      },
+      "actual": {
+        "case_id": "public-crd-removal",
+        "skill_activated": true,
+        "decision": "NEEDS_CHANGES",
+        "identified": [
+          "public_contract",
+          "breaking_change"
+        ],
+        "recommended": [
+          "deprecation_migration",
+          "compatibility_verification"
+        ],
+        "flags": [],
+        "trace_ref": "run-3/public-crd-removal"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "unsupported-rca-conclusion",
+      "class": "violation",
+      "critical": true,
+      "skill_activated": true,
+      "decision": "NEEDS_CHANGES",
+      "expected": {
+        "skillRequired": true,
+        "decision": [
+          "NEEDS_CHANGES"
+        ],
+        "mustIdentify": [
+          "insufficient_evidence",
+          "unsupported_causation"
+        ],
+        "mustRecommend": [
+          "inconclusive_result",
+          "collect_missing_metrics"
+        ],
+        "mustNotFlag": []
+      },
+      "actual": {
+        "case_id": "unsupported-rca-conclusion",
+        "skill_activated": true,
+        "decision": "NEEDS_CHANGES",
+        "identified": [
+          "insufficient_evidence",
+          "unsupported_causation"
+        ],
+        "recommended": [
+          "inconclusive_result",
+          "collect_missing_metrics"
+        ],
+        "flags": [],
+        "trace_ref": "run-3/unsupported-rca-conclusion"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "duplicate-kubernetes-client",
+      "class": "violation",
+      "critical": false,
+      "skill_activated": true,
+      "decision": "NEEDS_CHANGES",
+      "expected": {
+        "skillRequired": true,
+        "decision": [
+          "NEEDS_CHANGES"
+        ],
+        "mustIdentify": [
+          "duplicate_client",
+          "api_server_load_risk"
+        ],
+        "mustRecommend": [
+          "reuse_existing_client",
+          "idempotency_rbac_review"
+        ],
+        "mustNotFlag": []
+      },
+      "actual": {
+        "case_id": "duplicate-kubernetes-client",
+        "skill_activated": true,
+        "decision": "NEEDS_CHANGES",
+        "identified": [
+          "duplicate_client",
+          "api_server_load_risk"
+        ],
+        "recommended": [
+          "reuse_existing_client",
+          "idempotency_rbac_review"
+        ],
+        "flags": [],
+        "trace_ref": "run-3/duplicate-kubernetes-client"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "provider-boundary-valid",
+      "class": "safe-counterexample",
+      "critical": false,
+      "skill_activated": true,
+      "decision": "PASS",
+      "expected": {
+        "skillRequired": true,
+        "decision": [
+          "PASS"
+        ],
+        "mustIdentify": [
+          "provider_adapter_boundary"
+        ],
+        "mustRecommend": [
+          "adapter_contract_tests",
+          "support_matrix_update"
+        ],
+        "mustNotFlag": [
+          "provider_specific_core_coupling",
+          "unnecessary_abstraction"
+        ]
+      },
+      "actual": {
+        "case_id": "provider-boundary-valid",
+        "skill_activated": true,
+        "decision": "PASS",
+        "identified": [
+          "provider_adapter_boundary"
+        ],
+        "recommended": [
+          "adapter_contract_tests",
+          "support_matrix_update"
+        ],
+        "flags": [],
+        "trace_ref": "run-3/provider-boundary-valid"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "performance-with-benchmark",
+      "class": "safe-counterexample",
+      "critical": false,
+      "skill_activated": true,
+      "decision": "PASS",
+      "expected": {
+        "skillRequired": true,
+        "decision": [
+          "PASS"
+        ],
+        "mustIdentify": [
+          "measured_optimization",
+          "unchanged_findings"
+        ],
+        "mustRecommend": [
+          "retain_regression_benchmark"
+        ],
+        "mustNotFlag": [
+          "premature_optimization",
+          "unsupported_performance_claim"
+        ]
+      },
+      "actual": {
+        "case_id": "performance-with-benchmark",
+        "skill_activated": true,
+        "decision": "PASS",
+        "identified": [
+          "measured_optimization",
+          "unchanged_findings"
+        ],
+        "recommended": [
+          "retain_regression_benchmark"
+        ],
+        "flags": [],
+        "trace_ref": "run-3/performance-with-benchmark"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "backward-compatible-crd-extension",
+      "class": "safe-counterexample",
+      "critical": false,
+      "skill_activated": true,
+      "decision": "PASS",
+      "expected": {
+        "skillRequired": true,
+        "decision": [
+          "PASS"
+        ],
+        "mustIdentify": [
+          "non_breaking_extension",
+          "compatibility_verification"
+        ],
+        "mustRecommend": [
+          "upgrade_regression_test",
+          "documentation_update"
+        ],
+        "mustNotFlag": [
+          "silent_breaking_change"
+        ]
+      },
+      "actual": {
+        "case_id": "backward-compatible-crd-extension",
+        "skill_activated": true,
+        "decision": "PASS",
+        "identified": [
+          "non_breaking_extension",
+          "compatibility_verification"
+        ],
+        "recommended": [
+          "upgrade_regression_test",
+          "documentation_update"
+        ],
+        "flags": [],
+        "trace_ref": "run-3/backward-compatible-crd-extension"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "correctly-inconclusive-rca",
+      "class": "safe-counterexample",
+      "critical": false,
+      "skill_activated": true,
+      "decision": "PASS",
+      "expected": {
+        "skillRequired": true,
+        "decision": [
+          "PASS"
+        ],
+        "mustIdentify": [
+          "insufficient_evidence",
+          "qualified_hypothesis"
+        ],
+        "mustRecommend": [
+          "collect_missing_metrics"
+        ],
+        "mustNotFlag": [
+          "unsupported_causation",
+          "fabricated_evidence"
+        ]
+      },
+      "actual": {
+        "case_id": "correctly-inconclusive-rca",
+        "skill_activated": true,
+        "decision": "PASS",
+        "identified": [
+          "insufficient_evidence",
+          "qualified_hypothesis"
+        ],
+        "recommended": [
+          "collect_missing_metrics"
+        ],
+        "flags": [],
+        "trace_ref": "run-3/correctly-inconclusive-rca"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "shared-informer-reuse",
+      "class": "safe-counterexample",
+      "critical": false,
+      "skill_activated": true,
+      "decision": "PASS",
+      "expected": {
+        "skillRequired": true,
+        "decision": [
+          "PASS"
+        ],
+        "mustIdentify": [
+          "existing_client_reuse",
+          "bounded_target_scope"
+        ],
+        "mustRecommend": [
+          "api_load_test",
+          "least_privilege_rbac"
+        ],
+        "mustNotFlag": [
+          "duplicate_client",
+          "broad_read_only_permissions"
+        ]
+      },
+      "actual": {
+        "case_id": "shared-informer-reuse",
+        "skill_activated": true,
+        "decision": "PASS",
+        "identified": [
+          "existing_client_reuse",
+          "bounded_target_scope"
+        ],
+        "recommended": [
+          "api_load_test",
+          "least_privilege_rbac"
+        ],
+        "flags": [],
+        "trace_ref": "run-3/shared-informer-reuse"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "readme-typo",
+      "class": "unrelated",
+      "critical": false,
+      "skill_activated": false,
+      "decision": "PASS",
+      "expected": {
+        "skillRequired": false,
+        "decision": [
+          "PASS"
+        ],
+        "mustIdentify": [],
+        "mustRecommend": [],
+        "mustNotFlag": [
+          "architecture_change",
+          "public_runtime_change"
+        ]
+      },
+      "actual": {
+        "case_id": "readme-typo",
+        "skill_activated": false,
+        "decision": "PASS",
+        "identified": [],
+        "recommended": [],
+        "flags": [],
+        "trace_ref": "run-3/readme-typo"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "comment-cleanup",
+      "class": "unrelated",
+      "critical": false,
+      "skill_activated": false,
+      "decision": "PASS",
+      "expected": {
+        "skillRequired": false,
+        "decision": [
+          "PASS"
+        ],
+        "mustIdentify": [],
+        "mustRecommend": [],
+        "mustNotFlag": [
+          "risky_engineering_change",
+          "compatibility_review_required"
+        ]
+      },
+      "actual": {
+        "case_id": "comment-cleanup",
+        "skill_activated": false,
+        "decision": "PASS",
+        "identified": [],
+        "recommended": [],
+        "flags": [],
+        "trace_ref": "run-3/comment-cleanup"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    },
+    {
+      "case_id": "formatting-only",
+      "class": "unrelated",
+      "critical": false,
+      "skill_activated": false,
+      "decision": "PASS",
+      "expected": {
+        "skillRequired": false,
+        "decision": [
+          "PASS"
+        ],
+        "mustIdentify": [],
+        "mustRecommend": [],
+        "mustNotFlag": [
+          "feature_design_required",
+          "performance_benchmark_required"
+        ]
+      },
+      "actual": {
+        "case_id": "formatting-only",
+        "skill_activated": false,
+        "decision": "PASS",
+        "identified": [],
+        "recommended": [],
+        "flags": [],
+        "trace_ref": "run-3/formatting-only"
+      },
+      "checks": {
+        "activation": true,
+        "correctness": true,
+        "restraint": true,
+        "actionability": true
+      },
+      "score": 1,
+      "pass": true
+    }
+  ]
+}
