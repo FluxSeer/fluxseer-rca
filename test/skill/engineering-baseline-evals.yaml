@@ -6,8 +6,8 @@ purpose: >-
   project's engineering baseline rather than merely loading valid YAML.
 executionStatus: prepared-not-executed
 executionNote: >-
-  Agent captures are supplied separately to the runner. This corpus does not
-  prove behavioral qualification by itself.
+  Agent captures may be supplied by a local Codex session or external harness.
+  This corpus does not prove behavioral qualification by itself.
 cases:
   - id: provider-boundary-violation
     class: violation
