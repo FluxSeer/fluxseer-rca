@@ -57,9 +57,9 @@ type Expectations struct {
 	MustNotFlag   []string `json:"mustNotFlag"`
 }
 
-// CapturedRun is the structured output supplied by an external Agent eval
-// harness. It intentionally contains semantic tokens rather than free-text
-// expected output, so wording changes do not invalidate a judgment.
+// CapturedRun is the structured output supplied by a local Agent session or
+// external eval harness. It intentionally contains semantic tokens rather than
+// free-text expected output, so wording changes do not invalidate a judgment.
 type CapturedRun struct {
 	SchemaVersion string           `json:"schemaVersion"`
 	RunID         string           `json:"runId"`

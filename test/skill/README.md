@@ -7,17 +7,18 @@ repository's `engineering-baseline` Skill. It contains:
 - five safe counterexamples for restraint;
 - three unrelated controls that should not activate the Skill.
 
-The corpus is not itself an Agent qualification result. An external Agent eval
-harness must capture structured semantic tokens and pass them to the runner.
+The corpus is not itself an Agent qualification result. A local Codex session
+or an external Agent harness must capture structured semantic tokens and pass
+them to the runner.
 
 ## CI gate
 
 `.github/workflows/ci.yml` runs the repository regression suite, validates the
 Skill metadata, and checks that the golden corpus produces a `PREPARED` report
 with 13 cases and 4 critical cases. The deterministic checks are a hard CI
-gate; behavioral evidence remains report-only. CI does not invent Agent
-captures, so L3 Agent Execution remains `PENDING` until an external Agent
-harness supplies real results.
+gate; behavioral evidence remains report-only. CI does not call an Agent API or
+invent captures, so L3 Agent Execution remains `PENDING` until a local Codex
+session or external Agent harness supplies real results.
 
 ## Qualification status
 
@@ -63,9 +64,19 @@ GOWORK=off go run ./cmd/engineering-baseline-eval \
 Without `--results`, the runner reports `executionStatus: PREPARED` and
 `summary.overall: PREPARED`. This is intentionally not a qualification pass.
 
+## Local Codex evidence collection
+
+Agent API execution is not a CI prerequisite. To qualify locally, use a fixed
+Codex Skill/model/configuration to evaluate all 13 cases three times, preserve
+the raw session transcripts for audit, and write one normalized result file per
+run. Then pass those files to the existing runner below. Normalization and
+aggregation remain deterministic repository checks; the local Codex session is
+the only behavioral evidence collection step.
+
 ## Captured result contract
 
-The external harness should write JSON or YAML with this shape:
+A local Codex session or external harness should write JSON or YAML with this
+shape:
 
 ```yaml
 schemaVersion: fluxseer-engineering-baseline-results/v1
