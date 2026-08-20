@@ -14,11 +14,11 @@ them to the runner.
 ## CI gate
 
 `.github/workflows/ci.yml` runs the repository regression suite, validates the
-Skill metadata, and checks that the golden corpus produces a `PREPARED` report
-with 13 cases and 4 critical cases. The deterministic checks are a hard CI
-gate; behavioral evidence remains report-only. CI does not call an Agent API or
-invent captures, so L3 Agent Execution remains `PENDING` until a local Codex
-session or external Agent harness supplies real results.
+Skill metadata, checks that the golden corpus produces a `PREPARED` report with
+13 cases and 4 critical cases, and deterministically re-aggregates the
+committed v1 captures. The deterministic checks are a hard CI gate; behavioral
+enforcement remains report-only. CI does not call an Agent API or invent new
+captures.
 
 ## Qualification status
 
@@ -38,20 +38,22 @@ L3 Behavioral Qualification
   Runner Infrastructure    PASS
   Stability Contract       PASS
   Aggregation Contract     PASS
-  Agent Execution          PENDING
+  Agent Execution          PASS (3 runs, 39 executions)
 
 L4 CI Integration
   Workflow Definition      PASS
   Local Workflow Validation PASS
-  Hosted GitHub Execution  PENDING until the first hosted run
+  Hosted GitHub Execution  PASS
   Behavioral Enforcement   REPORT_ONLY
 
-Overall                    NOT QUALIFIED
+Overall                    QUALIFIED
 ```
 
 The runner report itself intentionally remains `executionStatus: PREPARED`
-and `summary.overall: PREPARED` until real Agent results are supplied. This is
-not equivalent to `PASS` and must not be inferred from a successful CI job.
+and `summary.overall: PREPARED` when invoked without `--results`. This is not
+equivalent to `PASS` and must not be inferred from a successful CI job. The
+versioned v1 evidence report is separate and is `EXECUTED`/`PASS` only after
+the committed captures are supplied.
 
 ## Validate the corpus and produce a pending report
 
