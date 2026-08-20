@@ -7,6 +7,8 @@ on:
     branches: [main]
     paths:
       - "api/**"
+      - ".agents/**"
+      - "AGENTS.md"
       - "charts/**"
       - "cmd/**"
       - "config/**"
@@ -38,6 +40,90 @@ env:
   TARGET_PLATFORM: linux/amd64
 
 jobs:
+  engineering-baseline:
+    name: Validate Engineering Baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install skill validation dependency
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.2
+
+      - name: Validate Skill metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          path = Path(".agents/skills/engineering-baseline/SKILL.md")
+          text = path.read_text(encoding="utf-8")
+          if not text.startswith("---\n"):
+              raise SystemExit("SKILL.md is missing YAML frontmatter")
+          _, frontmatter, _ = text.split("---\n", 2)
+          metadata = yaml.safe_load(frontmatter)
+          if metadata.get("name") != "engineering-baseline":
+              raise SystemExit("unexpected Skill name")
+          if not metadata.get("description", "").strip():
+              raise SystemExit("Skill description is empty")
+          print("Skill metadata: PASS")
+          PY
+
+      - name: Run repository regression for the qualifier
+        run: GOWORK=off go test ./...
+
+      - name: Validate golden corpus and prepared report
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/engineering-baseline-prepared.json"
+          GOWORK=off go run ./cmd/engineering-baseline-eval \
+            --cases test/skill/engineering-baseline-evals.yaml \
+            --output "$report"
+          python - "$report" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as stream:
+              report = json.load(stream)
+          summary = report["summary"]
+          cases = report["cases"]
+          assert report["status"] == "PREPARED"
+          assert report["executionStatus"] == "PREPARED"
+          assert summary["overall"] == "PREPARED"
+          assert summary["cases"] == 13
+          assert summary["executed"] == 0
+          assert len(cases) == 13
+          assert sum(case["critical"] for case in cases) == 4
+          print("Deterministic gate: PASS")
+          print("Golden corpus: 13 cases, 4 critical")
+          print("Hosted GitHub execution: PENDING until this workflow completes")
+          print("Behavioral enforcement: REPORT_ONLY")
+          print("Engineering qualification: NOT QUALIFIED")
+          PY
+
+      - name: Upload prepared qualification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engineering-baseline-prepared-${{ github.sha }}
+          path: ${{ runner.temp }}/engineering-baseline-prepared.json
+          if-no-files-found: ignore
+
   verify:
     name: Verify Source And Packaging
     runs-on: ubuntu-latest

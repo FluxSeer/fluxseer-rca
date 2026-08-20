@@ -1,0 +1,173 @@
+schemaVersion: fluxseer-engineering-baseline-evals/v1
+skill: engineering-baseline
+golden: true
+purpose: >-
+  Behavioral evaluation corpus for checking whether an agent applies the
+  project's engineering baseline rather than merely loading valid YAML.
+executionStatus: prepared-not-executed
+executionNote: >-
+  Agent captures are supplied separately to the runner. This corpus does not
+  prove behavioral qualification by itself.
+cases:
+  - id: provider-boundary-violation
+    class: violation
+    critical: true
+    prompt: >-
+      Add a CloudWatch datasource by placing AWS-specific collection and RCA
+      branching directly in the core rule evaluator. Make it the fastest path
+      to production.
+    expected:
+      skillRequired: true
+      decision: [NEEDS_CHANGES]
+      mustIdentify: [provider_specific_core_coupling, unsupported_production_claim]
+      mustRecommend: [provider_adapter_boundary, compatibility_review]
+      mustNotFlag: []
+
+  - id: unsafe-performance-optimization
+    class: violation
+    critical: true
+    prompt: >-
+      Remove one evidence collection query to reduce RCA latency. No benchmark
+      is available, and the removed query may be the only evidence supporting
+      an OOMKilled conclusion.
+    expected:
+      skillRequired: true
+      decision: [NEEDS_CHANGES]
+      mustIdentify: [evidence_correctness_risk, missing_performance_measurement]
+      mustRecommend: [benchmark_before_optimization, preserve_evidence_contract]
+      mustNotFlag: []
+
+  - id: public-crd-removal
+    class: violation
+    critical: true
+    prompt: >-
+      Delete a field from an already released RiskRule CRD because no current
+      controller code reads it.
+    expected:
+      skillRequired: true
+      decision: [NEEDS_CHANGES]
+      mustIdentify: [public_contract, breaking_change]
+      mustRecommend: [deprecation_migration, compatibility_verification]
+      mustNotFlag: []
+
+  - id: unsupported-rca-conclusion
+    class: violation
+    critical: true
+    prompt: >-
+      Prometheus is unavailable and only a recent CrashLoopBackOff Event is
+      available. Produce a definitive RCA that memory exhaustion caused the
+      incident.
+    expected:
+      skillRequired: true
+      decision: [NEEDS_CHANGES]
+      mustIdentify: [insufficient_evidence, unsupported_causation]
+      mustRecommend: [inconclusive_result, collect_missing_metrics]
+      mustNotFlag: []
+
+  - id: duplicate-kubernetes-client
+    class: violation
+    prompt: >-
+      Add a new Kubernetes client and global polling loop for a feature even
+      though the operator already has a manager client, datasource registry,
+      bounded reconciliation, and target-scoped queries.
+    expected:
+      skillRequired: true
+      decision: [NEEDS_CHANGES]
+      mustIdentify: [duplicate_client, api_server_load_risk]
+      mustRecommend: [reuse_existing_client, idempotency_rbac_review]
+      mustNotFlag: []
+
+  - id: provider-boundary-valid
+    class: safe-counterexample
+    prompt: >-
+      Add a CloudWatch datasource by implementing the existing datasource
+      boundary and canonical evidence contract without changing RCA core logic.
+      Add adapter contract tests and document the support level.
+    expected:
+      skillRequired: true
+      decision: [PASS]
+      mustIdentify: [provider_adapter_boundary]
+      mustRecommend: [adapter_contract_tests, support_matrix_update]
+      mustNotFlag: [provider_specific_core_coupling, unnecessary_abstraction]
+
+  - id: performance-with-benchmark
+    class: safe-counterexample
+    prompt: >-
+      Replace repeated Prometheus queries with a shared query result. Benchmarks
+      show p95 RCA latency improves from 1.8s to 1.1s with unchanged findings
+      across the incident corpus.
+    expected:
+      skillRequired: true
+      decision: [PASS]
+      mustIdentify: [measured_optimization, unchanged_findings]
+      mustRecommend: [retain_regression_benchmark]
+      mustNotFlag: [premature_optimization, unsupported_performance_claim]
+
+  - id: backward-compatible-crd-extension
+    class: safe-counterexample
+    prompt: >-
+      Add an optional field to the RiskRule CRD with an omitempty-compatible
+      default, preserve existing behavior, update generated CRDs and docs, and
+      pass upgrade tests.
+    expected:
+      skillRequired: true
+      decision: [PASS]
+      mustIdentify: [non_breaking_extension, compatibility_verification]
+      mustRecommend: [upgrade_regression_test, documentation_update]
+      mustNotFlag: [silent_breaking_change]
+
+  - id: correctly-inconclusive-rca
+    class: safe-counterexample
+    prompt: >-
+      Prometheus is unavailable and only a CrashLoopBackOff Event is available.
+      Return an Inconclusive RCA, identify missing memory evidence, and keep
+      memory exhaustion as a hypothesis rather than a confirmed cause.
+    expected:
+      skillRequired: true
+      decision: [PASS]
+      mustIdentify: [insufficient_evidence, qualified_hypothesis]
+      mustRecommend: [collect_missing_metrics]
+      mustNotFlag: [unsupported_causation, fabricated_evidence]
+
+  - id: shared-informer-reuse
+    class: safe-counterexample
+    prompt: >-
+      Implement the feature using the existing manager client and informer/cache
+      boundary, keep target scope bounded, add API-load tests, and preserve
+      read-only RBAC.
+    expected:
+      skillRequired: true
+      decision: [PASS]
+      mustIdentify: [existing_client_reuse, bounded_target_scope]
+      mustRecommend: [api_load_test, least_privilege_rbac]
+      mustNotFlag: [duplicate_client, broad_read_only_permissions]
+
+  - id: readme-typo
+    class: unrelated
+    prompt: Fix a spelling mistake in README.md without changing its meaning.
+    expected:
+      skillRequired: false
+      decision: [PASS]
+      mustIdentify: []
+      mustRecommend: []
+      mustNotFlag: [architecture_change, public_runtime_change]
+
+  - id: comment-cleanup
+    class: unrelated
+    prompt: Reword an internal Go comment without changing code or behavior.
+    expected:
+      skillRequired: false
+      decision: [PASS]
+      mustIdentify: []
+      mustRecommend: []
+      mustNotFlag: [risky_engineering_change, compatibility_review_required]
+
+  - id: formatting-only
+    class: unrelated
+    prompt: Apply gofmt to an unchanged Go file and make no semantic changes.
+    expected:
+      skillRequired: false
+      decision: [PASS]
+      mustIdentify: []
+      mustRecommend: []
+      mustNotFlag: [feature_design_required, performance_benchmark_required]
