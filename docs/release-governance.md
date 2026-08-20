@@ -25,9 +25,10 @@ Final publication is manual through `FluxSeer RCA Release`.
 
 The `main` branch, `test` branch, and `v*` tags should each have repository
 rulesets. At minimum, the rulesets should prevent deletion and force-push;
-branches should require a pull request, code-owner approval, and the required
-deterministic checks. Tag creation and updates should be limited to release
-maintainers.
+the `test` branch should require a pull request, code-owner approval, and the
+required deterministic checks. The `main` branch currently requires the
+deterministic checks but does not require a reviewer approval. Tag creation and
+updates should be limited to release maintainers.
 
 All third-party GitHub Actions in the workflows are pinned to full commit SHAs.
 When updating an action, change the SHA and retain the human-readable version
