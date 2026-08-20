@@ -1,9 +1,8 @@
 name: FluxSeer RCA Release
 
+# Final releases are intentionally manual. The release environment supplies
+# maintainer approval before this job can use write-capable permissions.
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -58,6 +57,7 @@ jobs:
   publish:
     name: Publish Release Artifacts
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - name: Resolve release version
         id: release
@@ -102,7 +102,7 @@ jobs:
           echo "qualification_run_id=$qualification_run_id" >> "$GITHUB_OUTPUT"
 
       - name: Checkout release source
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ steps.release.outputs.source_ref }}
           fetch-depth: 0
@@ -218,20 +218,20 @@ jobs:
           echo "qualified candidate evidence accepted: $report"
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
         id: registry
@@ -288,14 +288,14 @@ jobs:
       - name: Build and push operator image
         id: operator
         if: ${{ !inputs.release_only }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: Dockerfile
           platforms: ${{ env.TARGET_PLATFORM }}
           push: true
-          provenance: false
-          sbom: false
+          provenance: true
+          sbom: true
           tags: ${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/operator:${{ steps.release.outputs.version }}
           build-args: |
             VERSION=${{ steps.release.outputs.version }}
@@ -307,14 +307,14 @@ jobs:
       - name: Build and push demo-observability image
         id: demo
         if: ${{ !inputs.release_only }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: examples/fake-observability/Dockerfile
           platforms: ${{ env.TARGET_PLATFORM }}
           push: true
-          provenance: false
-          sbom: false
+          provenance: true
+          sbom: true
           tags: ${{ steps.registry.outputs.registry }}/${{ steps.registry.outputs.repository_prefix }}/demo-observability:${{ steps.release.outputs.version }}
           build-args: |
             VERSION=${{ steps.release.outputs.version }}
@@ -478,8 +478,8 @@ jobs:
           echo "notes=$out_dir/RELEASE_NOTES.md" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub prerelease and upload assets
-        if: ${{ github.event_name == 'push' || (inputs.create_github_release && steps.release.outputs.candidate != 'true') }}
-        uses: actions/github-script@v8
+        if: ${{ inputs.create_github_release && steps.release.outputs.candidate != 'true' }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const fs = require('fs');
