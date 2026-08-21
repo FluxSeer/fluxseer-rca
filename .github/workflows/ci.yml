@@ -6,7 +6,7 @@ on:
       - main
       - test
   pull_request:
-    branches: [main]
+    branches: [main, test]
     paths:
       - "api/**"
       - ".agents/**"
