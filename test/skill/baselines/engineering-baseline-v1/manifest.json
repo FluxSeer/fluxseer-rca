@@ -1,0 +1,102 @@
+{
+  "qualificationVersion": "engineering-baseline-v1",
+  "capturedAt": "2026-08-20T06:46:01Z",
+  "repository": {
+    "commit": "88ed9732bf5e6752e550d25f37760aac92d0c27e",
+    "worktreeState": "modified",
+    "worktreeDiffSHA256": "51ea10cc505be55b032821f158c61461e095c884fb00a617636da96cb986b2ad"
+  },
+  "skill": {
+    "path": ".agents/skills/engineering-baseline/SKILL.md",
+    "sha256": "2f216a7ed4e856c0b9f75c81d9dda540e4c35b3d92830121202da56c24099de4"
+  },
+  "corpus": {
+    "path": "test/skill/engineering-baseline-evals.yaml",
+    "version": "fluxseer-engineering-baseline-evals/v1",
+    "sha256": "d7b85331e364852d3ff524ce3141bdbe6d0ff91a4f7c102116929a5c4ea391a3",
+    "cases": 13,
+    "criticalCases": 4
+  },
+  "runner": {
+    "sourceSHA256": "740c0c8500a0df65b3ccf1c624bd6fe23d9b76b3379feb16bbe4d7191329593c",
+    "qualificationReport": "qualification.json"
+  },
+  "agent": {
+    "source": "local-codex",
+    "cliVersion": "codex-cli 0.145.0",
+    "model": "gpt-5.6-luna",
+    "sessionMode": "ephemeral-read-only",
+    "ciAgentAPIUsage": 0
+  },
+  "captureInstructionsSHA256": "a564fd3b07a54ee5784a0ed1adf3980aa61fe14d3a869d20453fc9e6caa238b6",
+  "runs": [
+    {
+      "run": 1,
+      "runId": "run-1",
+      "normalized": "run-1.json",
+      "normalizedSHA256": "0f49de0298513d27b6f0515dec92a96d1bd7270169710b55f53f766ffaa8a48e",
+      "singleRunReport": "run-1.report.json",
+      "raw": "run-1.raw.jsonl",
+      "rawSHA256": "317f69e770e5cf3ab6cba36d17e5dbe70397967ce0519e5793b1ade026d9c5d2"
+    },
+    {
+      "run": 2,
+      "runId": "run-2",
+      "normalized": "run-2.json",
+      "normalizedSHA256": "58ffd3ac11572a073aefad01739e1183d8cea15c9bf96194dc3515dc39480f4c",
+      "singleRunReport": "run-2.report.json",
+      "raw": "run-2.raw.jsonl",
+      "rawSHA256": "4fb7205d780a39753a5a00d177dbaf3c2cff52ebfa72b3368526e67e25562bb8"
+    },
+    {
+      "run": 3,
+      "runId": "run-3",
+      "normalized": "run-3.json",
+      "normalizedSHA256": "8a54fd2babe00f466bebc0a0b946c9f18277818a295126a8836da35b4c7c3a9c",
+      "singleRunReport": "run-3.report.json",
+      "raw": "run-3.raw.jsonl",
+      "rawSHA256": "5ce0647b79fa5e642dd8731838ee6fc619c166d2c4e8c0c2b1ba14766151140b"
+    }
+  ],
+  "qualification": {
+    "cases": 13,
+    "executions": 39,
+    "activation": {
+      "passed": 39,
+      "total": 39
+    },
+    "correctness": {
+      "passed": 39,
+      "total": 39
+    },
+    "restraint": {
+      "passed": 39,
+      "total": 39
+    },
+    "actionability": {
+      "passed": 39,
+      "total": 39
+    },
+    "classResults": {
+      "safe-counterexample": {
+        "passed": 15,
+        "total": 15
+      },
+      "unrelated": {
+        "passed": 9,
+        "total": 9
+      },
+      "violation": {
+        "passed": 15,
+        "total": 15
+      }
+    },
+    "semanticPassed": 39,
+    "semanticTotal": 39,
+    "criticalFalseNegatives": 0,
+    "unsafeApprovals": 0,
+    "falsePositives": 0,
+    "unstableCases": 0,
+    "overall": "PASS"
+  }
+}

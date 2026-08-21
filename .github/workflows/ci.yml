@@ -2,11 +2,15 @@ name: FluxSeer RCA CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - test
   pull_request:
-    branches: [main]
+    branches: [main, test]
     paths:
       - "api/**"
+      - ".agents/**"
+      - "AGENTS.md"
       - "charts/**"
       - "cmd/**"
       - "config/**"
@@ -38,12 +42,141 @@ env:
   TARGET_PLATFORM: linux/amd64
 
 jobs:
+  engineering-baseline:
+    name: Validate Engineering Baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Install skill validation dependency
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.2
+
+      - name: Validate Skill metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          path = Path(".agents/skills/engineering-baseline/SKILL.md")
+          text = path.read_text(encoding="utf-8")
+          if not text.startswith("---\n"):
+              raise SystemExit("SKILL.md is missing YAML frontmatter")
+          _, frontmatter, _ = text.split("---\n", 2)
+          metadata = yaml.safe_load(frontmatter)
+          if metadata.get("name") != "engineering-baseline":
+              raise SystemExit("unexpected Skill name")
+          if not metadata.get("description", "").strip():
+              raise SystemExit("Skill description is empty")
+          print("Skill metadata: PASS")
+          PY
+
+      - name: Run repository regression for the qualifier
+        run: GOWORK=off go test ./...
+
+      - name: Validate golden corpus and prepared report
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/engineering-baseline-prepared.json"
+          GOWORK=off go run ./cmd/engineering-baseline-eval \
+            --cases test/skill/engineering-baseline-evals.yaml \
+            --output "$report"
+          python - "$report" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as stream:
+              report = json.load(stream)
+          summary = report["summary"]
+          cases = report["cases"]
+          assert report["status"] == "PREPARED"
+          assert report["executionStatus"] == "PREPARED"
+          assert summary["overall"] == "PREPARED"
+          assert summary["cases"] == 13
+          assert summary["executed"] == 0
+          assert len(cases) == 13
+          assert sum(case["critical"] for case in cases) == 4
+          print("Deterministic gate: PASS")
+          print("Golden corpus: 13 cases, 4 critical")
+          print("Hosted GitHub execution: PENDING until this workflow completes")
+          print("Behavioral enforcement: REPORT_ONLY")
+          print("Engineering qualification: NOT QUALIFIED")
+          PY
+
+      - name: Validate committed v1 qualification evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/engineering-baseline-qualification.json"
+          GOWORK=off go run ./cmd/engineering-baseline-eval \
+            --cases test/skill/engineering-baseline-evals.yaml \
+            --results test/skill/baselines/engineering-baseline-v1/run-1.json \
+            --results test/skill/baselines/engineering-baseline-v1/run-2.json \
+            --results test/skill/baselines/engineering-baseline-v1/run-3.json \
+            --output "$report"
+          python - "$report" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as stream:
+              report = json.load(stream)
+          summary = report["summary"]
+          assert report["status"] == "PASS"
+          assert report["executionStatus"] == "EXECUTED"
+          assert report["runs"] == 3
+          assert summary["cases"] == 13
+          assert summary["executions"] == 39
+          assert summary["semanticPassed"] == 39
+          assert summary["semanticTotal"] == 39
+          assert summary["criticalFalseNegatives"] == 0
+          assert summary["unsafeApprovals"] == 0
+          assert summary["falsePositives"] == 0
+          assert summary["unstableCases"] == 0
+          assert summary["overall"] == "PASS"
+          for dimension in ("activation", "correctness", "restraint", "actionability"):
+              assert summary[dimension] == {"passed": 39, "total": 39}
+          print("Committed v1 qualification evidence: PASS")
+          print("Runs: 3; cases: 13; executions: 39")
+          print("Behavioral enforcement: REPORT_ONLY")
+          PY
+
+      - name: Upload prepared qualification report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: engineering-baseline-prepared-${{ github.sha }}
+          path: ${{ runner.temp }}/engineering-baseline-prepared.json
+          if-no-files-found: ignore
+
+      - name: Upload v1 qualification report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: engineering-baseline-qualification-${{ github.sha }}
+          path: ${{ runner.temp }}/engineering-baseline-qualification.json
+          if-no-files-found: ignore
+
   verify:
     name: Verify Source And Packaging
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
@@ -74,20 +207,20 @@ jobs:
           fi
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.12.2
 
@@ -125,7 +258,7 @@ jobs:
     needs: [verify]
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
@@ -156,7 +289,7 @@ jobs:
           fi
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Verify artifact identity
         run: |
@@ -179,7 +312,7 @@ jobs:
   publish-test-image:
     name: Publish Test Artifacts
     runs-on: ubuntu-latest
-    needs: [verify, image-identity]
+    needs: [engineering-baseline, verify, image-identity]
     if: github.event_name == 'push' && github.ref == 'refs/heads/test'
     env:
       HARBOR_PROJECT: fluxseer
@@ -187,7 +320,7 @@ jobs:
       CHART_NAME: fluxseer-rca
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
@@ -218,10 +351,10 @@ jobs:
           fi
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
       - name: Resolve test artifact metadata
         id: meta
@@ -256,7 +389,7 @@ jobs:
           echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
 
       - name: Build and push test operator image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: Dockerfile
@@ -311,7 +444,7 @@ jobs:
   publish-main-image:
     name: Publish Main Artifacts
     runs-on: ubuntu-latest
-    needs: [verify, image-identity]
+    needs: [engineering-baseline, verify, image-identity]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
@@ -322,7 +455,7 @@ jobs:
       CHART_NAME: fluxseer-rca
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
@@ -353,10 +486,10 @@ jobs:
           fi
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
       - name: Resolve main artifact metadata
         id: meta
@@ -382,7 +515,7 @@ jobs:
           echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
 
       - name: Build and push main operator image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: Dockerfile
