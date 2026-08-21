@@ -101,7 +101,8 @@ EOF
 
   scenario_wait_deployment_available "${namespace}" "${target_name}"
   if [[ "${expect_outcome}" == "Confirmed" ]]; then
-    scenario_wait_request_name "${namespace}" "${rule_name}"
+    scenario_wait_request_contract "${namespace}" "${rule_name}" \
+      Confirmed HighHTTPErrorRate prometheus
   else
     scenario_apply_yaml <<EOF
 apiVersion: aiops.platform/v1alpha1

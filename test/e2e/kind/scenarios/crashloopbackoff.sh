@@ -88,7 +88,8 @@ EOF
   scenario_wait_pod_label_event_fragment "${namespace}" app "${target_name}" BackOff "Back-off"
 
   if [[ "${expect_outcome}" == "Confirmed" ]]; then
-    scenario_wait_request_name "${namespace}" "${rule_name}"
+    scenario_wait_request_contract "${namespace}" "${rule_name}" \
+      Confirmed CrashLoop kubernetes-events BackOff
   else
     scenario_apply_yaml <<EOF
 apiVersion: aiops.platform/v1alpha1

@@ -85,7 +85,8 @@ spec:
 EOF
 
   scenario_wait_deployment_available "${namespace}" "${target_name}"
-  scenario_wait_request_name "${namespace}" "${rule_name}"
+  scenario_wait_request_contract "${namespace}" "${rule_name}" \
+    Confirmed ServicePortMismatch kubernetes-events ServicePortMismatch
   request_name="${SCENARIO_REQUEST_NAME}"
   scenario_wait_request_terminal "${namespace}" "${request_name}"
   scenario_wait_converged "${namespace}" "${rule_name}" "${request_name}"
