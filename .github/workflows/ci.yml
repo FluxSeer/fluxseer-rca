@@ -311,7 +311,7 @@ jobs:
 
   publish-test-image:
     name: Publish Test Artifacts
-    runs-on: [self-hosted, Linux, X64, test, fluxseer-rca-test]
+    runs-on: fluxseer-rca-test
     needs: [engineering-baseline, verify, image-identity]
     if: github.event_name == 'push' && github.ref == 'refs/heads/test'
     env:
