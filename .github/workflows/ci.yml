@@ -447,21 +447,36 @@ jobs:
             exit 1
           fi
 
-          harbor_digest() {
+          registry_manifest_digest() {
             local repository="$1"
             local reference="$2"
-            local encoded_repository
-            encoded_repository="$(printf '%s' "$repository" | sed 's#/#%252F#g')"
-            curl --fail --silent --show-error --retry 3 \
+            local registry_token
+            local response_headers
+            registry_token="$(curl --fail --silent --show-error --retry 3 \
+              --get \
               --user "$user:$token" \
-              "https://${registry}/api/v2.0/projects/${HARBOR_PROJECT}/repositories/${encoded_repository}/artifacts/${reference}" \
-              | jq -er '.digest'
+              --data-urlencode 'service=harbor-registry' \
+              --data-urlencode "scope=repository:${repository}:pull" \
+              "https://${registry}/service/token" \
+              | jq -er '.token // .access_token')"
+            response_headers="$(curl --fail --silent --show-error --retry 3 \
+              -D - \
+              -o /dev/null \
+              -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+              -H "Authorization: Bearer ${registry_token}" \
+              "https://${registry}/v2/${repository}/manifests/${reference}")"
+            printf '%s\n' "$response_headers" \
+              | awk 'tolower($1) == "docker-content-digest:" { gsub("\r", "", $2); print $2; exit }'
           }
 
           expected_image_digest="${{ steps.image.outputs.digest }}"
           expected_chart_digest="${HELM_DIGEST}"
-          image_readback_digest="$(harbor_digest "${HARBOR_REPOSITORY_PREFIX}/operator" "${{ steps.meta.outputs.image_tag }}")"
-          chart_readback_digest="$(harbor_digest "${HARBOR_REPOSITORY_PREFIX}/charts" "${{ steps.meta.outputs.chart_version }}")"
+          image_readback_digest="$(registry_manifest_digest "${HARBOR_REPOSITORY_PREFIX}/operator" "${{ steps.meta.outputs.image_tag }}")"
+          chart_readback_digest="$(registry_manifest_digest "${HARBOR_REPOSITORY_PREFIX}/charts" "${{ steps.meta.outputs.chart_version }}")"
+          if [ -z "$image_readback_digest" ] || [ -z "$chart_readback_digest" ]; then
+            echo "Registry did not return Docker-Content-Digest for both artifacts" >&2
+            exit 1
+          fi
 
           if [ "$expected_image_digest" != "$image_readback_digest" ]; then
             echo "Operator image digest mismatch" >&2
