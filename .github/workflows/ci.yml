@@ -472,7 +472,7 @@ jobs:
           expected_image_digest="${{ steps.image.outputs.digest }}"
           expected_chart_digest="${HELM_DIGEST}"
           image_readback_digest="$(registry_manifest_digest "${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/operator" "${{ steps.meta.outputs.image_tag }}")"
-          chart_readback_digest="$(registry_manifest_digest "${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts" "${{ steps.meta.outputs.chart_version }}")"
+          chart_readback_digest="$(registry_manifest_digest "${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts/${CHART_NAME}" "${{ steps.meta.outputs.chart_version }}")"
           if [ -z "$image_readback_digest" ] || [ -z "$chart_readback_digest" ]; then
             echo "Registry did not return Docker-Content-Digest for both artifacts" >&2
             exit 1
