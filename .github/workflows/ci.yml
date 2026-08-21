@@ -451,7 +451,7 @@ jobs:
             local repository="$1"
             local reference="$2"
             local encoded_repository
-            encoded_repository="$(printf '%s' "$repository" | sed 's#/#%2F#g')"
+            encoded_repository="$(printf '%s' "$repository" | sed 's#/#%252F#g')"
             curl --fail --silent --show-error --retry 3 \
               --user "$user:$token" \
               "https://${registry}/api/v2.0/projects/${HARBOR_PROJECT}/repositories/${encoded_repository}/artifacts/${reference}" \
