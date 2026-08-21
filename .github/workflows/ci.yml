@@ -329,7 +329,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=()
-          for tool in make; do
+          for tool in make curl jq; do
             if ! command -v "$tool" >/dev/null 2>&1; then
               missing+=("$tool")
             fi
@@ -389,6 +389,7 @@ jobs:
           echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
 
       - name: Build and push test operator image
+        id: image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
@@ -430,6 +431,52 @@ jobs:
           fi
           echo "HELM_DIGEST=$helm_digest" >> "$GITHUB_ENV"
 
+      - name: Verify Harbor artifact digests
+        shell: bash
+        env:
+          SECRET_REGISTRY: ${{ secrets.CI_HARBOR_REGISTRY }}
+          SECRET_USER: ${{ secrets.CI_HARBOR_GHA_USER }}
+          SECRET_TOKEN: ${{ secrets.CI_HARBOR_GHA_TOKEN }}
+        run: |
+          set -euo pipefail
+          registry="${SECRET_REGISTRY:-${CI_HARBOR_REGISTRY:-}}"
+          user="${SECRET_USER:-${CI_HARBOR_GHA_USER:-}}"
+          token="${SECRET_TOKEN:-${CI_HARBOR_GHA_TOKEN:-}}"
+          if [ -z "$registry" ] || [ -z "$user" ] || [ -z "$token" ]; then
+            echo "Harbor credentials are required for authenticated digest read-back" >&2
+            exit 1
+          fi
+
+          harbor_digest() {
+            local repository="$1"
+            local reference="$2"
+            local encoded_repository
+            encoded_repository="$(printf '%s' "$repository" | sed 's#/#%2F#g')"
+            curl --fail --silent --show-error --retry 3 \
+              --user "$user:$token" \
+              "https://${registry}/api/v2.0/projects/${HARBOR_PROJECT}/repositories/${encoded_repository}/artifacts/${reference}" \
+              | jq -er '.digest'
+          }
+
+          expected_image_digest="${{ steps.image.outputs.digest }}"
+          expected_chart_digest="${HELM_DIGEST}"
+          image_readback_digest="$(harbor_digest "${HARBOR_REPOSITORY_PREFIX}/operator" "${{ steps.meta.outputs.image_tag }}")"
+          chart_readback_digest="$(harbor_digest "${HARBOR_REPOSITORY_PREFIX}/charts" "${{ steps.meta.outputs.chart_version }}")"
+
+          if [ "$expected_image_digest" != "$image_readback_digest" ]; then
+            echo "Operator image digest mismatch" >&2
+            echo "push=$expected_image_digest readback=$image_readback_digest" >&2
+            exit 1
+          fi
+          if [ "$expected_chart_digest" != "$chart_readback_digest" ]; then
+            echo "Helm chart digest mismatch" >&2
+            echo "push=$expected_chart_digest readback=$chart_readback_digest" >&2
+            exit 1
+          fi
+
+          echo "IMAGE_READBACK_DIGEST=$image_readback_digest" >> "$GITHUB_ENV"
+          echo "CHART_READBACK_DIGEST=$chart_readback_digest" >> "$GITHUB_ENV"
+
       - name: Write test artifact summary
         run: |
           {
@@ -437,6 +484,8 @@ jobs:
             echo "- Operator image: ${{ steps.meta.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/operator:${{ steps.meta.outputs.image_tag }}"
             echo "- Helm chart: oci://${{ steps.meta.outputs.registry }}/${HARBOR_PROJECT}/${HARBOR_REPOSITORY_PREFIX}/charts/${CHART_NAME} --version ${{ steps.meta.outputs.chart_version }}"
             echo "- Helm digest: ${HELM_DIGEST}"
+            echo "- Image digest read-back: ${IMAGE_READBACK_DIGEST}"
+            echo "- Helm digest read-back: ${CHART_READBACK_DIGEST}"
             echo "- Branch: test"
             echo "- Commit: ${GITHUB_SHA}"
           } >> "$GITHUB_STEP_SUMMARY"
