@@ -4,7 +4,7 @@ This repository separates deterministic CI from release publication.
 
 ## CI and test artifacts
 
-- Pull requests targeting `main` run deterministic validation only. They do
+- Pull requests targeting `main` or `test` run deterministic validation only. They do
   not publish images and do not receive Harbor credentials.
 - Pushes to `main` and `test` run the deterministic CI workflow.
 - A push to `test` publishes test artifacts only after the deterministic jobs
@@ -25,10 +25,9 @@ Final publication is manual through `FluxSeer RCA Release`.
 
 The `main` branch, `test` branch, and `v*` tags should each have repository
 rulesets. At minimum, the rulesets should prevent deletion and force-push;
-the `test` branch should require a pull request, code-owner approval, and the
-required deterministic checks. The `main` branch currently requires the
-deterministic checks but does not require a reviewer approval. Tag creation and
-updates should be limited to release maintainers.
+branches should require a pull request and the required deterministic checks.
+The `main` and `test` branches do not require reviewer approval. Tag creation
+and updates should be limited to release maintainers.
 
 All third-party GitHub Actions in the workflows are pinned to full commit SHAs.
 When updating an action, change the SHA and retain the human-readable version
