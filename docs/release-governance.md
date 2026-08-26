@@ -7,8 +7,13 @@ This repository separates deterministic CI from release publication.
 - Pull requests targeting `main` or `test` run deterministic validation only. They do
   not publish images and do not receive Harbor credentials.
 - Pushes to `main` and `test` run the deterministic CI workflow.
-- A push to `test` publishes test artifacts only after the deterministic jobs
-  pass. The `test` branch must remain protected by a repository ruleset.
+- The `test` branch must remain protected by a repository ruleset.
+
+Test publication is dispatched from the private `FluxSeer/fluxseer-release`
+repository after the source commit and qualification run are verified. The
+public repository performs deterministic validation only; the private
+publisher owns Harbor credentials, the publication runner group, source-commit
+qualification, and image/chart digest read-back.
 
 ## Final releases
 
