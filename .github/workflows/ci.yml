@@ -311,6 +311,7 @@ jobs:
 
   publish-test-image:
     name: Publish Test Artifacts
+    # Harbor credentials are available only through the selected test runner group.
     runs-on: fluxseer-rca-test
     needs: [engineering-baseline, verify, image-identity]
     if: github.event_name == 'push' && github.ref == 'refs/heads/test'
