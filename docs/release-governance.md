@@ -7,14 +7,15 @@ This repository separates deterministic CI from release publication.
 - Pull requests targeting `main` or `test` run deterministic validation only. They do
   not publish images and do not receive Harbor credentials.
 - Pushes to `main` and `test` run the deterministic CI workflow.
-- A push to `test` publishes test artifacts only after the deterministic jobs
-  pass. The `test` branch must remain protected by a repository ruleset.
-- Test artifact publication runs on the `fluxseer-rca-test` ARC scale set,
-  which is restricted to the selected `fluxseer-test-publish` runner group.
-  That group permits only `FluxSeer/fluxseer-rca` and does not allow public
-  repositories.
-- Changing the ARC runner group requires recreating the scale set and
-  verifying its new GitHub scale-set identity before publication.
+- The `test` branch must remain protected by a repository ruleset.
+- Test publication is dispatched from the private `FluxSeer/fluxseer-release`
+  repository after the source commit and qualification run are verified.
+
+Test artifact publication has been moved to the private
+`FluxSeer/fluxseer-release` repository. The public repository now performs
+deterministic validation only; the private publisher owns Harbor credentials,
+the publication runner group, source-commit qualification, and digest
+read-back.
 
 ## Final releases
 
