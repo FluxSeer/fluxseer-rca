@@ -13,6 +13,8 @@ This repository separates deterministic CI from release publication.
   which is restricted to the selected `fluxseer-test-publish` runner group.
   That group permits only `FluxSeer/fluxseer-rca` and does not allow public
   repositories.
+- Changing the ARC runner group requires recreating the scale set and
+  verifying its new GitHub scale-set identity before publication.
 
 ## Final releases
 
