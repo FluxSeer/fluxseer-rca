@@ -9,6 +9,10 @@ This repository separates deterministic CI from release publication.
 - Pushes to `main` and `test` run the deterministic CI workflow.
 - A push to `test` publishes test artifacts only after the deterministic jobs
   pass. The `test` branch must remain protected by a repository ruleset.
+- Test artifact publication runs on the `fluxseer-rca-test` ARC scale set,
+  which is restricted to the selected `fluxseer-test-publish` runner group.
+  That group permits only `FluxSeer/fluxseer-rca` and does not allow public
+  repositories.
 
 ## Final releases
 
