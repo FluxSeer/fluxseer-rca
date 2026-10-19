@@ -1195,6 +1195,38 @@ func TestNormalizeObservationTruncatesLargeLogEvidence(t *testing.T) {
 	}
 }
 
+func TestNormalizeContainerTerminationTruncationWithoutStatusRecords(t *testing.T) {
+	req := datasource.QueryRequest{
+		Query:     "container-termination-status",
+		Target:    domain.ResourceRef{Namespace: "prod", Kind: "Deployment", Name: "checkout"},
+		QueryType: domain.QueryTypeContainerTermination,
+	}
+	result := &datasource.QueryResult{
+		Source:              "kubernetes-events",
+		QueryType:           domain.QueryTypeContainerTermination,
+		Summary:             "Kubernetes scanned 20 of at least 21 target Pods; no termination status records were returned",
+		Truncated:           true,
+		TruncationReason:    "TargetPodLimitExceeded",
+		LimitDimension:      "pods",
+		Limit:               20,
+		OriginalRecordCount: 21,
+		RetainedRecordCount: 20,
+	}
+
+	observations := normalizeObservations(result, req, 0, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if len(observations) != 1 {
+		t.Fatalf("expected a truncation observation despite empty status records, got %#v", observations)
+	}
+	observation := observations[0]
+	if !observation.Truncated || observation.Value.ContainerTermination == nil || observation.Summary != result.Summary || observation.LimitDimension != "pods" {
+		t.Fatalf("expected bounded scan metadata without fabricated status facts, got %#v", observation)
+	}
+	refs := evidenceRefsFromObservations(observations, req, v1alpha1.QueryRetentionPolicy{})
+	if len(refs) != 1 || !refs[0].Truncated || refs[0].TruncationReason != "TargetPodLimitExceeded" {
+		t.Fatalf("expected retained truncation metadata in public evidence ref, got %#v", refs)
+	}
+}
+
 func TestNormalizeObservationTruncatesLargeEventEvidence(t *testing.T) {
 	req := datasource.QueryRequest{
 		Query:     "recent-events",

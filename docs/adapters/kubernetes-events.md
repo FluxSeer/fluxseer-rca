@@ -33,6 +33,19 @@ Probe configuration behavior:
   container port, and `mismatchConfirmed`
 - unresolved named ports and unsupported probe handlers remain unconfirmed
 
+Container termination behavior:
+
+- support `queryType: containerTermination` for `CrashLoopBackOffV2`
+- read only application `status.containerStatuses` for a Pod or same-namespace,
+  owner-resolved Deployment, StatefulSet, DaemonSet, or ReplicaSet target
+- retain waiting reason, restart count, and last termination reason, exit code,
+  signal, and finish time; omit Pod specs, environment, and command arguments
+- inspect at most 20 Pods and 10 application containers per Pod; truncated
+  results cannot satisfy the required termination evidence check; workload
+  owner scans use the uncached API reader, with a maximum of 10 Pod-list pages
+- require the last termination finish time to fall within the investigation
+  window before the profile marks that check complete
+
 The Kubernetes adapter stays read-only and does not require a separate in-cluster service.
 
 ## Event Keywords

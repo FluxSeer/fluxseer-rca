@@ -145,12 +145,20 @@ Query field behavior:
 - `queryTemplate`: templated query rendered against target metadata
 - `reasons[]`: optional exact Kubernetes event `reason` filter for `queryType: event`; matching is case-insensitive and does not search event messages
 - `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
-- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `OOMKilled`, `LatencyRegression`, `RolloutLatencyRegression`, `ProbeFailure`, and `HighHTTPErrorRate`.
+- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `CrashLoopBackOffV2`, `OOMKilled`, `LatencyRegression`, `RolloutLatencyRegression`, `ProbeFailure`, and `HighHTTPErrorRate`.
 
 The Kubernetes datasource also supports `queryType: probeConfiguration` for
 HTTP readiness/liveness probe configuration and declared container-port
 resolution. A `ProbeFailure` claim requires both probe symptom evidence and
 bounded probe configuration evidence before it can become `Confirmed`.
+
+The Kubernetes datasource supports the additive `queryType:
+containerTermination` query for `CrashLoopBackOffV2`. The controller adds this
+target-scoped query automatically for that profile, even when the request
+already contains explicit queries. It reads bounded Pod termination status;
+it does not read `pods/log`. The existing `CrashLoopBackOff` profile keeps its
+Event-plus-application-log contract. This is a non-breaking addition to the
+accepted query type and profile names; no CRD field or report schema changed.
 - `evidenceRetention.mode`: external evidence retention mode. Current supported runtime behavior is `MetadataOnly` or `NormalizedSnapshot` with the built-in `local-filesystem` store.
 - `evidenceRetention.retention`: requested external payload retention duration for retained normalized snapshots.
 - `evidenceRetention.storageRef.name`: external evidence storage configuration reference. Current supported value for `NormalizedSnapshot` is `local-filesystem`.

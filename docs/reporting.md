@@ -40,7 +40,10 @@ report”.
 - 同規則產生的 `InvestigationRequest`
 - 直接或 linked projection 的 `RiskSignal`
 
-使用者透過 `fluxseer report riskrule ...` 取得 JSON 或 YAML。這個契約的內容必須與使用者對 Kubernetes API 有權限讀取的公開物件一致。
+使用者透過 `fluxseer report riskrule ...` 取得 JSON、YAML 或 Markdown。JSON
+和 YAML 使用 `fluxseer-riskrule-report/v1`，內容必須與使用者對 Kubernetes
+API 有權限讀取的公開物件一致。Markdown 是這些公開物件的閱讀呈現；可附上
+明確標為建議的唯讀下一步，但不得改寫資源狀態或把未確認主張提升成根因。
 
 It answers: **What did FluxSeer observe, investigate, and conclude for this
 RiskRule?** It does not contain test expectations, assertions, or PASS/FAIL.

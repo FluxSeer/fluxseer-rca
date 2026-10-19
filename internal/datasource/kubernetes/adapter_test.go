@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,7 +11,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
@@ -496,5 +499,74 @@ func TestAdapterQueryReturnsWorkloadStatusForNonDeploymentKinds(t *testing.T) {
 				t.Fatalf("unexpected status record for %s: %#v", tc.kind, record)
 			}
 		})
+	}
+}
+
+func TestAdapterQueryContainerTerminationIsTargetOwnedAndBounded(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	controller := true
+	finishedAt := metav1.NewTime(time.Date(2026, 10, 19, 2, 0, 0, 0, time.UTC))
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "demo", UID: "deployment-uid"},
+		Spec:       appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "checkout"}}},
+	}
+	replica := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "checkout-abc", Namespace: "demo", UID: "replicaset-uid",
+			Labels:          map[string]string{"app": "checkout"},
+			OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID, Controller: &controller}},
+		},
+		Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "checkout"}}},
+	}
+	ownedPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "checkout-abc-xyz", Namespace: "demo", UID: "pod-uid", Labels: map[string]string{"app": "checkout"},
+			OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: replica.Name, UID: replica.UID, Controller: &controller}},
+		},
+		Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{
+			Name: "app", RestartCount: 3,
+			State:                corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+			LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Error", ExitCode: 1, FinishedAt: finishedAt}},
+		}}},
+	}
+	decoyPod := ownedPod.DeepCopy()
+	decoyPod.Name = "checkout-decoy"
+	decoyPod.UID = "decoy-pod-uid"
+	decoyPod.OwnerReferences[0].UID = "unrelated-replicaset-uid"
+	objects := []client.Object{deployment, replica, ownedPod, decoyPod}
+	for i := 0; i < maxTerminationPods; i++ {
+		pod := ownedPod.DeepCopy()
+		pod.Name = fmt.Sprintf("checkout-extra-%02d", i)
+		pod.UID = types.UID(fmt.Sprintf("pod-extra-%02d", i))
+		objects = append(objects, pod)
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+	adapter := Adapter{Client: client}
+
+	result, err := adapter.Query(context.Background(), datasource.QueryRequest{
+		Target:    domain.ResourceRef{Namespace: "demo", Kind: "Deployment", Name: "checkout"},
+		QueryType: domain.QueryTypeContainerTermination,
+	})
+	if err != nil {
+		t.Fatalf("query container termination: %v", err)
+	}
+	if result.QueryType != domain.QueryTypeContainerTermination || len(result.Records) != maxTerminationPods {
+		t.Fatalf("expected bounded target-owned termination records, got %d records", len(result.Records))
+	}
+	if !result.Truncated || result.TruncationReason != "TargetPodLimitExceeded" || result.OriginalRecordCount != maxTerminationPods+1 || result.RetainedRecordCount != maxTerminationPods {
+		t.Fatalf("expected explicit pod-bound truncation metadata, got %#v", result)
+	}
+	got := result.Records[0]
+	if got["podName"] != ownedPod.Name || got["podUID"] != string(ownedPod.UID) || got["containerName"] != "app" || got["restartCount"] != int32(3) || got["waitingReason"] != "CrashLoopBackOff" || got["lastTerminatedReason"] != "Error" || got["lastTerminatedExitCode"] != int32(1) || got["lastTerminatedFinishedAt"] != finishedAt.Time.Format(time.RFC3339) {
+		t.Fatalf("unexpected bounded termination record: %#v", got)
+	}
+	if _, leaked := got["command"]; leaked {
+		t.Fatalf("termination query exposed container command: %#v", got)
 	}
 }

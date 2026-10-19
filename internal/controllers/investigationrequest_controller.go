@@ -109,6 +109,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, evidenceErr
 		}
 		if gate := evaluateEvidenceRequirements(investigation.Spec, evidence); gate != nil {
+			investigation.Status.EvidenceCoverage = gate.Coverage
 			switch {
 			case !gate.Complete:
 				applyEvidenceRequirementInconclusiveStatus(&investigation, evidence, *gate, now())
@@ -272,6 +273,8 @@ func requiredEvidenceChecksForProfile(profile string) []string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
 	case "crashloopbackoff":
 		return []string{"event:CrashLoopBackOff", "log:ApplicationFailure"}
+	case "crashloopbackoffv2":
+		return []string{"event:CrashLoopBackOff", "containerTermination:LastTermination"}
 	case "imagepullbackoff":
 		return []string{"event:ImagePullBackOff"}
 	case "oomkilled":
@@ -301,6 +304,11 @@ func evidenceCoverageCheckComplete(check string, spec v1alpha1.InvestigationRequ
 	case "log:ApplicationFailure":
 		return !missingReasonPresent(missing, "CrashLoopApplicationEvidenceMissing") &&
 			applicationLogEvidencePresent(spec, evidence)
+	case "containerTermination:LastTermination":
+		return !missingReasonPresent(missing, "ContainerTerminationEvidenceMissing") &&
+			!missingReasonPresent(missing, "ContainerTerminationEvidenceStale") &&
+			!missingReasonPresent(missing, "ContainerTerminationEvidenceTruncated") &&
+			containerTerminationEvidencePresent(evidence)
 	case "event:ImagePullBackOff":
 		return !missingReasonPresent(missing, "ImagePullEvidenceCoverageMissing") &&
 			eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
@@ -463,6 +471,15 @@ func missingSemanticEvidenceCoverage(profile string, spec v1alpha1.Investigation
 			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeLog), Reason: "CrashLoopApplicationEvidenceMissing"})
 		}
 		return missing
+	case "crashloopbackoffv2":
+		missing := make([]v1alpha1.RCAMissingEvidence, 0, 2)
+		if !eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") {
+			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeEvent), Reason: "CrashLoopEvidenceCoverageMissing"})
+		}
+		if reason := containerTerminationEvidenceMissingReason(evidence); reason != "" {
+			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeContainerTermination), Reason: reason})
+		}
+		return missing
 	case "imagepullbackoff":
 		if eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied") {
 			return nil
@@ -558,10 +575,57 @@ func applicationLogEvidencePresent(_ v1alpha1.InvestigationRequestSpec, evidence
 	return false
 }
 
+func containerTerminationEvidencePresent(evidence investigation.EvidenceCollectionResult) bool {
+	return containerTerminationEvidenceMissingReason(evidence) == ""
+}
+
+func containerTerminationEvidenceMissingReason(evidence investigation.EvidenceCollectionResult) string {
+	stale := false
+	truncated := false
+	for _, observation := range evidence.Observations {
+		if observation.Capability != domain.QueryTypeContainerTermination {
+			continue
+		}
+		if observation.Truncated {
+			truncated = true
+			continue
+		}
+		if observation.Value.ContainerTermination == nil {
+			continue
+		}
+		termination := observation.Value.ContainerTermination
+		if termination.LastTerminatedReason == "" || termination.LastTerminatedFinishedAt == "" {
+			continue
+		}
+		finishedAt, err := time.Parse(time.RFC3339, termination.LastTerminatedFinishedAt)
+		if err != nil {
+			continue
+		}
+		if !observation.TimeRange.Start.IsZero() && finishedAt.Before(observation.TimeRange.Start) {
+			stale = true
+			continue
+		}
+		if !observation.TimeRange.End.IsZero() && finishedAt.After(observation.TimeRange.End) {
+			stale = true
+			continue
+		}
+		return ""
+	}
+	if truncated {
+		return "ContainerTerminationEvidenceTruncated"
+	}
+	if stale {
+		return "ContainerTerminationEvidenceStale"
+	}
+	return "ContainerTerminationEvidenceMissing"
+}
+
 func requiredEvidenceKindsForProfile(profile string) []string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
 	case "crashloopbackoff", "imagepullbackoff":
 		return []string{string(domain.QueryTypeEvent)}
+	case "crashloopbackoffv2":
+		return []string{string(domain.QueryTypeEvent), string(domain.QueryTypeContainerTermination)}
 	case "oomkilled":
 		return []string{string(domain.QueryTypeEvent), string(domain.QueryTypeMetric)}
 	case "latencyregression":
@@ -610,6 +674,8 @@ func evidenceProfileHasNoIssue(profile string, spec v1alpha1.InvestigationReques
 	switch profileKey {
 	case "crashloopbackoff":
 		return eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") && applicationLogEvidencePresent(spec, evidence)
+	case "crashloopbackoffv2":
+		return eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") && containerTerminationEvidencePresent(evidence)
 	case "imagepullbackoff":
 		return eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
 	case "oomkilled":
@@ -626,6 +692,8 @@ func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) boo
 	switch profile {
 	case "crashloopbackoff":
 		return kind == string(domain.QueryTypeEvent) || kind == string(domain.QueryTypeLog)
+	case "crashloopbackoffv2":
+		return kind == string(domain.QueryTypeEvent) || kind == string(domain.QueryTypeContainerTermination)
 	case "imagepullbackoff":
 		return kind == string(domain.QueryTypeEvent)
 	case "oomkilled":
@@ -656,6 +724,8 @@ func evidenceRefMatchesProfileIssue(profile string, ref v1alpha1.EvidenceRef) bo
 		return containsAny(text, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
 	case "crashloopbackoff":
 		return containsAny(text, "crashloopbackoff", "backoff", "back-off", "container crashed", "unhealthy", "killing", "panic", "fatal", "startup error", "startup failure", "failed to initialize", "invalid configuration", "configuration error", "exception", "segmentation fault")
+	case "crashloopbackoffv2":
+		return containsAny(text, "crashloopbackoff", "backoff", "back-off", "container crashed", "unhealthy", "killing")
 	case "highhttperror", "highhttperrorrate":
 		return containsAny(text, "http", "5xx", "error rate", "error ratio", "connection refused", "upstream unavailable", "dependency unavailable", "service unavailable", "upstream timeout", "failed to connect", "dial tcp", "connection reset")
 	case "oomkilled":
@@ -1340,7 +1410,7 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	for _, claim := range claims {
 		rcametrics.RecordClaimVerification(claim.Verification)
 	}
-	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, confidence)
+	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, confidence, request.Spec.EvidenceRequirements.Profile)
 	rootCauseEntity := rootCauseEntityForInvestigationOutcome(evaluation.Outcome, preflight.Target)
 	if evaluation.RootCauseEntity != nil {
 		rootCauseEntity = *evaluation.RootCauseEntity
@@ -1428,7 +1498,7 @@ type canonicalVerdictEvaluation struct {
 	MissingEvidence []v1alpha1.RCAMissingEvidence
 }
 
-func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult, claims []v1alpha1.RCAClaim, providerConfidence float64) canonicalVerdictEvaluation {
+func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult, claims []v1alpha1.RCAClaim, providerConfidence float64, profile string) canonicalVerdictEvaluation {
 	causalClaims := rootCauseClaims(rca, claims)
 	supported, contradicted := countVerifiedRootCauseClaims(causalClaims)
 	supportedClaims := supportedRootCauseClaims(causalClaims)
@@ -1455,7 +1525,7 @@ func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigatio
 		evaluation.RootCauseEntity = nil
 		evaluation.Confidence = 0
 		evaluation.VerifiedScore = 0
-		evaluation.MissingEvidence = missingEvidenceForClaims(causalClaims)
+		evaluation.MissingEvidence = missingEvidenceForClaims(causalClaims, profile)
 	}
 	return evaluation
 }
@@ -1621,14 +1691,14 @@ func evidenceSummaryRank(ref v1alpha1.EvidenceRef) int {
 	}
 }
 
-func missingEvidenceForClaims(claims []v1alpha1.RCAClaim) []v1alpha1.RCAMissingEvidence {
+func missingEvidenceForClaims(claims []v1alpha1.RCAClaim, profile string) []v1alpha1.RCAMissingEvidence {
 	missing := make([]v1alpha1.RCAMissingEvidence, 0)
 	seen := map[string]bool{}
 	for _, claim := range claims {
 		if claim.Verification == verifier.VerificationSupported {
 			continue
 		}
-		for _, item := range missingEvidenceForClaim(claim.Statement) {
+		for _, item := range missingEvidenceForClaim(claim.Statement, profile) {
 			key := item.Source + "/" + item.Reason
 			if seen[key] {
 				continue
@@ -1640,7 +1710,7 @@ func missingEvidenceForClaims(claims []v1alpha1.RCAClaim) []v1alpha1.RCAMissingE
 	return missing
 }
 
-func missingEvidenceForClaim(statement string) []v1alpha1.RCAMissingEvidence {
+func missingEvidenceForClaim(statement, profile string) []v1alpha1.RCAMissingEvidence {
 	text := strings.ToLower(statement)
 	switch {
 	case containsAny(text, "rollout", "release", "image", "config", "configuration"):
@@ -1648,6 +1718,9 @@ func missingEvidenceForClaim(statement string) []v1alpha1.RCAMissingEvidence {
 	case containsAny(text, "memory", "oom", "resource pressure"):
 		return []v1alpha1.RCAMissingEvidence{{Source: "prometheus", Reason: "MemoryMetricsRequired"}, {Source: "kubernetes-events", Reason: "OOMEventRequired"}}
 	case containsAny(text, "crash", "restart", "backoff"):
+		if strings.EqualFold(strings.TrimSpace(profile), "CrashLoopBackOffV2") {
+			return []v1alpha1.RCAMissingEvidence{{Source: "loki", Reason: "CrashLoopApplicationLogRequired"}}
+		}
 		return []v1alpha1.RCAMissingEvidence{
 			{Source: "kubernetes-events", Reason: "CrashLoopEventRequired"},
 			{Source: "loki", Reason: "CrashLoopApplicationLogRequired"},

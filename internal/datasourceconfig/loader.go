@@ -92,7 +92,7 @@ func BuildSourceFromResource(ctx context.Context, reader client.Reader, item v1a
 				Message: "kubernetes datasource requires an in-cluster client",
 			}
 		}
-		source = k8sadapter.Adapter{Client: kubeReader}
+		source = k8sadapter.Adapter{Client: kubeReader, APIReader: reader}
 	default:
 		return nil, &ValidationError{
 			Reason:  "AdapterNotRegistered",

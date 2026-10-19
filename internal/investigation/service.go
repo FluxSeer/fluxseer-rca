@@ -442,7 +442,7 @@ func maxQueryResultRecords(queryType domain.QueryType, limits v1alpha1.QueryResu
 		return minPositiveLimit(limits.Metrics.MaxSamples, limits.Metrics.MaxSeries)
 	case domain.QueryTypeLog:
 		return firstPositiveLimit(limits.Logs.MaxEntries, limits.Logs.MaxLines)
-	case domain.QueryTypeEvent, domain.QueryTypeDeploymentCondition, domain.QueryTypeServiceConfiguration, domain.QueryTypeProbeConfiguration:
+	case domain.QueryTypeEvent, domain.QueryTypeDeploymentCondition, domain.QueryTypeServiceConfiguration, domain.QueryTypeProbeConfiguration, domain.QueryTypeContainerTermination:
 		return limits.Events.MaxRecords
 	default:
 		return 0
@@ -922,10 +922,49 @@ func (s *Service) resolveCollectionPlan(spec v1alpha1.InvestigationRequestSpec, 
 		}, nil
 	}
 
+	var (
+		names           []string
+		plan            []CollectionStep
+		datasourceIssue *Issue
+		queryTypeIssue  *Issue
+	)
 	if len(spec.Queries) > 0 {
-		return s.resolveQueryPlan(spec, target, labels)
+		names, plan, datasourceIssue, queryTypeIssue = s.resolveQueryPlan(spec, target, labels)
+	} else {
+		names, plan, datasourceIssue, queryTypeIssue = s.resolveDefaultDatasourcePlan(spec, target, labels)
 	}
-	return s.resolveDefaultDatasourcePlan(spec, target, labels)
+	if datasourceIssue != nil || queryTypeIssue != nil || !strings.EqualFold(strings.TrimSpace(spec.EvidenceRequirements.Profile), "CrashLoopBackOffV2") {
+		return names, plan, datasourceIssue, queryTypeIssue
+	}
+	for _, step := range plan {
+		if step.QueryType == domain.QueryTypeContainerTermination {
+			return names, plan, nil, nil
+		}
+	}
+	source, ok := s.Registry.Get("kubernetes-events")
+	if !ok {
+		return names, plan, &Issue{Reason: "DataSourceNotFound", Message: "CrashLoopBackOffV2 requires the built-in kubernetes-events datasource for container termination status"}, nil
+	}
+	if !source.Capabilities().SupportsQueryType(domain.QueryTypeContainerTermination) {
+		return names, plan, nil, &Issue{Reason: "CapabilityMismatch", Message: "the kubernetes-events datasource does not support containerTermination queries required by CrashLoopBackOffV2"}
+	}
+	if spec.QueryBudget.MaxQueriesTotal > 0 && int32(len(plan)+1) > spec.QueryBudget.MaxQueriesTotal {
+		return names, plan, nil, &Issue{Reason: "QueryBudgetExceeded", Message: "CrashLoopBackOffV2 container termination query exceeds queryBudget.maxQueriesTotal"}
+	}
+	if spec.QueryBudget.MaxQueriesPerSource > 0 {
+		queriesForSource := int32(0)
+		for _, step := range plan {
+			if step.DatasourceName == source.Name() {
+				queriesForSource++
+			}
+		}
+		if queriesForSource+1 > spec.QueryBudget.MaxQueriesPerSource {
+			return names, plan, nil, &Issue{Reason: "QueryBudgetExceeded", Message: "CrashLoopBackOffV2 container termination query exceeds queryBudget.maxQueriesPerSource for kubernetes-events"}
+		}
+	}
+	names = appendIfMissing(names, source.Name())
+	plan = append(plan, CollectionStep{Name: "container-termination-status", DatasourceName: source.Name(), QueryType: domain.QueryTypeContainerTermination, Query: "container-termination-status"})
+	return names, plan, nil, nil
 }
 
 func (s *Service) resolveDefaultDatasourcePlan(spec v1alpha1.InvestigationRequestSpec, target domain.ResourceRef, labels map[string]string) ([]string, []CollectionStep, *Issue, *Issue) {
@@ -1167,6 +1206,8 @@ func investigationQueryText(querySpec v1alpha1.InvestigationQuery, queryType dom
 		return "service-port-configuration"
 	case domain.QueryTypeProbeConfiguration:
 		return "probe-configuration"
+	case domain.QueryTypeContainerTermination:
+		return "container-termination-status"
 	default:
 		return ""
 	}
@@ -1188,6 +1229,11 @@ func normalizeObservations(result *datasource.QueryResult, req datasource.QueryR
 		retainedCount = result.RetainedRecordCount
 	}
 	observations := make([]domain.Observation, 0, retainedCount)
+	if len(result.Records) == 0 && result.Truncated && result.QueryType == domain.QueryTypeContainerTermination {
+		// Preserve the bounded-scan signal even when none of the retained Pods
+		// has a container status record to normalize.
+		return []domain.Observation{normalizeObservation(map[string]any{}, result, req, offset, result.OriginalRecordCount, result.RetainedRecordCount, true, collectedAt)}
+	}
 	for index, record := range result.Records {
 		if index >= maxEvidencePerDatasource {
 			break
@@ -1329,6 +1375,31 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 			ContainerPortName: containerPortName, ContainerPort: containerPort,
 			Resolution: resolution, MismatchConfirmed: mismatchConfirmed, Reason: reason,
 		}}
+	case domain.QueryTypeContainerTermination:
+		termination := &domain.ContainerTerminationObservation{
+			PodName:                  observationRecordString(record, "podName"),
+			PodUID:                   observationRecordString(record, "podUID"),
+			ContainerName:            observationRecordString(record, "containerName"),
+			RestartCount:             observationRecordInt32(record, "restartCount"),
+			WaitingReason:            observationRecordString(record, "waitingReason"),
+			LastTerminatedReason:     observationRecordString(record, "lastTerminatedReason"),
+			LastTerminatedExitCode:   observationRecordInt32(record, "lastTerminatedExitCode"),
+			LastTerminatedSignal:     observationRecordInt32(record, "lastTerminatedSignal"),
+			LastTerminatedFinishedAt: observationRecordString(record, "lastTerminatedFinishedAt"),
+		}
+		obs.Type = domain.ObservationTypeContainerTermination
+		obs.Summary = redactor.RedactText(fmt.Sprintf(
+			"Pod %s container %s restartCount=%d waitingReason=%s lastTerminatedReason=%s exitCode=%d signal=%d finishedAt=%s",
+			termination.PodName, termination.ContainerName, termination.RestartCount,
+			firstNonEmpty(termination.WaitingReason, "unknown"),
+			firstNonEmpty(termination.LastTerminatedReason, "unknown"),
+			termination.LastTerminatedExitCode, termination.LastTerminatedSignal,
+			firstNonEmpty(termination.LastTerminatedFinishedAt, "unknown"),
+		))
+		if result.Truncated && termination.PodName == "" && termination.ContainerName == "" {
+			obs.Summary = redactor.RedactText(result.Summary)
+		}
+		obs.Value = domain.ObservationValue{ContainerTermination: termination}
 	default:
 		obs.Type = domain.ObservationTypeEvent
 		obs.Summary = redactor.RedactText(result.Summary)

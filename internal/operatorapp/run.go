@@ -120,7 +120,7 @@ func Run(args []string, out io.Writer) error {
 	)
 
 	registry := datasource.NewRegistry(
-		k8sadapter.Adapter{Client: mgr.GetClient()},
+		k8sadapter.Adapter{Client: mgr.GetClient(), APIReader: mgr.GetAPIReader()},
 	)
 	modelProviders := model.NewRegistry(
 		openai.Provider{},

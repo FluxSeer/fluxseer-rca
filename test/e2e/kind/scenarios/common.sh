@@ -159,7 +159,7 @@ scenario_assert_pod_label_waiting_reason() {
 
   pods_json="$(scenario_kubectl get pods -n "${namespace}" -l "${label_key}=${label_value}" -o json)"
   jq -e --arg reason "${reason}" \
-    '.items | any(.[]; .status.containerStatuses | any(.[]?; .state.waiting.reason == $reason))' \
+    '.items | any(.[]; .status.containerStatuses | any(.[]?; .state.waiting.reason == $reason or ($reason == "CrashLoopBackOff" and (.restartCount // 0) > 0 and .lastState.terminated != null)))' \
     <<<"${pods_json}" >/dev/null
 }
 
@@ -343,6 +343,7 @@ scenario_capture_case() {
   scenario_kubectl get risksignals -n "${namespace}" -o json >"${case_dir}/risksignals.json"
   scenario_kubectl get events,pods,deployments,services -n "${namespace}" -o json >"${case_dir}/cluster-objects.json"
   (cd "${live_harness_repo_root}" && GOWORK=off go run ./cmd/fluxseer report riskrule "${rule_name}" --namespace "${namespace}" --output json) >"${case_dir}/public-report.json"
+  (cd "${live_harness_repo_root}" && GOWORK=off go run ./cmd/fluxseer report riskrule "${rule_name}" --namespace "${namespace}" --output markdown) >"${case_dir}/public-report.md"
 }
 
 scenario_cleanup_namespace() {

@@ -11,6 +11,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,7 +21,8 @@ import (
 )
 
 type Adapter struct {
-	Client client.Reader
+	Client    client.Reader
+	APIReader client.Reader
 }
 
 func (a Adapter) Name() string {
@@ -37,6 +39,7 @@ func (a Adapter) Capabilities() datasource.Capabilities {
 		DeploymentConditions: true,
 		ServiceConfiguration: true,
 		ProbeConfiguration:   true,
+		ContainerTermination: true,
 	}
 }
 
@@ -52,6 +55,9 @@ func (a Adapter) Query(ctx context.Context, req datasource.QueryRequest) (*datas
 	}
 	if req.QueryType == domain.QueryTypeProbeConfiguration {
 		return a.queryProbeConfiguration(ctx, req)
+	}
+	if req.QueryType == domain.QueryTypeContainerTermination {
+		return a.queryContainerTermination(ctx, req)
 	}
 
 	var events corev1.EventList
@@ -254,6 +260,217 @@ func probeConfigurationRecord(workload workloadContainerSet, container corev1.Co
 		"mismatchConfirmed": mismatch,
 		"reason":            reason,
 	}
+}
+
+const (
+	maxTerminationPods         = 20
+	maxTerminationReplicaSets  = 100
+	maxTerminationContainers   = 10
+	maxTerminationPodListPages = 10
+)
+
+func (a Adapter) queryContainerTermination(ctx context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {
+	reader := a.APIReader
+	if reader == nil {
+		reader = a.Client
+	}
+	pods, listTruncated, err := a.targetPods(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	sort.SliceStable(pods, func(i, j int) bool {
+		iCrashLoop := podHasCrashLoopContainer(pods[i])
+		jCrashLoop := podHasCrashLoopContainer(pods[j])
+		if iCrashLoop != jCrashLoop {
+			return iCrashLoop
+		}
+		if pods[i].Name != pods[j].Name {
+			return pods[i].Name < pods[j].Name
+		}
+		return string(pods[i].UID) < string(pods[j].UID)
+	})
+	originalPodCount := len(pods)
+	retainPodCount := min(originalPodCount, maxTerminationPods)
+	selected := pods[:retainPodCount]
+	records := make([]map[string]any, 0)
+	for _, pod := range selected {
+		statuses := append([]corev1.ContainerStatus(nil), pod.Status.ContainerStatuses...)
+		sort.SliceStable(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
+		if len(statuses) > maxTerminationContainers {
+			statuses = statuses[:maxTerminationContainers]
+		}
+		for _, status := range statuses {
+			if status.State.Waiting == nil && status.LastTerminationState.Terminated == nil {
+				continue
+			}
+			record := map[string]any{
+				"podName":       pod.Name,
+				"podUID":        string(pod.UID),
+				"containerName": status.Name,
+				"restartCount":  status.RestartCount,
+			}
+			if status.State.Waiting != nil {
+				record["waitingReason"] = status.State.Waiting.Reason
+			}
+			if terminated := status.LastTerminationState.Terminated; terminated != nil {
+				record["lastTerminatedReason"] = terminated.Reason
+				record["lastTerminatedExitCode"] = terminated.ExitCode
+				record["lastTerminatedSignal"] = terminated.Signal
+				if !terminated.FinishedAt.IsZero() {
+					record["lastTerminatedFinishedAt"] = terminated.FinishedAt.UTC().Format(time.RFC3339)
+				}
+			}
+			records = append(records, record)
+		}
+	}
+	result := &datasource.QueryResult{
+		Source:       a.Name(),
+		QueryType:    domain.QueryTypeContainerTermination,
+		Summary:      fmt.Sprintf("Kubernetes inspected termination status for %d containers across %d target Pods", len(records), len(selected)),
+		Records:      records,
+		NativeCounts: datasource.NativeResultCounts{ResultType: "containerTermination", Records: len(records)},
+	}
+	if originalPodCount > maxTerminationPods || listTruncated {
+		result.Truncated = true
+		result.TruncationReason = "TargetPodLimitExceeded"
+		result.LimitDimension = "pods"
+		result.Limit = maxTerminationPods
+		result.OriginalRecordCount = originalPodCount
+		result.RetainedRecordCount = len(selected)
+		result.NativeLimit = &datasource.NativeResultLimit{
+			Reason: "TargetPodLimitExceeded", Dimension: "pods", Limit: maxTerminationPods,
+			OriginalCount: int64(originalPodCount), RetainedCount: int64(len(selected)),
+		}
+	}
+	return result, nil
+}
+
+func (a Adapter) targetPods(ctx context.Context, req datasource.QueryRequest) ([]corev1.Pod, bool, error) {
+	reader := a.APIReader
+	if reader == nil {
+		reader = a.Client
+	}
+	key := types.NamespacedName{Namespace: req.Target.Namespace, Name: req.Target.Name}
+	switch normalizeKind(req.Target.Kind) {
+	case "pod":
+		var pod corev1.Pod
+		if err := a.Client.Get(ctx, key, &pod); err != nil {
+			return nil, false, fmt.Errorf("get target Pod termination status: %w", err)
+		}
+		return []corev1.Pod{pod}, false, nil
+	case "deployment":
+		var workload appsv1.Deployment
+		if err := a.Client.Get(ctx, key, &workload); err != nil {
+			return nil, false, fmt.Errorf("get target Deployment selector: %w", err)
+		}
+		if workload.Spec.Selector == nil || len(workload.Spec.Selector.MatchLabels) == 0 {
+			return nil, false, fmt.Errorf("target Deployment %s/%s has no matchLabels selector", req.Target.Namespace, req.Target.Name)
+		}
+		var replicas appsv1.ReplicaSetList
+		if err := reader.List(ctx, &replicas, client.InNamespace(req.Target.Namespace), client.MatchingLabels(workload.Spec.Selector.MatchLabels), client.Limit(maxTerminationReplicaSets+1)); err != nil {
+			return nil, false, fmt.Errorf("list target Deployment ReplicaSets: %w", err)
+		}
+		replicaUIDs := map[types.UID]bool{}
+		for _, replica := range replicas.Items {
+			if hasControllerOwner(replica.OwnerReferences, "Deployment", workload.Name, workload.UID) {
+				replicaUIDs[replica.UID] = true
+			}
+		}
+		pods, podListTruncated, err := a.listOwnedPods(ctx, reader, req.Target.Namespace, workload.Spec.Selector.MatchLabels, func(pod corev1.Pod) bool {
+			for _, owner := range pod.OwnerReferences {
+				if owner.Controller != nil && *owner.Controller && owner.Kind == "ReplicaSet" && replicaUIDs[owner.UID] {
+					return true
+				}
+			}
+			return false
+		})
+		return pods, podListTruncated || replicas.Continue != "" || len(replicas.Items) > maxTerminationReplicaSets, err
+	case "statefulset":
+		var workload appsv1.StatefulSet
+		if err := a.Client.Get(ctx, key, &workload); err != nil {
+			return nil, false, fmt.Errorf("get target StatefulSet selector: %w", err)
+		}
+		if workload.Spec.Selector == nil || len(workload.Spec.Selector.MatchLabels) == 0 {
+			return nil, false, fmt.Errorf("target StatefulSet %s/%s has no matchLabels selector", req.Target.Namespace, req.Target.Name)
+		}
+		return a.listOwnedPods(ctx, reader, req.Target.Namespace, workload.Spec.Selector.MatchLabels, func(pod corev1.Pod) bool {
+			return hasControllerOwner(pod.OwnerReferences, "StatefulSet", workload.Name, workload.UID)
+		})
+	case "daemonset":
+		var workload appsv1.DaemonSet
+		if err := a.Client.Get(ctx, key, &workload); err != nil {
+			return nil, false, fmt.Errorf("get target DaemonSet selector: %w", err)
+		}
+		if workload.Spec.Selector == nil || len(workload.Spec.Selector.MatchLabels) == 0 {
+			return nil, false, fmt.Errorf("target DaemonSet %s/%s has no matchLabels selector", req.Target.Namespace, req.Target.Name)
+		}
+		return a.listOwnedPods(ctx, reader, req.Target.Namespace, workload.Spec.Selector.MatchLabels, func(pod corev1.Pod) bool {
+			return hasControllerOwner(pod.OwnerReferences, "DaemonSet", workload.Name, workload.UID)
+		})
+	case "replicaset":
+		var workload appsv1.ReplicaSet
+		if err := a.Client.Get(ctx, key, &workload); err != nil {
+			return nil, false, fmt.Errorf("get target ReplicaSet selector: %w", err)
+		}
+		if workload.Spec.Selector == nil || len(workload.Spec.Selector.MatchLabels) == 0 {
+			return nil, false, fmt.Errorf("target ReplicaSet %s/%s has no matchLabels selector", req.Target.Namespace, req.Target.Name)
+		}
+		return a.listOwnedPods(ctx, reader, req.Target.Namespace, workload.Spec.Selector.MatchLabels, func(pod corev1.Pod) bool {
+			return hasControllerOwner(pod.OwnerReferences, "ReplicaSet", workload.Name, workload.UID)
+		})
+	default:
+		return nil, false, fmt.Errorf("target kind %q does not support container termination queries", req.Target.Kind)
+	}
+}
+
+func (a Adapter) listOwnedPods(ctx context.Context, reader client.Reader, namespace string, selector map[string]string, owned func(corev1.Pod) bool) ([]corev1.Pod, bool, error) {
+	result := make([]corev1.Pod, 0, maxTerminationPods)
+	continueToken := ""
+	for page := 0; page < maxTerminationPodListPages; page++ {
+		var pods corev1.PodList
+		listOptions := []client.ListOption{
+			client.InNamespace(namespace),
+			client.MatchingLabels(selector),
+			client.Limit(maxTerminationPods + 1),
+		}
+		if continueToken != "" {
+			listOptions = append(listOptions, client.Continue(continueToken))
+		}
+		if err := reader.List(ctx, &pods, listOptions...); err != nil {
+			return nil, false, fmt.Errorf("list target-owned Pods: %w", err)
+		}
+		for _, pod := range pods.Items {
+			if owned(pod) {
+				result = append(result, pod)
+				if len(result) > maxTerminationPods {
+					return result, true, nil
+				}
+			}
+		}
+		continueToken = pods.Continue
+		if continueToken == "" {
+			return result, false, nil
+		}
+	}
+	return result, continueToken != "", nil
+}
+
+func hasControllerOwner(owners []metav1.OwnerReference, kind, name string, uid types.UID) bool {
+	for _, owner := range owners {
+		if owner.Controller != nil && *owner.Controller && owner.Kind == kind && owner.Name == name && owner.UID == uid {
+			return true
+		}
+	}
+	return false
+}
+
+func podHasCrashLoopContainer(pod corev1.Pod) bool {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.State.Waiting != nil && status.State.Waiting.Reason == "CrashLoopBackOff" {
+			return true
+		}
+	}
+	return false
 }
 
 func firstContainerPortName(ports []corev1.ContainerPort) string {
