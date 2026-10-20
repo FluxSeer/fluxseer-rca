@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 func TestAllowedMetricLabelsRemainLowCardinality(t *testing.T) {
@@ -16,6 +17,85 @@ func TestAllowedMetricLabelsRemainLowCardinality(t *testing.T) {
 				t.Fatalf("metric %s uses forbidden high-cardinality label %q", metricName, label)
 			}
 		}
+	}
+}
+
+func TestRCAQualityMetricLabelsAvoidResourceIdentity(t *testing.T) {
+	for _, metricName := range []string{
+		"fluxseer_rca_investigation_quality_total",
+		"fluxseer_rca_evidence_sufficiency_total",
+		"fluxseer_rca_required_evidence_checks_total",
+		"fluxseer_rca_actionable_inconclusive_total",
+	} {
+		for _, label := range AllowedLabels[metricName] {
+			switch label {
+			case "namespace", "name", "uid", "target", "request", "query", "source_ref":
+				t.Fatalf("metric %s uses resource-specific label %q", metricName, label)
+			}
+		}
+	}
+}
+
+func TestRCAQualityMetricsAreRegistered(t *testing.T) {
+	RecordInvestigationQuality("CrashLoopBackOffV2", "heuristic", "available", "completed", "confirmed")
+	RecordEvidenceSufficiency("CrashLoopBackOffV2", true)
+	RecordRequiredEvidenceCheck("CrashLoopBackOffV2", "containerTermination:LastTermination", "usable")
+	RecordActionableInconclusive("CrashLoopBackOffV2", "termination_missing", true)
+	metrics, err := crmetrics.Registry.Gather()
+	if err != nil {
+		t.Fatalf("gather registered metrics: %v", err)
+	}
+	want := map[string]bool{
+		"fluxseer_rca_investigation_quality_total":    false,
+		"fluxseer_rca_evidence_sufficiency_total":     false,
+		"fluxseer_rca_required_evidence_checks_total": false,
+		"fluxseer_rca_actionable_inconclusive_total":  false,
+	}
+	for _, metric := range metrics {
+		if _, ok := want[metric.GetName()]; ok {
+			want[metric.GetName()] = true
+		}
+	}
+	for name, found := range want {
+		if !found {
+			t.Errorf("metric %s is not registered in the controller-runtime registry", name)
+		}
+	}
+}
+
+func TestRecordRCAQualityMetricsNormalizeLabelsAndIncrement(t *testing.T) {
+	outcome := []string{"crashloopbackoffv2", "openai", "partial", "completed", "confirmed"}
+	beforeOutcome := testutil.ToFloat64(InvestigationQualityTotal.WithLabelValues(outcome...))
+	RecordInvestigationQuality("CrashLoopBackOffV2", "OpenAI", "Partial", "Completed", "Confirmed")
+	afterOutcome := testutil.ToFloat64(InvestigationQualityTotal.WithLabelValues(outcome...))
+	if afterOutcome != beforeOutcome+1 {
+		t.Fatalf("expected RCA outcome counter increment, before=%f after=%f", beforeOutcome, afterOutcome)
+	}
+
+	unknownOutcome := []string{"other", "other", "other", "other", "other"}
+	beforeUnknown := testutil.ToFloat64(InvestigationQualityTotal.WithLabelValues(unknownOutcome...))
+	RecordInvestigationQuality("user-controlled-profile", "provider-instance-name", "unrecognized-state", "running", "unrecognized-outcome")
+	afterUnknown := testutil.ToFloat64(InvestigationQualityTotal.WithLabelValues(unknownOutcome...))
+	if afterUnknown != beforeUnknown+1 {
+		t.Fatalf("expected unknown labels to collapse to fixed values, before=%f after=%f", beforeUnknown, afterUnknown)
+	}
+
+	beforeSufficiency := testutil.ToFloat64(EvidenceSufficiencyTotal.WithLabelValues("crashloopbackoffv2", "true"))
+	RecordEvidenceSufficiency("CrashLoopBackOffV2", true)
+	if got := testutil.ToFloat64(EvidenceSufficiencyTotal.WithLabelValues("crashloopbackoffv2", "true")); got != beforeSufficiency+1 {
+		t.Fatalf("expected evidence sufficiency counter increment, before=%f after=%f", beforeSufficiency, got)
+	}
+
+	beforeCheck := testutil.ToFloat64(RequiredEvidenceChecksTotal.WithLabelValues("crashloopbackoffv2", "containertermination_lasttermination", "stale"))
+	RecordRequiredEvidenceCheck("CrashLoopBackOffV2", "containerTermination:LastTermination", "Stale")
+	if got := testutil.ToFloat64(RequiredEvidenceChecksTotal.WithLabelValues("crashloopbackoffv2", "containertermination_lasttermination", "stale")); got != beforeCheck+1 {
+		t.Fatalf("expected required evidence check counter increment, before=%f after=%f", beforeCheck, got)
+	}
+
+	beforeActionable := testutil.ToFloat64(ActionableInconclusiveTotal.WithLabelValues("crashloopbackoffv2", "termination_missing", "true"))
+	RecordActionableInconclusive("CrashLoopBackOffV2", "termination_missing", true)
+	if got := testutil.ToFloat64(ActionableInconclusiveTotal.WithLabelValues("crashloopbackoffv2", "termination_missing", "true")); got != beforeActionable+1 {
+		t.Fatalf("expected actionable inconclusive counter increment, before=%f after=%f", beforeActionable, got)
 	}
 }
 

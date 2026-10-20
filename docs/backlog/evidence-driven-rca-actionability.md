@@ -278,12 +278,41 @@ failures and evidence insufficiency into one unsuccessful-RCA bucket.
 | Metric | Initial definition | Required breakdown |
 | --- | --- | --- |
 | Scenario Coverage | Count of named scenarios with validated runtime evidence, divided by the explicitly declared scenario portfolio. | Scenario ID, target kind, evidence profile, validation tier. |
-| RCA Resolution Rate | Completed eligible investigations with `Confirmed` root cause divided by completed eligible investigations. Report separately from operational actionability. | Scenario, evidence profile, provider class, source availability. |
+| RCA Resolution Rate | Completed eligible investigations with `Confirmed` root cause divided by completed eligible investigations. Report separately from operational actionability. | Evidence profile, provider class, required-evidence availability. |
 | Evidence Sufficiency Rate | Investigations whose required profile checks completed with usable evidence divided by investigations where those checks were required. | Check/source, unavailable, stale, empty, failed, or usable. |
-| Actionable Inconclusive Rate | Inconclusive investigations that include a specific evidence gap and an available next diagnostic step divided by all Inconclusive investigations. | Gap reason and whether the step was executable. |
+| Actionable Inconclusive Rate | Inconclusive investigations that include a specific evidence gap and an available next diagnostic step divided by all Inconclusive investigations. | Evidence profile, bounded gap reason, and whether the step was executable. |
 
 Exclude raw query text, resource names, namespace names, and other
 high-cardinality or sensitive values from metric labels.
+
+### Runtime measurement contract
+
+The controller exports these additive Prometheus counter families:
+
+| Metric | Unit counted | Rate denominator |
+| --- | --- | --- |
+| `fluxseer_rca_investigation_quality_total` | Persisted terminal `InvestigationRequest` outcomes, labeled by bounded profile, provider class, evidence availability, phase, and outcome. | RCA Resolution Rate includes `phase="completed"` with outcome `confirmed`, `inconclusive`, or `unknown`; it excludes failed executions and `NoIssueFound`. |
+| `fluxseer_rca_evidence_sufficiency_total` | One terminal request with a recognized required evidence profile, labeled `sufficient=true/false`. Failed executions count as insufficient. | All terminal requests that declared one of the supported profiles. |
+| `fluxseer_rca_required_evidence_checks_total` | One required check per terminal request, labeled by bounded profile, check, and result (`usable`, `empty`, `missing`, `stale`, `truncated`, `failed`, `unavailable`, or `other`). | Supports per-check/source sufficiency breakdowns; only `usable` is numerator evidence. |
+| `fluxseer_rca_actionable_inconclusive_total` | One completed `Inconclusive` request, labeled by bounded profile, gap reason, and `actionable=true/false`. `true` requires a specific recorded evidence gap with a supported read-only next step. | All completed `Inconclusive` requests with a recognized required profile. |
+
+`evidence_availability` describes the recorded required-check state: all checks
+complete, partial/gapped, unavailable, or not applicable. It does not claim
+health for every configured datasource. Profile and provider labels map
+unknown values to `other`; no request, namespace, workload, datasource name, or
+query text is exported. The actionability gap label is restricted to known
+CrashLoop reason categories plus `none`, `multiple`, and `other`. Actionability
+is currently `true` only for CrashLoop profiles with a gap that maps to a
+specific report diagnostic. Other profiles remain `false` until equivalent
+guidance exists.
+
+`Scenario Coverage` is computed from the declared scenario portfolio and its
+validated runtime/replay artifacts. It is not a controller runtime counter.
+These in-memory counters are updated after a terminal status write succeeds;
+they can undercount if the controller exits after the API write and before the
+metric update, and reset on process restart as normal Prometheus counters do.
+Adding these metric families is `NON_BREAKING`; no CRD, report schema, RBAC, or
+Helm values contract changes.
 
 ## Acceptance Criteria
 

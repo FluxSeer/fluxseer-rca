@@ -71,6 +71,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 
 	original := investigation.DeepCopy()
 	restarting := original.Status.ObservedGeneration != investigation.Generation || isTerminalInvestigationPhase(original.Status.Phase)
+	qualityProviderClass := "heuristic"
 	message := "investigation execution started"
 	setInvestigationRequestStatus(&investigation.Status, v1alpha1.PhaseCollecting, message, investigation.Generation, now())
 	if investigation.Status.StartedAt == nil || restarting {
@@ -104,6 +105,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 		if preflightErr != nil {
 			return ctrl.Result{}, preflightErr
 		}
+		qualityProviderClass = providerType(preflight.Provider)
 		evidence, evidenceErr := r.collectEvidence(ctx, &investigation, preflight, now())
 		if evidenceErr != nil {
 			return ctrl.Result{}, evidenceErr
@@ -114,19 +116,15 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 			case !gate.Complete:
 				applyEvidenceRequirementInconclusiveStatus(&investigation, evidence, *gate, now())
 				applyInvestigationStatusBudget(&investigation, now())
-				if !reflect.DeepEqual(original.Status, investigation.Status) {
-					if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
-						return ctrl.Result{}, err
-					}
+				if err := r.persistStatusAndRecordQuality(ctx, original, &investigation, qualityProviderClass); err != nil {
+					return ctrl.Result{}, err
 				}
 				return ttlResult, nil
 			case gate.NoIssueFound:
 				applyEvidenceRequirementNoIssueFoundStatus(&investigation, evidence, *gate, now())
 				applyInvestigationStatusBudget(&investigation, now())
-				if !reflect.DeepEqual(original.Status, investigation.Status) {
-					if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
-						return ctrl.Result{}, err
-					}
+				if err := r.persistStatusAndRecordQuality(ctx, original, &investigation, qualityProviderClass); err != nil {
+					return ctrl.Result{}, err
 				}
 				return ttlResult, nil
 			}
@@ -160,12 +158,167 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	applyInvestigationStatusBudget(&investigation, now())
-	if !reflect.DeepEqual(original.Status, investigation.Status) {
-		if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
-			return ctrl.Result{}, err
-		}
+	if err := r.persistStatusAndRecordQuality(ctx, original, &investigation, qualityProviderClass); err != nil {
+		return ctrl.Result{}, err
 	}
 	return ttlResult, nil
+}
+
+func (r *InvestigationRequestReconciler) persistStatusAndRecordQuality(ctx context.Context, original, updated *v1alpha1.InvestigationRequest, providerClass string) error {
+	if reflect.DeepEqual(original.Status, updated.Status) {
+		return nil
+	}
+	if err := r.Status().Update(ctx, updated); err != nil {
+		if recordStatusUpdateConflict("InvestigationRequest", err) {
+			return nil
+		}
+		return err
+	}
+	if updated.Status.Phase == v1alpha1.PhaseCompleted || updated.Status.Phase == v1alpha1.PhaseFailed {
+		recordInvestigationQualityMetrics(updated, providerClass)
+	}
+	return nil
+}
+
+func recordInvestigationQualityMetrics(request *v1alpha1.InvestigationRequest, providerClass string) {
+	profile := request.Spec.EvidenceRequirements.Profile
+	checks := requiredEvidenceChecksForProfile(profile)
+	availability := evidenceAvailabilityForMetrics(request, checks)
+	rcametrics.RecordInvestigationQuality(profile, providerClass, availability, request.Status.Phase, request.Status.Outcome)
+	if len(checks) == 0 {
+		return
+	}
+
+	sufficient := request.Status.Phase == v1alpha1.PhaseCompleted && allRequiredChecksComplete(checks, request.Status.EvidenceCoverage)
+	rcametrics.RecordEvidenceSufficiency(profile, sufficient)
+	for _, check := range checks {
+		rcametrics.RecordRequiredEvidenceCheck(profile, check, evidenceCheckResultForMetrics(request, check))
+	}
+	if request.Status.Phase == v1alpha1.PhaseCompleted && request.Status.Outcome == v1alpha1.InvestigationOutcomeInconclusive {
+		rcametrics.RecordActionableInconclusive(profile, inconclusiveGapReason(request), inconclusiveHasSpecificNextStep(request))
+	}
+}
+
+func evidenceAvailabilityForMetrics(request *v1alpha1.InvestigationRequest, checks []string) string {
+	if len(checks) == 0 {
+		return "not_applicable"
+	}
+	if request.Status.Phase == v1alpha1.PhaseFailed {
+		return "unavailable"
+	}
+	coverage := request.Status.EvidenceCoverage
+	if coverage == nil {
+		return "unavailable"
+	}
+	if allRequiredChecksComplete(checks, coverage) {
+		return "available"
+	}
+	if len(coverage.CompletedChecks) > 0 || len(request.Status.MissingEvidence) > 0 || request.Status.Degradation != nil {
+		return "partial"
+	}
+	return "unavailable"
+}
+
+func allRequiredChecksComplete(checks []string, coverage *v1alpha1.RCAEvidenceCoverage) bool {
+	if coverage == nil || len(coverage.IncompleteChecks) != 0 {
+		return false
+	}
+	completed := map[string]struct{}{}
+	for _, check := range coverage.CompletedChecks {
+		completed[check] = struct{}{}
+	}
+	for _, check := range checks {
+		if _, ok := completed[check]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func evidenceCheckResultForMetrics(request *v1alpha1.InvestigationRequest, check string) string {
+	coverage := request.Status.EvidenceCoverage
+	if coverage != nil {
+		for _, completed := range coverage.CompletedChecks {
+			if completed == check {
+				return "usable"
+			}
+		}
+	}
+	if request.Status.Failure != nil {
+		return "unavailable"
+	}
+	checkSource := strings.ToLower(strings.SplitN(check, ":", 2)[0])
+	fallbackResult := "missing"
+	for _, missing := range request.Status.MissingEvidence {
+		if strings.ToLower(strings.TrimSpace(missing.Source)) != checkSource {
+			continue
+		}
+		switch missing.Reason {
+		case "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse":
+			return "failed"
+		case "ContainerTerminationEvidenceStale":
+			return "stale"
+		case "ContainerTerminationEvidenceTruncated":
+			return "truncated"
+		case "DataSourceNotFound", "DataSourceNotSpecified", "UnsupportedQueryType":
+			return "unavailable"
+		case "RequiredEvidenceMissing", "ContainerTerminationEvidenceMissing":
+			fallbackResult = "empty"
+		default:
+			fallbackResult = "missing"
+		}
+	}
+	return fallbackResult
+}
+
+func inconclusiveHasSpecificNextStep(request *v1alpha1.InvestigationRequest) bool {
+	profile := strings.ToLower(strings.TrimSpace(request.Spec.EvidenceRequirements.Profile))
+	if profile != "crashloopbackoff" && profile != "crashloopbackoffv2" {
+		return false
+	}
+	switch inconclusiveGapReason(request) {
+	case "application_evidence_missing", "application_log_required", "termination_missing", "termination_stale", "termination_truncated":
+		return true
+	default:
+		return false
+	}
+}
+
+func inconclusiveGapReason(request *v1alpha1.InvestigationRequest) string {
+	categories := map[string]struct{}{}
+	genericRequiredEvidence := false
+	for _, missing := range request.Status.MissingEvidence {
+		switch missing.Reason {
+		case "RequiredEvidenceMissing":
+			// This summary reason often accompanies a more specific gap below.
+			genericRequiredEvidence = true
+		case "CrashLoopApplicationEvidenceMissing":
+			categories["application_evidence_missing"] = struct{}{}
+		case "CrashLoopApplicationLogRequired":
+			categories["application_log_required"] = struct{}{}
+		case "ContainerTerminationEvidenceMissing":
+			categories["termination_missing"] = struct{}{}
+		case "ContainerTerminationEvidenceStale":
+			categories["termination_stale"] = struct{}{}
+		case "ContainerTerminationEvidenceTruncated":
+			categories["termination_truncated"] = struct{}{}
+		default:
+			categories["other"] = struct{}{}
+		}
+	}
+	if len(categories) == 0 {
+		if genericRequiredEvidence {
+			return "other"
+		}
+		return "none"
+	}
+	if len(categories) > 1 {
+		return "multiple"
+	}
+	for category := range categories {
+		return category
+	}
+	return "other"
 }
 
 func applyInvestigationStatusBudget(request *v1alpha1.InvestigationRequest, now time.Time) {

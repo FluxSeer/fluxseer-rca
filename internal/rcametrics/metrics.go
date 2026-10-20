@@ -22,6 +22,10 @@ var AllowedLabels = map[string][]string{
 	"fluxseer_rca_deduplication_hits_total":          {"source"},
 	"fluxseer_rca_loop_prevention_total":             {"reason"},
 	"fluxseer_rca_status_update_conflicts_total":     {"resource"},
+	"fluxseer_rca_investigation_quality_total":       {"profile", "provider_class", "evidence_availability", "phase", "outcome"},
+	"fluxseer_rca_evidence_sufficiency_total":        {"profile", "sufficient"},
+	"fluxseer_rca_required_evidence_checks_total":    {"profile", "check", "result"},
+	"fluxseer_rca_actionable_inconclusive_total":     {"profile", "gap_reason", "actionable"},
 }
 
 var forbiddenLabels = map[string]struct{}{
