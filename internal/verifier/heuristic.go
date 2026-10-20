@@ -209,6 +209,12 @@ func domainSupportEvidenceIDs(statement string, evidence []EvidenceRef) ([]strin
 		ids = append(ids, id)
 		coveredKinds[strings.ToLower(strings.TrimSpace(ref.Kind))] = true
 	}
+	if profile == "schedulingsuccess" {
+		// A normalized scheduling observation can independently establish the
+		// failure mechanism when it carries a UID-correlated PodScheduled=False
+		// condition. Root-cause candidates remain outside this verifier claim.
+		return ids, true
+	}
 	if profile == "serviceportmismatch" {
 		// Event text can preserve the legacy generic ConfigurationMismatch
 		// semantics; the controller only promotes ServicePortMismatch when a
@@ -305,7 +311,7 @@ func domainEvidenceSupports(profile string, ref EvidenceRef) bool {
 		}
 		return kind == "log" && containsAny(text, "panic", "fatal", "startup error", "startup failure", "failed to initialize", "invalid configuration", "configuration error", "exception", "segmentation fault")
 	case "schedulingsuccess":
-		return kind == "event" && containsAny(text, "failedscheduling", "failed scheduling", "unschedulable", "untolerated taint", "insufficient cpu", "insufficient memory")
+		return (kind == "event" || kind == "scheduling") && (containsAny(text, "failedscheduling", "failed scheduling", "unschedulable", "untolerated taint", "insufficient cpu", "insufficient memory") || (kind == "scheduling" && strings.Contains(text, "podschedul") && strings.Contains(text, "=false")))
 	case "probefailure":
 		return (kind == "event" && containsAny(text, "unhealthy", "readiness", "liveness", "probe", "not ready")) ||
 			(kind == "probeconfiguration" && containsAny(text, "probeconfigurationmismatch", "probe configuration mismatch", "mismatchconfirmed"))

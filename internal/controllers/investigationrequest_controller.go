@@ -373,7 +373,8 @@ func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, eviden
 	}
 	missing := make([]v1alpha1.RCAMissingEvidence, 0)
 	for _, kind := range requiredKinds {
-		if !present[kind] {
+		schedulingEventSatisfied := isSchedulingProfile(profile) && kind == string(domain.QueryTypeEvent) && present["scheduling"]
+		if !present[kind] && !schedulingEventSatisfied {
 			missing = append(missing, v1alpha1.RCAMissingEvidence{
 				Source: kind,
 				Reason: "RequiredEvidenceMissing",
@@ -548,14 +549,37 @@ func servicePortMismatchEvidencePresent(evidence investigation.EvidenceCollectio
 
 func failedSchedulingEvidencePresent(evidence investigation.EvidenceCollectionResult) bool {
 	for _, ref := range evidence.EvidenceRefs {
-		if !strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeEvent)) {
+		if ref.Truncated {
 			continue
 		}
+		kind := strings.ToLower(strings.TrimSpace(ref.Kind))
 		text := strings.ToLower(strings.Join([]string{ref.Reason, ref.Summary}, " "))
-		if containsAny(text, "failedscheduling", "failed scheduling") && containsAny(text, "insufficient memory", "insufficient cpu") {
+		if kind == string(domain.QueryTypeEvent) && containsAny(text, "failedscheduling", "failed scheduling") {
+			return true
+		}
+		if kind == "scheduling" && (containsAny(text, "unschedulable", "failedscheduling", "failed scheduling") || (strings.Contains(text, "podschedul") && strings.Contains(text, "=false"))) {
 			return true
 		}
 	}
+	return false
+}
+
+func schedulingFailureMechanismEvidencePresent(evidence investigation.EvidenceCollectionResult) bool {
+	for _, result := range evidence.Diagnostics {
+		if result.DiagnosticID != "scheduling" {
+			continue
+		}
+		for _, claim := range result.Claims {
+			if claim.Type == diagnostic.ClaimFailureMechanism &&
+				strings.Contains(strings.ToLower(claim.Statement), "could not be scheduled") &&
+				len(claim.EvidenceRefs) > 0 {
+				return true
+			}
+		}
+	}
+	// Generic Event query references do not carry the normalized Pod UID and
+	// time/source validation performed by SchedulingDiagnostic. They may satisfy
+	// an evidence-coverage gate, but must not independently confirm a mechanism.
 	return false
 }
 
@@ -799,6 +823,15 @@ func requiredEvidenceKindsForProfile(profile string) []string {
 	}
 }
 
+func isSchedulingProfile(profile string) bool {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "failedscheduling", "schedulingsuccess":
+		return true
+	default:
+		return false
+	}
+}
+
 func evidenceProfileHasNoIssue(profile string, spec v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult) bool {
 	profileKey := strings.ToLower(strings.TrimSpace(profile))
 	if profileKey == "" {
@@ -859,7 +892,7 @@ func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) boo
 	case "serviceportmismatch":
 		return kind == strings.ToLower(string(domain.QueryTypeServiceConfiguration))
 	case "failedscheduling", "schedulingsuccess":
-		return kind == string(domain.QueryTypeEvent)
+		return kind == string(domain.QueryTypeEvent) || kind == "scheduling"
 	case "effectivenessverification":
 		return kind == string(domain.QueryTypeEvent)
 	case "probefailure":
@@ -892,7 +925,7 @@ func evidenceRefMatchesProfileIssue(profile string, ref v1alpha1.EvidenceRef) bo
 	case "serviceportmismatch":
 		return containsAny(text, "serviceportmismatch", "service port mismatch", "mismatchconfirmed", "targetport", "target port", "container port")
 	case "failedscheduling", "schedulingsuccess":
-		return containsAny(text, "failedscheduling", "failed scheduling") && containsAny(text, "insufficient memory", "insufficient cpu")
+		return containsAny(text, "failedscheduling", "failed scheduling", "unschedulable") || (strings.Contains(text, "podschedul") && strings.Contains(text, "=false"))
 	case "effectivenessverification":
 		return strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeEvent))
 	case "probefailure":
@@ -1488,7 +1521,7 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		}
 		applyStructuredRCAStatus(request, preflight, evidence, rca, now)
 	}
-	evidenceDegradation := evidenceNativeLimitDegradation(evidence)
+	evidenceDegradation := evidenceCoverageDegradation(evidence)
 	if evidenceDegradation != nil {
 		request.Status.Degradation = evidenceDegradation
 	}
@@ -1516,7 +1549,8 @@ func applyInvestigationExecutionStatus(request *v1alpha1.InvestigationRequest, p
 		setStatusCondition(&request.Status.Conditions, conditionReady, metav1.ConditionTrue, "InvestigationCompleted", "evidence collection and RCA generation completed successfully", request.Generation, now)
 	}
 	if evidenceDegradation != nil {
-		setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, "NativeResultLimitExceeded", "evidence collection completed with bounded datasource result truncation", request.Generation, now)
+		reason, message := evidenceDegradationCondition(evidenceDegradation)
+		setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionTrue, reason, message, request.Generation, now)
 	} else {
 		setStatusCondition(&request.Status.Conditions, conditionDegraded, metav1.ConditionFalse, "NoDegradation", "request completed successfully without degradation", request.Generation, now)
 	}
@@ -1563,6 +1597,11 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	claims, verification := buildRCAClaims(rca, evidence, request.Spec.EvidenceRequirements.Profile)
 	for _, claim := range claims {
 		rcametrics.RecordClaimVerification(claim.Verification)
+		claimType := "provider"
+		if isSchedulingMechanismClaim(claim) {
+			claimType = "failure_mechanism"
+		}
+		rcametrics.RecordDiagnosticClaim(diagnosticMetricForRCAClaim(claim), claimType, claim.Verification)
 	}
 	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, confidence, request.Spec.EvidenceRequirements.Profile)
 	rootCauseEntity := rootCauseEntityForInvestigationOutcome(evaluation.Outcome, preflight.Target)
@@ -1586,11 +1625,21 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	request.Status.Confidence = evaluation.Confidence
 	request.Status.Outcome = evaluation.Outcome
 	request.Status.Claims = claims
-	request.Status.AlternativeHypotheses = diagnosticAlternativeHypotheses(evidence.Diagnostics)
+	request.Status.AlternativeHypotheses = diagnosticAlternativeHypothesesWithoutConfirmedMechanism(evidence.Diagnostics, claims)
 	request.Status.MissingEvidence = evaluation.MissingEvidence
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
 	request.Status.Execution = buildRCAExecution(request, preflight, evidence, rca, investigationExecutionID(request, preflight, evidence), executionStateFinalized, now)
 	request.Status.Execution.VerifierVersion = verification.Method
+}
+
+func diagnosticMetricForRCAClaim(claim v1alpha1.RCAClaim) string {
+	if isSchedulingMechanismClaim(claim) || containsAny(strings.ToLower(claim.Statement), "schedul", "unschedulable", "taint mismatch") {
+		return "scheduling"
+	}
+	if containsAny(strings.ToLower(claim.Statement), "imagepull", "image pull", "registry") {
+		return "imagepull"
+	}
+	return "other"
 }
 
 func diagnosticAlternativeHypotheses(results []diagnostic.Result) []v1alpha1.RCAAlternativeHypothesis {
@@ -1598,6 +1647,39 @@ func diagnosticAlternativeHypotheses(results []diagnostic.Result) []v1alpha1.RCA
 	for _, result := range results {
 		for _, claim := range result.Claims {
 			if claim.Type == diagnostic.ClaimObservation || strings.TrimSpace(claim.Statement) == "" {
+				continue
+			}
+			hypotheses = append(hypotheses, v1alpha1.RCAAlternativeHypothesis{
+				Statement:    claim.Statement,
+				Disposition:  "DiagnosticCandidateUnverified",
+				EvidenceRefs: append([]string(nil), claim.EvidenceRefs...),
+			})
+		}
+	}
+	return hypotheses
+}
+
+// diagnosticAlternativeHypothesesWithoutConfirmedMechanism keeps diagnostic
+// root-cause candidates explicitly unverified while removing a scheduling
+// failure-mechanism duplicate after the canonical mechanism claim is verified.
+func diagnosticAlternativeHypothesesWithoutConfirmedMechanism(results []diagnostic.Result, claims []v1alpha1.RCAClaim) []v1alpha1.RCAAlternativeHypothesis {
+	mechanismConfirmed := false
+	for _, claim := range claims {
+		if isSchedulingMechanismClaim(claim) && claim.Verification == verifier.VerificationSupported {
+			mechanismConfirmed = true
+			break
+		}
+	}
+	if !mechanismConfirmed {
+		return diagnosticAlternativeHypotheses(results)
+	}
+	hypotheses := make([]v1alpha1.RCAAlternativeHypothesis, 0)
+	for _, result := range results {
+		for _, claim := range result.Claims {
+			if claim.Type == diagnostic.ClaimObservation || strings.TrimSpace(claim.Statement) == "" {
+				continue
+			}
+			if result.DiagnosticID == "scheduling" && claim.Type == diagnostic.ClaimFailureMechanism && strings.Contains(strings.ToLower(claim.Statement), "could not be scheduled") {
 				continue
 			}
 			hypotheses = append(hypotheses, v1alpha1.RCAAlternativeHypothesis{
@@ -1779,7 +1861,19 @@ func rootCauseClaims(rca investigation.RCAResult, claims []v1alpha1.RCAClaim) []
 	if start >= len(claims) {
 		return nil
 	}
-	return claims[start:]
+	filtered := make([]v1alpha1.RCAClaim, 0, len(claims)-start)
+	for _, claim := range claims[start:] {
+		if isSchedulingMechanismClaim(claim) {
+			continue
+		}
+		filtered = append(filtered, claim)
+	}
+	return filtered
+}
+
+func isSchedulingMechanismClaim(claim v1alpha1.RCAClaim) bool {
+	return strings.HasPrefix(strings.TrimSpace(claim.ID), "claim-scheduling-mechanism") ||
+		strings.HasPrefix(strings.TrimSpace(claim.Statement), "SchedulingUnschedulable is confirmed by")
 }
 
 func countVerifiedRootCauseClaims(claims []v1alpha1.RCAClaim) (int, int) {
@@ -1903,15 +1997,25 @@ func missingEvidenceForClaim(statement, profile string) []v1alpha1.RCAMissingEvi
 	}
 }
 
-func evidenceNativeLimitDegradation(evidence investigation.EvidenceCollectionResult) *v1alpha1.RCADegradation {
+func evidenceCoverageDegradation(evidence investigation.EvidenceCollectionResult) *v1alpha1.RCADegradation {
 	reasons := make([]v1alpha1.RCADegradationReason, 0)
 	for _, ref := range evidence.EvidenceRefs {
-		if ref.TruncationReason != "NativeResultLimitExceeded" {
+		code := strings.TrimSpace(ref.TruncationReason)
+		if code == "" && !ref.Truncated {
 			continue
 		}
-		message := fmt.Sprintf("evidence %s was truncated by native %s limit", ref.ID, firstNonEmptyString(ref.LimitDimension, "result"))
+		if code == "" {
+			code = "EvidenceTruncated"
+		}
+		message := fmt.Sprintf("evidence %s was truncated: %s", ref.ID, code)
+		switch code {
+		case "NativeResultLimitExceeded":
+			message = fmt.Sprintf("evidence %s was truncated by native %s limit", ref.ID, firstNonEmptyString(ref.LimitDimension, "result"))
+		case "InvestigationQueryBudgetExhausted":
+			message = fmt.Sprintf("evidence %s is incomplete because the investigation query budget was exhausted", ref.ID)
+		}
 		reasons = append(reasons, v1alpha1.RCADegradationReason{
-			Code:    "NativeResultLimitExceeded",
+			Code:    code,
 			Stage:   v1alpha1.InvestigationStageEvidenceCollection,
 			Message: message,
 		})
@@ -1923,6 +2027,39 @@ func evidenceNativeLimitDegradation(evidence investigation.EvidenceCollectionRes
 		Partial: true,
 		Reasons: reasons,
 	}
+}
+
+// evidenceNativeLimitDegradation is retained for package-local compatibility
+// with existing tests and callers; the public condition contract now treats
+// every explicit evidence truncation, including query-budget exhaustion, as a
+// partial investigation.
+func evidenceNativeLimitDegradation(evidence investigation.EvidenceCollectionResult) *v1alpha1.RCADegradation {
+	degradation := evidenceCoverageDegradation(evidence)
+	if degradation == nil {
+		return nil
+	}
+	filtered := make([]v1alpha1.RCADegradationReason, 0, len(degradation.Reasons))
+	for _, reason := range degradation.Reasons {
+		if reason.Code == "NativeResultLimitExceeded" {
+			filtered = append(filtered, reason)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	degradation.Reasons = filtered
+	return degradation
+}
+
+func evidenceDegradationCondition(degradation *v1alpha1.RCADegradation) (string, string) {
+	if degradation == nil || len(degradation.Reasons) == 0 {
+		return "EvidenceCoverageIncomplete", "evidence collection completed with incomplete coverage"
+	}
+	first := degradation.Reasons[0]
+	if first.Code == "InvestigationQueryBudgetExhausted" {
+		return first.Code, "evidence collection completed with incomplete coverage because the investigation query budget was exhausted"
+	}
+	return first.Code, "evidence collection completed with bounded evidence truncation"
 }
 
 func rootCauseTypeForMetrics(request *v1alpha1.InvestigationRequest) string {
@@ -2458,10 +2595,19 @@ func buildRCAClaims(rca investigation.RCAResult, evidence investigation.Evidence
 		})
 	}
 	if statement, ok := profileBackedRCAClaim(profile, evidence); ok {
+		id := claimID(len(claims) + 1)
+		if strings.HasPrefix(statement, "SchedulingUnschedulable is confirmed by") {
+			id = "claim-scheduling-mechanism"
+		}
 		claims = append(claims, v1alpha1.RCAClaim{
-			ID:        claimID(len(claims) + 1),
+			ID:        id,
 			Statement: statement,
 		})
+	}
+	if strings.TrimSpace(profile) == "" {
+		if statement, ok := schedulingMechanismRCAClaim(evidence); ok {
+			claims = append(claims, v1alpha1.RCAClaim{ID: "claim-scheduling-mechanism", Statement: statement})
+		}
 	}
 	verification := verifier.VerifyClaims(verifierClaims(claims), verifierEvidenceRefs(evidence.EvidenceRefs))
 	return applyClaimVerification(claims, verification), verification
@@ -2480,8 +2626,8 @@ func profileBackedRCAClaim(profile string, evidence investigation.EvidenceCollec
 			return "ServicePortMismatch is confirmed by Kubernetes Service targetPort and resolved workload/container port evidence.", true
 		}
 	case "failedscheduling", "schedulingsuccess":
-		if failedSchedulingEvidencePresent(evidence) {
-			return "SchedulingFailure is confirmed by a FailedScheduling event with a supported insufficient-resource predicate.", true
+		if schedulingFailureMechanismEvidencePresent(evidence) {
+			return schedulingMechanismClaimStatement, true
 		}
 	case "probefailure":
 		if eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "unhealthy", "readiness probe", "liveness probe", "probe failed") && probeConfigurationMismatchEvidencePresent(evidence) {
@@ -2509,6 +2655,15 @@ func profileBackedRCAClaim(profile string, evidence investigation.EvidenceCollec
 		}
 	}
 	return "", false
+}
+
+const schedulingMechanismClaimStatement = "SchedulingUnschedulable is confirmed by UID-correlated scheduler condition or FailedScheduling evidence."
+
+func schedulingMechanismRCAClaim(evidence investigation.EvidenceCollectionResult) (string, bool) {
+	if !schedulingFailureMechanismEvidencePresent(evidence) {
+		return "", false
+	}
+	return schedulingMechanismClaimStatement, true
 }
 
 // imagePullProfileClaim preserves the ImagePullBackOff evidence-profile name

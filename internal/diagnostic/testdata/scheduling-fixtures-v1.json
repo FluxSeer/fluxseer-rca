@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "fluxseer-composable-scheduling-fixtures/v1",
+  "fixtures": [
+    {
+      "name": "pod-unassigned",
+      "evidence": {
+        "scheduling": [
+          {"id":"state-a","podUID":"pod-a","phase":"Pending","nodeName":"","podScheduledStatus":"Unknown","evidenceRefs":["state-a"]}
+        ]
+      },
+      "expected": {"status":"Inconclusive","claimIDs":["scheduling-observation-unassigned/pod-a"]}
+    },
+    {
+      "name": "scheduling-unschedulable",
+      "evidence": {
+        "scheduling": [
+          {"id":"state-b","podUID":"pod-b","phase":"Pending","nodeName":"","podScheduledStatus":"False","podScheduledReason":"Unschedulable","evidenceRefs":["state-b"]}
+        ]
+      },
+      "expected": {"status":"Supported","claimIDs":["scheduling-observation-unassigned/pod-b","scheduling-mechanism-unschedulable/pod-b"]}
+    },
+    {
+      "name": "insufficient-cpu",
+      "evidence": {
+        "scheduling": [
+          {"id":"event-c","podUID":"pod-c","phase":"Pending","nodeName":"","podScheduledStatus":"False","eventPodUID":"pod-c","eventReason":"FailedScheduling","eventMessage":"0/2 nodes are available: 2 Insufficient cpu.","evidenceRefs":["event-c"]}
+        ]
+      },
+      "expected": {"status":"Supported","claimIDs":["scheduling-observation-unassigned/pod-c","scheduling-mechanism-unschedulable/pod-c","scheduling-cause-insufficient-cpu/pod-c"]}
+    },
+    {
+      "name": "taint-mismatch",
+      "evidence": {
+        "scheduling": [
+          {"id":"event-d","podUID":"pod-d","phase":"Pending","nodeName":"","podScheduledStatus":"False","eventPodUID":"pod-d","eventReason":"FailedScheduling","eventMessage":"0/2 nodes are available: 2 node(s) had untolerated taint {dedicated: NoSchedule}.","evidenceRefs":["event-d"]}
+        ]
+      },
+      "expected": {"status":"Supported","claimIDs":["scheduling-observation-unassigned/pod-d","scheduling-mechanism-unschedulable/pod-d","scheduling-cause-taint-mismatch/pod-d"]}
+    },
+    {
+      "name": "affinity-mismatch",
+      "evidence": {
+        "scheduling": [
+          {"id":"event-e","podUID":"pod-e","phase":"Pending","nodeName":"","podScheduledStatus":"False","eventPodUID":"pod-e","eventReason":"FailedScheduling","eventMessage":"0/2 nodes match node selector.","evidenceRefs":["event-e"]}
+        ]
+      },
+      "expected": {"status":"Supported","claimIDs":["scheduling-observation-unassigned/pod-e","scheduling-mechanism-unschedulable/pod-e","scheduling-cause-node-affinity-mismatch/pod-e"]}
+    },
+    {
+      "name": "scheduling-gated",
+      "evidence": {
+        "scheduling": [
+          {"id":"state-f","podUID":"pod-f","phase":"Pending","nodeName":"","schedulingGates":["example.com/approval"],"evidenceRefs":["state-f"]}
+        ]
+      },
+      "expected": {"status":"Supported","claimIDs":["scheduling-observation-unassigned/pod-f","scheduling-mechanism-gated/pod-f"]}
+    },
+    {
+      "name": "pending-imagepull",
+      "evidence": {
+        "evidenceRefs":[{"id":"event-g","kind":"event","reason":"ErrImagePull","summary":"failed to pull image"}],
+        "scheduling":[{"id":"state-g","podUID":"pod-g","phase":"Pending","nodeName":"node-1","evidenceRefs":["state-g"]}]
+      },
+      "expected": {"status":"NotApplicable","claimIDs":[]}
+    },
+    {
+      "name": "missing-events",
+      "evidence": {
+        "scheduling":[{"id":"state-h","podUID":"pod-h","phase":"Pending","nodeName":"","podScheduledStatus":"Unknown","truncated":true,"evidenceRefs":["state-h"]}]
+      },
+      "expected": {"status":"Inconclusive","claimIDs":["scheduling-observation-unassigned/pod-h"]}
+    },
+    {
+      "name": "stale-pod-uid",
+      "evidence": {
+        "scheduling":[{"id":"event-i","podUID":"pod-i","phase":"Pending","nodeName":"","podScheduledStatus":"Unknown","eventPodUID":"pod-old","eventReason":"FailedScheduling","eventMessage":"Insufficient cpu","evidenceRefs":["event-i"]}]
+      },
+      "expected": {"status":"Inconclusive","claimIDs":["scheduling-observation-unassigned/pod-i"]}
+    },
+    {
+      "name": "mixed-pod-states",
+      "evidence": {
+        "evidenceRefs":[{"id":"image-event","kind":"event","reason":"ErrImagePull","summary":"failed to pull image"}],
+        "scheduling":[
+          {"id":"state-j","podUID":"pod-image","phase":"Pending","nodeName":"node-1","evidenceRefs":["state-j","image-event"]},
+          {"id":"event-k","podUID":"pod-scheduling","phase":"Pending","nodeName":"","podScheduledStatus":"False","eventPodUID":"pod-scheduling","eventReason":"FailedScheduling","eventMessage":"0/2 nodes are available: 2 Insufficient memory.","evidenceRefs":["event-k"]},
+          {"id":"state-l","podUID":"pod-running","phase":"Running","nodeName":"node-2","podScheduledStatus":"True","evidenceRefs":["state-l"]}
+        ]
+      },
+      "expected": {"status":"Supported","claimIDs":["scheduling-observation-unassigned/pod-scheduling","scheduling-mechanism-unschedulable/pod-scheduling","scheduling-cause-insufficient-memory/pod-scheduling"]}
+    }
+  ]
+}

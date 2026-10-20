@@ -98,6 +98,14 @@ type DataSource interface {
 	HealthCheck(ctx context.Context) error
 }
 
+// SchedulingEvidenceCollector is an optional, provider-specific adapter
+// boundary. The investigation runtime supplies an already resolved Pod scope
+// and receives normalized evidence without requiring Kubernetes types in the
+// core datasource contract.
+type SchedulingEvidenceCollector interface {
+	CollectSchedulingEvidence(ctx context.Context, req domain.SchedulingEvidenceRequest) (domain.SchedulingEvidenceResult, error)
+}
+
 type QueryPolicyProvider interface {
 	QueryPolicy() v1alpha1.DataSourceQueryPolicy
 }

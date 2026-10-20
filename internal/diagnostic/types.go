@@ -45,13 +45,47 @@ type CandidateClaim struct {
 	ID           string
 	Type         ClaimType
 	Statement    string
+	TargetUID    string
 	EvidenceRefs []string
+}
+
+// SchedulingObservation is normalized, target-scoped scheduling evidence. It
+// is deliberately independent of Kubernetes clients so replay fixtures and
+// the evaluator share the same contract. Collectors may populate it later.
+type SchedulingObservation struct {
+	ID                  string
+	PodUID              string
+	PodNamespace        string
+	PodName             string
+	Source              string
+	EventPodUID         string
+	Phase               string
+	NodeName            string
+	PodScheduledStatus  string
+	PodScheduledReason  string
+	PodScheduledMessage string
+	SchedulingGates     []string
+	EventReason         string
+	EventMessage        string
+	EvidenceRefs        []string
+	CollectedAt         time.Time
+	IncidentStart       time.Time
+	IncidentEnd         time.Time
+	Coverage            domain.SchedulingCoverage
+	CoverageReason      string
+	// StateCollected distinguishes a bounded coverage marker from an actual
+	// Pod state observation. A budget marker may carry a UID for provenance but
+	// must not be interpreted as an empty nodeName.
+	StateCollected bool
+	Truncated      bool
+	Stale          bool
 }
 
 // EvidenceSet is the normalized, bounded input to a diagnostic evaluator.
 type EvidenceSet struct {
 	Observations  []domain.Observation
 	EvidenceRefs  []v1alpha1.EvidenceRef
+	Scheduling    []SchedulingObservation
 	Scope         scope.Result
 	IncidentStart time.Time
 	IncidentEnd   time.Time

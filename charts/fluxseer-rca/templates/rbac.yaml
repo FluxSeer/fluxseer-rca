@@ -9,6 +9,12 @@ rules:
   - apiGroups: [""]
     resources: ["events", "pods", "namespaces", "services"]
     verbs: ["get", "list", "watch"]
+  # Scheduling evidence reads both the legacy core Event API and the
+  # events.k8s.io API. Keep this separate and read-only so an installation
+  # does not silently lose the newer event stream.
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
     verbs: ["get", "list", "watch"]
