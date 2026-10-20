@@ -245,3 +245,19 @@ Deployment-target and Pod-target InvestigationRequests. Both completed with
 the same `ImagePullFailure` supported claim and the same explicitly unverified
 diagnostic candidate; neither created a RiskSignal. The paired artifacts are
 under `reports/runtime/composable-diagnostics-entrypoints-20261020/`.
+
+## Phase 1 + 1.5 acceptance record
+
+Status: **Accepted as an independent merge increment**.
+
+The acceptance boundary is the ImagePull vertical slice plus cross-entrypoint
+reuse. It includes deterministic scope and diagnostic tests, provider evidence
+policy filtering, replayable evidence, full repository regression, hardening
+checks, and v1.34.1 live qualification for both Deployment and Pod targets.
+The next phase must start from the merged baseline on a separate branch and
+must not add Scheduling, Node, PVC, DNS, or other new diagnostic domains to
+this increment.
+
+Phase 2 composition claims are intentionally not covered by this record. They
+require a replay-first multi-diagnostic fixture gate before any live combined
+scenario is treated as a compatibility or accuracy result.
