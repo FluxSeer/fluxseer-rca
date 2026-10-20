@@ -71,8 +71,7 @@ func (SchedulingDiagnostic) Evaluate(evidence EvidenceSet) Result {
 		}
 		validState = true
 		refs := schedulingEvidenceRefs(observation)
-		phase := strings.ToLower(strings.TrimSpace(observation.Phase))
-		if strings.TrimSpace(observation.NodeName) == "" && phase != "running" {
+		if strings.TrimSpace(observation.NodeName) == "" {
 			observedUnassigned = true
 			appendSchedulingClaim(&result, claimKeys, CandidateClaim{
 				ID:           "scheduling-observation-unassigned/" + podUID,
@@ -83,6 +82,10 @@ func (SchedulingDiagnostic) Evaluate(evidence EvidenceSet) Result {
 			})
 		} else if strings.TrimSpace(observation.NodeName) != "" {
 			assignedPod = true
+		}
+		if observation.Truncated {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("scheduling evidence for Pod UID %q was truncated", podUID))
+			continue
 		}
 
 		if len(observation.SchedulingGates) > 0 {
@@ -104,9 +107,6 @@ func (SchedulingDiagnostic) Evaluate(evidence EvidenceSet) Result {
 		conditionUnschedulable := strings.EqualFold(strings.TrimSpace(observation.PodScheduledStatus), "False") && containsAny(conditionText, "unschedulable")
 		eventUnschedulable := containsAny(eventText, "failedscheduling", "failed scheduling")
 		if !conditionUnschedulable && !eventUnschedulable {
-			if observation.Truncated {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("scheduling evidence for Pod UID %q was truncated", podUID))
-			}
 			continue
 		}
 
@@ -121,9 +121,6 @@ func (SchedulingDiagnostic) Evaluate(evidence EvidenceSet) Result {
 		})
 		for _, candidate := range schedulingCandidates(podUID, eventText+" "+conditionText, failureRefs) {
 			appendSchedulingClaim(&result, claimKeys, candidate)
-		}
-		if observation.Truncated {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("specific scheduling predicates for Pod UID %q may be incomplete", podUID))
 		}
 	}
 
