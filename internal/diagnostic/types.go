@@ -73,8 +73,12 @@ type SchedulingObservation struct {
 	IncidentEnd         time.Time
 	Coverage            domain.SchedulingCoverage
 	CoverageReason      string
-	Truncated           bool
-	Stale               bool
+	// StateCollected distinguishes a bounded coverage marker from an actual
+	// Pod state observation. A budget marker may carry a UID for provenance but
+	// must not be interpreted as an empty nodeName.
+	StateCollected bool
+	Truncated      bool
+	Stale          bool
 }
 
 // EvidenceSet is the normalized, bounded input to a diagnostic evaluator.

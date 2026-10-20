@@ -57,6 +57,7 @@ func adaptSchedulingEvidence(records []domain.SchedulingEvidence) ([]diagnostic.
 			IncidentEnd:         record.IncidentEnd,
 			Coverage:            coverage,
 			CoverageReason:      record.CoverageReason,
+			StateCollected:      coverage == domain.SchedulingCoverageComplete || schedulingStateFieldsPresent(record),
 			Truncated:           record.Truncated || coverage == domain.SchedulingCoverageTruncated,
 			Stale:               record.Stale || coverage == domain.SchedulingCoverageStale,
 		}
@@ -100,6 +101,9 @@ func adaptSchedulingEvidence(records []domain.SchedulingEvidence) ([]diagnostic.
 
 func schedulingEvidenceRef(record domain.SchedulingEvidence, observation diagnostic.SchedulingObservation, redactor evidencepkg.PatternRedactor) v1alpha1.EvidenceRef {
 	summary := fmt.Sprintf("Pod %s/%s UID %s scheduling state: phase=%s nodeName=%s podScheduled=%s coverage=%s", record.Namespace, record.Name, record.PodUID, record.Phase, record.NodeName, record.PodScheduledStatus, observation.Coverage)
+	if !observation.StateCollected && strings.TrimSpace(record.CoverageReason) != "" {
+		summary = fmt.Sprintf("Scheduling evidence for Pod %s/%s UID %s is incomplete: %s", record.Namespace, record.Name, record.PodUID, record.CoverageReason)
+	}
 	return v1alpha1.EvidenceRef{
 		ID:               observation.ID,
 		Kind:             "scheduling",
@@ -116,6 +120,15 @@ func schedulingEvidenceRef(record domain.SchedulingEvidence, observation diagnos
 			Name:       record.Name,
 		}},
 	}
+}
+
+func schedulingStateFieldsPresent(record domain.SchedulingEvidence) bool {
+	return strings.TrimSpace(record.Phase) != "" ||
+		strings.TrimSpace(record.NodeName) != "" ||
+		strings.TrimSpace(record.PodScheduledStatus) != "" ||
+		strings.TrimSpace(record.PodScheduledReason) != "" ||
+		strings.TrimSpace(record.PodScheduledMessage) != "" ||
+		len(record.SchedulingGates) > 0
 }
 
 func schedulingEventRef(record domain.SchedulingEvidence, event domain.SchedulingEvent, observation diagnostic.SchedulingObservation, redactor evidencepkg.PatternRedactor) v1alpha1.EvidenceRef {

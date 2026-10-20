@@ -357,6 +357,50 @@ func TestSchedulingCollectionSharesInvestigationQueryBudget(t *testing.T) {
 	}
 }
 
+func TestServiceSurfacesSchedulingBudgetExhaustionWithoutFabricatingPodState(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pending", Namespace: "prod", UID: "pod-pending"}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+	source := &schedulingFakeDataSource{
+		fakeDataSource: fakeDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent, records: []map[string]any{{"reason": "FailedScheduling", "message": "scheduler reported a pending Pod"}}},
+	}
+	service := &Service{Client: reader, Registry: datasource.NewRegistry(source), DiagnosticPlanner: diagnostic.DefaultPlanner()}
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		Target:      v1alpha1.TargetRef{Namespace: "prod", Kind: "Pod", Name: "pending"},
+		QueryBudget: v1alpha1.InvestigationQueryBudget{MaxQueriesTotal: 1},
+	}, PreflightResult{
+		Target:          domain.ResourceRef{Namespace: "prod", Kind: "Pod", Name: "pending"},
+		DatasourceNames: []string{"kubernetes-events"},
+		CollectionPlan:  []CollectionStep{{DatasourceName: "kubernetes-events", QueryType: domain.QueryTypeEvent, Query: "events"}},
+	}, time.Date(2026, 10, 20, 2, 0, 0, 0, time.UTC))
+	if err != nil || result.Issue != nil {
+		t.Fatalf("unexpected budget collection result: err=%v issue=%#v", err, result.Issue)
+	}
+	if source.calls != 0 {
+		t.Fatalf("expected scheduling collector to be skipped after budget exhaustion, got %d calls", source.calls)
+	}
+	if len(result.SchedulingEvidence) != 1 || result.SchedulingEvidence[0].Coverage != domain.SchedulingCoverageTruncated {
+		t.Fatalf("expected explicit truncated scheduling coverage, got %#v", result.SchedulingEvidence)
+	}
+	if len(result.EvidenceRefs) != 2 || result.EvidenceRefs[1].Kind != "scheduling" || !result.EvidenceRefs[1].Truncated {
+		t.Fatalf("expected standard evidence plus a truncated scheduling reference, got %#v", result.EvidenceRefs)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].DiagnosticID != "scheduling" {
+		t.Fatalf("expected scheduling diagnostic for explicit coverage marker, got %#v", result.Diagnostics)
+	}
+	for _, claim := range result.Diagnostics[0].Claims {
+		if claim.Type == diagnostic.ClaimObservation && strings.Contains(claim.Statement, "not been assigned") {
+			t.Fatalf("budget marker fabricated Pod state claim: %#v", claim)
+		}
+	}
+	if len(result.Diagnostics[0].Warnings) == 0 {
+		t.Fatalf("expected budget exhaustion warning, got %#v", result.Diagnostics[0])
+	}
+}
+
 func TestServiceReusesImagePullDiagnosticAcrossDeploymentAndPodTargets(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {

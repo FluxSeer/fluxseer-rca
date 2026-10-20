@@ -245,7 +245,9 @@ func (s *Service) collectSchedulingEvidence(ctx context.Context, spec v1alpha1.I
 		}
 		if candidate, supports := source.(datasource.SchedulingEvidenceCollector); supports {
 			if !schedulingCollectionWithinBudget(spec.QueryBudget, preflight.CollectionPlan, name) {
-				return nil, nil, nil
+				records := schedulingBudgetExhaustionEvidence(pods, now, window)
+				observations, refs := adaptSchedulingEvidence(records)
+				return records, observations, refs
 			}
 			collector = candidate
 			break
@@ -269,6 +271,30 @@ func (s *Service) collectSchedulingEvidence(ctx context.Context, spec v1alpha1.I
 	})
 	observations, refs := adaptSchedulingEvidence(collection.Evidence)
 	return collection.Evidence, observations, refs
+}
+
+func schedulingBudgetExhaustionEvidence(pods []domain.SchedulingPodRef, now time.Time, window time.Duration) []domain.SchedulingEvidence {
+	records := make([]domain.SchedulingEvidence, 0, len(pods))
+	for _, pod := range pods {
+		uid := strings.TrimSpace(pod.UID)
+		if uid == "" {
+			continue
+		}
+		records = append(records, domain.SchedulingEvidence{
+			ID:             "scheduling/budget/" + uid,
+			PodUID:         uid,
+			Namespace:      pod.Namespace,
+			Name:           pod.Name,
+			Source:         "fluxseer/investigation",
+			Coverage:       domain.SchedulingCoverageTruncated,
+			CoverageReason: "InvestigationQueryBudgetExhausted",
+			IncidentStart:  now.Add(-window),
+			IncidentEnd:    now,
+			CollectedAt:    now,
+			Truncated:      true,
+		})
+	}
+	return records
 }
 
 func schedulingCollectionWithinBudget(budget v1alpha1.InvestigationQueryBudget, plan []CollectionStep, sourceName string) bool {

@@ -73,6 +73,18 @@ func (SchedulingDiagnostic) Evaluate(evidence EvidenceSet) Result {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("scheduling evidence for Pod UID %q is unavailable: %s", podUID, firstNonEmptyScheduling(observation.CoverageReason, string(observation.Coverage))))
 			continue
 		}
+		stateCollected := observation.StateCollected
+		// Preserve the pre-Phase-2 observation contract for callers that build
+		// normalized fixtures directly: Complete coverage implies a state was
+		// collected. The runtime sets StateCollected=false explicitly for a
+		// budget-only coverage marker.
+		if !stateCollected && observation.Coverage != domain.SchedulingCoverageTruncated {
+			stateCollected = true
+		}
+		if !stateCollected {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("scheduling state for Pod UID %q was not collected: %s", podUID, firstNonEmptyScheduling(observation.CoverageReason, "state unavailable")))
+			continue
+		}
 		validState = true
 		refs := schedulingEvidenceRefs(observation)
 		if strings.TrimSpace(observation.NodeName) == "" {
