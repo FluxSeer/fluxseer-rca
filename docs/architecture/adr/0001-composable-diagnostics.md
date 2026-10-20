@@ -200,3 +200,21 @@ each behavior, then with a real Kubernetes vertical slice:
 
 No performance, managed-distribution, or broad scenario-coverage claim is
 made by this ADR.
+
+## Implementation status
+
+The first internal seams are now present on the implementation branch:
+
+- `internal/scope` provides bounded Deployment → ReplicaSet → Pod resolution
+  with UID-authoritative ownership and partial-result warnings;
+- `internal/diagnostic` provides the deterministic Diagnostic interface,
+  bounded planner registry, and `ImagePullDiagnostic` candidate claims;
+- `investigation.Service` evaluates registered diagnostics after evidence
+  collection and passes explicitly unverified advisory candidates to the
+  existing provider input path;
+- hosted-provider evidence policy filtering removes diagnostic claim links to
+  evidence that is not allowed for that provider.
+
+The public CRD/report contracts and direct RiskSignal behavior remain
+unchanged. Real-cluster qualification of the new ImagePull vertical slice is
+still required before this ADR's first-slice Definition of Done is complete.
