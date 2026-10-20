@@ -168,6 +168,11 @@ func (a Adapter) CollectSchedulingEvidence(ctx context.Context, req SchedulingEv
 		}
 		allEvents := append(coreEvents, eventsV1...)
 		sort.SliceStable(allEvents, func(i, j int) bool {
+			iInWindow := schedulingEventWithinWindow(allEvents[i], record.IncidentStart, record.IncidentEnd)
+			jInWindow := schedulingEventWithinWindow(allEvents[j], record.IncidentStart, record.IncidentEnd)
+			if iInWindow != jInWindow {
+				return iInWindow
+			}
 			return schedulingEventSortKey(allEvents[i]) < schedulingEventSortKey(allEvents[j])
 		})
 		allEvents = deduplicateSchedulingEvents(allEvents)
