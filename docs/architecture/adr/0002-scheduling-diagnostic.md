@@ -288,12 +288,13 @@ production estimate.
 ## Phase 2F local live regression result
 
 The targeted post-change run is retained under
-`reports/runtime/v0.5-alpha1-proxmox-k8s134/phase2f-live-20261020-r2/` on
+`reports/runtime/v0.5-alpha1-proxmox-k8s134/phase2f-live-20261020-r4/` on
 Kubernetes `v1.34.1`:
 
 - Budget exhaustion completed `Inconclusive` with `Degraded=True`, reason
   `InvestigationQueryBudgetExhausted`, and the scheduling truncation reference
-  retained in status.
+  retained in status. An uncorrelated Event query did not independently
+  promote a scheduling mechanism claim.
 - A real unschedulable Pod produced a `SchedulingUnschedulable` claim with
   `Supported` verification. Selector/affinity and taint explanations remained
   `DiagnosticCandidateUnverified` alternatives, and the overall investigation
