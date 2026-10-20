@@ -17,6 +17,10 @@ spec:
         {{- include "fluxseer-rca.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "fluxseer-rca.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: manager
           image: {{ include "fluxseer-rca.image" . | quote }}
