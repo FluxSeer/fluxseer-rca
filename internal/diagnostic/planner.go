@@ -35,7 +35,7 @@ func NewPlanner(diagnostics ...Diagnostic) *Planner {
 // DefaultPlanner returns the first built-in diagnostic registry. The registry
 // is intentionally small; adding a diagnostic does not add a new query path.
 func DefaultPlanner() *Planner {
-	return NewPlanner(ImagePullDiagnostic{})
+	return NewPlanner(ImagePullDiagnostic{}, SchedulingDiagnostic{})
 }
 
 // Candidates returns diagnostics whose Match method accepts the current

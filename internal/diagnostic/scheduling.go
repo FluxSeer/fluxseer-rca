@@ -69,6 +69,10 @@ func (SchedulingDiagnostic) Evaluate(evidence EvidenceSet) Result {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("scheduling evidence for Pod UID %q is stale", podUID))
 			continue
 		}
+		if observation.Coverage == domain.SchedulingCoverageUnauthorized || observation.Coverage == domain.SchedulingCoverageUnavailable || observation.Coverage == domain.SchedulingCoverageCollectionFailed {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("scheduling evidence for Pod UID %q is unavailable: %s", podUID, firstNonEmptyScheduling(observation.CoverageReason, string(observation.Coverage))))
+			continue
+		}
 		validState = true
 		refs := schedulingEvidenceRefs(observation)
 		if strings.TrimSpace(observation.NodeName) == "" {
@@ -142,6 +146,15 @@ func (SchedulingDiagnostic) Evaluate(evidence EvidenceSet) Result {
 	sortSchedulingClaims(result.Claims)
 	sort.Strings(result.Warnings)
 	return result
+}
+
+func firstNonEmptyScheduling(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return "unknown"
 }
 
 func resultRequirements() []Requirement {
