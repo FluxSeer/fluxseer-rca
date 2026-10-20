@@ -87,7 +87,7 @@
           {"id":"state-l","podUID":"pod-running","phase":"Running","nodeName":"node-2","podScheduledStatus":"True","evidenceRefs":["state-l"]}
         ]
       },
-      "expected": {"status":"Supported","claimIDs":["scheduling-mechanism-unschedulable/pod-scheduling","scheduling-observation-unassigned/pod-scheduling","scheduling-cause-insufficient-memory/pod-scheduling"]}
+      "expected": {"status":"Supported","claimIDs":["scheduling-observation-unassigned/pod-scheduling","scheduling-mechanism-unschedulable/pod-scheduling","scheduling-cause-insufficient-memory/pod-scheduling"]}
     }
   ]
 }
