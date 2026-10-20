@@ -936,6 +936,13 @@ func (s *Service) resolveCollectionPlan(spec v1alpha1.InvestigationRequestSpec, 
 	if datasourceIssue != nil || queryTypeIssue != nil || !strings.EqualFold(strings.TrimSpace(spec.EvidenceRequirements.Profile), "CrashLoopBackOffV2") {
 		return names, plan, datasourceIssue, queryTypeIssue
 	}
+	if len(spec.Queries) == 0 {
+		for index := range plan {
+			if plan[index].DatasourceName == "kubernetes-events" && plan[index].QueryType == domain.QueryTypeEvent && len(plan[index].Reasons) == 0 {
+				plan[index].Reasons = []string{"BackOff"}
+			}
+		}
+	}
 	for _, step := range plan {
 		if step.QueryType == domain.QueryTypeContainerTermination {
 			return names, plan, nil, nil

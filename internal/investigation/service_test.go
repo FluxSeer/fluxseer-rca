@@ -109,6 +109,58 @@ func TestServicePreflightResolvesTargetDatasourcesAndProvider(t *testing.T) {
 	}
 }
 
+func TestServicePreflightAutoCompletesCrashLoopBackOffV2Plan(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add aiops scheme: %v", err)
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "prod"},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "checkout"}},
+			}},
+		}).
+		Build()
+	service := &Service{
+		Client: client,
+		Registry: datasource.NewRegistry(fakeDataSource{
+			name:                 "kubernetes-events",
+			queryType:            domain.QueryTypeEvent,
+			containerTermination: true,
+		}),
+		Resolver: modelgateway.KubeResolver{Client: client},
+	}
+
+	result, err := service.Preflight(context.Background(), "prod", v1alpha1.InvestigationRequestSpec{
+		Target:               v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "checkout"},
+		DataSources:          []v1alpha1.LocalObjectReference{{Name: "kubernetes-events"}},
+		EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: "CrashLoopBackOffV2"},
+	})
+	if err != nil {
+		t.Fatalf("preflight failed: %v", err)
+	}
+	if !result.Successful() {
+		t.Fatalf("expected successful preflight, got %#v", result)
+	}
+	if len(result.CollectionPlan) != 2 {
+		t.Fatalf("expected event plus automatic termination steps, got %#v", result.CollectionPlan)
+	}
+	eventStep := result.CollectionPlan[0]
+	if eventStep.QueryType != domain.QueryTypeEvent || len(eventStep.Reasons) != 1 || eventStep.Reasons[0] != "BackOff" {
+		t.Fatalf("expected automatic BackOff event filter, got %#v", eventStep)
+	}
+	terminationStep := result.CollectionPlan[1]
+	if terminationStep.QueryType != domain.QueryTypeContainerTermination || terminationStep.Query != "container-termination-status" {
+		t.Fatalf("expected automatic container termination step, got %#v", terminationStep)
+	}
+}
+
 func TestServicePreflightResolvesNonDeploymentTargets(t *testing.T) {
 	cases := []struct {
 		name               string
@@ -1976,14 +2028,15 @@ func TestServiceGenerateRCARejectsDeniedSensitivityTags(t *testing.T) {
 }
 
 type fakeDataSource struct {
-	name           string
-	queryType      domain.QueryType
-	records        []map[string]any
-	queryErr       error
-	delay          time.Duration
-	queryPolicy    v1alpha1.DataSourceQueryPolicy
-	nativeLimit    *datasource.NativeResultLimit
-	classification v1alpha1.DataClassification
+	name                 string
+	queryType            domain.QueryType
+	containerTermination bool
+	records              []map[string]any
+	queryErr             error
+	delay                time.Duration
+	queryPolicy          v1alpha1.DataSourceQueryPolicy
+	nativeLimit          *datasource.NativeResultLimit
+	classification       v1alpha1.DataClassification
 }
 
 type capturingModelProvider struct {
@@ -2067,6 +2120,9 @@ func (f fakeDataSource) Name() string { return f.name }
 func (f fakeDataSource) Type() string { return string(f.queryType) }
 
 func (f fakeDataSource) Capabilities() datasource.Capabilities {
+	if f.containerTermination {
+		return datasource.Capabilities{Events: true, ContainerTermination: true}
+	}
 	switch f.queryType {
 	case domain.QueryTypeMetric:
 		return datasource.Capabilities{Metrics: true}
