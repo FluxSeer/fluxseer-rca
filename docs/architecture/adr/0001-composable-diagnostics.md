@@ -216,5 +216,17 @@ The first internal seams are now present on the implementation branch:
   evidence that is not allowed for that provider.
 
 The public CRD/report contracts and direct RiskSignal behavior remain
-unchanged. Real-cluster qualification of the new ImagePull vertical slice is
-still required before this ADR's first-slice Definition of Done is complete.
+unchanged. The ImagePull vertical slice was qualified on the designated
+Kubernetes v1.34.1 test cluster with controller image
+`operator:k8s134-20261020-composable-37e14f2` (manifest digest
+`sha256:f54bec0f1f908642d5e10340d0a2532cb4f23a48eb14c21c006e25d9b14a8b81`).
+An invalid-image workload produced `ErrImagePull`; the InvestigationRequest
+completed with `Confirmed` for the bounded `ImagePullBackOff` mechanism,
+complete required-event coverage, and an explicitly unverified diagnostic
+candidate. No RiskSignal or remediation was created, and the test namespace
+was removed after qualification. The retained artifacts are under
+`reports/runtime/composable-diagnostics-imagepull-20261020/`.
+
+This qualifies the first vertical slice only. It does not establish a
+confirmed registry/DNS root cause, broad Kubernetes distribution compatibility,
+cross-workload causal correlation, or performance characteristics.
