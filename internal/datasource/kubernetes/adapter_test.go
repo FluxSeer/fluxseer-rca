@@ -563,7 +563,7 @@ func TestAdapterQueryContainerTerminationIsTargetOwnedAndBounded(t *testing.T) {
 		t.Fatalf("expected explicit pod-bound truncation metadata, got %#v", result)
 	}
 	got := result.Records[0]
-	if got["podName"] != ownedPod.Name || got["podUID"] != string(ownedPod.UID) || got["containerName"] != "app" || got["restartCount"] != int32(3) || got["waitingReason"] != "CrashLoopBackOff" || got["lastTerminatedReason"] != "Error" || got["lastTerminatedExitCode"] != int32(1) || got["lastTerminatedFinishedAt"] != finishedAt.Time.Format(time.RFC3339) {
+	if got["podName"] != ownedPod.Name || got["podUID"] != string(ownedPod.UID) || got["containerName"] != "app" || got["restartCount"] != int32(3) || got["waitingReason"] != "CrashLoopBackOff" || got["lastTerminatedReason"] != "Error" || got["lastTerminatedExitCode"] != int32(1) || got["lastTerminatedFinishedAt"] != finishedAt.Format(time.RFC3339) {
 		t.Fatalf("unexpected bounded termination record: %#v", got)
 	}
 	if _, leaked := got["command"]; leaked {

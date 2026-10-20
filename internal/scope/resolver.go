@@ -110,7 +110,7 @@ func (r *Resolver) ResolveDeployment(ctx context.Context, namespace, name string
 			Code:    WarningInvalidTarget,
 			Message: "Deployment namespace and name are required",
 		})
-		return result, fmt.Errorf("Deployment namespace and name are required")
+		return result, fmt.Errorf("deployment namespace and name are required")
 	}
 
 	var deployment appsv1.Deployment
@@ -133,7 +133,7 @@ func (r *Resolver) ResolveDeployment(ctx context.Context, namespace, name string
 			Message:  "resolved Deployment namespace differs from requested namespace",
 			Resource: &result.Deployment,
 		})
-		return result, fmt.Errorf("Deployment %s/%s resolved outside requested namespace", namespace, name)
+		return result, fmt.Errorf("deployment %s/%s resolved outside requested namespace", namespace, name)
 	}
 	if deployment.Spec.Selector == nil {
 		result.Complete = false
@@ -142,7 +142,7 @@ func (r *Resolver) ResolveDeployment(ctx context.Context, namespace, name string
 			Message:  "Deployment has no selector",
 			Resource: &result.Deployment,
 		})
-		return result, fmt.Errorf("Deployment %s/%s has no selector", namespace, name)
+		return result, fmt.Errorf("deployment %s/%s has no selector", namespace, name)
 	}
 	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
 	if err != nil {

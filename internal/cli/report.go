@@ -553,14 +553,15 @@ func writeReport(w io.Writer, report any, output string) error {
 		data []byte
 		err  error
 	)
-	if output == "markdown" {
+	switch output {
+	case "markdown":
 		if riskRule, ok := report.(riskRuleReport); ok {
 			return writeRiskRuleReportMarkdown(w, riskRule)
 		}
-		return fmt.Errorf("Markdown output is unsupported for report type %T", report)
-	} else if output == "yaml" {
+		return fmt.Errorf("markdown output is unsupported for report type %T", report)
+	case "yaml":
 		data, err = yaml.Marshal(report)
-	} else {
+	default:
 		data, err = json.MarshalIndent(report, "", "  ")
 	}
 	if err != nil {

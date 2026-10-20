@@ -406,7 +406,7 @@ func TestPersistStatusRecordsQualityMetricsAfterSuccessfulWrite(t *testing.T) {
 		t.Fatalf("get original InvestigationRequest: %v", err)
 	}
 	updated := original.DeepCopy()
-	updated.Status.ResourceStatus.Phase = v1alpha1.PhaseCompleted
+	updated.Status.Phase = v1alpha1.PhaseCompleted
 	updated.Status.Outcome = v1alpha1.InvestigationOutcomeInconclusive
 	updated.Status.MissingEvidence = []v1alpha1.RCAMissingEvidence{{Source: "containerTermination", Reason: "ContainerTerminationEvidenceMissing"}}
 	updated.Status.EvidenceCoverage = &v1alpha1.RCAEvidenceCoverage{

@@ -270,10 +270,6 @@ const (
 )
 
 func (a Adapter) queryContainerTermination(ctx context.Context, req datasource.QueryRequest) (*datasource.QueryResult, error) {
-	reader := a.APIReader
-	if reader == nil {
-		reader = a.Client
-	}
 	pods, listTruncated, err := a.targetPods(ctx, req)
 	if err != nil {
 		return nil, err
