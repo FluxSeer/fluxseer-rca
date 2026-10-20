@@ -141,8 +141,8 @@ EOF
   if [[ "${profile}" == "CrashLoopBackOffV2" ]]; then
     scenario_assert_json_jq "investigationrequest/${request_name}" "${namespace}" \
       '.status.evidenceCoverage.profile == "CrashLoopBackOffV2" and any(.status.evidenceRefs[]?; .kind == "containerTermination" and (.summary | contains("lastTerminatedReason=Error") and contains("exitCode=1")))'
-    rg -q 'lastTerminatedReason=Error exitCode=1' "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${target_name}/public-report.md"
-    rg -q 'termination status alone does not explain why the process exited' "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${target_name}/public-report.md"
+    grep -Fq 'lastTerminatedReason=Error exitCode=1' "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${target_name}/public-report.md"
+    grep -Fq 'termination status alone does not explain why the process exited' "${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${target_name}/public-report.md"
   fi
   scenario_cleanup_namespace "${namespace}"
 }
@@ -316,10 +316,10 @@ EOF
   scenario_capture_case "${target_name}" "${namespace}" "${rule_name}" "${request_name}" Deployment "${target_name}"
   case_dir="${LIVE_HARNESS_ARTIFACT_ROOT}/scenarios/${target_name}"
   case "${mode}" in
-    missing) rg -q 'target workload still has in-scope Pods' "${case_dir}/public-report.md" ;;
-    stale) rg -q 'outside the requested window' "${case_dir}/public-report.md" ;;
-    truncated) rg -q 'bounded termination status scan' "${case_dir}/public-report.md" ;;
-    permission) rg -q 'target Kubernetes Pods' "${case_dir}/public-report.md" ;;
+    missing) grep -Fq 'target workload still has in-scope Pods' "${case_dir}/public-report.md" ;;
+    stale) grep -Fq 'outside the requested window' "${case_dir}/public-report.md" ;;
+    truncated) grep -Fq 'bounded termination status scan' "${case_dir}/public-report.md" ;;
+    permission) grep -Fq 'target Kubernetes Pods' "${case_dir}/public-report.md" ;;
   esac
   scenario_cleanup_namespace "${namespace}"
 }
