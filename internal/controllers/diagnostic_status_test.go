@@ -129,3 +129,17 @@ func TestSchedulingMechanismClaimAcceptsVerifiedConditionEvidence(t *testing.T) 
 		t.Fatalf("expected condition-backed mechanism claim to verify, got %#v", claims)
 	}
 }
+
+func TestSchedulingProfileAcceptsConditionEvidenceWithoutEventRef(t *testing.T) {
+	evidence := investigation.EvidenceCollectionResult{EvidenceRefs: []v1alpha1.EvidenceRef{{
+		ID:      "pod-1",
+		Kind:    "scheduling",
+		Summary: "Pod prod/pending UID pod-1 scheduling state: phase=Pending nodeName= podScheduled=False coverage=Complete",
+	}}}
+	gate := evaluateEvidenceRequirements(v1alpha1.InvestigationRequestSpec{
+		EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: "FailedScheduling"},
+	}, evidence)
+	if gate == nil || !gate.Complete || len(gate.Missing) != 0 {
+		t.Fatalf("expected condition-backed scheduling profile to be complete, got %#v", gate)
+	}
+}

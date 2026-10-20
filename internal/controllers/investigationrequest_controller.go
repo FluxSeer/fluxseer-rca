@@ -373,7 +373,7 @@ func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, eviden
 	}
 	missing := make([]v1alpha1.RCAMissingEvidence, 0)
 	for _, kind := range requiredKinds {
-		if !present[kind] {
+		if !present[kind] && !(isSchedulingProfile(profile) && kind == string(domain.QueryTypeEvent) && present["scheduling"]) {
 			missing = append(missing, v1alpha1.RCAMissingEvidence{
 				Source: kind,
 				Reason: "RequiredEvidenceMissing",
@@ -819,6 +819,15 @@ func requiredEvidenceKindsForProfile(profile string) []string {
 	}
 }
 
+func isSchedulingProfile(profile string) bool {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "failedscheduling", "schedulingsuccess":
+		return true
+	default:
+		return false
+	}
+}
+
 func evidenceProfileHasNoIssue(profile string, spec v1alpha1.InvestigationRequestSpec, evidence investigation.EvidenceCollectionResult) bool {
 	profileKey := strings.ToLower(strings.TrimSpace(profile))
 	if profileKey == "" {
@@ -879,7 +888,7 @@ func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) boo
 	case "serviceportmismatch":
 		return kind == strings.ToLower(string(domain.QueryTypeServiceConfiguration))
 	case "failedscheduling", "schedulingsuccess":
-		return kind == string(domain.QueryTypeEvent)
+		return kind == string(domain.QueryTypeEvent) || kind == "scheduling"
 	case "effectivenessverification":
 		return kind == string(domain.QueryTypeEvent)
 	case "probefailure":
