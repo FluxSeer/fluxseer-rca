@@ -1,6 +1,6 @@
 # ADR 0002: Scheduling Diagnostic and Replay-first Composition
 
-- **Status:** Accepted for Phase 2 implementation
+- **Status:** Phase 2C runtime implemented locally; live qualification pending
 - **Date:** 2026-10-20
 - **Branch:** `feat/scheduling-diagnostic`
 - **Related:** [ADR 0001](0001-composable-diagnostics.md)
@@ -114,8 +114,7 @@ use independent, intentionally constructed scenarios.
 
 ## Phase 2B bounded evidence collector
 
-Phase 2B adds a read-only collector contract without wiring Scheduling into
-Planner reconciliation yet. The collector accepts only already authorized,
+Phase 2B adds a read-only collector contract. The collector accepts only already authorized,
 scope-resolved Pod references and uses the Adapter's existing `APIReader` (or
 its existing client fallback). It does not create a new Kubernetes client,
 resolve workload selectors, list Nodes, or infer a cause.
@@ -141,9 +140,17 @@ exhausted budget is retained as an explicit degradation record. The collector
 returns facts and normalized state only; root-cause wording remains the
 responsibility of the pure diagnostic and verifier.
 
-Phase 2B qualification is fake/replay based in this slice. Planner registration,
-InvestigationRequest wiring, live Kubernetes qualification, and Node evidence
-remain Phase 2C+ work.
+Phase 2B qualification is fake/replay based. Phase 2C now wires this collector
+through the Investigation runtime: one shared bounded collection is adapted into
+the existing `EvidenceSet`, `SchedulingDiagnostic` is registered beside
+`ImagePullDiagnostic`, and Deployment and Pod targets reuse the same UID-scoped
+pipeline. A source without the optional collector remains unchanged. A target
+without an authoritative Pod UID is not collected by this path, preventing
+name-only evidence from entering a report. The implicit collection consumes the
+existing investigation query budget before it runs.
+
+Phase 2C runtime qualification is replay/component based in this slice. Live
+Kubernetes qualification and Node evidence remain pending.
 
 ## Replay-first qualification
 
@@ -211,6 +218,9 @@ addition must preserve existing metric labels and contracts.
   evidence and version.
 - Existing scope, planner, verifier, provider policy, and report paths are
   reused.
+- Phase 2C component/runtime replay tests prove one shared scheduling
+  collection can feed the existing Investigation pipeline for Deployment and
+  Pod targets.
 - ImagePull and Scheduling claims remain isolated by evidence and target UID.
 - Replay-first positive, negative, missing-evidence, stale, UID-mismatch, and
   multi-Pod composition fixtures pass.
@@ -219,10 +229,12 @@ addition must preserve existing metric labels and contracts.
 - No new public CRD or report schema field is required.
 - No unauthorized Node reads, RiskSignal creation, remediation, or workload
   mutation occurs.
-- Live qualification covers at least one real scheduling failure and cleanup.
+- Live qualification of at least one real scheduling failure and cleanup is
+  still required before remote/release acceptance.
 - Existing Phase 1/1.5, CrashLoopBackOff, hardening, and schema checks remain
   green.
-- Baseline measurements are recorded with their verification limits.
+- Baseline measurement dimensions are defined; live values and performance
+  claims remain unverified.
 
 ## Risks and explicit non-goals
 
