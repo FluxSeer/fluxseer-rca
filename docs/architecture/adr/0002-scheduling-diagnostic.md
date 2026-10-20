@@ -1,6 +1,6 @@
 # ADR 0002: Scheduling Diagnostic and Replay-first Composition
 
-- **Status:** Phase 2E closed; Phase 2F implementation in progress; PASS_WITH_RISKS
+- **Status:** Phase 2F closed; local qualification complete; release pending; PASS_WITH_RISKS
 - **Date:** 2026-10-20
 - **Branch:** `feat/scheduling-diagnostic`
 - **Related:** [ADR 0001](0001-composable-diagnostics.md)
@@ -244,8 +244,8 @@ retained beside the qualification summary.
 This is local live acceptance only. Phase 2F now treats explicit evidence
 truncation, including a query-budget skip, as partial degradation and exposes
 that state through the existing `Degradation` status plus the `Degraded=True`
-condition. No new CRD field is required. The final live regression must still
-verify this contract on the deployed image.
+condition. No new CRD field is required. The final live regression verified
+this contract on the deployed image.
 
 ## Phase 2F observability and report contract
 
@@ -325,8 +325,9 @@ replace remote CI, pull-request review, or a broader release qualification.
   mutation occurs.
 - Local live qualification of real scheduling failure, scheduling gate,
   ImagePull isolation, and budget exhaustion is complete. Phase 2F semantic
-  and metrics regression is implemented and verified locally; CI/PR
-  verification and review are still required for release.
+  and metrics regression is implemented and verified locally; the overall
+  phase is locally accepted, while CI/PR verification and review are still
+  required for release.
 - Existing Phase 1/1.5, CrashLoopBackOff, hardening, and schema checks remain
   green.
 - Baseline measurement dimensions are defined; live values and performance
