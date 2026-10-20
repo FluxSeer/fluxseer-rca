@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
@@ -62,5 +63,69 @@ func TestImagePullProfileClaimDistinguishesFailureFromBackOffState(t *testing.T)
 				t.Fatalf("unexpected profile claim ok=%v statement=%q", ok, statement)
 			}
 		})
+	}
+}
+
+func TestSchedulingMechanismClaimIsConfirmedWhileRootCauseRemainsCandidate(t *testing.T) {
+	evidence := investigation.EvidenceCollectionResult{
+		EvidenceRefs: []v1alpha1.EvidenceRef{{
+			ID:      "event-1",
+			Kind:    string(domain.QueryTypeEvent),
+			Reason:  "FailedScheduling",
+			Summary: "0/1 nodes are unavailable: scheduler details redacted",
+		}},
+		Diagnostics: []diagnostic.Result{{
+			DiagnosticID: "scheduling",
+			Claims: []diagnostic.CandidateClaim{
+				{Type: diagnostic.ClaimFailureMechanism, Statement: "The scheduler reported that the Pod could not be scheduled.", EvidenceRefs: []string{"event-1"}},
+				{Type: diagnostic.ClaimRootCause, Statement: "The scheduler reported a Node selector or affinity mismatch for the Pod.", EvidenceRefs: []string{"event-1"}},
+			},
+		}},
+	}
+	rca := investigation.RCAResult{Reasoning: &domain.ReasoningOutput{RiskSummary: "Pod remains pending"}}
+	claims, _ := buildRCAClaims(rca, evidence, "")
+	var mechanism *v1alpha1.RCAClaim
+	for index := range claims {
+		if isSchedulingMechanismClaim(claims[index]) {
+			mechanism = &claims[index]
+			break
+		}
+	}
+	if mechanism == nil || mechanism.Verification != "Supported" {
+		t.Fatalf("expected confirmed scheduling mechanism claim, got %#v", claims)
+	}
+	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, 0.95, "")
+	if evaluation.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
+		t.Fatalf("expected unverified root cause to remain inconclusive, got %#v", evaluation)
+	}
+	hypotheses := diagnosticAlternativeHypothesesWithoutConfirmedMechanism(evidence.Diagnostics, claims)
+	if len(hypotheses) != 1 || hypotheses[0].Disposition != "DiagnosticCandidateUnverified" || !strings.Contains(hypotheses[0].Statement, "Node selector") {
+		t.Fatalf("expected only the root-cause candidate to remain unverified, got %#v", hypotheses)
+	}
+}
+
+func TestSchedulingMechanismClaimAcceptsVerifiedConditionEvidence(t *testing.T) {
+	evidence := investigation.EvidenceCollectionResult{
+		EvidenceRefs: []v1alpha1.EvidenceRef{{
+			ID:      "pod-1",
+			Kind:    "scheduling",
+			Summary: "Pod prod/pending UID pod-1 scheduling state: phase=Pending nodeName= podScheduled=False coverage=Complete",
+		}},
+	}
+	statement, ok := schedulingMechanismRCAClaim(evidence)
+	if !ok || statement != schedulingMechanismClaimStatement {
+		t.Fatalf("expected PodScheduled=False condition to support mechanism claim, got ok=%v statement=%q", ok, statement)
+	}
+	rca := investigation.RCAResult{Reasoning: &domain.ReasoningOutput{RiskSummary: "Pod remains pending"}}
+	claims, _ := buildRCAClaims(rca, evidence, "")
+	var mechanism *v1alpha1.RCAClaim
+	for index := range claims {
+		if isSchedulingMechanismClaim(claims[index]) {
+			mechanism = &claims[index]
+			break
+		}
+	}
+	if mechanism == nil || mechanism.Verification != "Supported" {
+		t.Fatalf("expected condition-backed mechanism claim to verify, got %#v", claims)
 	}
 }

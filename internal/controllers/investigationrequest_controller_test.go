@@ -2297,6 +2297,27 @@ func TestEvidenceNativeLimitDegradation(t *testing.T) {
 	}
 }
 
+func TestEvidenceCoverageDegradationMarksBudgetExhaustionPartial(t *testing.T) {
+	degradation := evidenceCoverageDegradation(investigation.EvidenceCollectionResult{
+		EvidenceRefs: []v1alpha1.EvidenceRef{{
+			ID:               "scheduling/budget/pod-1",
+			Kind:             "scheduling",
+			Truncated:        true,
+			TruncationReason: "InvestigationQueryBudgetExhausted",
+		}},
+	})
+	if degradation == nil || !degradation.Partial || len(degradation.Reasons) != 1 {
+		t.Fatalf("expected budget exhaustion to produce partial degradation, got %#v", degradation)
+	}
+	if reason := degradation.Reasons[0]; reason.Code != "InvestigationQueryBudgetExhausted" || reason.Stage != v1alpha1.InvestigationStageEvidenceCollection {
+		t.Fatalf("expected budget exhaustion reason, got %#v", reason)
+	}
+	conditionReason, message := evidenceDegradationCondition(degradation)
+	if conditionReason != "InvestigationQueryBudgetExhausted" || !strings.Contains(message, "incomplete coverage") {
+		t.Fatalf("expected explicit budget degradation condition, got reason=%q message=%q", conditionReason, message)
+	}
+}
+
 func TestUnverifiedRCASummaryPrefersIssueMatchingEvidence(t *testing.T) {
 	summary := unverifiedRCASummary(investigation.EvidenceCollectionResult{
 		EvidenceRefs: []v1alpha1.EvidenceRef{
@@ -2427,14 +2448,13 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 			wantNoIssue:  false,
 		},
 		{
-			name:    "failed scheduling without supported predicate is incomplete",
+			name:    "failed scheduling mechanism does not require a root-cause predicate",
 			profile: "FailedScheduling",
 			refs: []v1alpha1.EvidenceRef{
 				{Kind: string(domain.QueryTypeEvent), Reason: "FailedScheduling", Summary: "0/1 nodes are blocked: reason code redacted"},
 			},
-			wantComplete: false,
+			wantComplete: true,
 			wantNoIssue:  false,
-			wantMissing:  []string{string(domain.QueryTypeEvent)},
 		},
 		{
 			name:    "crashloop explicit backoff query complete with no matching records",

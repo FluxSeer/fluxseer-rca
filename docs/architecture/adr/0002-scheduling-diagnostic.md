@@ -1,6 +1,6 @@
 # ADR 0002: Scheduling Diagnostic and Replay-first Composition
 
-- **Status:** Phase 2E live qualification completed locally; PASS_WITH_RISKS
+- **Status:** Phase 2E closed; Phase 2F implementation in progress; PASS_WITH_RISKS
 - **Date:** 2026-10-20
 - **Branch:** `feat/scheduling-diagnostic`
 - **Related:** [ADR 0001](0001-composable-diagnostics.md)
@@ -241,10 +241,69 @@ revision 21 using the qualification image. The public reports, raw requests,
 raw Pod/Event objects, final status, metrics snapshot, and effective RBAC are
 retained beside the qualification summary.
 
-This is local live acceptance only. The current public status does not set the
-`Degraded` condition for a query-budget skip, and the metrics endpoint does not
-yet expose a separate scheduling-collector API-call series; both remain
-follow-up risks before remote/release acceptance.
+This is local live acceptance only. Phase 2F now treats explicit evidence
+truncation, including a query-budget skip, as partial degradation and exposes
+that state through the existing `Degradation` status plus the `Degraded=True`
+condition. No new CRD field is required. The final live regression must still
+verify this contract on the deployed image.
+
+## Phase 2F observability and report contract
+
+The report contract keeps investigation completion separate from evidence
+completeness:
+
+- `Phase=Completed` means the investigation workflow reached a terminal state.
+- `Outcome=Inconclusive` means the collected evidence did not support a root
+  cause conclusion.
+- `Degradation.Partial=true` and `Degraded=True` expose incomplete evidence
+  coverage, including `InvestigationQueryBudgetExhausted`.
+- `EvidenceRef.Truncated` and `TruncationReason` retain the exact bounded
+  evidence gap and remain visible to report consumers.
+
+Scheduling claims now use the same separation in status output:
+
+- `SchedulingUnschedulable` is a confirmed failure mechanism only after
+  target-scoped, UID-correlated condition or Event evidence is verified.
+- Resource, taint, and affinity explanations remain
+  `DiagnosticCandidateUnverified` unless a later evidence contract verifies
+  the specific root cause.
+- A confirmed mechanism is not counted as a verified root cause and therefore
+  cannot by itself produce a `Confirmed` investigation outcome or remediation.
+
+Phase 2F adds low-cardinality baseline metrics:
+
+```text
+fluxseer_diagnostic_collection_requests_total{diagnostic,outcome}
+fluxseer_diagnostic_collection_duration_seconds{diagnostic,outcome}
+fluxseer_diagnostic_evidence_coverage_total{diagnostic,outcome,reason}
+fluxseer_investigation_budget_exhausted_total{diagnostic,reason}
+fluxseer_diagnostic_claims_total{diagnostic,claim_type,verification}
+```
+
+Pod identity, InvestigationRequest identity, evidence IDs, and query text are
+not metric labels. Fixture-based known-truth cases remain the source for false
+confirmation measurement; live absence of a false claim is not a zero-rate
+production estimate.
+
+## Phase 2F local live regression result
+
+The targeted post-change run is retained under
+`reports/runtime/v0.5-alpha1-proxmox-k8s134/phase2f-live-20261020-r2/` on
+Kubernetes `v1.34.1`:
+
+- Budget exhaustion completed `Inconclusive` with `Degraded=True`, reason
+  `InvestigationQueryBudgetExhausted`, and the scheduling truncation reference
+  retained in status.
+- A real unschedulable Pod produced a `SchedulingUnschedulable` claim with
+  `Supported` verification. Selector/affinity and taint explanations remained
+  `DiagnosticCandidateUnverified` alternatives, and the overall investigation
+  stayed `Inconclusive` without a verified root cause.
+- The endpoint exposed all five Phase 2F metrics with bounded labels.
+- No RiskSignal, remediation request, or workload mutation was created. The
+  test namespace was deleted after evidence capture.
+
+This verifies the changed semantics on the local test cluster. It does not
+replace remote CI, pull-request review, or a broader release qualification.
 
 ## Definition of Done
 
@@ -264,9 +323,9 @@ follow-up risks before remote/release acceptance.
 - No unauthorized Node reads, RiskSignal creation, remediation, or workload
   mutation occurs.
 - Local live qualification of real scheduling failure, scheduling gate,
-  ImagePull isolation, and budget exhaustion is complete. Remote/release
-  acceptance still requires CI/PR verification and review of the remaining
-  coverage and metrics risks.
+  ImagePull isolation, and budget exhaustion is complete. Phase 2F semantic
+  and metrics regression is implemented and verified locally; CI/PR
+  verification and review are still required for release.
 - Existing Phase 1/1.5, CrashLoopBackOff, hardening, and schema checks remain
   green.
 - Baseline measurement dimensions are defined; live values and performance

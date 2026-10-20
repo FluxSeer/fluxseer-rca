@@ -41,15 +41,24 @@ func TestRCAQualityMetricsAreRegistered(t *testing.T) {
 	RecordEvidenceSufficiency("CrashLoopBackOffV2", true)
 	RecordRequiredEvidenceCheck("CrashLoopBackOffV2", "containerTermination:LastTermination", "usable")
 	RecordActionableInconclusive("CrashLoopBackOffV2", "termination_missing", true)
+	RecordDiagnosticCollection("Scheduling", 1, "Success", 10)
+	RecordDiagnosticEvidenceCoverage("Scheduling", "Success", "Complete")
+	RecordInvestigationBudgetExhausted("Scheduling", "query_budget")
+	RecordDiagnosticClaim("Scheduling", "Observation", "Candidate")
 	metrics, err := crmetrics.Registry.Gather()
 	if err != nil {
 		t.Fatalf("gather registered metrics: %v", err)
 	}
 	want := map[string]bool{
-		"fluxseer_rca_investigation_quality_total":    false,
-		"fluxseer_rca_evidence_sufficiency_total":     false,
-		"fluxseer_rca_required_evidence_checks_total": false,
-		"fluxseer_rca_actionable_inconclusive_total":  false,
+		"fluxseer_rca_investigation_quality_total":        false,
+		"fluxseer_rca_evidence_sufficiency_total":         false,
+		"fluxseer_rca_required_evidence_checks_total":     false,
+		"fluxseer_rca_actionable_inconclusive_total":      false,
+		"fluxseer_diagnostic_collection_requests_total":   false,
+		"fluxseer_diagnostic_collection_duration_seconds": false,
+		"fluxseer_diagnostic_evidence_coverage_total":     false,
+		"fluxseer_investigation_budget_exhausted_total":   false,
+		"fluxseer_diagnostic_claims_total":                false,
 	}
 	for _, metric := range metrics {
 		if _, ok := want[metric.GetName()]; ok {
@@ -60,6 +69,26 @@ func TestRCAQualityMetricsAreRegistered(t *testing.T) {
 		if !found {
 			t.Errorf("metric %s is not registered in the controller-runtime registry", name)
 		}
+	}
+}
+
+func TestDiagnosticMetricsNormalizeLabelsAndIncrement(t *testing.T) {
+	beforeRequests := testutil.ToFloat64(DiagnosticCollectionRequestsTotal.WithLabelValues("scheduling", "partial"))
+	RecordDiagnosticCollection("Scheduling", 2, "Partial", 25)
+	if got := testutil.ToFloat64(DiagnosticCollectionRequestsTotal.WithLabelValues("scheduling", "partial")); got != beforeRequests+2 {
+		t.Fatalf("expected diagnostic API request counter increment, before=%f after=%f", beforeRequests, got)
+	}
+	RecordDiagnosticEvidenceCoverage("Scheduling", "Partial", "InvestigationQueryBudgetExhausted")
+	RecordInvestigationBudgetExhausted("Scheduling", "query_budget")
+	RecordDiagnosticClaim("Scheduling", "FailureMechanism", "Candidate")
+	if got := testutil.ToFloat64(DiagnosticEvidenceCoverageTotal.WithLabelValues("scheduling", "partial", "budget_exhausted")); got < 1 {
+		t.Fatalf("expected budget coverage metric, got %f", got)
+	}
+	if got := testutil.ToFloat64(InvestigationBudgetExhaustedTotal.WithLabelValues("scheduling", "budget_exhausted")); got < 1 {
+		t.Fatalf("expected budget exhaustion metric, got %f", got)
+	}
+	if got := testutil.ToFloat64(DiagnosticClaimsTotal.WithLabelValues("scheduling", "failure_mechanism", "candidate")); got < 1 {
+		t.Fatalf("expected diagnostic claim metric, got %f", got)
 	}
 }
 

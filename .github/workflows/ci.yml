@@ -250,7 +250,9 @@ jobs:
           make verify-docs-contract
 
       - name: Helm lint
-        run: helm lint charts/fluxseer-rca
+        run: |
+          helm lint charts/fluxseer-rca
+          make verify-scheduling-rbac
 
   image-identity:
     name: Verify Image Identity

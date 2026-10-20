@@ -9,23 +9,28 @@ import (
 )
 
 var AllowedLabels = map[string][]string{
-	"fluxseer_rca_investigation_total":               {"namespace", "provider_type", "result", "root_cause_type"},
-	"fluxseer_rca_provider_requests_total":           {"provider_type", "result"},
-	"fluxseer_rca_provider_failures_total":           {"provider_type", "reason"},
-	"fluxseer_rca_datasource_query_duration_seconds": {"datasource_type", "result"},
-	"fluxseer_rca_evidence_truncated_total":          {"kind", "reason"},
-	"fluxseer_rca_claim_verification_total":          {"verification_status"},
-	"fluxseer_rca_query_policy_decisions_total":      {"backend", "decision", "reason"},
-	"fluxseer_rca_query_result_limit_exceeded_total": {"backend_type", "dimension"},
-	"fluxseer_rca_datasource_query_queue_depth":      {"scheduler"},
-	"fluxseer_rca_datasource_queries_in_flight":      {"scheduler"},
-	"fluxseer_rca_deduplication_hits_total":          {"source"},
-	"fluxseer_rca_loop_prevention_total":             {"reason"},
-	"fluxseer_rca_status_update_conflicts_total":     {"resource"},
-	"fluxseer_rca_investigation_quality_total":       {"profile", "provider_class", "evidence_availability", "phase", "outcome"},
-	"fluxseer_rca_evidence_sufficiency_total":        {"profile", "sufficient"},
-	"fluxseer_rca_required_evidence_checks_total":    {"profile", "check", "result"},
-	"fluxseer_rca_actionable_inconclusive_total":     {"profile", "gap_reason", "actionable"},
+	"fluxseer_rca_investigation_total":                {"namespace", "provider_type", "result", "root_cause_type"},
+	"fluxseer_rca_provider_requests_total":            {"provider_type", "result"},
+	"fluxseer_rca_provider_failures_total":            {"provider_type", "reason"},
+	"fluxseer_rca_datasource_query_duration_seconds":  {"datasource_type", "result"},
+	"fluxseer_rca_evidence_truncated_total":           {"kind", "reason"},
+	"fluxseer_rca_claim_verification_total":           {"verification_status"},
+	"fluxseer_rca_query_policy_decisions_total":       {"backend", "decision", "reason"},
+	"fluxseer_rca_query_result_limit_exceeded_total":  {"backend_type", "dimension"},
+	"fluxseer_rca_datasource_query_queue_depth":       {"scheduler"},
+	"fluxseer_rca_datasource_queries_in_flight":       {"scheduler"},
+	"fluxseer_rca_deduplication_hits_total":           {"source"},
+	"fluxseer_rca_loop_prevention_total":              {"reason"},
+	"fluxseer_rca_status_update_conflicts_total":      {"resource"},
+	"fluxseer_rca_investigation_quality_total":        {"profile", "provider_class", "evidence_availability", "phase", "outcome"},
+	"fluxseer_rca_evidence_sufficiency_total":         {"profile", "sufficient"},
+	"fluxseer_rca_required_evidence_checks_total":     {"profile", "check", "result"},
+	"fluxseer_rca_actionable_inconclusive_total":      {"profile", "gap_reason", "actionable"},
+	"fluxseer_diagnostic_collection_requests_total":   {"diagnostic", "outcome"},
+	"fluxseer_diagnostic_collection_duration_seconds": {"diagnostic", "outcome"},
+	"fluxseer_diagnostic_evidence_coverage_total":     {"diagnostic", "outcome", "reason"},
+	"fluxseer_investigation_budget_exhausted_total":   {"diagnostic", "reason"},
+	"fluxseer_diagnostic_claims_total":                {"diagnostic", "claim_type", "verification"},
 }
 
 var forbiddenLabels = map[string]struct{}{
@@ -133,6 +138,42 @@ var (
 		},
 		AllowedLabels["fluxseer_rca_status_update_conflicts_total"],
 	)
+	DiagnosticCollectionRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fluxseer_diagnostic_collection_requests_total",
+			Help: "Actual bounded datasource API requests made by a FluxSeer diagnostic collector.",
+		},
+		AllowedLabels["fluxseer_diagnostic_collection_requests_total"],
+	)
+	DiagnosticCollectionDurationSeconds = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "fluxseer_diagnostic_collection_duration_seconds",
+			Help:    "FluxSeer diagnostic evidence collection duration by diagnostic and outcome.",
+			Buckets: prometheus.DefBuckets,
+		},
+		AllowedLabels["fluxseer_diagnostic_collection_duration_seconds"],
+	)
+	DiagnosticEvidenceCoverageTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fluxseer_diagnostic_evidence_coverage_total",
+			Help: "FluxSeer diagnostic evidence coverage outcomes by diagnostic, result, and bounded reason.",
+		},
+		AllowedLabels["fluxseer_diagnostic_evidence_coverage_total"],
+	)
+	InvestigationBudgetExhaustedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fluxseer_investigation_budget_exhausted_total",
+			Help: "FluxSeer investigations whose bounded query budget prevented a diagnostic collection.",
+		},
+		AllowedLabels["fluxseer_investigation_budget_exhausted_total"],
+	)
+	DiagnosticClaimsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fluxseer_diagnostic_claims_total",
+			Help: "FluxSeer diagnostic candidate and verified claims by bounded diagnostic dimensions.",
+		},
+		AllowedLabels["fluxseer_diagnostic_claims_total"],
+	)
 )
 
 func init() {
@@ -150,6 +191,11 @@ func init() {
 		DeduplicationHitsTotal,
 		LoopPreventionTotal,
 		StatusUpdateConflictsTotal,
+		DiagnosticCollectionRequestsTotal,
+		DiagnosticCollectionDurationSeconds,
+		DiagnosticEvidenceCoverageTotal,
+		InvestigationBudgetExhaustedTotal,
+		DiagnosticClaimsTotal,
 	)
 }
 
@@ -210,6 +256,30 @@ func RecordStatusUpdateConflict(resource string) {
 	StatusUpdateConflictsTotal.WithLabelValues(normalizeLabel(resource, "unknown")).Inc()
 }
 
+// RecordDiagnosticCollection records one bounded collection operation. The
+// request count is the provider-reported API request count, so a budget skip
+// can expose coverage degradation without fabricating an API call.
+func RecordDiagnosticCollection(diagnostic string, requests int, outcome string, duration time.Duration) {
+	diagnosticLabel := normalizeDiagnostic(diagnostic)
+	outcomeLabel := normalizeDiagnosticOutcome(outcome)
+	if requests > 0 {
+		DiagnosticCollectionRequestsTotal.WithLabelValues(diagnosticLabel, outcomeLabel).Add(float64(requests))
+	}
+	DiagnosticCollectionDurationSeconds.WithLabelValues(diagnosticLabel, outcomeLabel).Observe(duration.Seconds())
+}
+
+func RecordDiagnosticEvidenceCoverage(diagnostic, outcome, reason string) {
+	DiagnosticEvidenceCoverageTotal.WithLabelValues(normalizeDiagnostic(diagnostic), normalizeDiagnosticOutcome(outcome), normalizeDiagnosticReason(reason)).Inc()
+}
+
+func RecordInvestigationBudgetExhausted(diagnostic, reason string) {
+	InvestigationBudgetExhaustedTotal.WithLabelValues(normalizeDiagnostic(diagnostic), normalizeDiagnosticReason(reason)).Inc()
+}
+
+func RecordDiagnosticClaim(diagnostic, claimType, verification string) {
+	DiagnosticClaimsTotal.WithLabelValues(normalizeDiagnostic(diagnostic), normalizeClaimType(claimType), normalizeClaimVerification(verification)).Inc()
+}
+
 func ForbiddenLabelNames() map[string]struct{} {
 	out := make(map[string]struct{}, len(forbiddenLabels))
 	for key := range forbiddenLabels {
@@ -228,6 +298,63 @@ func normalizeResult(value string) string {
 
 func normalizeReason(value string) string {
 	return normalizeLabel(value, "unknown")
+}
+
+func normalizeDiagnostic(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "imagepull", "imagepullbackoff":
+		return "imagepull"
+	case "scheduling":
+		return "scheduling"
+	default:
+		return "other"
+	}
+}
+
+func normalizeDiagnosticOutcome(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "success", "partial", "failure":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "failure"
+	}
+}
+
+func normalizeDiagnosticReason(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "complete", "partial", "truncated", "stale", "unauthorized", "collection_failed", "budget_exhausted", "missing":
+		return strings.ToLower(strings.TrimSpace(value))
+	case "investigationquerybudgetexhausted", "query_budget":
+		return "budget_exhausted"
+	default:
+		return "other"
+	}
+}
+
+func normalizeClaimType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "observation":
+		return "observation"
+	case "failuremechanism", "failure_mechanism":
+		return "failure_mechanism"
+	case "rootcause", "root_cause":
+		return "root_cause"
+	case "provider":
+		return "provider"
+	default:
+		return "other"
+	}
+}
+
+func normalizeClaimVerification(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "supported", "confirmed":
+		return "supported"
+	case "unverified", "inferred", "unsupported", "contradicted", "candidate":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "unknown"
+	}
 }
 
 func normalizeLabel(value string, fallback string) string {

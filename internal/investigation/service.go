@@ -209,7 +209,13 @@ func (s *Service) evaluateDiagnostics(ctx context.Context, preflight PreflightRe
 		resolved, _ := s.ScopeResolver.ResolveDeployment(ctx, preflight.Target.Namespace, preflight.Target.Name)
 		input.Scope = resolved
 	}
-	return s.DiagnosticPlanner.Evaluate(input)
+	results := s.DiagnosticPlanner.Evaluate(input)
+	for _, result := range results {
+		for _, claim := range result.Claims {
+			rcametrics.RecordDiagnosticClaim(result.DiagnosticID, string(claim.Type), "candidate")
+		}
+	}
+	return results
 }
 
 // collectSchedulingEvidence invokes one optional collector for the complete
@@ -246,6 +252,8 @@ func (s *Service) collectSchedulingEvidence(ctx context.Context, spec v1alpha1.I
 		if candidate, supports := source.(datasource.SchedulingEvidenceCollector); supports {
 			if !schedulingCollectionWithinBudget(spec.QueryBudget, preflight.CollectionPlan, name) {
 				records := schedulingBudgetExhaustionEvidence(pods, now, window)
+				rcametrics.RecordDiagnosticEvidenceCoverage("scheduling", "partial", "budget_exhausted")
+				rcametrics.RecordInvestigationBudgetExhausted("scheduling", "query_budget")
 				observations, refs := adaptSchedulingEvidence(records)
 				return records, observations, refs
 			}
@@ -262,15 +270,40 @@ func (s *Service) collectSchedulingEvidence(ctx context.Context, spec v1alpha1.I
 		MaxPages:       10,
 		MaxAPIRequests: 64,
 	}
-	collection, _ := collector.CollectSchedulingEvidence(ctx, domain.SchedulingEvidenceRequest{
+	collectionStarted := time.Now()
+	collection, collectionErr := collector.CollectSchedulingEvidence(ctx, domain.SchedulingEvidenceRequest{
 		Namespace: preflight.Target.Namespace,
 		Pods:      pods,
 		StartTime: now.Add(-window),
 		EndTime:   now,
 		Limits:    limits,
 	})
+	collectionOutcome, coverageReason := schedulingCollectionMetricOutcome(collection, collectionErr)
+	rcametrics.RecordDiagnosticCollection("scheduling", collection.APIRequests, collectionOutcome, time.Since(collectionStarted))
+	rcametrics.RecordDiagnosticEvidenceCoverage("scheduling", collectionOutcome, coverageReason)
 	observations, refs := adaptSchedulingEvidence(collection.Evidence)
 	return collection.Evidence, observations, refs
+}
+
+func schedulingCollectionMetricOutcome(collection domain.SchedulingEvidenceResult, collectionErr error) (string, string) {
+	if collectionErr != nil {
+		return "failure", "collection_failed"
+	}
+	if collection.Truncated || collection.Coverage == domain.SchedulingCoverageTruncated {
+		return "partial", "truncated"
+	}
+	switch collection.Coverage {
+	case domain.SchedulingCoverageStale:
+		return "partial", "stale"
+	case domain.SchedulingCoverageUnauthorized:
+		return "failure", "unauthorized"
+	case domain.SchedulingCoverageUnavailable, domain.SchedulingCoverageCollectionFailed:
+		return "failure", "collection_failed"
+	case domain.SchedulingCoveragePartial:
+		return "partial", "partial"
+	default:
+		return "success", "complete"
+	}
 }
 
 func schedulingBudgetExhaustionEvidence(pods []domain.SchedulingPodRef, now time.Time, window time.Duration) []domain.SchedulingEvidence {

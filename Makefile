@@ -28,7 +28,7 @@ CHART_VERSION := $(patsubst v%,%,$(VERSION))
 OPERATOR_IMAGE_REF := $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 DEMO_IMAGE_REF := $(DEMO_IMAGE_REPOSITORY):$(IMAGE_TAG)
 
-.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.5-alpha1-live-harness verify-v0.5-alpha1-kind-rca verify-v0.5-alpha1-kind-remediation verify-release-qualification verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-runtime-canonical-workloads-cluster verify-runtime-riskrule-incidents-cluster verify-runtime-traffic-pattern-conformance-cluster verify-runtime-prometheus-pattern-conformance-cluster verify-runtime-public-report-catalog export-runtime-public-reports verify-rbac-profiles verify-rule-packs verify-detection-pattern-catalog verify-traffic-pattern-promql verify-prometheus-pattern-promql verify-docs-contract verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
+.PHONY: fmt lint test run run-operator run-manager demo-up demo-down install-demo apply-riskrule inject-fault recover-demo demo-status demo-degrade-missing-datasource demo-degrade-capability-mismatch demo-degrade-provider-auth-failed demo-reset-riskrule demo-degrade-all verify-e2e-kind verify-investigation-kind verify-lifecycle-kind verify-v0.5-alpha1-live-harness verify-v0.5-alpha1-kind-rca verify-v0.5-alpha1-kind-remediation verify-release-qualification verify-v0.3-beta-upgrade-kind verify-v0.2-alpha verify-v0.2-beta verify-v0.3-schema-freeze verify-v0.3-beta-hardening verify-v0.4-approval-lifecycle verify-runtime-provider-policy-cluster verify-runtime-matrix-cluster verify-runtime-canonical-workloads-cluster verify-runtime-riskrule-incidents-cluster verify-runtime-traffic-pattern-conformance-cluster verify-runtime-prometheus-pattern-conformance-cluster verify-runtime-public-report-catalog export-runtime-public-reports verify-rbac-profiles verify-rule-packs verify-detection-pattern-catalog verify-traffic-pattern-promql verify-prometheus-pattern-promql verify-docs-contract verify-scheduling-rbac verify-rule-packs-kind verify-artifact-identity verify-packaging-consistency verify-build-reproducibility verify-release-inputs verify-release-cleanup verify-release-pretag verify-release-v0.2-beta verify-release-v0.3-beta verify-release-v0.3-rc build-images build-demo-images
 
 fmt:
 	$(GO) fmt ./...
@@ -217,6 +217,9 @@ verify-prometheus-pattern-promql:
 
 verify-docs-contract:
 	bash hack/verify-docs-contract.sh
+
+verify-scheduling-rbac:
+	bash hack/verify-scheduling-rbac.sh
 
 verify-rule-packs-kind:
 	VERSION=$(VERSION) IMAGE_TAG=$(IMAGE_TAG) TARGET_PLATFORM=$(TARGET_PLATFORM) IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) bash test/e2e/kind/verify_rule_packs_kind.sh
