@@ -327,6 +327,20 @@ scenario_assert_contract() {
   fi
 }
 
+scenario_assert_claim() {
+  local namespace="$1"
+  local request_name="$2"
+  local claim_id="$3"
+  local expected_verification="$4"
+  local statement_fragment="$5"
+
+  scenario_assert_json_jq "investigationrequest/${request_name}" "${namespace}" \
+    --arg claimID "${claim_id}" \
+    --arg verification "${expected_verification}" \
+    --arg statementFragment "${statement_fragment}" \
+    '.status.claims | any(.[]?; .id == $claimID and .verification == $verification and ((.statement // "") | contains($statementFragment)))'
+}
+
 scenario_capture_case() {
   local case_id="$1"
   local namespace="$2"
