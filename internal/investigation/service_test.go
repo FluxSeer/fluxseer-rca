@@ -21,6 +21,7 @@ import (
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
+	"github.com/FluxSeer/fluxseer-rca/internal/diagnostic"
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
 	"github.com/FluxSeer/fluxseer-rca/internal/knowledge"
@@ -28,6 +29,7 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/model/heuristic"
 	"github.com/FluxSeer/fluxseer-rca/internal/modelgateway"
 	"github.com/FluxSeer/fluxseer-rca/internal/rcametrics"
+	"github.com/FluxSeer/fluxseer-rca/internal/scope"
 )
 
 type clientObject = client.Object
@@ -158,6 +160,63 @@ func TestServicePreflightAutoCompletesCrashLoopBackOffV2Plan(t *testing.T) {
 	terminationStep := result.CollectionPlan[1]
 	if terminationStep.QueryType != domain.QueryTypeContainerTermination || terminationStep.Query != "container-termination-status" {
 		t.Fatalf("expected automatic container termination step, got %#v", terminationStep)
+	}
+}
+
+func TestServiceEvaluatesComposableImagePullDiagnosticAfterEvidenceCollection(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	controller := true
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "prod", UID: "deployment-1"},
+		Spec: appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}, Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "web"}},
+		}},
+	}
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-rs", Namespace: "prod", UID: "replicaset-1", Labels: map[string]string{"app": "web"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: "web", UID: deployment.UID, Controller: &controller}},
+	}}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-pod", Namespace: "prod", UID: "pod-1", Labels: map[string]string{"app": "web"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "web-rs", UID: replicaSet.UID, Controller: &controller}},
+	}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, replicaSet, pod).Build()
+	service := &Service{
+		Client:            reader,
+		Registry:          datasource.NewRegistry(fakeDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent, records: []map[string]any{{"reason": "ErrImagePull", "message": "failed to pull image"}}}),
+		DiagnosticPlanner: diagnostic.DefaultPlanner(),
+		ScopeResolver:     scope.NewResolver(reader, scope.Limits{}),
+	}
+	preflight := PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Kind: "Deployment", Name: "web"},
+		CollectionPlan: []CollectionStep{{
+			Name: "kubernetes-events", DatasourceName: "kubernetes-events", QueryType: domain.QueryTypeEvent, Query: "events",
+		}},
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		Target: v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "web"},
+	}, preflight, time.Date(2026, 10, 20, 2, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue != nil {
+		t.Fatalf("unexpected collection issue: %#v", result.Issue)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].DiagnosticID != "image-pull" {
+		t.Fatalf("expected one image-pull diagnostic result, got %#v", result.Diagnostics)
+	}
+	if result.Diagnostics[0].Status != diagnostic.StatusSupported {
+		t.Fatalf("expected supported image-pull mechanism, got %#v", result.Diagnostics[0])
+	}
+	if len(result.Diagnostics[0].Claims) != 2 {
+		t.Fatalf("expected observation and failure-mechanism claims, got %#v", result.Diagnostics[0].Claims)
 	}
 }
 

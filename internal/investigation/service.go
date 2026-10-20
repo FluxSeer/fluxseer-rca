@@ -22,12 +22,14 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
 	"github.com/FluxSeer/fluxseer-rca/internal/dataclassification"
 	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
+	"github.com/FluxSeer/fluxseer-rca/internal/diagnostic"
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
 	"github.com/FluxSeer/fluxseer-rca/internal/modelgateway"
 	"github.com/FluxSeer/fluxseer-rca/internal/querypolicy"
 	"github.com/FluxSeer/fluxseer-rca/internal/rcametrics"
 	"github.com/FluxSeer/fluxseer-rca/internal/rule"
+	"github.com/FluxSeer/fluxseer-rca/internal/scope"
 	"github.com/FluxSeer/fluxseer-rca/internal/statusbudget"
 )
 
@@ -73,6 +75,7 @@ type EvidenceCollectionResult struct {
 	Summary      string
 	EvidenceRefs []v1alpha1.EvidenceRef
 	Observations []domain.Observation
+	Diagnostics  []diagnostic.Result
 	Issue        *Issue
 }
 
@@ -92,11 +95,13 @@ type RCAResult struct {
 }
 
 type Service struct {
-	Client        client.Reader
-	Registry      *datasource.Registry
-	Resolver      modelgateway.ProviderResolver
-	Gateway       *modelgateway.Gateway
-	EvidenceStore evidencepkg.SnapshotStore
+	Client            client.Reader
+	Registry          *datasource.Registry
+	Resolver          modelgateway.ProviderResolver
+	Gateway           *modelgateway.Gateway
+	EvidenceStore     evidencepkg.SnapshotStore
+	DiagnosticPlanner *diagnostic.Planner
+	ScopeResolver     *scope.Resolver
 }
 
 func (s *Service) Preflight(ctx context.Context, namespace string, spec v1alpha1.InvestigationRequestSpec) (PreflightResult, error) {
@@ -175,7 +180,26 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 		return result, nil
 	}
 	result.Summary = fmt.Sprintf("collected %d evidence records from %d investigation queries", totalRecords, len(preflight.CollectionPlan))
+	result.Diagnostics = s.evaluateDiagnostics(ctx, preflight, result)
 	return result, nil
+}
+
+func (s *Service) evaluateDiagnostics(ctx context.Context, preflight PreflightResult, evidence EvidenceCollectionResult) []diagnostic.Result {
+	if s.DiagnosticPlanner == nil {
+		return nil
+	}
+	input := diagnostic.EvidenceSet{
+		Observations: append([]domain.Observation(nil), evidence.Observations...),
+		EvidenceRefs: append([]v1alpha1.EvidenceRef(nil), evidence.EvidenceRefs...),
+	}
+	if len(s.DiagnosticPlanner.Candidates(input)) == 0 {
+		return nil
+	}
+	if s.ScopeResolver != nil && strings.EqualFold(strings.TrimSpace(preflight.Target.Kind), "Deployment") {
+		resolved, _ := s.ScopeResolver.ResolveDeployment(ctx, preflight.Target.Namespace, preflight.Target.Name)
+		input.Scope = resolved
+	}
+	return s.DiagnosticPlanner.Evaluate(input)
 }
 
 func (s *Service) applyEvidenceRetention(ctx context.Context, policy v1alpha1.EvidenceRetentionPolicy, result *EvidenceCollectionResult, now time.Time) *Issue {
@@ -1812,18 +1836,23 @@ func buildInvestigationIngestionOutput(spec v1alpha1.InvestigationRequestSpec, p
 		contextSummary = strings.TrimSpace(spec.Question) + " | " + evidenceResult.Summary
 	}
 
+	metadata := map[string]string{
+		"question": strings.TrimSpace(spec.Question),
+		"mode":     firstNonEmpty(spec.Mode, v1alpha1.InvestigationModeReadOnly),
+	}
+	if advisory := diagnosticAdvisoryText(evidenceResult.Diagnostics); advisory != "" {
+		metadata["diagnosticAdvisories"] = advisory
+	}
+
 	return domain.IngestionOutput{
 		Context: domain.IncidentContext{
-			ID:       fmt.Sprintf("investigation-%s-%s", preflight.Target.Namespace, preflight.Target.Name),
-			Cluster:  preflight.Target.Cluster,
-			Service:  preflight.Target.Service,
-			Resource: preflight.Target,
-			Summary:  contextSummary,
-			Signals:  signals,
-			Metadata: map[string]string{
-				"question": strings.TrimSpace(spec.Question),
-				"mode":     firstNonEmpty(spec.Mode, v1alpha1.InvestigationModeReadOnly),
-			},
+			ID:          fmt.Sprintf("investigation-%s-%s", preflight.Target.Namespace, preflight.Target.Name),
+			Cluster:     preflight.Target.Cluster,
+			Service:     preflight.Target.Service,
+			Resource:    preflight.Target,
+			Summary:     contextSummary,
+			Signals:     signals,
+			Metadata:    metadata,
 			GeneratedAt: now,
 		},
 		Evidence: domain.EvidenceBundle{
@@ -1840,6 +1869,28 @@ func buildInvestigationIngestionOutput(spec v1alpha1.InvestigationRequestSpec, p
 		},
 		DedupedFrom: len(evidenceResult.EvidenceRefs),
 	}
+}
+
+func diagnosticAdvisoryText(results []diagnostic.Result) string {
+	parts := make([]string, 0, len(results))
+	for _, result := range results {
+		for _, claim := range result.Claims {
+			statement := strings.TrimSpace(claim.Statement)
+			if statement == "" {
+				continue
+			}
+			parts = append(parts, fmt.Sprintf("%s/%s %s candidate: %s", result.DiagnosticID, result.Status, claim.Type, statement))
+		}
+		for _, warning := range result.Warnings {
+			if text := strings.TrimSpace(warning); text != "" {
+				parts = append(parts, fmt.Sprintf("%s/%s warning: %s", result.DiagnosticID, result.Status, text))
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "UNVERIFIED diagnostic candidates; Claim Verification remains authoritative. " + strings.Join(parts, " | ")
 }
 
 func normalizeEvidenceKind(kind string) string {
