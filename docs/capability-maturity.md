@@ -46,6 +46,7 @@ runtime behavior and Helm/RBAC gate are the source of truth.
 | --- | --- | --- |
 | Kubernetes Events evidence | Supported | Enabled through the built-in adapter and default Kubernetes baseline rule pack. |
 | Kubernetes workload status | Supported | `deploymentCondition` remains a compatibility query type and returns workload status for supported workload targets. |
+| Kubernetes container termination status | Implemented; evidence-gap cases qualified on Kind v1.35.8 and Proxmox Talos/Kubernetes v1.34.1 | Additive `CrashLoopBackOffV2` profile. The four missing, stale, truncated, and denied-read cases passed; this does not establish full scenario or managed-distribution compatibility. |
 | Workload target discovery | Supported | `RiskRule` supports `Deployment`, `StatefulSet`, `DaemonSet`, `Job`, `CronJob`, and Pod owner-chain canonicalization. |
 | Prometheus datasource | Supported | Opt-in `DataSource` or environment configuration. |
 | Loki datasource | Supported | Opt-in `DataSource` or environment configuration. |

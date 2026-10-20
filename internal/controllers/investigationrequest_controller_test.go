@@ -16,6 +16,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -282,6 +283,176 @@ func TestInvestigationRequestReconcilerCompletesWithRCA(t *testing.T) {
 	}
 	if cond := findCondition(stored.Status.Conditions, conditionVerified); cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "NoSupportedRootCauseClaims" {
 		t.Fatalf("expected Verified false NoSupportedRootCauseClaims, got %#v", cond)
+	}
+}
+
+func TestRecordInvestigationQualityMetrics(t *testing.T) {
+	profile := "crashloopbackoffv2"
+	checks := []string{"event:CrashLoopBackOff", "containerTermination:LastTermination"}
+
+	confirmed := &v1alpha1.InvestigationRequest{
+		Spec: v1alpha1.InvestigationRequestSpec{EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: "CrashLoopBackOffV2"}},
+		Status: v1alpha1.InvestigationRequestStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{Phase: v1alpha1.PhaseCompleted},
+			Outcome:        v1alpha1.InvestigationOutcomeConfirmed,
+			EvidenceCoverage: &v1alpha1.RCAEvidenceCoverage{
+				Profile:         "CrashLoopBackOffV2",
+				RequiredChecks:  checks,
+				CompletedChecks: checks,
+			},
+		},
+	}
+	confirmedOutcome := []string{profile, "heuristic", "available", "completed", "confirmed"}
+	outcomeBefore := testutil.ToFloat64(rcametrics.InvestigationQualityTotal.WithLabelValues(confirmedOutcome...))
+	sufficientBefore := testutil.ToFloat64(rcametrics.EvidenceSufficiencyTotal.WithLabelValues(profile, "true"))
+	usableBefore := testutil.ToFloat64(rcametrics.RequiredEvidenceChecksTotal.WithLabelValues(profile, "event_crashloopbackoff", "usable"))
+	recordInvestigationQualityMetrics(confirmed, "")
+	if got := testutil.ToFloat64(rcametrics.InvestigationQualityTotal.WithLabelValues(confirmedOutcome...)); got != outcomeBefore+1 {
+		t.Fatalf("expected confirmed outcome increment, before=%f after=%f", outcomeBefore, got)
+	}
+	if got := testutil.ToFloat64(rcametrics.EvidenceSufficiencyTotal.WithLabelValues(profile, "true")); got != sufficientBefore+1 {
+		t.Fatalf("expected sufficient evidence increment, before=%f after=%f", sufficientBefore, got)
+	}
+	if got := testutil.ToFloat64(rcametrics.RequiredEvidenceChecksTotal.WithLabelValues(profile, "event_crashloopbackoff", "usable")); got != usableBefore+1 {
+		t.Fatalf("expected usable event check increment, before=%f after=%f", usableBefore, got)
+	}
+
+	inconclusive := &v1alpha1.InvestigationRequest{
+		Spec: v1alpha1.InvestigationRequestSpec{EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: "CrashLoopBackOffV2"}},
+		Status: v1alpha1.InvestigationRequestStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{Phase: v1alpha1.PhaseCompleted},
+			Outcome:        v1alpha1.InvestigationOutcomeInconclusive,
+			MissingEvidence: []v1alpha1.RCAMissingEvidence{
+				{Source: "containerTermination", Reason: "RequiredEvidenceMissing"},
+				{Source: "containerTermination", Reason: "ContainerTerminationEvidenceStale"},
+			},
+			EvidenceCoverage: &v1alpha1.RCAEvidenceCoverage{
+				Profile:          "CrashLoopBackOffV2",
+				RequiredChecks:   checks,
+				CompletedChecks:  []string{checks[0]},
+				IncompleteChecks: []string{checks[1]},
+			},
+		},
+	}
+	partialOutcome := []string{profile, "heuristic", "partial", "completed", "inconclusive"}
+	partialBefore := testutil.ToFloat64(rcametrics.InvestigationQualityTotal.WithLabelValues(partialOutcome...))
+	insufficientBefore := testutil.ToFloat64(rcametrics.EvidenceSufficiencyTotal.WithLabelValues(profile, "false"))
+	staleBefore := testutil.ToFloat64(rcametrics.RequiredEvidenceChecksTotal.WithLabelValues(profile, "containertermination_lasttermination", "stale"))
+	actionableBefore := testutil.ToFloat64(rcametrics.ActionableInconclusiveTotal.WithLabelValues(profile, "termination_stale", "true"))
+	recordInvestigationQualityMetrics(inconclusive, "heuristic")
+	if got := testutil.ToFloat64(rcametrics.InvestigationQualityTotal.WithLabelValues(partialOutcome...)); got != partialBefore+1 {
+		t.Fatalf("expected inconclusive outcome increment, before=%f after=%f", partialBefore, got)
+	}
+	if got := testutil.ToFloat64(rcametrics.EvidenceSufficiencyTotal.WithLabelValues(profile, "false")); got != insufficientBefore+1 {
+		t.Fatalf("expected insufficient evidence increment, before=%f after=%f", insufficientBefore, got)
+	}
+	if got := testutil.ToFloat64(rcametrics.RequiredEvidenceChecksTotal.WithLabelValues(profile, "containertermination_lasttermination", "stale")); got != staleBefore+1 {
+		t.Fatalf("expected stale termination check increment, before=%f after=%f", staleBefore, got)
+	}
+	if got := testutil.ToFloat64(rcametrics.ActionableInconclusiveTotal.WithLabelValues(profile, "termination_stale", "true")); got != actionableBefore+1 {
+		t.Fatalf("expected actionable inconclusive increment, before=%f after=%f", actionableBefore, got)
+	}
+
+	missingTermination := inconclusive.DeepCopy()
+	missingTermination.Status.MissingEvidence = []v1alpha1.RCAMissingEvidence{
+		{Source: "containerTermination", Reason: "RequiredEvidenceMissing"},
+		{Source: "containerTermination", Reason: "ContainerTerminationEvidenceMissing"},
+	}
+	missingTerminationGapBefore := testutil.ToFloat64(rcametrics.ActionableInconclusiveTotal.WithLabelValues(profile, "termination_missing", "true"))
+	missingTerminationCheckBefore := testutil.ToFloat64(rcametrics.RequiredEvidenceChecksTotal.WithLabelValues(profile, "containertermination_lasttermination", "empty"))
+	recordInvestigationQualityMetrics(missingTermination, "heuristic")
+	if got := testutil.ToFloat64(rcametrics.ActionableInconclusiveTotal.WithLabelValues(profile, "termination_missing", "true")); got != missingTerminationGapBefore+1 {
+		t.Fatalf("expected actionable termination-missing increment despite generic evidence summary, before=%f after=%f", missingTerminationGapBefore, got)
+	}
+	if got := testutil.ToFloat64(rcametrics.RequiredEvidenceChecksTotal.WithLabelValues(profile, "containertermination_lasttermination", "empty")); got != missingTerminationCheckBefore+1 {
+		t.Fatalf("expected empty termination check despite generic evidence summary, before=%f after=%f", missingTerminationCheckBefore, got)
+	}
+
+	failed := &v1alpha1.InvestigationRequest{
+		Spec: v1alpha1.InvestigationRequestSpec{EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: "CrashLoopBackOffV2"}},
+		Status: v1alpha1.InvestigationRequestStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{Phase: v1alpha1.PhaseFailed},
+			Outcome:        v1alpha1.InvestigationOutcomeUnknown,
+			Failure:        &v1alpha1.InvestigationFailure{Code: "DatasourceQueryFailed"},
+		},
+	}
+	failedOutcome := []string{profile, "heuristic", "unavailable", "failed", "unknown"}
+	failedBefore := testutil.ToFloat64(rcametrics.InvestigationQualityTotal.WithLabelValues(failedOutcome...))
+	unavailableBefore := testutil.ToFloat64(rcametrics.RequiredEvidenceChecksTotal.WithLabelValues(profile, "event_crashloopbackoff", "unavailable"))
+	recordInvestigationQualityMetrics(failed, "")
+	if got := testutil.ToFloat64(rcametrics.InvestigationQualityTotal.WithLabelValues(failedOutcome...)); got != failedBefore+1 {
+		t.Fatalf("expected failed investigation increment, before=%f after=%f", failedBefore, got)
+	}
+	if got := testutil.ToFloat64(rcametrics.RequiredEvidenceChecksTotal.WithLabelValues(profile, "event_crashloopbackoff", "unavailable")); got != unavailableBefore+1 {
+		t.Fatalf("expected unavailable evidence check increment, before=%f after=%f", unavailableBefore, got)
+	}
+}
+
+func TestPersistStatusRecordsQualityMetricsAfterSuccessfulWrite(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add aiops scheme: %v", err)
+	}
+	original := &v1alpha1.InvestigationRequest{
+		ObjectMeta: metav1.ObjectMeta{Name: "quality-metric", Namespace: "default", Generation: 1},
+		Spec:       v1alpha1.InvestigationRequestSpec{EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: "CrashLoopBackOffV2"}},
+		Status: v1alpha1.InvestigationRequestStatus{
+			ResourceStatus: v1alpha1.ResourceStatus{Phase: v1alpha1.PhasePending},
+		},
+	}
+	apiClient := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&v1alpha1.InvestigationRequest{}).WithObjects(original).Build()
+	original = &v1alpha1.InvestigationRequest{}
+	if err := apiClient.Get(context.Background(), types.NamespacedName{Namespace: "default", Name: "quality-metric"}, original); err != nil {
+		t.Fatalf("get original InvestigationRequest: %v", err)
+	}
+	updated := original.DeepCopy()
+	updated.Status.Phase = v1alpha1.PhaseCompleted
+	updated.Status.Outcome = v1alpha1.InvestigationOutcomeInconclusive
+	updated.Status.MissingEvidence = []v1alpha1.RCAMissingEvidence{{Source: "containerTermination", Reason: "ContainerTerminationEvidenceMissing"}}
+	updated.Status.EvidenceCoverage = &v1alpha1.RCAEvidenceCoverage{
+		Profile:          "CrashLoopBackOffV2",
+		RequiredChecks:   []string{"event:CrashLoopBackOff", "containerTermination:LastTermination"},
+		CompletedChecks:  []string{"event:CrashLoopBackOff"},
+		IncompleteChecks: []string{"containerTermination:LastTermination"},
+	}
+	reconciler := &InvestigationRequestReconciler{Client: apiClient}
+	labels := []string{"crashloopbackoffv2", "heuristic", "partial", "completed", "inconclusive"}
+	before := testutil.ToFloat64(rcametrics.InvestigationQualityTotal.WithLabelValues(labels...))
+
+	if err := reconciler.persistStatusAndRecordQuality(context.Background(), original, updated, ""); err != nil {
+		t.Fatalf("persist status and metrics: %v", err)
+	}
+	persisted := &v1alpha1.InvestigationRequest{}
+	if err := apiClient.Get(context.Background(), types.NamespacedName{Namespace: "default", Name: "quality-metric"}, persisted); err != nil {
+		t.Fatalf("get persisted InvestigationRequest: %v", err)
+	}
+	if got := testutil.ToFloat64(rcametrics.InvestigationQualityTotal.WithLabelValues(labels...)); got != before+1 {
+		t.Fatalf("expected quality metric to increment after successful status update, before=%f after=%f", before, got)
+	}
+
+	if persisted.Status.Phase != v1alpha1.PhaseCompleted || persisted.Status.Outcome != v1alpha1.InvestigationOutcomeInconclusive {
+		t.Fatalf("expected completed inconclusive status to be persisted, got phase=%q outcome=%q", persisted.Status.Phase, persisted.Status.Outcome)
+	}
+
+	conflictObject := original.DeepCopy()
+	conflictObject.Name = "quality-metric-conflict"
+	conflictClient := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&v1alpha1.InvestigationRequest{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(context.Context, client.Client, string, client.Object, ...client.SubResourceUpdateOption) error {
+				return apierrors.NewConflict(schema.GroupResource{Resource: "investigationrequests"}, conflictObject.Name, errors.New("simulated status conflict"))
+			},
+		}).WithObjects(conflictObject).Build()
+	conflictUpdated := conflictObject.DeepCopy()
+	conflictUpdated.Status = updated.Status
+	conflictUpdated.ResourceVersion = "999"
+	conflictReconciler := &InvestigationRequestReconciler{Client: conflictClient}
+	conflictBefore := testutil.ToFloat64(rcametrics.InvestigationQualityTotal.WithLabelValues(labels...))
+	if err := conflictReconciler.persistStatusAndRecordQuality(context.Background(), conflictObject, conflictUpdated, ""); err != nil {
+		t.Fatalf("expected status conflict to be handled without error, got %v", err)
+	}
+	if got := testutil.ToFloat64(rcametrics.InvestigationQualityTotal.WithLabelValues(labels...)); got != conflictBefore {
+		t.Fatalf("status conflict must not increment persisted-outcome metrics, before=%f after=%f", conflictBefore, got)
 	}
 }
 

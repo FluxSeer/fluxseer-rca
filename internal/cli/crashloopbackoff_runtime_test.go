@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,8 +38,12 @@ import (
 type crashLoopBackOffRuntimeCase struct {
 	id              string
 	name            string
+	profile         string
 	applicationLog  string
 	triggerRiskRule bool
+	lokiConfigured  bool
+	lokiStatusCode  int
+	requiredKinds   []string
 	expected        runtimeharness.ExpectedRuntimeResult
 }
 
@@ -74,6 +80,7 @@ func TestCrashLoopBackOffRuntimeQualification(t *testing.T) {
 			name:            "CrashLoopBackOff with bounded application startup evidence",
 			applicationLog:  "panic during startup: invalid configuration for checkout",
 			triggerRiskRule: true,
+			lokiConfigured:  true,
 			expected: runtimeharness.ExpectedRuntimeResult{
 				InvestigationPhase:       v1alpha1.PhaseCompleted,
 				InvestigationOutcome:     v1alpha1.InvestigationOutcomeConfirmed,
@@ -92,6 +99,7 @@ func TestCrashLoopBackOffRuntimeQualification(t *testing.T) {
 			name:            "CrashLoopBackOff without application causal evidence",
 			applicationLog:  "",
 			triggerRiskRule: false,
+			lokiConfigured:  true,
 			expected: runtimeharness.ExpectedRuntimeResult{
 				InvestigationPhase:       v1alpha1.PhaseCompleted,
 				InvestigationOutcome:     v1alpha1.InvestigationOutcomeInconclusive,
@@ -102,6 +110,44 @@ func TestCrashLoopBackOffRuntimeQualification(t *testing.T) {
 				RiskSignalExpected:       false,
 				RiskSignalPhase:          "",
 				FailureReason:            "",
+				MaxUnexpectedSideEffects: 0,
+			},
+		},
+		{
+			id:             "crashloop-loki-datasource-not-found",
+			name:           "CrashLoopBackOff with missing Loki datasource",
+			lokiConfigured: false,
+			expected: runtimeharness.ExpectedRuntimeResult{
+				InvestigationPhase:       v1alpha1.PhaseFailed,
+				InvestigationOutcome:     v1alpha1.InvestigationOutcomeUnknown,
+				FailureReason:            "DataSourceNotFound",
+				MaxUnexpectedSideEffects: 0,
+			},
+		},
+		{
+			id:             "crashloop-loki-query-failure",
+			name:           "CrashLoopBackOff with Loki query failure",
+			lokiConfigured: true,
+			lokiStatusCode: http.StatusServiceUnavailable,
+			expected: runtimeharness.ExpectedRuntimeResult{
+				InvestigationPhase:       v1alpha1.PhaseFailed,
+				InvestigationOutcome:     v1alpha1.InvestigationOutcomeUnknown,
+				FailureReason:            "DatasourceUnavailable",
+				MaxUnexpectedSideEffects: 0,
+			},
+		},
+		{
+			id:             "crashloop-v2-termination-without-causal-log",
+			name:           "CrashLoopBackOffV2 with termination status but no causal log",
+			profile:        "CrashLoopBackOffV2",
+			lokiConfigured: true,
+			requiredKinds:  []string{"event", "containerTermination"},
+			expected: runtimeharness.ExpectedRuntimeResult{
+				InvestigationPhase:       v1alpha1.PhaseCompleted,
+				InvestigationOutcome:     v1alpha1.InvestigationOutcomeInconclusive,
+				RequiredEvidenceSources:  []string{"kubernetes-events"},
+				RequiredReasons:          []string{"BackOff"},
+				RiskSignalExpected:       false,
 				MaxUnexpectedSideEffects: 0,
 			},
 		},
@@ -128,17 +174,27 @@ func TestCrashLoopBackOffRuntimeQualification(t *testing.T) {
 			environment.Timeout = 2 * time.Second
 			environment.PollInterval = time.Millisecond
 			environment.Now = func() time.Time { return now }
+			var runtimeMarkdown []byte
 			environment.PublicReport = func(ctx context.Context, env *runtimeharness.Environment, ruleName string) ([]byte, error) {
 				report, err := buildRiskRuleReport(ctx, env.Client, env.Namespace, ruleName)
 				if err != nil {
 					return nil, err
 				}
+				var markdown strings.Builder
+				if err := writeRiskRuleReportMarkdown(&markdown, report); err != nil {
+					return nil, err
+				}
+				runtimeMarkdown = []byte(markdown.String())
 				return json.Marshal(report)
 			}
 
 			lokiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/loki/api/v1/query_range" {
 					http.NotFound(w, r)
+					return
+				}
+				if testCase.lokiStatusCode != 0 {
+					http.Error(w, "Loki fixture unavailable", testCase.lokiStatusCode)
 					return
 				}
 				if testCase.applicationLog == "" {
@@ -190,6 +246,7 @@ func TestCrashLoopBackOffRuntimeQualification(t *testing.T) {
 				t.Fatalf("runtime qualification failed: %#v", report.Scenarios)
 			}
 			assertPublicCrashLoopBackOffReport(t, artifactDir, caseSpec, namespace)
+			assertPublicCrashLoopBackOffMarkdown(t, artifactDir, caseSpec, runtimeMarkdown)
 		})
 	}
 }
@@ -197,7 +254,7 @@ func TestCrashLoopBackOffRuntimeQualification(t *testing.T) {
 func setupCrashLoopBackOffRuntimeCase(ctx context.Context, env *runtimeharness.Environment, testCase crashLoopBackOffRuntimeCase, now time.Time, lokiURL string) error {
 	labels := map[string]string{"app": testCase.id}
 	if err := env.Create(ctx, &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: testCase.id, Namespace: env.Namespace, Labels: labels},
+		ObjectMeta: metav1.ObjectMeta{Name: testCase.id, Namespace: env.Namespace, Labels: labels, UID: types.UID(testCase.id + "-deployment")},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: labels},
 			Template: corev1.PodTemplateSpec{
@@ -210,6 +267,32 @@ func setupCrashLoopBackOffRuntimeCase(ctx context.Context, env *runtimeharness.E
 		},
 	}); err != nil {
 		return fmt.Errorf("create Deployment fixture: %w", err)
+	}
+	if strings.EqualFold(testCase.profile, "CrashLoopBackOffV2") {
+		controller := true
+		replicaUID := types.UID(testCase.id + "-replicaset")
+		if err := env.Create(ctx, &appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: testCase.id + "-replicaset", Namespace: env.Namespace, UID: replicaUID, Labels: labels,
+				OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: testCase.id, UID: types.UID(testCase.id + "-deployment"), Controller: &controller}},
+			},
+			Spec: appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: labels}},
+		}); err != nil {
+			return fmt.Errorf("create ReplicaSet fixture: %w", err)
+		}
+		if err := env.Create(ctx, &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: testCase.id + "-pod", Namespace: env.Namespace, UID: types.UID(testCase.id + "-pod-uid"), Labels: labels,
+				OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: testCase.id + "-replicaset", UID: replicaUID, Controller: &controller}},
+			},
+			Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{
+				Name: "app", RestartCount: 3,
+				State:                corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+				LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Error", ExitCode: 1, FinishedAt: metav1.NewTime(now.Add(-time.Minute))}},
+			}}},
+		}); err != nil {
+			return fmt.Errorf("create Pod status fixture: %w", err)
+		}
 	}
 	if err := env.Create(ctx, &corev1.Event{
 		ObjectMeta:     metav1.ObjectMeta{Name: testCase.id + "-backoff", Namespace: env.Namespace},
@@ -234,10 +317,11 @@ func setupCrashLoopBackOffRuntimeCase(ctx context.Context, env *runtimeharness.E
 	}
 	env.RegisterRiskRule(rule.Name)
 
-	registry := datasource.NewRegistry(
-		kubernetesdatasource.Adapter{Client: env.Client},
-		lokidatasource.Adapter{BaseURL: lokiURL},
-	)
+	adapters := []datasource.DataSource{kubernetesdatasource.Adapter{Client: env.Client}}
+	if testCase.lokiConfigured {
+		adapters = append(adapters, lokidatasource.Adapter{BaseURL: lokiURL})
+	}
+	registry := datasource.NewRegistry(adapters...)
 	if testCase.triggerRiskRule {
 		if _, err := (&controllers.RiskRuleReconciler{
 			Client:   env.Client,
@@ -260,7 +344,11 @@ func setupCrashLoopBackOffRuntimeCase(ctx context.Context, env *runtimeharness.E
 		}
 		requestName = requests.Items[0].Name
 	} else {
-		request := crashLoopBackOffInvestigationRequest(rule, providerName, testCase.id)
+		profile := testCase.profile
+		if profile == "" {
+			profile = "CrashLoopBackOff"
+		}
+		request := crashLoopBackOffInvestigationRequest(rule, providerName, testCase.id, profile)
 		if err := env.Create(ctx, request); err != nil {
 			return fmt.Errorf("create InvestigationRequest fixture: %w", err)
 		}
@@ -306,14 +394,17 @@ func crashLoopBackOffRiskRule(namespace, appName string, labels map[string]strin
 	}
 }
 
-func crashLoopBackOffInvestigationRequest(rule *v1alpha1.RiskRule, providerName, appName string) *v1alpha1.InvestigationRequest {
+func crashLoopBackOffInvestigationRequest(rule *v1alpha1.RiskRule, providerName, appName, profile string) *v1alpha1.InvestigationRequest {
 	return &v1alpha1.InvestigationRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: appName + "-manual-investigation", Namespace: rule.Namespace, Labels: map[string]string{runtimeRiskRuleLabelKey: rule.Name}},
 		Spec: v1alpha1.InvestigationRequestSpec{
-			Target:           v1alpha1.TargetRef{APIVersion: "apps/v1", Kind: "Deployment", Namespace: rule.Namespace, Name: appName},
-			Queries:          []v1alpha1.InvestigationQuery{{Name: "crashloop-event", DatasourceRef: v1alpha1.LocalObjectReference{Name: "kubernetes-events"}, QueryType: "event", Reasons: []string{"BackOff"}}},
+			Target: v1alpha1.TargetRef{APIVersion: "apps/v1", Kind: "Deployment", Namespace: rule.Namespace, Name: appName},
+			Queries: []v1alpha1.InvestigationQuery{
+				{Name: "crashloop-event", DatasourceRef: v1alpha1.LocalObjectReference{Name: "kubernetes-events"}, QueryType: "event", Reasons: []string{"BackOff"}},
+				{Name: "application-startup-failure", DatasourceRef: v1alpha1.LocalObjectReference{Name: "loki"}, QueryType: "log"},
+			},
 			ModelProviderRef: providerNameRef(providerName), Mode: v1alpha1.InvestigationModeReadOnly, CreateRiskSignal: true,
-			EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: "CrashLoopBackOff"},
+			EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: profile},
 			TimeRange:            v1alpha1.InvestigationTimeRange{Lookback: metav1.Duration{Duration: 10 * time.Minute}},
 		},
 	}
@@ -336,11 +427,20 @@ func assertPublicCrashLoopBackOffReport(t *testing.T, artifactDir string, testCa
 	if request.Status.Phase != testCase.expected.InvestigationPhase || request.Status.Outcome != testCase.expected.InvestigationOutcome {
 		t.Fatalf("public report investigation status mismatch: phase=%s outcome=%s", request.Status.Phase, request.Status.Outcome)
 	}
+	if testCase.profile != "" && request.Spec.EvidenceRequirements.Profile != testCase.profile {
+		t.Fatalf("public report profile mismatch: got %q want %q", request.Spec.EvidenceRequirements.Profile, testCase.profile)
+	}
+	if strings.EqualFold(testCase.profile, "CrashLoopBackOffV2") {
+		coverage := request.Status.EvidenceCoverage
+		if coverage == nil || coverage.Profile != testCase.profile || !slices.Contains(coverage.CompletedChecks, "containerTermination:LastTermination") || len(coverage.IncompleteChecks) != 0 {
+			t.Fatalf("public report lost completed termination profile coverage: %#v", coverage)
+		}
+	}
 	if request.Spec.Target.Name != testCase.id {
 		t.Fatalf("public report lost investigation target: %#v", request.Spec.Target)
 	}
 	if testCase.expected.RootCauseType == "" {
-		if request.Status.Verdict == nil || request.Status.Verdict.RootCauseType != "" || runtimeharness.TargetIdentity(request.Status.Verdict.RootCauseEntity) != "" {
+		if request.Status.Verdict != nil && (request.Status.Verdict.RootCauseType != "" || runtimeharness.TargetIdentity(request.Status.Verdict.RootCauseEntity) != "") {
 			t.Fatalf("public report fabricated root cause: %#v", request.Status.Verdict)
 		}
 	} else if request.Status.Verdict == nil || request.Status.Verdict.RootCauseType != testCase.expected.RootCauseType || runtimeharness.TargetIdentity(request.Status.Verdict.RootCauseEntity) != testCase.expected.RootCauseEntity {
@@ -354,6 +454,17 @@ func assertPublicCrashLoopBackOffReport(t *testing.T, artifactDir string, testCa
 	for _, ref := range request.Status.EvidenceRefs {
 		sources[ref.Source] = true
 		reasons[ref.Reason] = true
+	}
+	if len(testCase.requiredKinds) > 0 {
+		kinds := map[string]bool{}
+		for _, ref := range request.Status.EvidenceRefs {
+			kinds[ref.Kind] = true
+		}
+		for _, required := range testCase.requiredKinds {
+			if !kinds[required] {
+				t.Fatalf("public report missing evidence kind %q: %#v", required, request.Status.EvidenceRefs)
+			}
+		}
 	}
 	for _, required := range testCase.expected.RequiredEvidenceSources {
 		if !sources[required] {
@@ -371,5 +482,51 @@ func assertPublicCrashLoopBackOffReport(t *testing.T, artifactDir string, testCa
 		}
 	} else if len(report.RiskSignals) != 0 {
 		t.Fatalf("public report expected no RiskSignal, got %d", len(report.RiskSignals))
+	}
+}
+
+func assertPublicCrashLoopBackOffMarkdown(t *testing.T, artifactDir string, testCase crashLoopBackOffRuntimeCase, markdown []byte) {
+	t.Helper()
+	if len(markdown) == 0 {
+		t.Fatal("runtime Markdown report was not generated")
+	}
+	path := filepath.Join(artifactDir, "user-facing", "scenarios", testCase.id, "report.md")
+	if err := os.WriteFile(path, markdown, 0o644); err != nil {
+		t.Fatalf("write runtime Markdown report artifact: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read runtime Markdown report artifact: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "## InvestigationRequest:") || !strings.Contains(content, "### Observed evidence") {
+		t.Fatalf("runtime Markdown report is missing investigation or evidence sections:\n%s", content)
+	}
+	switch testCase.id {
+	case "crashloop-event-only":
+		assertCrashLoopMarkdownContains(t, content, "**Not confirmed**", "CrashLoopApplicationEvidenceMissing", "Check that the configured log query covers this workload")
+	case "crashloop-loki-datasource-not-found":
+		assertCrashLoopMarkdownContains(t, content, "DataSourceNotFound", "Configure the referenced Loki datasource", "No root cause was inferred")
+	case "crashloop-loki-query-failure":
+		assertCrashLoopMarkdownContains(t, content, "DatasourceUnavailable", "Restore access to the declared log datasource", "same target and time window")
+		if strings.Contains(content, "Loki fixture unavailable") {
+			t.Fatalf("runtime Markdown report exposed raw upstream error text:\n%s", content)
+		}
+	case "crashloop-application-startup-failure":
+		assertCrashLoopMarkdownContains(t, content, "**Confirmed**", "Root cause type: `CrashLoop`")
+		if strings.Contains(content, "### Suggested next steps") {
+			t.Fatalf("confirmed runtime Markdown report should not suggest diagnostic next steps:\n%s", content)
+		}
+	case "crashloop-v2-termination-without-causal-log":
+		assertCrashLoopMarkdownContains(t, content, "container app restartCount=3", "lastTerminatedReason=Error exitCode=1", "CrashLoopApplicationLogRequired", "**Not confirmed**")
+	}
+}
+
+func assertCrashLoopMarkdownContains(t *testing.T, content string, expected ...string) {
+	t.Helper()
+	for _, value := range expected {
+		if !strings.Contains(content, value) {
+			t.Errorf("runtime Markdown report missing %q:\n%s", value, content)
+		}
 	}
 }

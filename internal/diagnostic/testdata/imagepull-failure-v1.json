@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "fluxseer-composable-diagnostics-fixture/v1",
+  "scenario": "image-pull-failure-with-dns-detail",
+  "evidence": {
+    "observations": [
+      {
+        "id": "evidence-001",
+        "type": "event",
+        "reason": "Failed",
+        "message": "Failed to pull image \"registry.example.invalid/fluxseer/image-does-not-exist:qualification\": dial tcp: lookup registry.example.invalid on 10.96.0.10:53: no such host",
+        "summary": "Failed to pull image \"registry.example.invalid/fluxseer/image-does-not-exist:qualification\": dial tcp: lookup registry.example.invalid on 10.96.0.10:53: no such host"
+      }
+    ],
+    "evidenceRefs": [
+      {
+        "id": "evidence-001",
+        "kind": "event",
+        "reason": "Failed",
+        "summary": "Failed to pull image \"registry.example.invalid/fluxseer/image-does-not-exist:qualification\": dial tcp: lookup registry.example.invalid on 10.96.0.10:53: no such host"
+      }
+    ]
+  },
+  "expected": {
+    "diagnosticID": "image-pull",
+    "status": "Supported",
+    "claimIDs": [
+      "image-pull-observed",
+      "image-pull-failure",
+      "image-pull-cause-registry-network"
+    ],
+    "rootCauseCandidateIsUnverified": true
+  }
+}

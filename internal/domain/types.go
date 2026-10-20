@@ -45,6 +45,7 @@ const (
 	QueryTypeDeploymentCondition  QueryType = "deploymentCondition"
 	QueryTypeServiceConfiguration QueryType = "serviceConfiguration"
 	QueryTypeProbeConfiguration   QueryType = "probeConfiguration"
+	QueryTypeContainerTermination QueryType = "containerTermination"
 )
 
 type TimelineEvent struct {
@@ -76,6 +77,7 @@ const (
 	ObservationTypeDeploymentCondition  ObservationType = "deploymentCondition"
 	ObservationTypeServiceConfiguration ObservationType = "serviceConfiguration"
 	ObservationTypeProbeConfiguration   ObservationType = "probeConfiguration"
+	ObservationTypeContainerTermination ObservationType = "containerTermination"
 )
 
 type ObservationValue struct {
@@ -85,6 +87,7 @@ type ObservationValue struct {
 	DeploymentCondition  *DeploymentConditionObservation  `json:"deploymentCondition,omitempty"`
 	ServiceConfiguration *ServiceConfigurationObservation `json:"serviceConfiguration,omitempty"`
 	ProbeConfiguration   *ProbeConfigurationObservation   `json:"probeConfiguration,omitempty"`
+	ContainerTermination *ContainerTerminationObservation `json:"containerTermination,omitempty"`
 }
 
 type MetricObservation struct {
@@ -143,6 +146,18 @@ type ProbeConfigurationObservation struct {
 	Resolution        string `json:"resolution,omitempty"`
 	MismatchConfirmed bool   `json:"mismatchConfirmed,omitempty"`
 	Reason            string `json:"reason,omitempty"`
+}
+
+type ContainerTerminationObservation struct {
+	PodName                  string `json:"podName,omitempty"`
+	PodUID                   string `json:"podUID,omitempty"`
+	ContainerName            string `json:"containerName,omitempty"`
+	RestartCount             int32  `json:"restartCount,omitempty"`
+	WaitingReason            string `json:"waitingReason,omitempty"`
+	LastTerminatedReason     string `json:"lastTerminatedReason,omitempty"`
+	LastTerminatedExitCode   int32  `json:"lastTerminatedExitCode,omitempty"`
+	LastTerminatedSignal     int32  `json:"lastTerminatedSignal,omitempty"`
+	LastTerminatedFinishedAt string `json:"lastTerminatedFinishedAt,omitempty"`
 }
 
 type Observation struct {

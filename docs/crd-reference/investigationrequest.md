@@ -145,12 +145,20 @@ Query field behavior:
 - `queryTemplate`: templated query rendered against target metadata
 - `reasons[]`: optional exact Kubernetes event `reason` filter for `queryType: event`; matching is case-insensitive and does not search event messages
 - `ttlSeconds`: optional retention window in seconds after the request reaches `Completed` or `Failed`
-- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `OOMKilled`, `LatencyRegression`, `RolloutLatencyRegression`, `ProbeFailure`, and `HighHTTPErrorRate`.
+- `evidenceRequirements.profile`: optional required evidence profile. Current profiles are `ImagePullBackOff`, `CrashLoopBackOff`, `CrashLoopBackOffV2`, `OOMKilled`, `LatencyRegression`, `RolloutLatencyRegression`, `ProbeFailure`, and `HighHTTPErrorRate`.
 
 The Kubernetes datasource also supports `queryType: probeConfiguration` for
 HTTP readiness/liveness probe configuration and declared container-port
 resolution. A `ProbeFailure` claim requires both probe symptom evidence and
 bounded probe configuration evidence before it can become `Confirmed`.
+
+The Kubernetes datasource supports the additive `queryType:
+containerTermination` query for `CrashLoopBackOffV2`. The controller adds this
+target-scoped query automatically for that profile, even when the request
+already contains explicit queries. It reads bounded Pod termination status;
+it does not read `pods/log`. The existing `CrashLoopBackOff` profile keeps its
+Event-plus-application-log contract. This is a non-breaking addition to the
+accepted query type and profile names; no CRD field or report schema changed.
 - `evidenceRetention.mode`: external evidence retention mode. Current supported runtime behavior is `MetadataOnly` or `NormalizedSnapshot` with the built-in `local-filesystem` store.
 - `evidenceRetention.retention`: requested external payload retention duration for retained normalized snapshots.
 - `evidenceRetention.storageRef.name`: external evidence storage configuration reference. Current supported value for `NormalizedSnapshot` is `local-filesystem`.
@@ -194,6 +202,12 @@ For example, `ErrImagePull` supports `ImagePullFailure`, but by itself cannot
 distinguish `ImageNotFound`, registry authentication failure, DNS failure, or
 registry unavailability. A provider claim at one of those more specific levels
 must reference additional supporting evidence or remain unverified.
+
+`ImagePullBackOff` remains the backward-compatible evidence-profile name. An
+`ErrImagePull` event alone is reported as the bounded `ImagePullFailure`
+mechanism. The `ImagePullBackOff` state is named only when the collected event
+evidence explicitly identifies that state; the profile name must not be read as
+proof that the Pod reached the Kubernetes back-off waiting state.
 
 Detection and evidence sufficiency are independent. An `OOMKilled` Event can
 successfully trigger a `RiskRule`, while the `OOMKilled` profile remains

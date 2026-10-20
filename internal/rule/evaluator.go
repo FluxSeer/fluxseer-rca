@@ -47,6 +47,8 @@ func ParseQueryType(raw string) (domain.QueryType, bool) {
 		return domain.QueryTypeServiceConfiguration, true
 	case "probeconfiguration", "probeconfig", "kubernetesprobeconfiguration":
 		return domain.QueryTypeProbeConfiguration, true
+	case "containertermination", "containerterminationstatus", "kubernetescontainertermination":
+		return domain.QueryTypeContainerTermination, true
 	case "trace", "traces", "opentelemetry":
 		return domain.QueryTypeTrace, true
 	default:

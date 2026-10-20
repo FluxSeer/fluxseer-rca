@@ -128,7 +128,7 @@ func containsRegexMatcher(query string) bool {
 }
 
 func hasTargetScope(req Request) bool {
-	if req.QueryType == domain.QueryTypeEvent || req.QueryType == domain.QueryTypeDeploymentCondition || req.QueryType == domain.QueryTypeServiceConfiguration || req.QueryType == domain.QueryTypeProbeConfiguration {
+	if req.QueryType == domain.QueryTypeEvent || req.QueryType == domain.QueryTypeDeploymentCondition || req.QueryType == domain.QueryTypeServiceConfiguration || req.QueryType == domain.QueryTypeProbeConfiguration || req.QueryType == domain.QueryTypeContainerTermination {
 		return true
 	}
 	query := req.Query

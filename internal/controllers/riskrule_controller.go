@@ -282,7 +282,7 @@ func (r *RiskRuleReconciler) analyzeRCA(ctx context.Context, riskRule *v1alpha1.
 	evidence := evidenceCollectionResultFromMatches(matches)
 	rca := investigation.RCAResult{Reasoning: &reasoning}
 	claims, _ := buildRCAClaims(rca, evidence, "")
-	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, float64(reasoning.Confidence.Score)/100.0)
+	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, float64(reasoning.Confidence.Score)/100.0, "")
 	if evaluation.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
 		return rcaResult{
 			ProviderName: provider.Name,

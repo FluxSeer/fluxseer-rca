@@ -28,6 +28,21 @@ fluxseer report riskrule <riskrule-name> \
   -o yaml > riskrule-report.yaml
 ```
 
+輸出給人閱讀的 Markdown 摘要：
+
+```sh
+fluxseer report riskrule <riskrule-name> \
+  -n <riskrule-namespace> \
+  -o markdown > riskrule-report.md
+```
+
+Markdown view 依公開 Kubernetes 資源中的狀態呈現觀測證據、根因確認狀態、
+主張驗證、假設、證據缺口與降級原因。對 `CrashLoopBackOff` evidence
+profile，若根因尚未確認，還會列出與缺失證據狀態相符的唯讀排查步驟。
+這些步驟是診斷建議，不會執行查詢或變更叢集資源，也不代表根因已確認。
+`-o json` 和 `-o yaml` 仍輸出原有 `fluxseer-riskrule-report/v1` 公開資源
+快照；Markdown 是由相同快照產生的閱讀呈現，不改寫 CRD status 或 JSON schema。
+
 執行者需要 `get` 指定的 `RiskRule`、`list` 同 namespace 的 `InvestigationRequest`、`list` 所有可見 namespace 的 `RiskSignal`，以及 `get` 被調查結果引用的 `RiskSignal`。Kubernetes RBAC 仍是報告可見範圍的權限邊界。
 
 ## 提供給 AI 分析

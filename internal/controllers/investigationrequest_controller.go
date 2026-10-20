@@ -19,6 +19,7 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
 	"github.com/FluxSeer/fluxseer-rca/internal/dataclassification"
+	"github.com/FluxSeer/fluxseer-rca/internal/diagnostic"
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
 	"github.com/FluxSeer/fluxseer-rca/internal/investigation"
@@ -71,6 +72,7 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 
 	original := investigation.DeepCopy()
 	restarting := original.Status.ObservedGeneration != investigation.Generation || isTerminalInvestigationPhase(original.Status.Phase)
+	qualityProviderClass := "heuristic"
 	message := "investigation execution started"
 	setInvestigationRequestStatus(&investigation.Status, v1alpha1.PhaseCollecting, message, investigation.Generation, now())
 	if investigation.Status.StartedAt == nil || restarting {
@@ -104,28 +106,26 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 		if preflightErr != nil {
 			return ctrl.Result{}, preflightErr
 		}
+		qualityProviderClass = providerType(preflight.Provider)
 		evidence, evidenceErr := r.collectEvidence(ctx, &investigation, preflight, now())
 		if evidenceErr != nil {
 			return ctrl.Result{}, evidenceErr
 		}
 		if gate := evaluateEvidenceRequirements(investigation.Spec, evidence); gate != nil {
+			investigation.Status.EvidenceCoverage = gate.Coverage
 			switch {
 			case !gate.Complete:
 				applyEvidenceRequirementInconclusiveStatus(&investigation, evidence, *gate, now())
 				applyInvestigationStatusBudget(&investigation, now())
-				if !reflect.DeepEqual(original.Status, investigation.Status) {
-					if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
-						return ctrl.Result{}, err
-					}
+				if err := r.persistStatusAndRecordQuality(ctx, original, &investigation, qualityProviderClass); err != nil {
+					return ctrl.Result{}, err
 				}
 				return ttlResult, nil
 			case gate.NoIssueFound:
 				applyEvidenceRequirementNoIssueFoundStatus(&investigation, evidence, *gate, now())
 				applyInvestigationStatusBudget(&investigation, now())
-				if !reflect.DeepEqual(original.Status, investigation.Status) {
-					if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
-						return ctrl.Result{}, err
-					}
+				if err := r.persistStatusAndRecordQuality(ctx, original, &investigation, qualityProviderClass); err != nil {
+					return ctrl.Result{}, err
 				}
 				return ttlResult, nil
 			}
@@ -159,12 +159,167 @@ func (r *InvestigationRequestReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	applyInvestigationStatusBudget(&investigation, now())
-	if !reflect.DeepEqual(original.Status, investigation.Status) {
-		if err := r.Status().Update(ctx, &investigation); err != nil && !recordStatusUpdateConflict("InvestigationRequest", err) {
-			return ctrl.Result{}, err
-		}
+	if err := r.persistStatusAndRecordQuality(ctx, original, &investigation, qualityProviderClass); err != nil {
+		return ctrl.Result{}, err
 	}
 	return ttlResult, nil
+}
+
+func (r *InvestigationRequestReconciler) persistStatusAndRecordQuality(ctx context.Context, original, updated *v1alpha1.InvestigationRequest, providerClass string) error {
+	if reflect.DeepEqual(original.Status, updated.Status) {
+		return nil
+	}
+	if err := r.Status().Update(ctx, updated); err != nil {
+		if recordStatusUpdateConflict("InvestigationRequest", err) {
+			return nil
+		}
+		return err
+	}
+	if updated.Status.Phase == v1alpha1.PhaseCompleted || updated.Status.Phase == v1alpha1.PhaseFailed {
+		recordInvestigationQualityMetrics(updated, providerClass)
+	}
+	return nil
+}
+
+func recordInvestigationQualityMetrics(request *v1alpha1.InvestigationRequest, providerClass string) {
+	profile := request.Spec.EvidenceRequirements.Profile
+	checks := requiredEvidenceChecksForProfile(profile)
+	availability := evidenceAvailabilityForMetrics(request, checks)
+	rcametrics.RecordInvestigationQuality(profile, providerClass, availability, request.Status.Phase, request.Status.Outcome)
+	if len(checks) == 0 {
+		return
+	}
+
+	sufficient := request.Status.Phase == v1alpha1.PhaseCompleted && allRequiredChecksComplete(checks, request.Status.EvidenceCoverage)
+	rcametrics.RecordEvidenceSufficiency(profile, sufficient)
+	for _, check := range checks {
+		rcametrics.RecordRequiredEvidenceCheck(profile, check, evidenceCheckResultForMetrics(request, check))
+	}
+	if request.Status.Phase == v1alpha1.PhaseCompleted && request.Status.Outcome == v1alpha1.InvestigationOutcomeInconclusive {
+		rcametrics.RecordActionableInconclusive(profile, inconclusiveGapReason(request), inconclusiveHasSpecificNextStep(request))
+	}
+}
+
+func evidenceAvailabilityForMetrics(request *v1alpha1.InvestigationRequest, checks []string) string {
+	if len(checks) == 0 {
+		return "not_applicable"
+	}
+	if request.Status.Phase == v1alpha1.PhaseFailed {
+		return "unavailable"
+	}
+	coverage := request.Status.EvidenceCoverage
+	if coverage == nil {
+		return "unavailable"
+	}
+	if allRequiredChecksComplete(checks, coverage) {
+		return "available"
+	}
+	if len(coverage.CompletedChecks) > 0 || len(request.Status.MissingEvidence) > 0 || request.Status.Degradation != nil {
+		return "partial"
+	}
+	return "unavailable"
+}
+
+func allRequiredChecksComplete(checks []string, coverage *v1alpha1.RCAEvidenceCoverage) bool {
+	if coverage == nil || len(coverage.IncompleteChecks) != 0 {
+		return false
+	}
+	completed := map[string]struct{}{}
+	for _, check := range coverage.CompletedChecks {
+		completed[check] = struct{}{}
+	}
+	for _, check := range checks {
+		if _, ok := completed[check]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func evidenceCheckResultForMetrics(request *v1alpha1.InvestigationRequest, check string) string {
+	coverage := request.Status.EvidenceCoverage
+	if coverage != nil {
+		for _, completed := range coverage.CompletedChecks {
+			if completed == check {
+				return "usable"
+			}
+		}
+	}
+	if request.Status.Failure != nil {
+		return "unavailable"
+	}
+	checkSource := strings.ToLower(strings.SplitN(check, ":", 2)[0])
+	fallbackResult := "missing"
+	for _, missing := range request.Status.MissingEvidence {
+		if strings.ToLower(strings.TrimSpace(missing.Source)) != checkSource {
+			continue
+		}
+		switch missing.Reason {
+		case "DatasourceQueryFailed", "DatasourceAuthFailed", "DatasourceRateLimited", "DatasourceUnavailable", "DatasourceRequestInvalid", "InvalidDatasourceResponse":
+			return "failed"
+		case "ContainerTerminationEvidenceStale":
+			return "stale"
+		case "ContainerTerminationEvidenceTruncated":
+			return "truncated"
+		case "DataSourceNotFound", "DataSourceNotSpecified", "UnsupportedQueryType":
+			return "unavailable"
+		case "RequiredEvidenceMissing", "ContainerTerminationEvidenceMissing":
+			fallbackResult = "empty"
+		default:
+			fallbackResult = "missing"
+		}
+	}
+	return fallbackResult
+}
+
+func inconclusiveHasSpecificNextStep(request *v1alpha1.InvestigationRequest) bool {
+	profile := strings.ToLower(strings.TrimSpace(request.Spec.EvidenceRequirements.Profile))
+	if profile != "crashloopbackoff" && profile != "crashloopbackoffv2" {
+		return false
+	}
+	switch inconclusiveGapReason(request) {
+	case "application_evidence_missing", "application_log_required", "termination_missing", "termination_stale", "termination_truncated":
+		return true
+	default:
+		return false
+	}
+}
+
+func inconclusiveGapReason(request *v1alpha1.InvestigationRequest) string {
+	categories := map[string]struct{}{}
+	genericRequiredEvidence := false
+	for _, missing := range request.Status.MissingEvidence {
+		switch missing.Reason {
+		case "RequiredEvidenceMissing":
+			// This summary reason often accompanies a more specific gap below.
+			genericRequiredEvidence = true
+		case "CrashLoopApplicationEvidenceMissing":
+			categories["application_evidence_missing"] = struct{}{}
+		case "CrashLoopApplicationLogRequired":
+			categories["application_log_required"] = struct{}{}
+		case "ContainerTerminationEvidenceMissing":
+			categories["termination_missing"] = struct{}{}
+		case "ContainerTerminationEvidenceStale":
+			categories["termination_stale"] = struct{}{}
+		case "ContainerTerminationEvidenceTruncated":
+			categories["termination_truncated"] = struct{}{}
+		default:
+			categories["other"] = struct{}{}
+		}
+	}
+	if len(categories) == 0 {
+		if genericRequiredEvidence {
+			return "other"
+		}
+		return "none"
+	}
+	if len(categories) > 1 {
+		return "multiple"
+	}
+	for category := range categories {
+		return category
+	}
+	return "other"
 }
 
 func applyInvestigationStatusBudget(request *v1alpha1.InvestigationRequest, now time.Time) {
@@ -272,6 +427,8 @@ func requiredEvidenceChecksForProfile(profile string) []string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
 	case "crashloopbackoff":
 		return []string{"event:CrashLoopBackOff", "log:ApplicationFailure"}
+	case "crashloopbackoffv2":
+		return []string{"event:CrashLoopBackOff", "containerTermination:LastTermination"}
 	case "imagepullbackoff":
 		return []string{"event:ImagePullBackOff"}
 	case "oomkilled":
@@ -301,6 +458,11 @@ func evidenceCoverageCheckComplete(check string, spec v1alpha1.InvestigationRequ
 	case "log:ApplicationFailure":
 		return !missingReasonPresent(missing, "CrashLoopApplicationEvidenceMissing") &&
 			applicationLogEvidencePresent(spec, evidence)
+	case "containerTermination:LastTermination":
+		return !missingReasonPresent(missing, "ContainerTerminationEvidenceMissing") &&
+			!missingReasonPresent(missing, "ContainerTerminationEvidenceStale") &&
+			!missingReasonPresent(missing, "ContainerTerminationEvidenceTruncated") &&
+			containerTerminationEvidencePresent(evidence)
 	case "event:ImagePullBackOff":
 		return !missingReasonPresent(missing, "ImagePullEvidenceCoverageMissing") &&
 			eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
@@ -463,6 +625,15 @@ func missingSemanticEvidenceCoverage(profile string, spec v1alpha1.Investigation
 			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeLog), Reason: "CrashLoopApplicationEvidenceMissing"})
 		}
 		return missing
+	case "crashloopbackoffv2":
+		missing := make([]v1alpha1.RCAMissingEvidence, 0, 2)
+		if !eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") {
+			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeEvent), Reason: "CrashLoopEvidenceCoverageMissing"})
+		}
+		if reason := containerTerminationEvidenceMissingReason(evidence); reason != "" {
+			missing = append(missing, v1alpha1.RCAMissingEvidence{Source: string(domain.QueryTypeContainerTermination), Reason: reason})
+		}
+		return missing
 	case "imagepullbackoff":
 		if eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied") {
 			return nil
@@ -558,10 +729,57 @@ func applicationLogEvidencePresent(_ v1alpha1.InvestigationRequestSpec, evidence
 	return false
 }
 
+func containerTerminationEvidencePresent(evidence investigation.EvidenceCollectionResult) bool {
+	return containerTerminationEvidenceMissingReason(evidence) == ""
+}
+
+func containerTerminationEvidenceMissingReason(evidence investigation.EvidenceCollectionResult) string {
+	stale := false
+	truncated := false
+	for _, observation := range evidence.Observations {
+		if observation.Capability != domain.QueryTypeContainerTermination {
+			continue
+		}
+		if observation.Truncated {
+			truncated = true
+			continue
+		}
+		if observation.Value.ContainerTermination == nil {
+			continue
+		}
+		termination := observation.Value.ContainerTermination
+		if termination.LastTerminatedReason == "" || termination.LastTerminatedFinishedAt == "" {
+			continue
+		}
+		finishedAt, err := time.Parse(time.RFC3339, termination.LastTerminatedFinishedAt)
+		if err != nil {
+			continue
+		}
+		if !observation.TimeRange.Start.IsZero() && finishedAt.Before(observation.TimeRange.Start) {
+			stale = true
+			continue
+		}
+		if !observation.TimeRange.End.IsZero() && finishedAt.After(observation.TimeRange.End) {
+			stale = true
+			continue
+		}
+		return ""
+	}
+	if truncated {
+		return "ContainerTerminationEvidenceTruncated"
+	}
+	if stale {
+		return "ContainerTerminationEvidenceStale"
+	}
+	return "ContainerTerminationEvidenceMissing"
+}
+
 func requiredEvidenceKindsForProfile(profile string) []string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
 	case "crashloopbackoff", "imagepullbackoff":
 		return []string{string(domain.QueryTypeEvent)}
+	case "crashloopbackoffv2":
+		return []string{string(domain.QueryTypeEvent), string(domain.QueryTypeContainerTermination)}
 	case "oomkilled":
 		return []string{string(domain.QueryTypeEvent), string(domain.QueryTypeMetric)}
 	case "latencyregression":
@@ -610,6 +828,8 @@ func evidenceProfileHasNoIssue(profile string, spec v1alpha1.InvestigationReques
 	switch profileKey {
 	case "crashloopbackoff":
 		return eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") && applicationLogEvidencePresent(spec, evidence)
+	case "crashloopbackoffv2":
+		return eventCoveragePresent(spec, evidence, "crashloopbackoff", "backoff", "back-off", "unhealthy", "killing", "container crashed") && containerTerminationEvidencePresent(evidence)
 	case "imagepullbackoff":
 		return eventCoveragePresent(spec, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
 	case "oomkilled":
@@ -626,6 +846,8 @@ func evidenceRefRelevantForProfile(profile string, ref v1alpha1.EvidenceRef) boo
 	switch profile {
 	case "crashloopbackoff":
 		return kind == string(domain.QueryTypeEvent) || kind == string(domain.QueryTypeLog)
+	case "crashloopbackoffv2":
+		return kind == string(domain.QueryTypeEvent) || kind == string(domain.QueryTypeContainerTermination)
 	case "imagepullbackoff":
 		return kind == string(domain.QueryTypeEvent)
 	case "oomkilled":
@@ -656,6 +878,8 @@ func evidenceRefMatchesProfileIssue(profile string, ref v1alpha1.EvidenceRef) bo
 		return containsAny(text, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied")
 	case "crashloopbackoff":
 		return containsAny(text, "crashloopbackoff", "backoff", "back-off", "container crashed", "unhealthy", "killing", "panic", "fatal", "startup error", "startup failure", "failed to initialize", "invalid configuration", "configuration error", "exception", "segmentation fault")
+	case "crashloopbackoffv2":
+		return containsAny(text, "crashloopbackoff", "backoff", "back-off", "container crashed", "unhealthy", "killing")
 	case "highhttperror", "highhttperrorrate":
 		return containsAny(text, "http", "5xx", "error rate", "error ratio", "connection refused", "upstream unavailable", "dependency unavailable", "service unavailable", "upstream timeout", "failed to connect", "dial tcp", "connection reset")
 	case "oomkilled":
@@ -1340,7 +1564,7 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	for _, claim := range claims {
 		rcametrics.RecordClaimVerification(claim.Verification)
 	}
-	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, confidence)
+	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, confidence, request.Spec.EvidenceRequirements.Profile)
 	rootCauseEntity := rootCauseEntityForInvestigationOutcome(evaluation.Outcome, preflight.Target)
 	if evaluation.RootCauseEntity != nil {
 		rootCauseEntity = *evaluation.RootCauseEntity
@@ -1362,11 +1586,28 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	request.Status.Confidence = evaluation.Confidence
 	request.Status.Outcome = evaluation.Outcome
 	request.Status.Claims = claims
-	request.Status.AlternativeHypotheses = nil
+	request.Status.AlternativeHypotheses = diagnosticAlternativeHypotheses(evidence.Diagnostics)
 	request.Status.MissingEvidence = evaluation.MissingEvidence
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
 	request.Status.Execution = buildRCAExecution(request, preflight, evidence, rca, investigationExecutionID(request, preflight, evidence), executionStateFinalized, now)
 	request.Status.Execution.VerifierVersion = verification.Method
+}
+
+func diagnosticAlternativeHypotheses(results []diagnostic.Result) []v1alpha1.RCAAlternativeHypothesis {
+	hypotheses := make([]v1alpha1.RCAAlternativeHypothesis, 0)
+	for _, result := range results {
+		for _, claim := range result.Claims {
+			if claim.Type == diagnostic.ClaimObservation || strings.TrimSpace(claim.Statement) == "" {
+				continue
+			}
+			hypotheses = append(hypotheses, v1alpha1.RCAAlternativeHypothesis{
+				Statement:    claim.Statement,
+				Disposition:  "DiagnosticCandidateUnverified",
+				EvidenceRefs: append([]string(nil), claim.EvidenceRefs...),
+			})
+		}
+	}
+	return hypotheses
 }
 
 func investigationOutcomeAllowsRiskSignalProjection(outcome string) bool {
@@ -1428,7 +1669,7 @@ type canonicalVerdictEvaluation struct {
 	MissingEvidence []v1alpha1.RCAMissingEvidence
 }
 
-func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult, claims []v1alpha1.RCAClaim, providerConfidence float64) canonicalVerdictEvaluation {
+func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigation.EvidenceCollectionResult, claims []v1alpha1.RCAClaim, providerConfidence float64, profile string) canonicalVerdictEvaluation {
 	causalClaims := rootCauseClaims(rca, claims)
 	supported, contradicted := countVerifiedRootCauseClaims(causalClaims)
 	supportedClaims := supportedRootCauseClaims(causalClaims)
@@ -1455,7 +1696,7 @@ func evaluateCanonicalVerdict(rca investigation.RCAResult, evidence investigatio
 		evaluation.RootCauseEntity = nil
 		evaluation.Confidence = 0
 		evaluation.VerifiedScore = 0
-		evaluation.MissingEvidence = missingEvidenceForClaims(causalClaims)
+		evaluation.MissingEvidence = missingEvidenceForClaims(causalClaims, profile)
 	}
 	return evaluation
 }
@@ -1621,14 +1862,14 @@ func evidenceSummaryRank(ref v1alpha1.EvidenceRef) int {
 	}
 }
 
-func missingEvidenceForClaims(claims []v1alpha1.RCAClaim) []v1alpha1.RCAMissingEvidence {
+func missingEvidenceForClaims(claims []v1alpha1.RCAClaim, profile string) []v1alpha1.RCAMissingEvidence {
 	missing := make([]v1alpha1.RCAMissingEvidence, 0)
 	seen := map[string]bool{}
 	for _, claim := range claims {
 		if claim.Verification == verifier.VerificationSupported {
 			continue
 		}
-		for _, item := range missingEvidenceForClaim(claim.Statement) {
+		for _, item := range missingEvidenceForClaim(claim.Statement, profile) {
 			key := item.Source + "/" + item.Reason
 			if seen[key] {
 				continue
@@ -1640,7 +1881,7 @@ func missingEvidenceForClaims(claims []v1alpha1.RCAClaim) []v1alpha1.RCAMissingE
 	return missing
 }
 
-func missingEvidenceForClaim(statement string) []v1alpha1.RCAMissingEvidence {
+func missingEvidenceForClaim(statement, profile string) []v1alpha1.RCAMissingEvidence {
 	text := strings.ToLower(statement)
 	switch {
 	case containsAny(text, "rollout", "release", "image", "config", "configuration"):
@@ -1648,6 +1889,9 @@ func missingEvidenceForClaim(statement string) []v1alpha1.RCAMissingEvidence {
 	case containsAny(text, "memory", "oom", "resource pressure"):
 		return []v1alpha1.RCAMissingEvidence{{Source: "prometheus", Reason: "MemoryMetricsRequired"}, {Source: "kubernetes-events", Reason: "OOMEventRequired"}}
 	case containsAny(text, "crash", "restart", "backoff"):
+		if strings.EqualFold(strings.TrimSpace(profile), "CrashLoopBackOffV2") {
+			return []v1alpha1.RCAMissingEvidence{{Source: "loki", Reason: "CrashLoopApplicationLogRequired"}}
+		}
 		return []v1alpha1.RCAMissingEvidence{
 			{Source: "kubernetes-events", Reason: "CrashLoopEventRequired"},
 			{Source: "loki", Reason: "CrashLoopApplicationLogRequired"},
@@ -2248,9 +2492,7 @@ func profileBackedRCAClaim(profile string, evidence investigation.EvidenceCollec
 			return "CrashLoopBackOff is confirmed by a workload restart symptom and application failure evidence.", true
 		}
 	case "imagepullbackoff":
-		if eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied") {
-			return "ImagePullBackOff is confirmed by Kubernetes image pull failure event evidence.", true
-		}
+		return imagePullProfileClaim(evidence)
 	case "oomkilled":
 		if eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "oomkilled", "out of memory", "memory pressure", "memory limit") && evidenceKindPresent(v1alpha1.InvestigationRequestSpec{}, evidence, string(domain.QueryTypeMetric), "memory", "oom", "container_memory") {
 			return "OOMKilled is confirmed by Kubernetes OOM event and memory pressure evidence.", true
@@ -2267,6 +2509,27 @@ func profileBackedRCAClaim(profile string, evidence investigation.EvidenceCollec
 		}
 	}
 	return "", false
+}
+
+// imagePullProfileClaim preserves the ImagePullBackOff evidence-profile name
+// while keeping the canonical claim precise. Kubernetes can report an
+// ErrImagePull event before the pod reaches the ImagePullBackOff waiting state;
+// event evidence alone therefore confirms an ImagePullFailure, not the
+// back-off state itself.
+func imagePullProfileClaim(evidence investigation.EvidenceCollectionResult) (string, bool) {
+	if !eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied") {
+		return "", false
+	}
+	for _, ref := range evidence.EvidenceRefs {
+		if !strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeEvent)) {
+			continue
+		}
+		text := strings.ToLower(strings.Join([]string{ref.Reason, ref.Summary}, " "))
+		if strings.EqualFold(strings.TrimSpace(ref.Reason), "ImagePullBackOff") || strings.Contains(text, "imagepullbackoff") {
+			return "ImagePullBackOff is confirmed by explicit Kubernetes ImagePullBackOff event evidence.", true
+		}
+	}
+	return "ImagePullFailure is confirmed by Kubernetes image-pull failure event evidence.", true
 }
 
 func verifierClaims(claims []v1alpha1.RCAClaim) []verifier.Claim {

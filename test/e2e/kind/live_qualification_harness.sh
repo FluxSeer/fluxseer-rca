@@ -14,6 +14,7 @@ LIVE_HARNESS_IMAGE_TAG="${LIVE_HARNESS_IMAGE_TAG:-${IMAGE_TAG:-live-kind-harness
 LIVE_HARNESS_TARGET_PLATFORM="${LIVE_HARNESS_TARGET_PLATFORM:-${TARGET_PLATFORM:-linux/amd64}}"
 LIVE_HARNESS_IMAGE_REPOSITORY="${LIVE_HARNESS_IMAGE_REPOSITORY:-${IMAGE_REPOSITORY:-fluxseer/fluxseer-rca/operator}}"
 LIVE_HARNESS_CLUSTER_CONFIG="${LIVE_HARNESS_CLUSTER_CONFIG:-${live_harness_repo_root}/examples/kind/kind-config.yaml}"
+LIVE_HARNESS_NODE_IMAGE="${LIVE_HARNESS_NODE_IMAGE:-}"
 LIVE_HARNESS_TIMEOUT_SECONDS="${LIVE_HARNESS_TIMEOUT_SECONDS:-${FLUXSEER_RCA_E2E_TIMEOUT_SECONDS:-300}}"
 LIVE_HARNESS_POLL_SECONDS="${LIVE_HARNESS_POLL_SECONDS:-${FLUXSEER_RCA_E2E_POLL_SECONDS:-3}}"
 LIVE_HARNESS_SNAPSHOT_REQUEST_TIMEOUT="${LIVE_HARNESS_SNAPSHOT_REQUEST_TIMEOUT:-10s}"
@@ -74,18 +75,25 @@ live_harness_prepare_artifacts() {
     --arg context "${LIVE_HARNESS_CONTEXT}" \
     --arg version "${LIVE_HARNESS_VERSION}" \
     --arg image "${LIVE_HARNESS_OPERATOR_IMAGE_REF}" \
+    --arg nodeImage "${LIVE_HARNESS_NODE_IMAGE:-kind-default}" \
     --arg artifactRoot "${LIVE_HARNESS_ARTIFACT_ROOT}" \
-    '{schemaVersion:$schema,runId:$runId,clusterName:$clusterName,kubernetesContext:$context,version:$version,operatorImage:$image,artifactRoot:$artifactRoot}' \
+    '{schemaVersion:$schema,runId:$runId,clusterName:$clusterName,kubernetesContext:$context,version:$version,operatorImage:$image,kubernetesNodeImage:$nodeImage,artifactRoot:$artifactRoot}' \
     >"${LIVE_HARNESS_ARTIFACT_ROOT}/run.json"
 }
 
 live_harness_create_cluster() {
   log_section "Create Fresh Kind Cluster"
   kind delete cluster --name "${LIVE_HARNESS_CLUSTER_NAME}" >/dev/null 2>&1 || true
-  kind create cluster \
-    --name "${LIVE_HARNESS_CLUSTER_NAME}" \
-    --config "${LIVE_HARNESS_CLUSTER_CONFIG}" \
+  local kind_args=(
+    create cluster
+    --name "${LIVE_HARNESS_CLUSTER_NAME}"
+    --config "${LIVE_HARNESS_CLUSTER_CONFIG}"
     --wait 120s
+  )
+  if [[ -n "${LIVE_HARNESS_NODE_IMAGE}" ]]; then
+    kind_args+=(--image "${LIVE_HARNESS_NODE_IMAGE}")
+  fi
+  kind "${kind_args[@]}"
   LIVE_HARNESS_CLUSTER_CREATED=true
   kind get kubeconfig --name "${LIVE_HARNESS_CLUSTER_NAME}" >"${LIVE_HARNESS_KUBECONFIG}"
   export KUBECONFIG="${LIVE_HARNESS_KUBECONFIG}"

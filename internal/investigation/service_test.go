@@ -21,6 +21,7 @@ import (
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
+	"github.com/FluxSeer/fluxseer-rca/internal/diagnostic"
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
 	"github.com/FluxSeer/fluxseer-rca/internal/knowledge"
@@ -28,6 +29,7 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/model/heuristic"
 	"github.com/FluxSeer/fluxseer-rca/internal/modelgateway"
 	"github.com/FluxSeer/fluxseer-rca/internal/rcametrics"
+	"github.com/FluxSeer/fluxseer-rca/internal/scope"
 )
 
 type clientObject = client.Object
@@ -106,6 +108,206 @@ func TestServicePreflightResolvesTargetDatasourcesAndProvider(t *testing.T) {
 	}
 	if len(result.CollectionPlan) != 2 {
 		t.Fatalf("expected two collection steps, got %#v", result.CollectionPlan)
+	}
+}
+
+func TestServicePreflightAutoCompletesCrashLoopBackOffV2Plan(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add aiops scheme: %v", err)
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "prod"},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "checkout"}},
+			}},
+		}).
+		Build()
+	service := &Service{
+		Client: client,
+		Registry: datasource.NewRegistry(fakeDataSource{
+			name:                 "kubernetes-events",
+			queryType:            domain.QueryTypeEvent,
+			containerTermination: true,
+		}),
+		Resolver: modelgateway.KubeResolver{Client: client},
+	}
+
+	result, err := service.Preflight(context.Background(), "prod", v1alpha1.InvestigationRequestSpec{
+		Target:               v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "checkout"},
+		DataSources:          []v1alpha1.LocalObjectReference{{Name: "kubernetes-events"}},
+		EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: "CrashLoopBackOffV2"},
+	})
+	if err != nil {
+		t.Fatalf("preflight failed: %v", err)
+	}
+	if !result.Successful() {
+		t.Fatalf("expected successful preflight, got %#v", result)
+	}
+	if len(result.CollectionPlan) != 2 {
+		t.Fatalf("expected event plus automatic termination steps, got %#v", result.CollectionPlan)
+	}
+	eventStep := result.CollectionPlan[0]
+	if eventStep.QueryType != domain.QueryTypeEvent || len(eventStep.Reasons) != 1 || eventStep.Reasons[0] != "BackOff" {
+		t.Fatalf("expected automatic BackOff event filter, got %#v", eventStep)
+	}
+	terminationStep := result.CollectionPlan[1]
+	if terminationStep.QueryType != domain.QueryTypeContainerTermination || terminationStep.Query != "container-termination-status" {
+		t.Fatalf("expected automatic container termination step, got %#v", terminationStep)
+	}
+}
+
+func TestServiceEvaluatesComposableImagePullDiagnosticAfterEvidenceCollection(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	controller := true
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "prod", UID: "deployment-1"},
+		Spec: appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}, Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "web"}},
+		}},
+	}
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-rs", Namespace: "prod", UID: "replicaset-1", Labels: map[string]string{"app": "web"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: "web", UID: deployment.UID, Controller: &controller}},
+	}}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-pod", Namespace: "prod", UID: "pod-1", Labels: map[string]string{"app": "web"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "web-rs", UID: replicaSet.UID, Controller: &controller}},
+	}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, replicaSet, pod).Build()
+	service := &Service{
+		Client:            reader,
+		Registry:          datasource.NewRegistry(fakeDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent, records: []map[string]any{{"reason": "ErrImagePull", "message": "failed to pull image"}}}),
+		DiagnosticPlanner: diagnostic.DefaultPlanner(),
+		ScopeResolver:     scope.NewResolver(reader, scope.Limits{}),
+	}
+	preflight := PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Kind: "Deployment", Name: "web"},
+		CollectionPlan: []CollectionStep{{
+			Name: "kubernetes-events", DatasourceName: "kubernetes-events", QueryType: domain.QueryTypeEvent, Query: "events",
+		}},
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		Target: v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "web"},
+	}, preflight, time.Date(2026, 10, 20, 2, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue != nil {
+		t.Fatalf("unexpected collection issue: %#v", result.Issue)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].DiagnosticID != "image-pull" {
+		t.Fatalf("expected one image-pull diagnostic result, got %#v", result.Diagnostics)
+	}
+	if result.Diagnostics[0].Status != diagnostic.StatusSupported {
+		t.Fatalf("expected supported image-pull mechanism, got %#v", result.Diagnostics[0])
+	}
+	if len(result.Diagnostics[0].Claims) != 2 {
+		t.Fatalf("expected observation and failure-mechanism claims, got %#v", result.Diagnostics[0].Claims)
+	}
+}
+
+func TestServiceReusesImagePullDiagnosticAcrossDeploymentAndPodTargets(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	controller := true
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "prod", UID: "deployment-1"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "web"}}},
+		},
+	}
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-rs", Namespace: "prod", UID: "replicaset-1", Labels: map[string]string{"app": "web"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: "web", UID: deployment.UID, Controller: &controller}},
+	}}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-pod", Namespace: "prod", UID: "pod-1", Labels: map[string]string{"app": "web"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "web-rs", UID: replicaSet.UID, Controller: &controller}},
+	}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, replicaSet, pod).Build()
+	service := &Service{
+		DiagnosticPlanner: diagnostic.DefaultPlanner(),
+		ScopeResolver:     scope.NewResolver(reader, scope.Limits{}),
+	}
+	evidence := EvidenceCollectionResult{
+		Observations: []domain.Observation{{
+			ID:      "evidence-001",
+			Type:    domain.ObservationTypeEvent,
+			Summary: "failed to pull image",
+			Value: domain.ObservationValue{Event: &domain.EventObservation{
+				Reason: "Failed", Message: "failed to pull image: ErrImagePull",
+			}},
+		}},
+		EvidenceRefs: []v1alpha1.EvidenceRef{{
+			ID: "evidence-001", Kind: string(domain.QueryTypeEvent), Reason: "Failed", Summary: "failed to pull image: ErrImagePull",
+		}},
+	}
+
+	deploymentResults := service.evaluateDiagnostics(context.Background(), PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Kind: "Deployment", Name: "web"},
+	}, evidence)
+	podResults := service.evaluateDiagnostics(context.Background(), PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Kind: "Pod", Name: "web-pod"},
+	}, evidence)
+	if len(deploymentResults) != 1 || len(podResults) != 1 {
+		t.Fatalf("expected one diagnostic result per entry point, deployment=%#v pod=%#v", deploymentResults, podResults)
+	}
+	if deploymentResults[0].Status != podResults[0].Status {
+		t.Fatalf("expected equal diagnostic statuses, deployment=%s pod=%s", deploymentResults[0].Status, podResults[0].Status)
+	}
+	if len(deploymentResults[0].Claims) != len(podResults[0].Claims) {
+		t.Fatalf("expected equal claim counts, deployment=%#v pod=%#v", deploymentResults[0].Claims, podResults[0].Claims)
+	}
+	for index := range deploymentResults[0].Claims {
+		left, right := deploymentResults[0].Claims[index], podResults[0].Claims[index]
+		if left.ID != right.ID || left.Type != right.Type || left.Statement != right.Statement || strings.Join(left.EvidenceRefs, ",") != strings.Join(right.EvidenceRefs, ",") {
+			t.Fatalf("expected entry points to produce identical claim[%d], deployment=%#v pod=%#v", index, left, right)
+		}
+	}
+}
+
+func TestProviderEvidencePolicyFiltersDiagnosticClaimsWithRemovedEvidence(t *testing.T) {
+	results := []diagnostic.Result{{
+		DiagnosticID: "image-pull",
+		Status:       diagnostic.StatusSupported,
+		Claims: []diagnostic.CandidateClaim{{
+			ID:           "image-pull-cause",
+			Type:         diagnostic.ClaimRootCause,
+			Statement:    "registry rejected image access",
+			EvidenceRefs: []string{"event-secret", "event-public"},
+		}},
+		Warnings: []string{"candidate remains unverified"},
+	}}
+	filtered := filterDiagnosticResultsForEvidence(results, []v1alpha1.EvidenceRef{{ID: "event-public"}})
+	if len(filtered) != 1 || len(filtered[0].Claims) != 1 {
+		t.Fatalf("expected diagnostic claim to survive with allowed evidence, got %#v", filtered)
+	}
+	if len(filtered[0].Claims[0].EvidenceRefs) != 1 || filtered[0].Claims[0].EvidenceRefs[0] != "event-public" {
+		t.Fatalf("expected removed evidence ref to be filtered, got %#v", filtered[0].Claims[0])
+	}
+	removed := filterDiagnosticResultsForEvidence(results, nil)
+	if len(removed) != 1 || len(removed[0].Claims) != 0 {
+		t.Fatalf("expected claim to be removed when all evidence is filtered, got %#v", removed)
 	}
 }
 
@@ -1195,6 +1397,38 @@ func TestNormalizeObservationTruncatesLargeLogEvidence(t *testing.T) {
 	}
 }
 
+func TestNormalizeContainerTerminationTruncationWithoutStatusRecords(t *testing.T) {
+	req := datasource.QueryRequest{
+		Query:     "container-termination-status",
+		Target:    domain.ResourceRef{Namespace: "prod", Kind: "Deployment", Name: "checkout"},
+		QueryType: domain.QueryTypeContainerTermination,
+	}
+	result := &datasource.QueryResult{
+		Source:              "kubernetes-events",
+		QueryType:           domain.QueryTypeContainerTermination,
+		Summary:             "Kubernetes scanned 20 of at least 21 target Pods; no termination status records were returned",
+		Truncated:           true,
+		TruncationReason:    "TargetPodLimitExceeded",
+		LimitDimension:      "pods",
+		Limit:               20,
+		OriginalRecordCount: 21,
+		RetainedRecordCount: 20,
+	}
+
+	observations := normalizeObservations(result, req, 0, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC))
+	if len(observations) != 1 {
+		t.Fatalf("expected a truncation observation despite empty status records, got %#v", observations)
+	}
+	observation := observations[0]
+	if !observation.Truncated || observation.Value.ContainerTermination == nil || observation.Summary != result.Summary || observation.LimitDimension != "pods" {
+		t.Fatalf("expected bounded scan metadata without fabricated status facts, got %#v", observation)
+	}
+	refs := evidenceRefsFromObservations(observations, req, v1alpha1.QueryRetentionPolicy{})
+	if len(refs) != 1 || !refs[0].Truncated || refs[0].TruncationReason != "TargetPodLimitExceeded" {
+		t.Fatalf("expected retained truncation metadata in public evidence ref, got %#v", refs)
+	}
+}
+
 func TestNormalizeObservationTruncatesLargeEventEvidence(t *testing.T) {
 	req := datasource.QueryRequest{
 		Query:     "recent-events",
@@ -1944,14 +2178,15 @@ func TestServiceGenerateRCARejectsDeniedSensitivityTags(t *testing.T) {
 }
 
 type fakeDataSource struct {
-	name           string
-	queryType      domain.QueryType
-	records        []map[string]any
-	queryErr       error
-	delay          time.Duration
-	queryPolicy    v1alpha1.DataSourceQueryPolicy
-	nativeLimit    *datasource.NativeResultLimit
-	classification v1alpha1.DataClassification
+	name                 string
+	queryType            domain.QueryType
+	containerTermination bool
+	records              []map[string]any
+	queryErr             error
+	delay                time.Duration
+	queryPolicy          v1alpha1.DataSourceQueryPolicy
+	nativeLimit          *datasource.NativeResultLimit
+	classification       v1alpha1.DataClassification
 }
 
 type capturingModelProvider struct {
@@ -2035,6 +2270,9 @@ func (f fakeDataSource) Name() string { return f.name }
 func (f fakeDataSource) Type() string { return string(f.queryType) }
 
 func (f fakeDataSource) Capabilities() datasource.Capabilities {
+	if f.containerTermination {
+		return datasource.Capabilities{Events: true, ContainerTermination: true}
+	}
 	switch f.queryType {
 	case domain.QueryTypeMetric:
 		return datasource.Capabilities{Metrics: true}

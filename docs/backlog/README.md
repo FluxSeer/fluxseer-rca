@@ -22,6 +22,7 @@ Status meanings:
 | P0 | [v0.5 Safe Remediation](v0.5-safe-remediation.md) | `Active` | `v0.5-alpha.1` proves the safety contract, one real Kubernetes action, and post-action verification; GitOps follows as a second backend. |
 | P0 | [v0.5 SRE RCA scenario portfolio](v0.5-sre-rca-scenario-portfolio.md) | `Active` | Five high-frequency RCA cases plus `Effective`/`Ineffective` remediation verification have deterministic contracts before `v0.5-alpha.1`. |
 | P0 | [v0.5 Runtime RCA qualification contracts](v0.5-runtime-rca-qualification.md) | `Active` | `v0.5-runtime-rca-matrix/v1` and `v0.5-safe-remediation-matrix/v1` define public report, evidence, failure, and side-effect acceptance gates before runtime implementation. |
+| P0 | [Evidence-driven RCA actionability](evidence-driven-rca-actionability.md) | `Active` | Initial CrashLoopBackOff V2 evidence-gap cases, bounded quality counters, and the K8s 1.34 live gate are complete; continue with general evidence-plan execution and actionability coverage across supported profiles. |
 | P0 | [Beta stabilization and RCA quality baseline](v0.3-beta-stabilization.md) | `Active` | Expand replay quality, verifier, provider, diagnostics, and real-cluster compatibility evidence. |
 | P1 | [Production-readiness expansion](v0.3-production-readiness.md) | `Active` | Scenario and target coverage extends beyond the first E2E matrix. |
 | P1 | [Architecture hardening follow-ups](v0.3-architecture-hardening.md) | `Active` | Post-action effectiveness verification and the selected durable evidence backend are complete. |

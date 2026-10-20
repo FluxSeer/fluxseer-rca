@@ -28,6 +28,7 @@ import (
 	promadapter "github.com/FluxSeer/fluxseer-rca/internal/datasource/prometheus"
 	"github.com/FluxSeer/fluxseer-rca/internal/datasourceconfig"
 	"github.com/FluxSeer/fluxseer-rca/internal/detector"
+	"github.com/FluxSeer/fluxseer-rca/internal/diagnostic"
 	"github.com/FluxSeer/fluxseer-rca/internal/escalation"
 	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
 	"github.com/FluxSeer/fluxseer-rca/internal/executor"
@@ -41,6 +42,7 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/model/openai"
 	"github.com/FluxSeer/fluxseer-rca/internal/modelgateway"
 	"github.com/FluxSeer/fluxseer-rca/internal/notifier/webhook"
+	"github.com/FluxSeer/fluxseer-rca/internal/scope"
 	"github.com/FluxSeer/fluxseer-rca/internal/thresholds"
 	"github.com/FluxSeer/fluxseer-rca/internal/version"
 )
@@ -120,7 +122,7 @@ func Run(args []string, out io.Writer) error {
 	)
 
 	registry := datasource.NewRegistry(
-		k8sadapter.Adapter{Client: mgr.GetClient()},
+		k8sadapter.Adapter{Client: mgr.GetClient(), APIReader: mgr.GetAPIReader()},
 	)
 	modelProviders := model.NewRegistry(
 		openai.Provider{},
@@ -188,11 +190,13 @@ func Run(args []string, out io.Writer) error {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Service: &investigation.Service{
-			Client:        mgr.GetClient(),
-			Registry:      registry,
-			Resolver:      resolver,
-			Gateway:       gateway,
-			EvidenceStore: evidenceStoreFromEnv(),
+			Client:            mgr.GetClient(),
+			Registry:          registry,
+			Resolver:          resolver,
+			Gateway:           gateway,
+			EvidenceStore:     evidenceStoreFromEnv(),
+			DiagnosticPlanner: diagnostic.DefaultPlanner(),
+			ScopeResolver:     scope.NewResolver(mgr.GetAPIReader(), scope.Limits{}),
 		},
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create InvestigationRequest controller: %w", err)

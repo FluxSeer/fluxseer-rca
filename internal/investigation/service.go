@@ -22,12 +22,14 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
 	"github.com/FluxSeer/fluxseer-rca/internal/dataclassification"
 	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
+	"github.com/FluxSeer/fluxseer-rca/internal/diagnostic"
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
 	"github.com/FluxSeer/fluxseer-rca/internal/modelgateway"
 	"github.com/FluxSeer/fluxseer-rca/internal/querypolicy"
 	"github.com/FluxSeer/fluxseer-rca/internal/rcametrics"
 	"github.com/FluxSeer/fluxseer-rca/internal/rule"
+	"github.com/FluxSeer/fluxseer-rca/internal/scope"
 	"github.com/FluxSeer/fluxseer-rca/internal/statusbudget"
 )
 
@@ -73,6 +75,7 @@ type EvidenceCollectionResult struct {
 	Summary      string
 	EvidenceRefs []v1alpha1.EvidenceRef
 	Observations []domain.Observation
+	Diagnostics  []diagnostic.Result
 	Issue        *Issue
 }
 
@@ -92,11 +95,13 @@ type RCAResult struct {
 }
 
 type Service struct {
-	Client        client.Reader
-	Registry      *datasource.Registry
-	Resolver      modelgateway.ProviderResolver
-	Gateway       *modelgateway.Gateway
-	EvidenceStore evidencepkg.SnapshotStore
+	Client            client.Reader
+	Registry          *datasource.Registry
+	Resolver          modelgateway.ProviderResolver
+	Gateway           *modelgateway.Gateway
+	EvidenceStore     evidencepkg.SnapshotStore
+	DiagnosticPlanner *diagnostic.Planner
+	ScopeResolver     *scope.Resolver
 }
 
 func (s *Service) Preflight(ctx context.Context, namespace string, spec v1alpha1.InvestigationRequestSpec) (PreflightResult, error) {
@@ -175,7 +180,26 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 		return result, nil
 	}
 	result.Summary = fmt.Sprintf("collected %d evidence records from %d investigation queries", totalRecords, len(preflight.CollectionPlan))
+	result.Diagnostics = s.evaluateDiagnostics(ctx, preflight, result)
 	return result, nil
+}
+
+func (s *Service) evaluateDiagnostics(ctx context.Context, preflight PreflightResult, evidence EvidenceCollectionResult) []diagnostic.Result {
+	if s.DiagnosticPlanner == nil {
+		return nil
+	}
+	input := diagnostic.EvidenceSet{
+		Observations: append([]domain.Observation(nil), evidence.Observations...),
+		EvidenceRefs: append([]v1alpha1.EvidenceRef(nil), evidence.EvidenceRefs...),
+	}
+	if len(s.DiagnosticPlanner.Candidates(input)) == 0 {
+		return nil
+	}
+	if s.ScopeResolver != nil && strings.EqualFold(strings.TrimSpace(preflight.Target.Kind), "Deployment") {
+		resolved, _ := s.ScopeResolver.ResolveDeployment(ctx, preflight.Target.Namespace, preflight.Target.Name)
+		input.Scope = resolved
+	}
+	return s.DiagnosticPlanner.Evaluate(input)
 }
 
 func (s *Service) applyEvidenceRetention(ctx context.Context, policy v1alpha1.EvidenceRetentionPolicy, result *EvidenceCollectionResult, now time.Time) *Issue {
@@ -442,7 +466,7 @@ func maxQueryResultRecords(queryType domain.QueryType, limits v1alpha1.QueryResu
 		return minPositiveLimit(limits.Metrics.MaxSamples, limits.Metrics.MaxSeries)
 	case domain.QueryTypeLog:
 		return firstPositiveLimit(limits.Logs.MaxEntries, limits.Logs.MaxLines)
-	case domain.QueryTypeEvent, domain.QueryTypeDeploymentCondition, domain.QueryTypeServiceConfiguration, domain.QueryTypeProbeConfiguration:
+	case domain.QueryTypeEvent, domain.QueryTypeDeploymentCondition, domain.QueryTypeServiceConfiguration, domain.QueryTypeProbeConfiguration, domain.QueryTypeContainerTermination:
 		return limits.Events.MaxRecords
 	default:
 		return 0
@@ -679,6 +703,7 @@ func applyProviderDataPolicy(provider *v1alpha1.ModelProvider, evidenceResult Ev
 	filtered := evidenceResult
 	filtered.EvidenceRefs = filterEvidenceRefsForProviderPolicy(evidenceResult.EvidenceRefs, policy)
 	filtered.Observations = filterObservationsForProviderPolicy(evidenceResult.Observations, policy)
+	filtered.Diagnostics = filterDiagnosticResultsForEvidence(evidenceResult.Diagnostics, filtered.EvidenceRefs)
 	if !policy.AllowExternalTransmission {
 		decision := dataclassification.EvaluateProviderPolicy(policy, filtered.EvidenceRefs)
 		decision.Decision = dataclassification.DecisionRejected
@@ -702,6 +727,41 @@ func applyProviderDataPolicy(provider *v1alpha1.ModelProvider, evidenceResult Ev
 	}
 	filtered.Summary = fmt.Sprintf("%s; provider data policy retained %d evidence refs", evidenceResult.Summary, len(filtered.EvidenceRefs))
 	return filtered, nil
+}
+
+func filterDiagnosticResultsForEvidence(results []diagnostic.Result, refs []v1alpha1.EvidenceRef) []diagnostic.Result {
+	if len(results) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		if ref.ID != "" {
+			allowed[ref.ID] = struct{}{}
+		}
+	}
+	filtered := make([]diagnostic.Result, 0, len(results))
+	for _, result := range results {
+		copyResult := result
+		copyResult.Claims = nil
+		for _, claim := range result.Claims {
+			claimRefs := make([]string, 0, len(claim.EvidenceRefs))
+			for _, refID := range claim.EvidenceRefs {
+				if _, ok := allowed[refID]; ok {
+					claimRefs = append(claimRefs, refID)
+				}
+			}
+			if len(claimRefs) == 0 && len(claim.EvidenceRefs) > 0 {
+				continue
+			}
+			claim.EvidenceRefs = claimRefs
+			copyResult.Claims = append(copyResult.Claims, claim)
+		}
+		if len(copyResult.Claims) == 0 && len(copyResult.Warnings) == 0 {
+			continue
+		}
+		filtered = append(filtered, copyResult)
+	}
+	return filtered
 }
 
 func providerDataPolicyAudit(provider *v1alpha1.ModelProvider, refs []v1alpha1.EvidenceRef, decision dataclassification.Decision, policy v1alpha1.ModelProviderDataPolicy) *v1alpha1.ProviderEgressAudit {
@@ -922,10 +982,56 @@ func (s *Service) resolveCollectionPlan(spec v1alpha1.InvestigationRequestSpec, 
 		}, nil
 	}
 
+	var (
+		names           []string
+		plan            []CollectionStep
+		datasourceIssue *Issue
+		queryTypeIssue  *Issue
+	)
 	if len(spec.Queries) > 0 {
-		return s.resolveQueryPlan(spec, target, labels)
+		names, plan, datasourceIssue, queryTypeIssue = s.resolveQueryPlan(spec, target, labels)
+	} else {
+		names, plan, datasourceIssue, queryTypeIssue = s.resolveDefaultDatasourcePlan(spec, target, labels)
 	}
-	return s.resolveDefaultDatasourcePlan(spec, target, labels)
+	if datasourceIssue != nil || queryTypeIssue != nil || !strings.EqualFold(strings.TrimSpace(spec.EvidenceRequirements.Profile), "CrashLoopBackOffV2") {
+		return names, plan, datasourceIssue, queryTypeIssue
+	}
+	if len(spec.Queries) == 0 {
+		for index := range plan {
+			if plan[index].DatasourceName == "kubernetes-events" && plan[index].QueryType == domain.QueryTypeEvent && len(plan[index].Reasons) == 0 {
+				plan[index].Reasons = []string{"BackOff"}
+			}
+		}
+	}
+	for _, step := range plan {
+		if step.QueryType == domain.QueryTypeContainerTermination {
+			return names, plan, nil, nil
+		}
+	}
+	source, ok := s.Registry.Get("kubernetes-events")
+	if !ok {
+		return names, plan, &Issue{Reason: "DataSourceNotFound", Message: "CrashLoopBackOffV2 requires the built-in kubernetes-events datasource for container termination status"}, nil
+	}
+	if !source.Capabilities().SupportsQueryType(domain.QueryTypeContainerTermination) {
+		return names, plan, nil, &Issue{Reason: "CapabilityMismatch", Message: "the kubernetes-events datasource does not support containerTermination queries required by CrashLoopBackOffV2"}
+	}
+	if spec.QueryBudget.MaxQueriesTotal > 0 && int32(len(plan)+1) > spec.QueryBudget.MaxQueriesTotal {
+		return names, plan, nil, &Issue{Reason: "QueryBudgetExceeded", Message: "CrashLoopBackOffV2 container termination query exceeds queryBudget.maxQueriesTotal"}
+	}
+	if spec.QueryBudget.MaxQueriesPerSource > 0 {
+		queriesForSource := int32(0)
+		for _, step := range plan {
+			if step.DatasourceName == source.Name() {
+				queriesForSource++
+			}
+		}
+		if queriesForSource+1 > spec.QueryBudget.MaxQueriesPerSource {
+			return names, plan, nil, &Issue{Reason: "QueryBudgetExceeded", Message: "CrashLoopBackOffV2 container termination query exceeds queryBudget.maxQueriesPerSource for kubernetes-events"}
+		}
+	}
+	names = appendIfMissing(names, source.Name())
+	plan = append(plan, CollectionStep{Name: "container-termination-status", DatasourceName: source.Name(), QueryType: domain.QueryTypeContainerTermination, Query: "container-termination-status"})
+	return names, plan, nil, nil
 }
 
 func (s *Service) resolveDefaultDatasourcePlan(spec v1alpha1.InvestigationRequestSpec, target domain.ResourceRef, labels map[string]string) ([]string, []CollectionStep, *Issue, *Issue) {
@@ -1167,6 +1273,8 @@ func investigationQueryText(querySpec v1alpha1.InvestigationQuery, queryType dom
 		return "service-port-configuration"
 	case domain.QueryTypeProbeConfiguration:
 		return "probe-configuration"
+	case domain.QueryTypeContainerTermination:
+		return "container-termination-status"
 	default:
 		return ""
 	}
@@ -1188,6 +1296,11 @@ func normalizeObservations(result *datasource.QueryResult, req datasource.QueryR
 		retainedCount = result.RetainedRecordCount
 	}
 	observations := make([]domain.Observation, 0, retainedCount)
+	if len(result.Records) == 0 && result.Truncated && result.QueryType == domain.QueryTypeContainerTermination {
+		// Preserve the bounded-scan signal even when none of the retained Pods
+		// has a container status record to normalize.
+		return []domain.Observation{normalizeObservation(map[string]any{}, result, req, offset, result.OriginalRecordCount, result.RetainedRecordCount, true, collectedAt)}
+	}
 	for index, record := range result.Records {
 		if index >= maxEvidencePerDatasource {
 			break
@@ -1329,6 +1442,31 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 			ContainerPortName: containerPortName, ContainerPort: containerPort,
 			Resolution: resolution, MismatchConfirmed: mismatchConfirmed, Reason: reason,
 		}}
+	case domain.QueryTypeContainerTermination:
+		termination := &domain.ContainerTerminationObservation{
+			PodName:                  observationRecordString(record, "podName"),
+			PodUID:                   observationRecordString(record, "podUID"),
+			ContainerName:            observationRecordString(record, "containerName"),
+			RestartCount:             observationRecordInt32(record, "restartCount"),
+			WaitingReason:            observationRecordString(record, "waitingReason"),
+			LastTerminatedReason:     observationRecordString(record, "lastTerminatedReason"),
+			LastTerminatedExitCode:   observationRecordInt32(record, "lastTerminatedExitCode"),
+			LastTerminatedSignal:     observationRecordInt32(record, "lastTerminatedSignal"),
+			LastTerminatedFinishedAt: observationRecordString(record, "lastTerminatedFinishedAt"),
+		}
+		obs.Type = domain.ObservationTypeContainerTermination
+		obs.Summary = redactor.RedactText(fmt.Sprintf(
+			"Pod %s container %s restartCount=%d waitingReason=%s lastTerminatedReason=%s exitCode=%d signal=%d finishedAt=%s",
+			termination.PodName, termination.ContainerName, termination.RestartCount,
+			firstNonEmpty(termination.WaitingReason, "unknown"),
+			firstNonEmpty(termination.LastTerminatedReason, "unknown"),
+			termination.LastTerminatedExitCode, termination.LastTerminatedSignal,
+			firstNonEmpty(termination.LastTerminatedFinishedAt, "unknown"),
+		))
+		if result.Truncated && termination.PodName == "" && termination.ContainerName == "" {
+			obs.Summary = redactor.RedactText(result.Summary)
+		}
+		obs.Value = domain.ObservationValue{ContainerTermination: termination}
 	default:
 		obs.Type = domain.ObservationTypeEvent
 		obs.Summary = redactor.RedactText(result.Summary)
@@ -1734,18 +1872,23 @@ func buildInvestigationIngestionOutput(spec v1alpha1.InvestigationRequestSpec, p
 		contextSummary = strings.TrimSpace(spec.Question) + " | " + evidenceResult.Summary
 	}
 
+	metadata := map[string]string{
+		"question": strings.TrimSpace(spec.Question),
+		"mode":     firstNonEmpty(spec.Mode, v1alpha1.InvestigationModeReadOnly),
+	}
+	if advisory := diagnosticAdvisoryText(evidenceResult.Diagnostics); advisory != "" {
+		metadata["diagnosticAdvisories"] = advisory
+	}
+
 	return domain.IngestionOutput{
 		Context: domain.IncidentContext{
-			ID:       fmt.Sprintf("investigation-%s-%s", preflight.Target.Namespace, preflight.Target.Name),
-			Cluster:  preflight.Target.Cluster,
-			Service:  preflight.Target.Service,
-			Resource: preflight.Target,
-			Summary:  contextSummary,
-			Signals:  signals,
-			Metadata: map[string]string{
-				"question": strings.TrimSpace(spec.Question),
-				"mode":     firstNonEmpty(spec.Mode, v1alpha1.InvestigationModeReadOnly),
-			},
+			ID:          fmt.Sprintf("investigation-%s-%s", preflight.Target.Namespace, preflight.Target.Name),
+			Cluster:     preflight.Target.Cluster,
+			Service:     preflight.Target.Service,
+			Resource:    preflight.Target,
+			Summary:     contextSummary,
+			Signals:     signals,
+			Metadata:    metadata,
 			GeneratedAt: now,
 		},
 		Evidence: domain.EvidenceBundle{
@@ -1762,6 +1905,28 @@ func buildInvestigationIngestionOutput(spec v1alpha1.InvestigationRequestSpec, p
 		},
 		DedupedFrom: len(evidenceResult.EvidenceRefs),
 	}
+}
+
+func diagnosticAdvisoryText(results []diagnostic.Result) string {
+	parts := make([]string, 0, len(results))
+	for _, result := range results {
+		for _, claim := range result.Claims {
+			statement := strings.TrimSpace(claim.Statement)
+			if statement == "" {
+				continue
+			}
+			parts = append(parts, fmt.Sprintf("%s/%s %s candidate: %s", result.DiagnosticID, result.Status, claim.Type, statement))
+		}
+		for _, warning := range result.Warnings {
+			if text := strings.TrimSpace(warning); text != "" {
+				parts = append(parts, fmt.Sprintf("%s/%s warning: %s", result.DiagnosticID, result.Status, text))
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "UNVERIFIED diagnostic candidates; Claim Verification remains authoritative. " + strings.Join(parts, " | ")
 }
 
 func normalizeEvidenceKind(kind string) string {

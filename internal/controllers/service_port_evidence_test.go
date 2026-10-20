@@ -51,7 +51,7 @@ func TestProfileBackedServicePortClaimOverridesUnrelatedUnsupportedProviderClaim
 	}}
 
 	claims, verification := buildRCAClaims(rca, evidence, "serviceportmismatch")
-	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, 0.95)
+	evaluation := evaluateCanonicalVerdict(rca, evidence, claims, 0.95, "")
 	if evaluation.Outcome != v1alpha1.InvestigationOutcomeConfirmed {
 		t.Fatalf("expected profile-backed RCA to be confirmed, got %s (claims=%#v, verification=%#v)", evaluation.Outcome, claims, verification)
 	}
