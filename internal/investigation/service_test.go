@@ -220,6 +220,31 @@ func TestServiceEvaluatesComposableImagePullDiagnosticAfterEvidenceCollection(t 
 	}
 }
 
+func TestProviderEvidencePolicyFiltersDiagnosticClaimsWithRemovedEvidence(t *testing.T) {
+	results := []diagnostic.Result{{
+		DiagnosticID: "image-pull",
+		Status:       diagnostic.StatusSupported,
+		Claims: []diagnostic.CandidateClaim{{
+			ID:           "image-pull-cause",
+			Type:         diagnostic.ClaimRootCause,
+			Statement:    "registry rejected image access",
+			EvidenceRefs: []string{"event-secret", "event-public"},
+		}},
+		Warnings: []string{"candidate remains unverified"},
+	}}
+	filtered := filterDiagnosticResultsForEvidence(results, []v1alpha1.EvidenceRef{{ID: "event-public"}})
+	if len(filtered) != 1 || len(filtered[0].Claims) != 1 {
+		t.Fatalf("expected diagnostic claim to survive with allowed evidence, got %#v", filtered)
+	}
+	if len(filtered[0].Claims[0].EvidenceRefs) != 1 || filtered[0].Claims[0].EvidenceRefs[0] != "event-public" {
+		t.Fatalf("expected removed evidence ref to be filtered, got %#v", filtered[0].Claims[0])
+	}
+	removed := filterDiagnosticResultsForEvidence(results, nil)
+	if len(removed) != 1 || len(removed[0].Claims) != 0 {
+		t.Fatalf("expected claim to be removed when all evidence is filtered, got %#v", removed)
+	}
+}
+
 func TestServicePreflightResolvesNonDeploymentTargets(t *testing.T) {
 	cases := []struct {
 		name               string

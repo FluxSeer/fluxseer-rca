@@ -703,6 +703,7 @@ func applyProviderDataPolicy(provider *v1alpha1.ModelProvider, evidenceResult Ev
 	filtered := evidenceResult
 	filtered.EvidenceRefs = filterEvidenceRefsForProviderPolicy(evidenceResult.EvidenceRefs, policy)
 	filtered.Observations = filterObservationsForProviderPolicy(evidenceResult.Observations, policy)
+	filtered.Diagnostics = filterDiagnosticResultsForEvidence(evidenceResult.Diagnostics, filtered.EvidenceRefs)
 	if !policy.AllowExternalTransmission {
 		decision := dataclassification.EvaluateProviderPolicy(policy, filtered.EvidenceRefs)
 		decision.Decision = dataclassification.DecisionRejected
@@ -726,6 +727,41 @@ func applyProviderDataPolicy(provider *v1alpha1.ModelProvider, evidenceResult Ev
 	}
 	filtered.Summary = fmt.Sprintf("%s; provider data policy retained %d evidence refs", evidenceResult.Summary, len(filtered.EvidenceRefs))
 	return filtered, nil
+}
+
+func filterDiagnosticResultsForEvidence(results []diagnostic.Result, refs []v1alpha1.EvidenceRef) []diagnostic.Result {
+	if len(results) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		if ref.ID != "" {
+			allowed[ref.ID] = struct{}{}
+		}
+	}
+	filtered := make([]diagnostic.Result, 0, len(results))
+	for _, result := range results {
+		copyResult := result
+		copyResult.Claims = nil
+		for _, claim := range result.Claims {
+			claimRefs := make([]string, 0, len(claim.EvidenceRefs))
+			for _, refID := range claim.EvidenceRefs {
+				if _, ok := allowed[refID]; ok {
+					claimRefs = append(claimRefs, refID)
+				}
+			}
+			if len(claimRefs) == 0 && len(claim.EvidenceRefs) > 0 {
+				continue
+			}
+			claim.EvidenceRefs = claimRefs
+			copyResult.Claims = append(copyResult.Claims, claim)
+		}
+		if len(copyResult.Claims) == 0 && len(copyResult.Warnings) == 0 {
+			continue
+		}
+		filtered = append(filtered, copyResult)
+	}
+	return filtered
 }
 
 func providerDataPolicyAudit(provider *v1alpha1.ModelProvider, refs []v1alpha1.EvidenceRef, decision dataclassification.Decision, policy v1alpha1.ModelProviderDataPolicy) *v1alpha1.ProviderEgressAudit {
