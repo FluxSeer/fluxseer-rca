@@ -235,9 +235,11 @@ exhaustion case:
 All four requests completed `Inconclusive`, with no `RiskSignal`, remediation,
 or workload mutation. The first run exposed a deployment RBAC gap for
 `events.k8s.io/events`; the chart now grants only read-only get/list/watch for
-that API, and the test ClusterRole was patched before the final run. The
-public reports, raw requests, raw Pod/Event objects, final status, metrics
-snapshot, and effective RBAC are retained beside the qualification summary.
+that API. The test ClusterRole was patched before the final run and then
+formally converged through Helm with `--force-conflicts`; the final release is
+revision 21 using the qualification image. The public reports, raw requests,
+raw Pod/Event objects, final status, metrics snapshot, and effective RBAC are
+retained beside the qualification summary.
 
 This is local live acceptance only. The current public status does not set the
 `Degraded` condition for a query-budget skip, and the metrics endpoint does not
