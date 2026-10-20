@@ -111,6 +111,14 @@ func TestSchedulingMechanismClaimAcceptsVerifiedConditionEvidence(t *testing.T) 
 			Kind:    "scheduling",
 			Summary: "Pod prod/pending UID pod-1 scheduling state: phase=Pending nodeName= podScheduled=False coverage=Complete",
 		}},
+		Diagnostics: []diagnostic.Result{{
+			DiagnosticID: "scheduling",
+			Claims: []diagnostic.CandidateClaim{{
+				Type:         diagnostic.ClaimFailureMechanism,
+				Statement:    "The scheduler reported that the Pod could not be scheduled.",
+				EvidenceRefs: []string{"pod-1"},
+			}},
+		}},
 	}
 	statement, ok := schedulingMechanismRCAClaim(evidence)
 	if !ok || statement != schedulingMechanismClaimStatement {
@@ -141,5 +149,18 @@ func TestSchedulingProfileAcceptsConditionEvidenceWithoutEventRef(t *testing.T) 
 	}, evidence)
 	if gate == nil || !gate.Complete || len(gate.Missing) != 0 {
 		t.Fatalf("expected condition-backed scheduling profile to be complete, got %#v", gate)
+	}
+}
+
+func TestGenericEventReferenceDoesNotConfirmSchedulingMechanism(t *testing.T) {
+	statement, ok := schedulingMechanismRCAClaim(investigation.EvidenceCollectionResult{
+		EvidenceRefs: []v1alpha1.EvidenceRef{{
+			Kind:    string(domain.QueryTypeEvent),
+			Reason:  "FailedScheduling",
+			Summary: "0/2 nodes are unavailable",
+		}},
+	})
+	if ok || statement != "" {
+		t.Fatalf("expected uncorrelated generic event to remain unconfirmed, got ok=%v statement=%q", ok, statement)
 	}
 }

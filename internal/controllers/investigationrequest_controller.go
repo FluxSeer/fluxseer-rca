@@ -576,7 +576,10 @@ func schedulingFailureMechanismEvidencePresent(evidence investigation.EvidenceCo
 			}
 		}
 	}
-	return failedSchedulingEvidencePresent(evidence)
+	// Generic Event query references do not carry the normalized Pod UID and
+	// time/source validation performed by SchedulingDiagnostic. They may satisfy
+	// an evidence-coverage gate, but must not independently confirm a mechanism.
+	return false
 }
 
 func probeConfigurationMismatchEvidencePresent(evidence investigation.EvidenceCollectionResult) bool {
