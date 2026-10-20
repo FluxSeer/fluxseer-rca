@@ -55,6 +55,9 @@ type CandidateClaim struct {
 type SchedulingObservation struct {
 	ID                  string
 	PodUID              string
+	PodNamespace        string
+	PodName             string
+	Source              string
 	EventPodUID         string
 	Phase               string
 	NodeName            string
@@ -66,6 +69,10 @@ type SchedulingObservation struct {
 	EventMessage        string
 	EvidenceRefs        []string
 	CollectedAt         time.Time
+	IncidentStart       time.Time
+	IncidentEnd         time.Time
+	Coverage            domain.SchedulingCoverage
+	CoverageReason      string
 	Truncated           bool
 	Stale               bool
 }

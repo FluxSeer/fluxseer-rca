@@ -75,6 +75,17 @@ func TestCollectSchedulingEvidenceNormalizesPodStateAndBothEventAPIs(t *testing.
 	}
 }
 
+func TestDeduplicateSchedulingEventsCollapsesLogicalCrossAPIDuplicates(t *testing.T) {
+	now := time.Date(2026, 10, 20, 3, 0, 0, 0, time.UTC)
+	events := deduplicateSchedulingEvents([]domain.SchedulingEvent{
+		{ID: "core/event", UID: "core-uid", PodUID: "pod-1", Reason: "FailedScheduling", Message: "Insufficient cpu", ObservedAt: now},
+		{ID: "events/event", UID: "events-uid", PodUID: "pod-1", Reason: "FailedScheduling", Message: "Insufficient cpu", ObservedAt: now},
+	})
+	if len(events) != 1 {
+		t.Fatalf("expected one logical event after cross-API deduplication, got %#v", events)
+	}
+}
+
 func TestCollectSchedulingEvidenceExcludesReusedPodNameAndMarksStaleEvents(t *testing.T) {
 	now := time.Date(2026, 10, 20, 3, 0, 0, 0, time.UTC)
 	pod := &corev1.Pod{ObjectMeta: typesMeta("demo", "worker", "pod-new"), Status: corev1.PodStatus{Phase: corev1.PodPending}}

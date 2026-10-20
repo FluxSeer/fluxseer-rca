@@ -24,42 +24,12 @@ const (
 	defaultSchedulingMaxAPIRequests = 64
 )
 
-// SchedulingPodRef is an already scope-resolved, authorized Pod reference.
-// The collector deliberately does not resolve Deployments or selectors; that
-// responsibility remains with the existing scope resolver.
-type SchedulingPodRef struct {
-	Namespace string
-	Name      string
-	UID       string
-}
-
-// SchedulingEvidenceLimits bound every dimension of a scheduling collection.
-type SchedulingEvidenceLimits struct {
-	MaxPods        int
-	MaxEvents      int
-	MaxPages       int
-	MaxAPIRequests int
-}
-
-// SchedulingEvidenceRequest supplies the incident window and the exact Pod
-// scope. No cluster-wide Pod or Event scan is performed by this collector.
-type SchedulingEvidenceRequest struct {
-	Namespace string
-	Pods      []SchedulingPodRef
-	StartTime time.Time
-	EndTime   time.Time
-	Limits    SchedulingEvidenceLimits
-}
-
-type SchedulingEvidenceResult struct {
-	Evidence       []domain.SchedulingEvidence
-	Coverage       domain.SchedulingCoverage
-	CoverageReason string
-	APIRequests    int
-	ScannedPods    int
-	ScannedEvents  int
-	Truncated      bool
-}
+// These aliases keep the Kubernetes adapter's established test and package
+// API source-compatible while the request/result contract lives in domain.
+type SchedulingPodRef = domain.SchedulingPodRef
+type SchedulingEvidenceLimits = domain.SchedulingEvidenceLimits
+type SchedulingEvidenceRequest = domain.SchedulingEvidenceRequest
+type SchedulingEvidenceResult = domain.SchedulingEvidenceResult
 
 // SchedulingCollectionError keeps collection failure semantics explicit for
 // callers. A forbidden Event list is not represented as an empty event set.
@@ -288,6 +258,7 @@ func normalizeSchedulingPod(pod corev1.Pod, start, end time.Time) domain.Schedul
 		PodUID:          string(pod.UID),
 		Namespace:       pod.Namespace,
 		Name:            pod.Name,
+		Source:          "kubernetes/pod",
 		Phase:           string(pod.Status.Phase),
 		NodeName:        pod.Spec.NodeName,
 		SchedulingGates: make([]string, 0, len(pod.Spec.SchedulingGates)),
@@ -507,7 +478,7 @@ func (a Adapter) listSchedulingEvents(ctx context.Context, reader client.Reader,
 
 func normalizeCoreSchedulingEvent(event corev1.Event) domain.SchedulingEvent {
 	observed, last, known := coreEventTimes(event)
-	return domain.SchedulingEvent{ID: schedulingEventID("core", event.Namespace, event.Name, event.UID), UID: string(event.UID), PodUID: string(event.InvolvedObject.UID), Reason: event.Reason, Message: event.Message, Type: event.Type, ObservedAt: observed, LastObservedAt: last, TimeKnown: known}
+	return domain.SchedulingEvent{ID: schedulingEventID("core", event.Namespace, event.Name, event.UID), UID: string(event.UID), PodUID: string(event.InvolvedObject.UID), Source: "kubernetes/core-v1", Reason: event.Reason, Message: event.Message, Type: event.Type, ObservedAt: observed, LastObservedAt: last, TimeKnown: known}
 }
 
 func normalizeV1SchedulingEvent(event eventsv1.Event) domain.SchedulingEvent {
@@ -516,7 +487,7 @@ func normalizeV1SchedulingEvent(event eventsv1.Event) domain.SchedulingEvent {
 	if event.Series != nil && !event.Series.LastObservedTime.IsZero() {
 		last = event.Series.LastObservedTime.Time.UTC()
 	}
-	return domain.SchedulingEvent{ID: schedulingEventID("events", event.Namespace, event.Name, event.UID), UID: string(event.UID), PodUID: string(event.Regarding.UID), Reason: event.Reason, Message: event.Note, Type: event.Type, ObservedAt: observed, LastObservedAt: last, TimeKnown: !observed.IsZero()}
+	return domain.SchedulingEvent{ID: schedulingEventID("events", event.Namespace, event.Name, event.UID), UID: string(event.UID), PodUID: string(event.Regarding.UID), Source: "kubernetes/events-v1", Reason: event.Reason, Message: event.Note, Type: event.Type, ObservedAt: observed, LastObservedAt: last, TimeKnown: !observed.IsZero()}
 }
 
 func coreEventTimes(event corev1.Event) (time.Time, time.Time, bool) {
@@ -551,17 +522,27 @@ func schedulingEventID(source, namespace, name string, uid types.UID) string {
 }
 
 func deduplicateSchedulingEvents(events []domain.SchedulingEvent) []domain.SchedulingEvent {
-	seen := map[string]struct{}{}
+	seenUID := map[string]struct{}{}
+	seenFingerprint := map[string]struct{}{}
 	result := make([]domain.SchedulingEvent, 0, len(events))
 	for _, event := range events {
-		key := event.UID
-		if key == "" {
-			key = event.ID + "/" + event.PodUID
+		if event.UID != "" {
+			if _, ok := seenUID[event.UID]; ok {
+				continue
+			}
+			seenUID[event.UID] = struct{}{}
 		}
-		if _, ok := seen[key]; ok {
+		fingerprint := strings.Join([]string{
+			event.PodUID,
+			strings.ToLower(strings.TrimSpace(event.Reason)),
+			strings.TrimSpace(event.Message),
+			event.ObservedAt.UTC().Format(time.RFC3339Nano),
+			event.LastObservedAt.UTC().Format(time.RFC3339Nano),
+		}, "\x00")
+		if _, ok := seenFingerprint[fingerprint]; ok {
 			continue
 		}
-		seen[key] = struct{}{}
+		seenFingerprint[fingerprint] = struct{}{}
 		result = append(result, event)
 	}
 	return result
@@ -597,7 +578,7 @@ func schedulingCoverageReason(err error) string {
 }
 
 func unavailableSchedulingEvidence(ref SchedulingPodRef, coverage domain.SchedulingCoverage, reason string) domain.SchedulingEvidence {
-	return domain.SchedulingEvidence{ID: schedulingEvidenceID(ref), PodUID: ref.UID, Namespace: ref.Namespace, Name: ref.Name, Coverage: coverage, CoverageReason: reason, Stale: coverage == domain.SchedulingCoverageStale, Truncated: coverage == domain.SchedulingCoverageTruncated, CollectedAt: time.Now().UTC()}
+	return domain.SchedulingEvidence{ID: schedulingEvidenceID(ref), PodUID: ref.UID, Namespace: ref.Namespace, Name: ref.Name, Source: "kubernetes/pod", Coverage: coverage, CoverageReason: reason, Stale: coverage == domain.SchedulingCoverageStale, Truncated: coverage == domain.SchedulingCoverageTruncated, CollectedAt: time.Now().UTC()}
 }
 
 func schedulingEvidenceID(ref SchedulingPodRef) string {

@@ -19,6 +19,7 @@ import (
 	k8sadapter "github.com/FluxSeer/fluxseer-rca/internal/datasource/kubernetes"
 	lokiadapter "github.com/FluxSeer/fluxseer-rca/internal/datasource/loki"
 	promadapter "github.com/FluxSeer/fluxseer-rca/internal/datasource/prometheus"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 )
 
 const (
@@ -114,6 +115,14 @@ func (p policyDataSource) QueryPolicy() v1alpha1.DataSourceQueryPolicy {
 
 func (p policyDataSource) DataClassification() v1alpha1.DataClassification {
 	return p.classification
+}
+
+func (p policyDataSource) CollectSchedulingEvidence(ctx context.Context, req domain.SchedulingEvidenceRequest) (domain.SchedulingEvidenceResult, error) {
+	collector, ok := p.DataSource.(datasource.SchedulingEvidenceCollector)
+	if !ok {
+		return domain.SchedulingEvidenceResult{}, fmt.Errorf("datasource %q does not support scheduling evidence collection", p.Name())
+	}
+	return collector.CollectSchedulingEvidence(ctx, req)
 }
 
 func validateQueryPolicy(policy v1alpha1.DataSourceQueryPolicy) error {

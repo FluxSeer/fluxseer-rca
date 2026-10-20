@@ -25,6 +25,7 @@ type SchedulingEvent struct {
 	ID             string    `json:"id"`
 	UID            string    `json:"uid,omitempty"`
 	PodUID         string    `json:"podUID"`
+	Source         string    `json:"source,omitempty"`
 	Reason         string    `json:"reason,omitempty"`
 	Message        string    `json:"message,omitempty"`
 	Type           string    `json:"type,omitempty"`
@@ -83,6 +84,7 @@ type SchedulingEvidence struct {
 	PodUID                 string                           `json:"podUID"`
 	Namespace              string                           `json:"namespace"`
 	Name                   string                           `json:"name"`
+	Source                 string                           `json:"source,omitempty"`
 	Phase                  string                           `json:"phase,omitempty"`
 	NodeName               string                           `json:"nodeName,omitempty"`
 	PodScheduledStatus     string                           `json:"podScheduledStatus,omitempty"`
@@ -105,4 +107,44 @@ type SchedulingEvidence struct {
 	CollectedAt            time.Time                        `json:"collectedAt"`
 	Truncated              bool                             `json:"truncated"`
 	Stale                  bool                             `json:"stale"`
+}
+
+// SchedulingPodRef is an already scope-resolved, authorized Pod reference.
+// It is shared by provider adapters and the investigation runtime so the
+// collector cannot silently widen the target scope.
+type SchedulingPodRef struct {
+	Namespace string
+	Name      string
+	UID       string
+}
+
+// SchedulingEvidenceLimits bound every dimension of a scheduling collection.
+type SchedulingEvidenceLimits struct {
+	MaxPods        int
+	MaxEvents      int
+	MaxPages       int
+	MaxAPIRequests int
+}
+
+// SchedulingEvidenceRequest supplies the incident window and exact Pod scope
+// to an optional datasource scheduling collector.
+type SchedulingEvidenceRequest struct {
+	Namespace string
+	Pods      []SchedulingPodRef
+	StartTime time.Time
+	EndTime   time.Time
+	Limits    SchedulingEvidenceLimits
+}
+
+// SchedulingEvidenceResult is the provider-neutral result of one bounded
+// scheduling collection. The runtime invokes this at most once per
+// investigation and adapts the returned records into EvidenceSet.
+type SchedulingEvidenceResult struct {
+	Evidence       []SchedulingEvidence
+	Coverage       SchedulingCoverage
+	CoverageReason string
+	APIRequests    int
+	ScannedPods    int
+	ScannedEvents  int
+	Truncated      bool
 }
