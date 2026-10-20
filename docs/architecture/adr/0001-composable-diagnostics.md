@@ -239,3 +239,9 @@ de-identified fixture derived from the live evidence is stored at
 `ImagePullBackOff` profile name remains compatible, while an `ErrImagePull`
 event is emitted as the more precise `ImagePullFailure` mechanism unless
 explicit BackOff state evidence is present.
+
+The same reuse path was qualified live on Kubernetes v1.34.1 with paired
+Deployment-target and Pod-target InvestigationRequests. Both completed with
+the same `ImagePullFailure` supported claim and the same explicitly unverified
+diagnostic candidate; neither created a RiskSignal. The paired artifacts are
+under `reports/runtime/composable-diagnostics-entrypoints-20261020/`.
