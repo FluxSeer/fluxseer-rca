@@ -107,10 +107,11 @@ func TestImagePullDiagnosticUsesEventObservationAndReferenceDeterministically(t 
 			ID:   "event-002",
 			Type: domain.ObservationTypeEvent,
 			Value: domain.ObservationValue{Event: &domain.EventObservation{
-				Reason: "ImagePullBackOff",
+				Reason:  "Failed",
+				Message: "Failed to pull image: ErrImagePull",
 			}},
 		}},
-		EvidenceRefs: []v1alpha1.EvidenceRef{{ID: "event-001", Kind: "event", Reason: "ErrImagePull", Summary: "failed to pull image"}},
+		EvidenceRefs: []v1alpha1.EvidenceRef{{ID: "event-001", Kind: "event", Reason: "Failed", Summary: "Error: ErrImagePull"}},
 		Scope:        completeScope(),
 	}
 	result := diagnostic.Evaluate(evidence)

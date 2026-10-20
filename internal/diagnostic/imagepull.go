@@ -79,7 +79,7 @@ func (d ImagePullDiagnostic) Evaluate(evidence EvidenceSet) Result {
 			continue
 		}
 		truncated = truncated || observation.Truncated
-		for _, kind := range imagePullDetailKinds(observation.Summary, eventReason(observation)) {
+		for _, kind := range imagePullDetailKinds(eventMessage(observation)+" "+observation.Summary, eventReason(observation)) {
 			detailKinds[kind] = true
 		}
 	}
@@ -122,7 +122,7 @@ func (d ImagePullDiagnostic) Evaluate(evidence EvidenceSet) Result {
 func imagePullEvidenceIDs(evidence EvidenceSet) []string {
 	ids := make(map[string]struct{})
 	for _, observation := range evidence.Observations {
-		if observation.Type != domain.ObservationTypeEvent || !isImagePullReason(eventReason(observation)) {
+		if observation.Type != domain.ObservationTypeEvent || !isImagePullEvidence(eventReason(observation), eventMessage(observation)+" "+observation.Summary) {
 			continue
 		}
 		if observation.ID != "" {
@@ -130,7 +130,7 @@ func imagePullEvidenceIDs(evidence EvidenceSet) []string {
 		}
 	}
 	for _, ref := range evidence.EvidenceRefs {
-		if strings.EqualFold(strings.TrimSpace(ref.Kind), "event") && isImagePullReason(ref.Reason) && ref.ID != "" {
+		if strings.EqualFold(strings.TrimSpace(ref.Kind), "event") && isImagePullEvidence(ref.Reason, ref.Summary) && ref.ID != "" {
 			ids[ref.ID] = struct{}{}
 		}
 	}
@@ -149,6 +149,13 @@ func eventReason(observation domain.Observation) string {
 	return ""
 }
 
+func eventMessage(observation domain.Observation) string {
+	if observation.Value.Event != nil {
+		return observation.Value.Event.Message
+	}
+	return ""
+}
+
 func isImagePullReason(reason string) bool {
 	switch strings.ToLower(strings.TrimSpace(reason)) {
 	case "errimagepull", "imagepullbackoff":
@@ -156,6 +163,21 @@ func isImagePullReason(reason string) bool {
 	default:
 		return false
 	}
+}
+
+func isImagePullEvidence(reason, summary string) bool {
+	if isImagePullReason(reason) {
+		return true
+	}
+	text := strings.ToLower(strings.TrimSpace(reason + " " + summary))
+	return containsAny(text,
+		"errimagepull",
+		"imagepullbackoff",
+		"failed to pull image",
+		"pull access denied",
+		"failed to resolve reference",
+		"image pull failed",
+	)
 }
 
 func imagePullDetailKinds(summary, reason string) []string {
