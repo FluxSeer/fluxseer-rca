@@ -73,6 +73,9 @@ func TestSchedulingDiagnosticReplaysContractFixtures(t *testing.T) {
 			if string(result.Status) != fixture.Expected.Status {
 				t.Fatalf("expected status %q, got %#v", fixture.Expected.Status, result)
 			}
+			if result.Status == StatusConfirmed {
+				t.Fatal("pure scheduling diagnostic must not confirm a root cause")
+			}
 			claimIDs := make([]string, 0, len(result.Claims))
 			for _, claim := range result.Claims {
 				claimIDs = append(claimIDs, claim.ID)
@@ -81,9 +84,6 @@ func TestSchedulingDiagnosticReplaysContractFixtures(t *testing.T) {
 				}
 				if len(claim.EvidenceRefs) == 0 && claim.Type != ClaimObservation {
 					t.Fatalf("claim must retain evidence references: %#v", claim)
-				}
-				if claim.Type == ClaimRootCause && result.Status == StatusConfirmed {
-					t.Fatal("pure diagnostic must not confirm a root cause")
 				}
 			}
 			if !reflect.DeepEqual(claimIDs, fixture.Expected.ClaimIDs) {
