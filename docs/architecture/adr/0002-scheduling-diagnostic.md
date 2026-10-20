@@ -112,6 +112,39 @@ This fixture simulates composition without assuming that one ReplicaSet can
 reliably create incompatible Pod templates. Kubernetes live qualification will
 use independent, intentionally constructed scenarios.
 
+## Phase 2B bounded evidence collector
+
+Phase 2B adds a read-only collector contract without wiring Scheduling into
+Planner reconciliation yet. The collector accepts only already authorized,
+scope-resolved Pod references and uses the Adapter's existing `APIReader` (or
+its existing client fallback). It does not create a new Kubernetes client,
+resolve workload selectors, list Nodes, or infer a cause.
+
+The normalized `domain.SchedulingEvidence` record retains:
+
+- Pod UID, namespace, name, phase, node assignment, and `PodScheduled`
+  condition details;
+- scheduling gates, resource requests including init-container requests,
+  node selector/affinity constraints, and tolerations;
+- UID-correlated `FailedScheduling` and related scheduler Events from both
+  `core/v1` and `events.k8s.io/v1` when available;
+- incident window, collection time, event time quality, and explicit coverage.
+
+Coverage is one of `Complete`, `Partial`, `Unavailable`, `Truncated`, `Stale`,
+`Unauthorized`, or `CollectionFailed`. An empty Event result remains distinct
+from an Event API error. A Pod name or Event name without a matching UID is not
+accepted as evidence for the current target.
+
+Collection bounds cover Pod count, Event records, paginated list pages, and
+API requests. A disappearing Pod, stale UID, denied Event API, timeout, or
+exhausted budget is retained as an explicit degradation record. The collector
+returns facts and normalized state only; root-cause wording remains the
+responsibility of the pure diagnostic and verifier.
+
+Phase 2B qualification is fake/replay based in this slice. Planner registration,
+InvestigationRequest wiring, live Kubernetes qualification, and Node evidence
+remain Phase 2C+ work.
+
 ## Replay-first qualification
 
 Replay fixtures are a required merge gate before live composition claims.
