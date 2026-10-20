@@ -2492,9 +2492,7 @@ func profileBackedRCAClaim(profile string, evidence investigation.EvidenceCollec
 			return "CrashLoopBackOff is confirmed by a workload restart symptom and application failure evidence.", true
 		}
 	case "imagepullbackoff":
-		if eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied") {
-			return "ImagePullBackOff is confirmed by Kubernetes image pull failure event evidence.", true
-		}
+		return imagePullProfileClaim(evidence)
 	case "oomkilled":
 		if eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "oomkilled", "out of memory", "memory pressure", "memory limit") && evidenceKindPresent(v1alpha1.InvestigationRequestSpec{}, evidence, string(domain.QueryTypeMetric), "memory", "oom", "container_memory") {
 			return "OOMKilled is confirmed by Kubernetes OOM event and memory pressure evidence.", true
@@ -2511,6 +2509,27 @@ func profileBackedRCAClaim(profile string, evidence investigation.EvidenceCollec
 		}
 	}
 	return "", false
+}
+
+// imagePullProfileClaim preserves the ImagePullBackOff evidence-profile name
+// while keeping the canonical claim precise. Kubernetes can report an
+// ErrImagePull event before the pod reaches the ImagePullBackOff waiting state;
+// event evidence alone therefore confirms an ImagePullFailure, not the
+// back-off state itself.
+func imagePullProfileClaim(evidence investigation.EvidenceCollectionResult) (string, bool) {
+	if !eventCoveragePresent(v1alpha1.InvestigationRequestSpec{}, evidence, "imagepullbackoff", "errimagepull", "failed to pull image", "pull access denied") {
+		return "", false
+	}
+	for _, ref := range evidence.EvidenceRefs {
+		if !strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeEvent)) {
+			continue
+		}
+		text := strings.ToLower(strings.Join([]string{ref.Reason, ref.Summary}, " "))
+		if strings.EqualFold(strings.TrimSpace(ref.Reason), "ImagePullBackOff") || strings.Contains(text, "imagepullbackoff") {
+			return "ImagePullBackOff is confirmed by explicit Kubernetes ImagePullBackOff event evidence.", true
+		}
+	}
+	return "ImagePullFailure is confirmed by Kubernetes image-pull failure event evidence.", true
 }
 
 func verifierClaims(claims []v1alpha1.RCAClaim) []verifier.Claim {

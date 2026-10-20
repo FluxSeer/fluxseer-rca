@@ -220,6 +220,72 @@ func TestServiceEvaluatesComposableImagePullDiagnosticAfterEvidenceCollection(t 
 	}
 }
 
+func TestServiceReusesImagePullDiagnosticAcrossDeploymentAndPodTargets(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	controller := true
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "prod", UID: "deployment-1"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "web"}}},
+		},
+	}
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-rs", Namespace: "prod", UID: "replicaset-1", Labels: map[string]string{"app": "web"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: "web", UID: deployment.UID, Controller: &controller}},
+	}}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-pod", Namespace: "prod", UID: "pod-1", Labels: map[string]string{"app": "web"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "web-rs", UID: replicaSet.UID, Controller: &controller}},
+	}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, replicaSet, pod).Build()
+	service := &Service{
+		DiagnosticPlanner: diagnostic.DefaultPlanner(),
+		ScopeResolver:     scope.NewResolver(reader, scope.Limits{}),
+	}
+	evidence := EvidenceCollectionResult{
+		Observations: []domain.Observation{{
+			ID:      "evidence-001",
+			Type:    domain.ObservationTypeEvent,
+			Summary: "failed to pull image",
+			Value: domain.ObservationValue{Event: &domain.EventObservation{
+				Reason: "Failed", Message: "failed to pull image: ErrImagePull",
+			}},
+		}},
+		EvidenceRefs: []v1alpha1.EvidenceRef{{
+			ID: "evidence-001", Kind: string(domain.QueryTypeEvent), Reason: "Failed", Summary: "failed to pull image: ErrImagePull",
+		}},
+	}
+
+	deploymentResults := service.evaluateDiagnostics(context.Background(), PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Kind: "Deployment", Name: "web"},
+	}, evidence)
+	podResults := service.evaluateDiagnostics(context.Background(), PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Kind: "Pod", Name: "web-pod"},
+	}, evidence)
+	if len(deploymentResults) != 1 || len(podResults) != 1 {
+		t.Fatalf("expected one diagnostic result per entry point, deployment=%#v pod=%#v", deploymentResults, podResults)
+	}
+	if deploymentResults[0].Status != podResults[0].Status {
+		t.Fatalf("expected equal diagnostic statuses, deployment=%s pod=%s", deploymentResults[0].Status, podResults[0].Status)
+	}
+	if len(deploymentResults[0].Claims) != len(podResults[0].Claims) {
+		t.Fatalf("expected equal claim counts, deployment=%#v pod=%#v", deploymentResults[0].Claims, podResults[0].Claims)
+	}
+	for index := range deploymentResults[0].Claims {
+		left, right := deploymentResults[0].Claims[index], podResults[0].Claims[index]
+		if left.ID != right.ID || left.Type != right.Type || left.Statement != right.Statement || strings.Join(left.EvidenceRefs, ",") != strings.Join(right.EvidenceRefs, ",") {
+			t.Fatalf("expected entry points to produce identical claim[%d], deployment=%#v pod=%#v", index, left, right)
+		}
+	}
+}
+
 func TestProviderEvidencePolicyFiltersDiagnosticClaimsWithRemovedEvidence(t *testing.T) {
 	results := []diagnostic.Result{{
 		DiagnosticID: "image-pull",

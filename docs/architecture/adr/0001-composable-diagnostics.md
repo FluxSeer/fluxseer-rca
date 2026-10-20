@@ -230,3 +230,12 @@ was removed after qualification. The retained artifacts are under
 This qualifies the first vertical slice only. It does not establish a
 confirmed registry/DNS root cause, broad Kubernetes distribution compatibility,
 cross-workload causal correlation, or performance characteristics.
+
+Phase 1.5 reuse qualification now covers the same normalized image-pull
+evidence entering through Deployment and Pod targets. Both paths use the same
+planner and evaluator and produce identical candidate claims. A replayable,
+de-identified fixture derived from the live evidence is stored at
+`internal/diagnostic/testdata/imagepull-failure-v1.json`. The existing
+`ImagePullBackOff` profile name remains compatible, while an `ErrImagePull`
+event is emitted as the more precise `ImagePullFailure` mechanism unless
+explicit BackOff state evidence is present.

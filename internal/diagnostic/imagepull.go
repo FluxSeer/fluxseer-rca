@@ -28,14 +28,14 @@ func (d ImagePullDiagnostic) Match(evidence EvidenceSet) MatchResult {
 		return MatchResult{Reason: "validated Deployment scope has no Pods"}
 	}
 	if len(imagePullEvidenceIDs(evidence)) == 0 {
-		return MatchResult{Reason: "no ErrImagePull or ImagePullBackOff evidence"}
+		return MatchResult{Reason: "no image-pull failure evidence"}
 	}
 	return MatchResult{Applicable: true, Reason: "image-pull evidence is present"}
 }
 
 func (ImagePullDiagnostic) Requirements(_ EvidenceSet) []Requirement {
 	return []Requirement{
-		{ID: imagePullEventRequirement, Capability: domain.QueryTypeEvent, Description: "a target-scoped ErrImagePull or ImagePullBackOff Event", Required: true},
+		{ID: imagePullEventRequirement, Capability: domain.QueryTypeEvent, Description: "a target-scoped image-pull failure Event (for example ErrImagePull or ImagePullBackOff)", Required: true},
 		{ID: imagePullCauseRequirement, Capability: domain.QueryTypeEvent, Description: "untruncated Event detail for a specific image-pull failure mechanism", Required: false},
 	}
 }
@@ -52,7 +52,7 @@ func (d ImagePullDiagnostic) Evaluate(evidence EvidenceSet) Result {
 	ids := imagePullEvidenceIDs(evidence)
 	if len(ids) == 0 {
 		result.Status = StatusNotApplicable
-		result.Summary = "ImagePullDiagnostic did not find target-scoped image-pull evidence."
+		result.Summary = "ImagePullDiagnostic did not find target-scoped image-pull failure evidence."
 		result.MissingRequirements = append(result.MissingRequirements, d.Requirements(evidence)[0])
 		return result
 	}

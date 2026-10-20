@@ -203,6 +203,12 @@ distinguish `ImageNotFound`, registry authentication failure, DNS failure, or
 registry unavailability. A provider claim at one of those more specific levels
 must reference additional supporting evidence or remain unverified.
 
+`ImagePullBackOff` remains the backward-compatible evidence-profile name. An
+`ErrImagePull` event alone is reported as the bounded `ImagePullFailure`
+mechanism. The `ImagePullBackOff` state is named only when the collected event
+evidence explicitly identifies that state; the profile name must not be read as
+proof that the Pod reached the Kubernetes back-off waiting state.
+
 Detection and evidence sufficiency are independent. An `OOMKilled` Event can
 successfully trigger a `RiskRule`, while the `OOMKilled` profile remains
 incomplete when memory metrics are unavailable. In that case the incident
