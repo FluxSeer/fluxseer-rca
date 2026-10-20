@@ -548,6 +548,9 @@ func servicePortMismatchEvidencePresent(evidence investigation.EvidenceCollectio
 
 func failedSchedulingEvidencePresent(evidence investigation.EvidenceCollectionResult) bool {
 	for _, ref := range evidence.EvidenceRefs {
+		if ref.Truncated {
+			continue
+		}
 		if !strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeEvent)) {
 			continue
 		}

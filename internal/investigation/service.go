@@ -72,11 +72,13 @@ func (r PreflightResult) Successful() bool {
 }
 
 type EvidenceCollectionResult struct {
-	Summary      string
-	EvidenceRefs []v1alpha1.EvidenceRef
-	Observations []domain.Observation
-	Diagnostics  []diagnostic.Result
-	Issue        *Issue
+	Summary            string
+	EvidenceRefs       []v1alpha1.EvidenceRef
+	Observations       []domain.Observation
+	SchedulingEvidence []domain.SchedulingEvidence
+	Scheduling         []diagnostic.SchedulingObservation
+	Diagnostics        []diagnostic.Result
+	Issue              *Issue
 }
 
 type CollectionStep struct {
@@ -173,6 +175,13 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 		totalRecords += len(filtered.Records)
 	}
 
+	if schedulingEvidence, scheduling, schedulingRefs := s.collectSchedulingEvidence(ctx, spec, preflight, now, window); len(schedulingEvidence) > 0 || len(scheduling) > 0 {
+		result.SchedulingEvidence = schedulingEvidence
+		result.Scheduling = scheduling
+		evidenceRefs = append(evidenceRefs, schedulingRefs...)
+		totalRecords += len(schedulingEvidence)
+	}
+
 	result.EvidenceRefs = evidenceRefs
 	result.Observations = observations
 	if issue := s.applyEvidenceRetention(ctx, spec.EvidenceRetention, &result, now); issue != nil {
@@ -191,6 +200,7 @@ func (s *Service) evaluateDiagnostics(ctx context.Context, preflight PreflightRe
 	input := diagnostic.EvidenceSet{
 		Observations: append([]domain.Observation(nil), evidence.Observations...),
 		EvidenceRefs: append([]v1alpha1.EvidenceRef(nil), evidence.EvidenceRefs...),
+		Scheduling:   append([]diagnostic.SchedulingObservation(nil), evidence.Scheduling...),
 	}
 	if len(s.DiagnosticPlanner.Candidates(input)) == 0 {
 		return nil
@@ -200,6 +210,121 @@ func (s *Service) evaluateDiagnostics(ctx context.Context, preflight PreflightRe
 		input.Scope = resolved
 	}
 	return s.DiagnosticPlanner.Evaluate(input)
+}
+
+// collectSchedulingEvidence invokes one optional collector for the complete
+// investigation scope. The result is shared by all diagnostics, preserving a
+// single bounded collection budget instead of querying once per diagnostic.
+func (s *Service) collectSchedulingEvidence(ctx context.Context, spec v1alpha1.InvestigationRequestSpec, preflight PreflightResult, now time.Time, window time.Duration) ([]domain.SchedulingEvidence, []diagnostic.SchedulingObservation, []v1alpha1.EvidenceRef) {
+	if s.Registry == nil {
+		return nil, nil, nil
+	}
+	pods, ok := s.resolveSchedulingPodRefs(ctx, preflight)
+	if !ok || len(pods) == 0 {
+		return nil, nil, nil
+	}
+	var collector datasource.SchedulingEvidenceCollector
+	sourceNames := append([]string(nil), preflight.DatasourceNames...)
+	if len(sourceNames) == 0 {
+		seen := map[string]struct{}{}
+		for _, step := range preflight.CollectionPlan {
+			if step.DatasourceName == "" {
+				continue
+			}
+			if _, exists := seen[step.DatasourceName]; exists {
+				continue
+			}
+			seen[step.DatasourceName] = struct{}{}
+			sourceNames = append(sourceNames, step.DatasourceName)
+		}
+	}
+	for _, name := range sourceNames {
+		source, exists := s.Registry.Get(name)
+		if !exists {
+			continue
+		}
+		if candidate, supports := source.(datasource.SchedulingEvidenceCollector); supports {
+			if !schedulingCollectionWithinBudget(spec.QueryBudget, preflight.CollectionPlan, name) {
+				return nil, nil, nil
+			}
+			collector = candidate
+			break
+		}
+	}
+	if collector == nil {
+		return nil, nil, nil
+	}
+	limits := domain.SchedulingEvidenceLimits{
+		MaxPods:        len(pods),
+		MaxEvents:      int(spec.QueryBudget.ResultLimits.Events.MaxRecords),
+		MaxPages:       10,
+		MaxAPIRequests: 64,
+	}
+	collection, _ := collector.CollectSchedulingEvidence(ctx, domain.SchedulingEvidenceRequest{
+		Namespace: preflight.Target.Namespace,
+		Pods:      pods,
+		StartTime: now.Add(-window),
+		EndTime:   now,
+		Limits:    limits,
+	})
+	observations, refs := adaptSchedulingEvidence(collection.Evidence)
+	return collection.Evidence, observations, refs
+}
+
+func schedulingCollectionWithinBudget(budget v1alpha1.InvestigationQueryBudget, plan []CollectionStep, sourceName string) bool {
+	// Scheduling evidence is one shared investigation-level collection. Count
+	// that collection before invoking it so a Diagnostic registry cannot bypass
+	// the public query budget by adding another evaluator.
+	if budget.MaxQueriesTotal > 0 && int32(len(plan)+1) > budget.MaxQueriesTotal {
+		return false
+	}
+	if budget.MaxQueriesPerSource <= 0 {
+		return true
+	}
+	count := int32(0)
+	for _, step := range plan {
+		if step.DatasourceName == sourceName {
+			count++
+		}
+	}
+	return count+1 <= budget.MaxQueriesPerSource
+}
+
+func (s *Service) resolveSchedulingPodRefs(ctx context.Context, preflight PreflightResult) ([]domain.SchedulingPodRef, bool) {
+	if s == nil || s.Client == nil {
+		return nil, false
+	}
+	if strings.EqualFold(strings.TrimSpace(preflight.Target.Kind), "Pod") {
+		var pod corev1.Pod
+		if err := s.Client.Get(ctx, types.NamespacedName{Namespace: preflight.Target.Namespace, Name: preflight.Target.Name}, &pod); err != nil {
+			return nil, false
+		}
+		if pod.UID == "" {
+			return nil, false
+		}
+		return []domain.SchedulingPodRef{{Namespace: pod.Namespace, Name: pod.Name, UID: string(pod.UID)}}, true
+	}
+	if !strings.EqualFold(strings.TrimSpace(preflight.Target.Kind), "Deployment") || s.ScopeResolver == nil {
+		return nil, false
+	}
+	resolved, err := s.ScopeResolver.ResolveDeployment(ctx, preflight.Target.Namespace, preflight.Target.Name)
+	if err != nil && len(resolved.Pods) == 0 {
+		return nil, false
+	}
+	refs := make([]domain.SchedulingPodRef, 0, len(resolved.Pods))
+	for _, pod := range resolved.Pods {
+		if pod.UID == "" {
+			continue
+		}
+		refs = append(refs, domain.SchedulingPodRef{Namespace: pod.Namespace, Name: pod.Name, UID: string(pod.UID)})
+	}
+	sort.SliceStable(refs, func(i, j int) bool {
+		if refs[i].Namespace != refs[j].Namespace {
+			return refs[i].Namespace < refs[j].Namespace
+		}
+		return refs[i].Name < refs[j].Name
+	})
+	return refs, true
 }
 
 func (s *Service) applyEvidenceRetention(ctx context.Context, policy v1alpha1.EvidenceRetentionPolicy, result *EvidenceCollectionResult, now time.Time) *Issue {
@@ -703,6 +828,8 @@ func applyProviderDataPolicy(provider *v1alpha1.ModelProvider, evidenceResult Ev
 	filtered := evidenceResult
 	filtered.EvidenceRefs = filterEvidenceRefsForProviderPolicy(evidenceResult.EvidenceRefs, policy)
 	filtered.Observations = filterObservationsForProviderPolicy(evidenceResult.Observations, policy)
+	filtered.SchedulingEvidence = filterSchedulingEvidenceForEvidence(evidenceResult.SchedulingEvidence, filtered.EvidenceRefs)
+	filtered.Scheduling = filterSchedulingObservationsForEvidence(evidenceResult.Scheduling, filtered.EvidenceRefs)
 	filtered.Diagnostics = filterDiagnosticResultsForEvidence(evidenceResult.Diagnostics, filtered.EvidenceRefs)
 	if !policy.AllowExternalTransmission {
 		decision := dataclassification.EvaluateProviderPolicy(policy, filtered.EvidenceRefs)
@@ -727,6 +854,61 @@ func applyProviderDataPolicy(provider *v1alpha1.ModelProvider, evidenceResult Ev
 	}
 	filtered.Summary = fmt.Sprintf("%s; provider data policy retained %d evidence refs", evidenceResult.Summary, len(filtered.EvidenceRefs))
 	return filtered, nil
+}
+
+func filterSchedulingEvidenceForEvidence(records []domain.SchedulingEvidence, refs []v1alpha1.EvidenceRef) []domain.SchedulingEvidence {
+	if len(records) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		if ref.ID != "" {
+			allowed[ref.ID] = struct{}{}
+		}
+	}
+	filtered := make([]domain.SchedulingEvidence, 0, len(records))
+	for _, record := range records {
+		_, recordAllowed := allowed[record.ID]
+		copyRecord := record
+		copyRecord.Events = nil
+		for _, event := range record.Events {
+			if _, ok := allowed[event.ID]; ok {
+				copyRecord.Events = append(copyRecord.Events, event)
+			}
+		}
+		if !recordAllowed && len(copyRecord.Events) == 0 {
+			continue
+		}
+		filtered = append(filtered, copyRecord)
+	}
+	return filtered
+}
+
+func filterSchedulingObservationsForEvidence(observations []diagnostic.SchedulingObservation, refs []v1alpha1.EvidenceRef) []diagnostic.SchedulingObservation {
+	if len(observations) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		if ref.ID != "" {
+			allowed[ref.ID] = struct{}{}
+		}
+	}
+	filtered := make([]diagnostic.SchedulingObservation, 0, len(observations))
+	for _, observation := range observations {
+		copyObservation := observation
+		copyObservation.EvidenceRefs = nil
+		for _, refID := range observation.EvidenceRefs {
+			if _, ok := allowed[refID]; ok {
+				copyObservation.EvidenceRefs = append(copyObservation.EvidenceRefs, refID)
+			}
+		}
+		if len(observation.EvidenceRefs) > 0 && len(copyObservation.EvidenceRefs) == 0 {
+			continue
+		}
+		filtered = append(filtered, copyObservation)
+	}
+	return filtered
 }
 
 func filterDiagnosticResultsForEvidence(results []diagnostic.Result, refs []v1alpha1.EvidenceRef) []diagnostic.Result {

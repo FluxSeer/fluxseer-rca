@@ -220,6 +220,143 @@ func TestServiceEvaluatesComposableImagePullDiagnosticAfterEvidenceCollection(t 
 	}
 }
 
+func TestServiceComposesImagePullAndSchedulingDiagnosticsWithIsolatedClaims(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	controller := true
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "prod", UID: "deployment-1"},
+		Spec: appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}}, Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "web"}},
+		}},
+	}
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-rs", Namespace: "prod", UID: "replicaset-1", Labels: map[string]string{"app": "web"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: "web", UID: deployment.UID, Controller: &controller}},
+	}}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-pod", Namespace: "prod", UID: "pod-1", Labels: map[string]string{"app": "web"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "web-rs", UID: replicaSet.UID, Controller: &controller}},
+	}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, replicaSet, pod).Build()
+	now := time.Date(2026, 10, 20, 2, 0, 0, 0, time.UTC)
+	source := &schedulingFakeDataSource{
+		fakeDataSource: fakeDataSource{
+			name:      "kubernetes-events",
+			queryType: domain.QueryTypeEvent,
+			records:   []map[string]any{{"reason": "ErrImagePull", "message": "failed to pull image"}},
+		},
+		evidence: []domain.SchedulingEvidence{{
+			ID: "pod/pod-1", PodUID: "pod-1", Namespace: "prod", Name: "web-pod", Source: "kubernetes/pod",
+			Phase: "Pending", PodScheduledStatus: "False", PodScheduledReason: "Unschedulable", PodScheduledMessage: "0/1 nodes are available: Insufficient cpu.",
+			Coverage: domain.SchedulingCoverageComplete, CollectedAt: now,
+			Events: []domain.SchedulingEvent{{ID: "events/sched-1", UID: "sched-1", PodUID: "pod-1", Source: "kubernetes/events-v1", Reason: "FailedScheduling", Message: "0/1 nodes are available: Insufficient cpu.", ObservedAt: now}},
+		}},
+	}
+	service := &Service{
+		Client:            reader,
+		Registry:          datasource.NewRegistry(source),
+		DiagnosticPlanner: diagnostic.DefaultPlanner(),
+		ScopeResolver:     scope.NewResolver(reader, scope.Limits{}),
+	}
+	preflight := PreflightResult{
+		Target:          domain.ResourceRef{Namespace: "prod", Kind: "Deployment", Name: "web"},
+		DatasourceNames: []string{"kubernetes-events"},
+		CollectionPlan:  []CollectionStep{{Name: "kubernetes-events", DatasourceName: "kubernetes-events", QueryType: domain.QueryTypeEvent, Query: "events"}},
+	}
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{Target: v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "web"}}, preflight, now)
+	if err != nil {
+		t.Fatalf("collect evidence failed: %v", err)
+	}
+	if result.Issue != nil {
+		t.Fatalf("unexpected collection issue: %#v", result.Issue)
+	}
+	if source.calls != 1 {
+		t.Fatalf("expected one shared scheduling collection, got %d", source.calls)
+	}
+	if len(result.SchedulingEvidence) != 1 || len(result.Scheduling) != 1 {
+		t.Fatalf("expected one normalized scheduling record, got raw=%#v adapted=%#v", result.SchedulingEvidence, result.Scheduling)
+	}
+	if len(result.Diagnostics) != 2 || result.Diagnostics[0].DiagnosticID != "image-pull" || result.Diagnostics[1].DiagnosticID != "scheduling" {
+		t.Fatalf("expected image-pull and scheduling diagnostics, got %#v", result.Diagnostics)
+	}
+	var scheduling diagnostic.Result
+	for _, candidate := range result.Diagnostics {
+		if candidate.DiagnosticID == "scheduling" {
+			scheduling = candidate
+		}
+		if candidate.DiagnosticID == "image-pull" {
+			for _, claim := range candidate.Claims {
+				for _, ref := range claim.EvidenceRefs {
+					if strings.HasPrefix(ref, "pod/") || strings.HasPrefix(ref, "events/") {
+						t.Fatalf("image-pull claim was contaminated by scheduling evidence: %#v", claim)
+					}
+				}
+			}
+		}
+	}
+	if len(scheduling.Claims) == 0 {
+		t.Fatalf("expected scheduling claims, got %#v", scheduling)
+	}
+	for _, claim := range scheduling.Claims {
+		if claim.TargetUID != "pod-1" {
+			t.Fatalf("expected scheduling claim to preserve Pod UID, got %#v", claim)
+		}
+		for _, ref := range claim.EvidenceRefs {
+			if ref != "pod/pod-1" && ref != "events/sched-1" {
+				t.Fatalf("unexpected scheduling evidence ref %q in %#v", ref, claim)
+			}
+		}
+	}
+}
+
+func TestServiceCollectsSchedulingEvidenceForPodTarget(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pending", Namespace: "prod", UID: "pod-pending"}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+	source := &schedulingFakeDataSource{
+		fakeDataSource: fakeDataSource{name: "kubernetes-events", queryType: domain.QueryTypeEvent},
+		evidence: []domain.SchedulingEvidence{{
+			ID: "pod/pod-pending", PodUID: "pod-pending", Namespace: "prod", Name: "pending", Coverage: domain.SchedulingCoverageComplete,
+		}},
+	}
+	service := &Service{Client: reader, Registry: datasource.NewRegistry(source), DiagnosticPlanner: diagnostic.DefaultPlanner()}
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{Target: v1alpha1.TargetRef{Namespace: "prod", Kind: "Pod", Name: "pending"}}, PreflightResult{
+		Target:          domain.ResourceRef{Namespace: "prod", Kind: "Pod", Name: "pending"},
+		DatasourceNames: []string{"kubernetes-events"},
+		CollectionPlan:  []CollectionStep{{DatasourceName: "kubernetes-events", QueryType: domain.QueryTypeEvent, Query: "events"}},
+	}, time.Date(2026, 10, 20, 2, 0, 0, 0, time.UTC))
+	if err != nil || result.Issue != nil {
+		t.Fatalf("unexpected Pod-target collection result: err=%v issue=%#v", err, result.Issue)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].DiagnosticID != "scheduling" {
+		t.Fatalf("expected Pod target to select scheduling diagnostic, got %#v", result.Diagnostics)
+	}
+	if source.calls != 1 {
+		t.Fatalf("expected one Pod-target scheduling collection, got %d", source.calls)
+	}
+}
+
+func TestSchedulingCollectionSharesInvestigationQueryBudget(t *testing.T) {
+	if schedulingCollectionWithinBudget(v1alpha1.InvestigationQueryBudget{MaxQueriesTotal: 1}, []CollectionStep{{DatasourceName: "kubernetes-events"}}, "kubernetes-events") {
+		t.Fatal("expected implicit scheduling collection to consume the investigation query budget")
+	}
+	if schedulingCollectionWithinBudget(v1alpha1.InvestigationQueryBudget{MaxQueriesPerSource: 1}, []CollectionStep{{DatasourceName: "kubernetes-events"}}, "kubernetes-events") {
+		t.Fatal("expected scheduling collection to consume the datasource query budget")
+	}
+	if !schedulingCollectionWithinBudget(v1alpha1.InvestigationQueryBudget{MaxQueriesTotal: 2, MaxQueriesPerSource: 2}, []CollectionStep{{DatasourceName: "kubernetes-events"}}, "kubernetes-events") {
+		t.Fatal("expected one declared query plus one shared scheduling collection to fit the budget")
+	}
+}
+
 func TestServiceReusesImagePullDiagnosticAcrossDeploymentAndPodTargets(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
@@ -308,6 +445,23 @@ func TestProviderEvidencePolicyFiltersDiagnosticClaimsWithRemovedEvidence(t *tes
 	removed := filterDiagnosticResultsForEvidence(results, nil)
 	if len(removed) != 1 || len(removed[0].Claims) != 0 {
 		t.Fatalf("expected claim to be removed when all evidence is filtered, got %#v", removed)
+	}
+}
+
+func TestProviderEvidencePolicyFiltersSchedulingEvidenceByReferences(t *testing.T) {
+	evidence := EvidenceCollectionResult{
+		SchedulingEvidence: []domain.SchedulingEvidence{{
+			ID: "pod/pod-1", PodUID: "pod-1", Events: []domain.SchedulingEvent{{ID: "events/sched-1", PodUID: "pod-1"}},
+		}},
+		Scheduling: []diagnostic.SchedulingObservation{{PodUID: "pod-1", EvidenceRefs: []string{"pod/pod-1", "events/sched-1"}}},
+	}
+	filtered := filterSchedulingEvidenceForEvidence(evidence.SchedulingEvidence, []v1alpha1.EvidenceRef{{ID: "events/sched-1"}})
+	if len(filtered) != 1 || len(filtered[0].Events) != 1 || filtered[0].Events[0].ID != "events/sched-1" {
+		t.Fatalf("expected scheduling raw evidence to retain only authorized event refs, got %#v", filtered)
+	}
+	filteredObservations := filterSchedulingObservationsForEvidence(evidence.Scheduling, []v1alpha1.EvidenceRef{{ID: "events/sched-1"}})
+	if len(filteredObservations) != 1 || len(filteredObservations[0].EvidenceRefs) != 1 || filteredObservations[0].EvidenceRefs[0] != "events/sched-1" {
+		t.Fatalf("expected scheduling observation refs to follow provider policy, got %#v", filteredObservations)
 	}
 }
 
@@ -2187,6 +2341,17 @@ type fakeDataSource struct {
 	queryPolicy          v1alpha1.DataSourceQueryPolicy
 	nativeLimit          *datasource.NativeResultLimit
 	classification       v1alpha1.DataClassification
+}
+
+type schedulingFakeDataSource struct {
+	fakeDataSource
+	evidence []domain.SchedulingEvidence
+	calls    int
+}
+
+func (f *schedulingFakeDataSource) CollectSchedulingEvidence(context.Context, domain.SchedulingEvidenceRequest) (domain.SchedulingEvidenceResult, error) {
+	f.calls++
+	return domain.SchedulingEvidenceResult{Evidence: append([]domain.SchedulingEvidence(nil), f.evidence...)}, nil
 }
 
 type capturingModelProvider struct {
