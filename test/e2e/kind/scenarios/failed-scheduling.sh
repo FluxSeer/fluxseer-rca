@@ -67,13 +67,14 @@ EOF
   scenario_wait_jsonpath_equals "Pending Pod observed" "pod/${target_name}" "${namespace}" '{.status.phase}' Pending
   scenario_wait_event_fragment "${namespace}" "${target_name}" FailedScheduling "Insufficient memory"
   scenario_wait_request_contract "${namespace}" "${rule_name}" \
-    Confirmed SchedulingFailure kubernetes-events FailedScheduling
+    Inconclusive "" kubernetes-events FailedScheduling
   request_name="${SCENARIO_REQUEST_NAME}"
   scenario_wait_request_terminal "${namespace}" "${request_name}"
   scenario_wait_converged "${namespace}" "${rule_name}" "${request_name}"
   scenario_assert_contract "${namespace}" "${rule_name}" "${request_name}" \
-    Confirmed SchedulingFailure "v1/Pod/${namespace}/${target_name}" 1 kubernetes-events FailedScheduling
-  scenario_wait_signal_for_request "${namespace}" "${rule_name}" "${request_name}"
+    Inconclusive "" "" 0 kubernetes-events FailedScheduling
+  scenario_assert_claim "${namespace}" "${request_name}" \
+    claim-scheduling-mechanism Supported "SchedulingUnschedulable is confirmed by"
   scenario_capture_case "failed-scheduling" "${namespace}" "${rule_name}" "${request_name}" Pod "${target_name}"
   scenario_cleanup_namespace "${namespace}"
 }
