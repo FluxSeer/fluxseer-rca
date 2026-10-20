@@ -373,7 +373,8 @@ func evaluateEvidenceRequirements(spec v1alpha1.InvestigationRequestSpec, eviden
 	}
 	missing := make([]v1alpha1.RCAMissingEvidence, 0)
 	for _, kind := range requiredKinds {
-		if !present[kind] && !(isSchedulingProfile(profile) && kind == string(domain.QueryTypeEvent) && present["scheduling"]) {
+		schedulingEventSatisfied := isSchedulingProfile(profile) && kind == string(domain.QueryTypeEvent) && present["scheduling"]
+		if !present[kind] && !schedulingEventSatisfied {
 			missing = append(missing, v1alpha1.RCAMissingEvidence{
 				Source: kind,
 				Reason: "RequiredEvidenceMissing",

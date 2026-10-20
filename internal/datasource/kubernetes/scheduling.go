@@ -231,10 +231,10 @@ func normalizeSchedulingPodRefs(namespace string, refs []SchedulingPodRef) ([]Sc
 		ref.Name = strings.TrimSpace(ref.Name)
 		ref.UID = strings.TrimSpace(ref.UID)
 		if ref.Namespace != namespace {
-			return nil, fmt.Errorf("Pod %s/%s is outside authorized namespace %q", ref.Namespace, ref.Name, namespace)
+			return nil, fmt.Errorf("pod %s/%s is outside authorized namespace %q", ref.Namespace, ref.Name, namespace)
 		}
 		if ref.Name == "" {
-			return nil, fmt.Errorf("Pod name is required")
+			return nil, fmt.Errorf("pod name is required")
 		}
 		key := ref.Namespace + "/" + ref.Name + "/" + ref.UID
 		if _, ok := seen[key]; ok {
@@ -482,10 +482,10 @@ func normalizeCoreSchedulingEvent(event corev1.Event) domain.SchedulingEvent {
 }
 
 func normalizeV1SchedulingEvent(event eventsv1.Event) domain.SchedulingEvent {
-	observed := event.EventTime.Time.UTC()
+	observed := event.EventTime.UTC()
 	last := observed
 	if event.Series != nil && !event.Series.LastObservedTime.IsZero() {
-		last = event.Series.LastObservedTime.Time.UTC()
+		last = event.Series.LastObservedTime.UTC()
 	}
 	return domain.SchedulingEvent{ID: schedulingEventID("events", event.Namespace, event.Name, event.UID), UID: string(event.UID), PodUID: string(event.Regarding.UID), Source: "kubernetes/events-v1", Reason: event.Reason, Message: event.Note, Type: event.Type, ObservedAt: observed, LastObservedAt: last, TimeKnown: !observed.IsZero()}
 }
