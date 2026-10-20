@@ -1,6 +1,6 @@
 # ADR 0002: Scheduling Diagnostic and Replay-first Composition
 
-- **Status:** Phase 2C runtime implemented locally; live qualification pending
+- **Status:** Phase 2E live qualification completed locally; PASS_WITH_RISKS
 - **Date:** 2026-10-20
 - **Branch:** `feat/scheduling-diagnostic`
 - **Related:** [ADR 0001](0001-composable-diagnostics.md)
@@ -150,7 +150,7 @@ name-only evidence from entering a report. The implicit collection consumes the
 existing investigation query budget before it runs.
 
 Phase 2C runtime qualification is replay/component based in this slice. Live
-Kubernetes qualification and Node evidence remain pending.
+Kubernetes qualification and Node evidence remain separate gates.
 
 ## Replay-first qualification
 
@@ -212,6 +212,38 @@ Phase 2 records baseline values without claiming an optimization:
 The baseline is diagnostic metadata and test output first. Any runtime metric
 addition must preserve existing metric labels and contracts.
 
+## Phase 2E local live qualification result
+
+The final run is retained under
+`reports/runtime/v0.5-alpha1-proxmox-k8s134/phase2e-live-20261020-r2/` and
+used Kubernetes `v1.34.1` on the dedicated `fluxseer-k8s134` cluster. It ran
+three independent read-only Pod scenarios plus an investigation-budget
+exhaustion case:
+
+- an affinity/taint scheduling failure retained Pod and UID-correlated
+  `FailedScheduling` evidence and emitted scheduler, affinity, and taint
+  candidates as `DiagnosticCandidateUnverified`;
+- a Pod with an active scheduling gate emitted a gate candidate without an
+  `Unschedulable` candidate;
+- an assigned Pod with `ErrImagePull` retained ImagePull evidence and did not
+  emit a scheduling failure candidate;
+- `maxQueriesTotal: 1` preserved the declared event evidence and added an
+  explicit `truncated=true` scheduling reference with reason
+  `InvestigationQueryBudgetExhausted` without invoking the extra collector or
+  fabricating Pod state.
+
+All four requests completed `Inconclusive`, with no `RiskSignal`, remediation,
+or workload mutation. The first run exposed a deployment RBAC gap for
+`events.k8s.io/events`; the chart now grants only read-only get/list/watch for
+that API, and the test ClusterRole was patched before the final run. The
+public reports, raw requests, raw Pod/Event objects, final status, metrics
+snapshot, and effective RBAC are retained beside the qualification summary.
+
+This is local live acceptance only. The current public status does not set the
+`Degraded` condition for a query-budget skip, and the metrics endpoint does not
+yet expose a separate scheduling-collector API-call series; both remain
+follow-up risks before remote/release acceptance.
+
 ## Definition of Done
 
 - `SchedulingDiagnostic` is pure and deterministic for the same normalized
@@ -229,8 +261,10 @@ addition must preserve existing metric labels and contracts.
 - No new public CRD or report schema field is required.
 - No unauthorized Node reads, RiskSignal creation, remediation, or workload
   mutation occurs.
-- Live qualification of at least one real scheduling failure and cleanup is
-  still required before remote/release acceptance.
+- Local live qualification of real scheduling failure, scheduling gate,
+  ImagePull isolation, and budget exhaustion is complete. Remote/release
+  acceptance still requires CI/PR verification and review of the remaining
+  coverage and metrics risks.
 - Existing Phase 1/1.5, CrashLoopBackOff, hardening, and schema checks remain
   green.
 - Baseline measurement dimensions are defined; live values and performance
