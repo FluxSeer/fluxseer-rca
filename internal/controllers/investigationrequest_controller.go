@@ -19,6 +19,7 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/canonicaldigest"
 	"github.com/FluxSeer/fluxseer-rca/internal/dataclassification"
+	"github.com/FluxSeer/fluxseer-rca/internal/diagnostic"
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
 	"github.com/FluxSeer/fluxseer-rca/internal/investigation"
@@ -1585,11 +1586,28 @@ func applyStructuredRCAStatus(request *v1alpha1.InvestigationRequest, preflight 
 	request.Status.Confidence = evaluation.Confidence
 	request.Status.Outcome = evaluation.Outcome
 	request.Status.Claims = claims
-	request.Status.AlternativeHypotheses = nil
+	request.Status.AlternativeHypotheses = diagnosticAlternativeHypotheses(evidence.Diagnostics)
 	request.Status.MissingEvidence = evaluation.MissingEvidence
 	request.Status.Degradation = &v1alpha1.RCADegradation{Partial: false}
 	request.Status.Execution = buildRCAExecution(request, preflight, evidence, rca, investigationExecutionID(request, preflight, evidence), executionStateFinalized, now)
 	request.Status.Execution.VerifierVersion = verification.Method
+}
+
+func diagnosticAlternativeHypotheses(results []diagnostic.Result) []v1alpha1.RCAAlternativeHypothesis {
+	hypotheses := make([]v1alpha1.RCAAlternativeHypothesis, 0)
+	for _, result := range results {
+		for _, claim := range result.Claims {
+			if claim.Type == diagnostic.ClaimObservation || strings.TrimSpace(claim.Statement) == "" {
+				continue
+			}
+			hypotheses = append(hypotheses, v1alpha1.RCAAlternativeHypothesis{
+				Statement:    claim.Statement,
+				Disposition:  "DiagnosticCandidateUnverified",
+				EvidenceRefs: append([]string(nil), claim.EvidenceRefs...),
+			})
+		}
+	}
+	return hypotheses
 }
 
 func investigationOutcomeAllowsRiskSignalProjection(outcome string) bool {
