@@ -219,6 +219,21 @@ func (s *Service) evaluateDiagnostics(ctx context.Context, preflight PreflightRe
 	if s.ScopeResolver != nil && strings.EqualFold(strings.TrimSpace(preflight.Target.Kind), "Deployment") {
 		resolved, _ := s.ScopeResolver.ResolveDeployment(ctx, preflight.Target.Namespace, preflight.Target.Name)
 		input.Scope = resolved
+	} else if strings.EqualFold(strings.TrimSpace(preflight.Target.Kind), "Pod") {
+		// Pod targets have no ownership traversal, but a validated API read still
+		// provides the UID needed to scope ImagePull candidates safely.
+		if pods, ok := s.resolveSchedulingPodRefs(ctx, preflight); ok && len(pods) == 1 && strings.TrimSpace(pods[0].UID) != "" {
+			input.Scope = scope.Result{
+				Pods: []scope.ResourceRef{{
+					APIVersion: "v1",
+					Kind:       "Pod",
+					Namespace:  pods[0].Namespace,
+					Name:       pods[0].Name,
+					UID:        types.UID(pods[0].UID),
+				}},
+				Complete: true,
+			}
+		}
 	}
 	results := s.DiagnosticPlanner.Evaluate(input)
 	for _, result := range results {

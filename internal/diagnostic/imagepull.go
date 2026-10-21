@@ -127,7 +127,7 @@ func (d ImagePullDiagnostic) Evaluate(evidence EvidenceSet) Result {
 // scope can safely identify the target; a Deployment with multiple Pods must
 // remain unscoped until evidence correlation supplies a UID.
 func imagePullTargetUID(evidence EvidenceSet) string {
-	if len(evidence.Scope.Pods) != 1 {
+	if !evidence.Scope.Complete || len(evidence.Scope.Pods) != 1 {
 		return ""
 	}
 	return strings.TrimSpace(string(evidence.Scope.Pods[0].UID))
