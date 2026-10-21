@@ -1,6 +1,7 @@
 package investigation
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"time"
@@ -25,7 +26,11 @@ const (
 	shadowVerificationSkipped             = "Skipped"
 	shadowVerificationErrorReconciliation = "ReconciliationNotCompleted"
 	shadowVerificationErrorEvidence       = "TrustedEvidenceUnavailable"
+	shadowVerificationErrorPanic          = "ShadowVerifierPanic"
+	shadowVerificationErrorContext        = "ShadowVerifierContextDeadline"
 )
+
+const shadowVerificationTimeout = 5 * time.Second
 
 // ShadowClaimVerification carries candidate lineage alongside the existing
 // verifier result. It is internal and intentionally not serialized to the
@@ -56,6 +61,60 @@ type ShadowVerificationResult struct {
 type ShadowVerificationInput struct {
 	Reconciliation CandidateReconciliationResult
 	EvidenceRefs   []v1alpha1.EvidenceRef
+}
+
+// runShadowVerificationSafely keeps the shadow path fail-closed and bounded.
+// It is intentionally separate from VerifyReconciledCandidates so tests can
+// exercise panic and deadline isolation without changing the pure verifier.
+// The result channel is buffered: a verifier that finishes after a deadline
+// cannot block its worker while the legacy pipeline continues.
+func runShadowVerificationSafely(ctx context.Context, input ShadowVerificationInput, verify func(ShadowVerificationInput) ShadowVerificationResult) (result ShadowVerificationResult) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if verify == nil {
+		verify = VerifyReconciledCandidates
+	}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, shadowVerificationTimeout)
+		defer cancel()
+	}
+	if err := ctx.Err(); err != nil {
+		return ShadowVerificationResult{Status: ShadowVerificationFailed, Error: shadowVerificationErrorContext}
+	}
+	input = cloneShadowVerificationInput(input)
+
+	results := make(chan ShadowVerificationResult, 1)
+	go func() {
+		defer func() {
+			if recover() != nil {
+				results <- ShadowVerificationResult{Status: ShadowVerificationFailed, Error: shadowVerificationErrorPanic}
+			}
+		}()
+		results <- verify(input)
+	}()
+	select {
+	case result = <-results:
+		return result
+	case <-ctx.Done():
+		return ShadowVerificationResult{Status: ShadowVerificationFailed, Error: shadowVerificationErrorContext}
+	}
+}
+
+func cloneShadowVerificationInput(input ShadowVerificationInput) ShadowVerificationInput {
+	clone := ShadowVerificationInput{
+		Reconciliation: input.Reconciliation,
+		EvidenceRefs:   append([]v1alpha1.EvidenceRef(nil), input.EvidenceRefs...),
+	}
+	clone.Reconciliation.Records = make([]diagnostic.CandidateRecord, len(input.Reconciliation.Records))
+	for index, record := range input.Reconciliation.Records {
+		clone.Reconciliation.Records[index] = record
+		clone.Reconciliation.Records[index].Candidate.EvidenceRefs = append([]string(nil), record.Candidate.EvidenceRefs...)
+		clone.Reconciliation.Records[index].Evidence = append([]diagnostic.EvidenceIdentity(nil), record.Evidence...)
+	}
+	clone.Reconciliation.Accounting.Resolutions = append([]diagnostic.CandidateResolution(nil), input.Reconciliation.Accounting.Resolutions...)
+	return clone
 }
 
 // VerifyReconciledCandidates sends only ProposedClaim resolutions through the
@@ -269,6 +328,9 @@ func verifierStatement(record diagnostic.CandidateRecord) string {
 	// lineage while using the canonical verifier vocabulary in Shadow Mode.
 	if record.DiagnosticID == "scheduling" && record.Candidate.Type == diagnostic.ClaimFailureMechanism && strings.HasPrefix(record.Candidate.ID, "scheduling-mechanism-unschedulable/") {
 		return "SchedulingUnschedulable is confirmed by UID-correlated scheduler condition or FailedScheduling evidence."
+	}
+	if record.DiagnosticID == "service-port" && record.Candidate.Type == diagnostic.ClaimRootCause && record.Candidate.ID == "service-port-mismatch" {
+		return "ServicePortMismatch is confirmed by Kubernetes Service targetPort and resolved workload/container port evidence."
 	}
 	return record.Candidate.Statement
 }

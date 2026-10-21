@@ -204,10 +204,10 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 		IncidentEnd:            now,
 	})
 	result.Reconciliation = &reconciliation
-	shadowVerification := VerifyReconciledCandidates(ShadowVerificationInput{
+	shadowVerification := runShadowVerificationSafely(ctx, ShadowVerificationInput{
 		Reconciliation: reconciliation,
 		EvidenceRefs:   result.EvidenceRefs,
-	})
+	}, VerifyReconciledCandidates)
 	result.ShadowVerification = &shadowVerification
 	return result, nil
 }

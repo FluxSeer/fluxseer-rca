@@ -1,12 +1,56 @@
 package investigation
 
 import (
+	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/diagnostic"
+	"github.com/FluxSeer/fluxseer-rca/internal/verifier"
 )
+
+func TestRunShadowVerificationSafelyContainsPanic(t *testing.T) {
+	result := runShadowVerificationSafely(context.Background(), ShadowVerificationInput{}, func(ShadowVerificationInput) ShadowVerificationResult {
+		panic("test shadow panic")
+	})
+	if result.Status != ShadowVerificationFailed || result.Error != shadowVerificationErrorPanic {
+		t.Fatalf("expected contained shadow panic, got %#v", result)
+	}
+}
+
+func TestRunShadowVerificationSafelyHonorsContextDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	started := make(chan struct{})
+	result := runShadowVerificationSafely(ctx, ShadowVerificationInput{}, func(ShadowVerificationInput) ShadowVerificationResult {
+		close(started)
+		<-ctx.Done()
+		return ShadowVerificationResult{Status: ShadowVerificationCompleted}
+	})
+	<-started
+	if result.Status != ShadowVerificationFailed || result.Error != shadowVerificationErrorContext {
+		t.Fatalf("expected deadline-isolated shadow result, got %#v", result)
+	}
+}
+
+func TestRunShadowVerificationSafelyKeepsLegacyInputUnchanged(t *testing.T) {
+	input := ShadowVerificationInput{
+		EvidenceRefs: []v1alpha1.EvidenceRef{{ID: "event-1", Kind: "event", Reason: "FailedScheduling", Summary: "scheduler event"}},
+	}
+	before := input
+	result := runShadowVerificationSafely(context.Background(), input, func(got ShadowVerificationInput) ShadowVerificationResult {
+		got.EvidenceRefs[0].Summary = "shadow-local-copy"
+		return ShadowVerificationResult{Status: ShadowVerificationCompleted}
+	})
+	if result.Status != ShadowVerificationCompleted {
+		t.Fatalf("expected shadow completion, got %#v", result)
+	}
+	if !reflect.DeepEqual(input, before) {
+		t.Fatalf("shadow verification mutated shared input: before=%#v after=%#v", before, input)
+	}
+}
 
 func TestVerifyReconciledCandidatesSupportsSchedulingMechanism(t *testing.T) {
 	reconciliation := ReconcileDiagnosticCandidates(reconciliationInput([]diagnostic.Result{
@@ -51,6 +95,38 @@ func TestVerifyReconciledCandidatesSupportsImagePullWithoutRootCauseInference(t 
 	}
 	if result.Claims[0].Verification == "Confirmed" {
 		t.Fatal("shadow verifier must not promote a diagnostic mechanism to Confirmed root cause")
+	}
+}
+
+func TestVerifyReconciledCandidatesSupportsServicePortDiagnostic(t *testing.T) {
+	reconciliation := ReconcileDiagnosticCandidates(reconciliationInput([]diagnostic.Result{
+		{
+			DiagnosticID:      "service-port",
+			DiagnosticVersion: "v1",
+			Claims: []diagnostic.CandidateClaim{{
+				ID:           "service-port-mismatch",
+				Type:         diagnostic.ClaimRootCause,
+				Statement:    "The Service targetPort does not match the resolved workload container port.",
+				TargetUID:    "pod-service",
+				EvidenceRefs: []string{"service-evidence"},
+			}},
+		},
+	}, reconciliationEvidence("service-evidence", "pod-service")))
+	result := VerifyReconciledCandidates(ShadowVerificationInput{
+		Reconciliation: reconciliation,
+		EvidenceRefs: []v1alpha1.EvidenceRef{{
+			ID:      "service-evidence",
+			Kind:    "serviceConfiguration",
+			Reason:  "ServicePortMismatch",
+			Summary: "Service targetPort does not match the workload container port.",
+		}},
+	})
+	if result.Status != ShadowVerificationCompleted || len(result.Claims) != 1 {
+		t.Fatalf("expected completed service-port shadow verification, got %#v", result)
+	}
+	claim := result.Claims[0]
+	if claim.Verification != verifier.VerificationSupported || claim.VerifierStatement == claim.Statement {
+		t.Fatalf("expected service-port canonical verifier vocabulary to be supported without replacing lineage, got %#v", claim)
 	}
 }
 

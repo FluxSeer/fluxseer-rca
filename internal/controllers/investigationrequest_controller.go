@@ -1156,7 +1156,17 @@ func (r *InvestigationRequestReconciler) collectEvidence(ctx context.Context, re
 			},
 		}, nil
 	}
-	return r.Service.CollectEvidence(ctx, request.Spec, preflight, now)
+	result, err := r.Service.CollectEvidence(ctx, request.Spec, preflight, now)
+	if err == nil && result.ShadowVerification != nil {
+		ctrl.LoggerFrom(ctx).Info("shadow verification completed",
+			"status", result.ShadowVerification.Status,
+			"claims", len(result.ShadowVerification.Claims),
+			"coverage", result.ShadowVerification.CoverageScore,
+			"method", result.ShadowVerification.Method,
+			"error", result.ShadowVerification.Error,
+		)
+	}
+	return result, err
 }
 
 func (r *InvestigationRequestReconciler) generateRCA(ctx context.Context, request *v1alpha1.InvestigationRequest, preflight investigation.PreflightResult, evidence investigation.EvidenceCollectionResult, now time.Time) (investigation.RCAResult, error) {

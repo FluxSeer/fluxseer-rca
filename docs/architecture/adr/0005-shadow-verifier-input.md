@@ -67,7 +67,26 @@ retained and rejected candidates, deduplicated candidates, UID isolation,
 conflicting evidence IDs, and deterministic ordering.
 
 Runtime tests confirm ImagePull and Scheduling candidates receive shadow
-verification while existing canonical RCA behavior remains unchanged.
+verification while existing canonical RCA behavior remains unchanged. The
+existing ServicePortMismatch path is represented by a bounded
+`ServicePortDiagnostic` candidate only when the service evidence can be scoped
+to one validated Pod; multi-Pod service evidence remains inconclusive rather
+than being assigned to an arbitrary target.
+
+The local live qualification on Kubernetes `v1.34.1` exercised
+ServicePortMismatch, FailedScheduling, ImagePull isolation, and the
+CrashLoopBackOffV2 missing-termination-evidence case with the current branch
+operator connected to the authorized test cluster. The controlled summary and
+per-case artifacts are retained under:
+
+`reports/runtime/v0.5-alpha1-proxmox-k8s134/phase3a3-live-20261021-r1/`
+
+All four cases completed shadow verification with full disposition coverage;
+canonical outcomes and RiskSignal behavior remained unchanged, and the
+temporary local operator was stopped before the original Helm deployment was
+restored. Panic, timeout, and shared-input mutation isolation are covered by
+replay/unit tests; live fault injection for those shadow failures remains
+unverified.
 
 Phase 3A-3 does not perform canonical cutover, add public schema fields, or
 introduce new Prometheus metrics.
