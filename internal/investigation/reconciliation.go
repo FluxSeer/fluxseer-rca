@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/FluxSeer/fluxseer-rca/internal/diagnostic"
+	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 )
 
 // ReconciliationStatus describes the runtime adapter boundary. It is kept
@@ -121,9 +122,28 @@ type CandidateReconciliationResult struct {
 }
 
 func (s *Service) reconciliationTargetUIDs(ctx context.Context, preflight PreflightResult) []string {
-	refs, ok := s.resolveSchedulingPodRefs(ctx, preflight)
-	if !ok {
-		return nil
+	var refs []domain.SchedulingPodRef
+	if strings.EqualFold(strings.TrimSpace(preflight.Target.Kind), "Deployment") {
+		if s == nil || s.ScopeResolver == nil {
+			return nil
+		}
+		resolved, err := s.ScopeResolver.ResolveDeployment(ctx, preflight.Target.Namespace, preflight.Target.Name)
+		if err != nil || !resolved.Complete {
+			return nil
+		}
+		refs = make([]domain.SchedulingPodRef, 0, len(resolved.Pods))
+		for _, pod := range resolved.Pods {
+			if pod.UID == "" {
+				continue
+			}
+			refs = append(refs, domain.SchedulingPodRef{Namespace: pod.Namespace, Name: pod.Name, UID: string(pod.UID)})
+		}
+	} else {
+		var ok bool
+		refs, ok = s.resolveSchedulingPodRefs(ctx, preflight)
+		if !ok {
+			return nil
+		}
 	}
 	seen := make(map[string]struct{}, len(refs))
 	uids := make([]string, 0, len(refs))
