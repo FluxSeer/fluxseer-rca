@@ -383,7 +383,34 @@ jobs:
             assert_equal org.opencontainers.image.version "$version" "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')"
             assert_equal org.opencontainers.image.revision "$git_commit" "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
             assert_equal org.opencontainers.image.created "$build_date" "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.created" }}')"
-            docker buildx imagetools inspect "$ref" | awk '/Digest:/ {print $2; exit}'
+            inspect_out="$(mktemp)"
+            inspect_err="$(mktemp)"
+            set +e
+            docker buildx imagetools inspect "$ref" >"$inspect_out" 2>"$inspect_err"
+            inspect_rc=$?
+            set -e
+            if [ "$inspect_rc" -ne 0 ]; then
+              echo "published image digest inspection failed" >&2
+              echo "image=$ref" >&2
+              echo "exit_code=$inspect_rc" >&2
+              echo "imagetools_stderr:" >&2
+              cat "$inspect_err" >&2
+              echo "imagetools_stdout:" >&2
+              cat "$inspect_out" >&2
+              rm -f "$inspect_out" "$inspect_err"
+              return "$inspect_rc"
+            fi
+            digest="$(awk '/^Digest:/ {print $2; exit}' "$inspect_out")"
+            if [ -z "$digest" ]; then
+              echo "published image digest was not found" >&2
+              echo "image=$ref" >&2
+              echo "imagetools_stdout:" >&2
+              cat "$inspect_out" >&2
+              rm -f "$inspect_out" "$inspect_err"
+              return 1
+            fi
+            rm -f "$inspect_out" "$inspect_err"
+            printf '%s\n' "$digest"
           }
 
           operator_digest="$(verify_image operator /fluxseer-rca-operator 'FluxSeer RCA')"
