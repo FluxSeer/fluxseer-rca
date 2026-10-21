@@ -81,7 +81,10 @@ type EvidenceCollectionResult struct {
 	// Reconciliation is internal shadow-mode lineage. It is deliberately not
 	// consumed by the canonical RCA/verifier path in Phase 3A-2.
 	Reconciliation *CandidateReconciliationResult
-	Issue          *Issue
+	// ShadowVerification is internal Phase 3A-3 output. It never participates
+	// in canonical verdict construction.
+	ShadowVerification *ShadowVerificationResult
+	Issue              *Issue
 }
 
 type CollectionStep struct {
@@ -201,6 +204,11 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 		IncidentEnd:            now,
 	})
 	result.Reconciliation = &reconciliation
+	shadowVerification := VerifyReconciledCandidates(ShadowVerificationInput{
+		Reconciliation: reconciliation,
+		EvidenceRefs:   result.EvidenceRefs,
+	})
+	result.ShadowVerification = &shadowVerification
 	return result, nil
 }
 

@@ -224,6 +224,14 @@ func TestServiceEvaluatesComposableImagePullDiagnosticAfterEvidenceCollection(t 
 	if len(result.Reconciliation.Records) != len(result.Diagnostics[0].Claims) || result.Reconciliation.Accounting.Summary.ProposedClaimCount != len(result.Diagnostics[0].Claims) {
 		t.Fatalf("expected every image-pull candidate to be proposed in shadow accounting, got %#v", result.Reconciliation)
 	}
+	if result.ShadowVerification == nil || result.ShadowVerification.Status != ShadowVerificationCompleted || len(result.ShadowVerification.Claims) != len(result.Diagnostics[0].Claims) {
+		t.Fatalf("expected image-pull candidates to enter shadow verifier, got %#v", result.ShadowVerification)
+	}
+	for _, claim := range result.ShadowVerification.Claims {
+		if claim.Verification != "Supported" {
+			t.Fatalf("expected image-pull shadow verification to be supported, got %#v", claim)
+		}
+	}
 }
 
 func TestServiceComposesImagePullAndSchedulingDiagnosticsWithIsolatedClaims(t *testing.T) {
@@ -314,6 +322,9 @@ func TestServiceComposesImagePullAndSchedulingDiagnosticsWithIsolatedClaims(t *t
 	}
 	if len(result.Reconciliation.Accounting.Resolutions) != len(result.Reconciliation.Records) || len(result.Reconciliation.Records) == 0 {
 		t.Fatalf("expected one lineage resolution per runtime candidate, got %#v", result.Reconciliation)
+	}
+	if result.ShadowVerification == nil || result.ShadowVerification.Status != ShadowVerificationCompleted {
+		t.Fatalf("expected completed multi-diagnostic shadow verification, got %#v", result.ShadowVerification)
 	}
 	for _, claim := range scheduling.Claims {
 		if claim.TargetUID != "pod-1" {
