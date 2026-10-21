@@ -386,7 +386,7 @@ jobs:
             docker buildx imagetools inspect "$ref" | awk '/Digest:/ {print $2; exit}'
           }
 
-          operator_digest="$(verify_image operator /fluxseer-rca-operator FluxSeer RCA)"
+          operator_digest="$(verify_image operator /fluxseer-rca-operator 'FluxSeer RCA')"
           demo_digest="$(verify_image demo-observability /demo-observability 'FluxSeer RCA Demo Observability')"
           echo "operator_digest=$operator_digest" >> "$GITHUB_OUTPUT"
           echo "demo_digest=$demo_digest" >> "$GITHUB_OUTPUT"
