@@ -75,11 +75,9 @@ func runShadowVerificationSafely(ctx context.Context, input ShadowVerificationIn
 	if verify == nil {
 		verify = VerifyReconciledCandidates
 	}
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, shadowVerificationTimeout)
-		defer cancel()
-	}
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, shadowVerificationTimeout)
+	defer cancel()
 	if err := ctx.Err(); err != nil {
 		return ShadowVerificationResult{Status: ShadowVerificationFailed, Error: shadowVerificationErrorContext}
 	}
@@ -105,7 +103,7 @@ func runShadowVerificationSafely(ctx context.Context, input ShadowVerificationIn
 func cloneShadowVerificationInput(input ShadowVerificationInput) ShadowVerificationInput {
 	clone := ShadowVerificationInput{
 		Reconciliation: input.Reconciliation,
-		EvidenceRefs:   append([]v1alpha1.EvidenceRef(nil), input.EvidenceRefs...),
+		EvidenceRefs:   cloneEvidenceRefs(input.EvidenceRefs),
 	}
 	clone.Reconciliation.Records = make([]diagnostic.CandidateRecord, len(input.Reconciliation.Records))
 	for index, record := range input.Reconciliation.Records {
@@ -114,6 +112,31 @@ func cloneShadowVerificationInput(input ShadowVerificationInput) ShadowVerificat
 		clone.Reconciliation.Records[index].Evidence = append([]diagnostic.EvidenceIdentity(nil), record.Evidence...)
 	}
 	clone.Reconciliation.Accounting.Resolutions = append([]diagnostic.CandidateResolution(nil), input.Reconciliation.Accounting.Resolutions...)
+	return clone
+}
+
+func cloneEvidenceRefs(refs []v1alpha1.EvidenceRef) []v1alpha1.EvidenceRef {
+	clone := make([]v1alpha1.EvidenceRef, len(refs))
+	for index, ref := range refs {
+		clone[index] = ref
+		clone[index].RelatedTargets = append([]v1alpha1.TargetRef(nil), ref.RelatedTargets...)
+		if ref.Classification != nil {
+			classification := *ref.Classification
+			classification.SensitivityTags = append([]string(nil), ref.Classification.SensitivityTags...)
+			clone[index].Classification = &classification
+		}
+		if ref.PayloadRef != nil {
+			payload := *ref.PayloadRef
+			if ref.PayloadRef.ExpiresAt != nil {
+				expiresAt := ref.PayloadRef.ExpiresAt.DeepCopy()
+				payload.ExpiresAt = expiresAt
+			}
+			clone[index].PayloadRef = &payload
+		}
+		if ref.CollectedAt != nil {
+			clone[index].CollectedAt = ref.CollectedAt.DeepCopy()
+		}
+	}
 	return clone
 }
 

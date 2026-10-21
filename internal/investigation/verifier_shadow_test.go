@@ -37,18 +37,33 @@ func TestRunShadowVerificationSafelyHonorsContextDeadline(t *testing.T) {
 
 func TestRunShadowVerificationSafelyKeepsLegacyInputUnchanged(t *testing.T) {
 	input := ShadowVerificationInput{
-		EvidenceRefs: []v1alpha1.EvidenceRef{{ID: "event-1", Kind: "event", Reason: "FailedScheduling", Summary: "scheduler event"}},
+		EvidenceRefs: []v1alpha1.EvidenceRef{{
+			ID:      "event-1",
+			Kind:    "event",
+			Reason:  "FailedScheduling",
+			Summary: "scheduler event",
+			Classification: &v1alpha1.DataClassification{
+				SensitivityTags: []string{"InfrastructureMetadata"},
+			},
+			RelatedTargets: []v1alpha1.TargetRef{{Name: "pod-1"}},
+		}},
 	}
-	before := input
+	beforeSummary := input.EvidenceRefs[0].Summary
+	beforeTag := input.EvidenceRefs[0].Classification.SensitivityTags[0]
+	beforeTarget := input.EvidenceRefs[0].RelatedTargets[0].Name
 	result := runShadowVerificationSafely(context.Background(), input, func(got ShadowVerificationInput) ShadowVerificationResult {
 		got.EvidenceRefs[0].Summary = "shadow-local-copy"
+		got.EvidenceRefs[0].Classification.SensitivityTags[0] = "shadow-local-tag"
+		got.EvidenceRefs[0].RelatedTargets[0].Name = "shadow-local-target"
 		return ShadowVerificationResult{Status: ShadowVerificationCompleted}
 	})
 	if result.Status != ShadowVerificationCompleted {
 		t.Fatalf("expected shadow completion, got %#v", result)
 	}
-	if !reflect.DeepEqual(input, before) {
-		t.Fatalf("shadow verification mutated shared input: before=%#v after=%#v", before, input)
+	if input.EvidenceRefs[0].Summary != beforeSummary ||
+		input.EvidenceRefs[0].Classification.SensitivityTags[0] != beforeTag ||
+		input.EvidenceRefs[0].RelatedTargets[0].Name != beforeTarget {
+		t.Fatalf("shadow verification mutated shared input: after=%#v", input)
 	}
 }
 
