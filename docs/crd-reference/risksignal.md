@@ -54,6 +54,7 @@ Capture a detected workload risk with enough context for notification, review, a
 | `classification` | object | no | Computed compact data classification inherited from the source evidence. |
 | `reason` | string | no | Event or classification reason. |
 | `link` | string | no | External reference URL or logical link. |
+| `relatedTargets` | array | no | Explicit Kubernetes resources named by the evidence provenance. |
 
 ### `status`
 
