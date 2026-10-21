@@ -340,15 +340,49 @@ jobs:
             title="$3"
             ref="$registry/$repository_prefix/$image:$version"
             docker pull --platform "${TARGET_PLATFORM}" "$ref" >&2
-            json="$(docker run --rm --platform "${TARGET_PLATFORM}" --entrypoint "$binary" "$ref" version --output=json)"
-            test "$(jq -r '.version' <<<"$json")" = "$version"
-            test "$(jq -r '.gitCommit' <<<"$json")" = "$git_commit"
-            test "$(jq -r '.gitDirty' <<<"$json")" = "false"
-            test "$(jq -r '.buildDate' <<<"$json")" = "$build_date"
-            test "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.title" }}')" = "$title"
-            test "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$version"
-            test "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$git_commit"
-            test "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.created" }}')" = "$build_date"
+            runtime_err="$(mktemp)"
+            set +e
+            json="$(docker run --rm --platform "${TARGET_PLATFORM}" --entrypoint "$binary" "$ref" version --output=json 2>"$runtime_err")"
+            runtime_rc=$?
+            set -e
+            if [ "$runtime_rc" -ne 0 ]; then
+              echo "container metadata command failed" >&2
+              echo "image=$ref" >&2
+              echo "platform=${TARGET_PLATFORM}" >&2
+              echo "entrypoint=$binary" >&2
+              echo "exit_code=$runtime_rc" >&2
+              echo "runtime_stderr:" >&2
+              cat "$runtime_err" >&2
+              echo "image_config:" >&2
+              docker image inspect "$ref" --format '{{json .Config}}' >&2 || true
+              rm -f "$runtime_err"
+              return "$runtime_rc"
+            fi
+            rm -f "$runtime_err"
+            if ! jq -e . >/dev/null <<<"$json"; then
+              echo "container metadata command returned invalid JSON" >&2
+              echo "image=$ref" >&2
+              echo "stdout=$json" >&2
+              return 1
+            fi
+            echo "container_metadata=$json"
+            assert_equal() {
+              field="$1"
+              expected="$2"
+              actual="$3"
+              if [ "$actual" != "$expected" ]; then
+                echo "metadata mismatch field=$field expected=$expected actual=$actual image=$ref" >&2
+                return 1
+              fi
+            }
+            assert_equal version "$version" "$(jq -r '.version' <<<"$json")"
+            assert_equal gitCommit "$git_commit" "$(jq -r '.gitCommit' <<<"$json")"
+            assert_equal gitDirty false "$(jq -r '.gitDirty' <<<"$json")"
+            assert_equal buildDate "$build_date" "$(jq -r '.buildDate' <<<"$json")"
+            assert_equal org.opencontainers.image.title "$title" "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.title" }}')"
+            assert_equal org.opencontainers.image.version "$version" "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')"
+            assert_equal org.opencontainers.image.revision "$git_commit" "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+            assert_equal org.opencontainers.image.created "$build_date" "$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.created" }}')"
             docker buildx imagetools inspect "$ref" | awk '/Digest:/ {print $2; exit}'
           }
 
