@@ -19,6 +19,12 @@ spec:
         app.kubernetes.io/component: controller-manager
     spec:
       serviceAccountName: fluxseer-rca-controller-manager
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: manager
           image: ghcr.io/fluxseer/fluxseer-rca/operator:v0.4.0-beta.3
