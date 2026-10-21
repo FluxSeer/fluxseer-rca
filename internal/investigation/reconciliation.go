@@ -97,7 +97,17 @@ func diagnosticEvidenceInventory(result EvidenceCollectionResult, targetUIDs []s
 		}
 		return inventory[i].IncidentStart.Before(inventory[j].IncidentStart)
 	})
-	return inventory
+	deduplicated := inventory[:0]
+	for _, identity := range inventory {
+		if len(deduplicated) > 0 {
+			previous := deduplicated[len(deduplicated)-1]
+			if previous.ID == identity.ID && previous.TargetUID == identity.TargetUID && previous.IncidentStart.Equal(identity.IncidentStart) && previous.IncidentEnd.Equal(identity.IncidentEnd) && previous.Authorized == identity.Authorized && previous.Valid == identity.Valid && previous.Incomplete == identity.Incomplete {
+				continue
+			}
+		}
+		deduplicated = append(deduplicated, identity)
+	}
+	return deduplicated
 }
 
 // CandidateReconciliationInput is the trusted runtime input to the adapter.
