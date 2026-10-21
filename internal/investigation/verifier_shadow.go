@@ -90,6 +90,23 @@ func VerifyReconciledCandidates(input ShadowVerificationInput) ShadowVerificatio
 	failed := false
 	for _, resolution := range resolutions {
 		record, exists := records[resolution.CandidateID]
+		if resolution.Disposition != diagnostic.CandidateDispositionProposedClaim {
+			entry := ShadowClaimVerification{
+				CandidateID:          resolution.CandidateID,
+				CandidateFingerprint: resolution.CandidateFingerprint,
+				ClaimFingerprint:     resolution.ClaimFingerprint,
+				Disposition:          resolution.Disposition,
+				DuplicateOf:          resolution.DuplicateOf,
+				Verification:         shadowVerificationSkipped,
+				Reason:               resolution.Reason,
+			}
+			if exists {
+				entry.TargetUID = record.Candidate.TargetUID
+				entry.Statement = record.Candidate.Statement
+			}
+			claims = append(claims, entry)
+			continue
+		}
 		if !exists {
 			failed = true
 			claims = append(claims, ShadowClaimVerification{
@@ -115,11 +132,6 @@ func VerifyReconciledCandidates(input ShadowVerificationInput) ShadowVerificatio
 			Verification:         shadowVerificationSkipped,
 			Reason:               resolution.Reason,
 		}
-		if resolution.Disposition != diagnostic.CandidateDispositionProposedClaim {
-			claims = append(claims, entry)
-			continue
-		}
-
 		proposed++
 		candidateRefs, ok := evidenceForCandidate(record, refs)
 		if !ok {

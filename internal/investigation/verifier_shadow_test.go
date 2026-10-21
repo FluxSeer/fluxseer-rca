@@ -63,6 +63,7 @@ func TestVerifyReconciledCandidatesSkipsNonProposedDispositions(t *testing.T) {
 		reconciliationResult("scheduling", "v1",
 			reconciliationClaim("rejected", diagnostic.ClaimRootCause, "A rejected candidate.", "pod-1", "event-unauthorized"),
 			reconciliationClaim("retained", diagnostic.ClaimRootCause, "A retained candidate.", "pod-2", "event-incomplete"),
+			reconciliationClaim("", diagnostic.ClaimRootCause, "A candidate without identity.", "pod-3", "event-missing-id"),
 		)}, unauthorized, incomplete))
 	result := VerifyReconciledCandidates(ShadowVerificationInput{
 		Reconciliation: input,
@@ -72,7 +73,7 @@ func TestVerifyReconciledCandidatesSkipsNonProposedDispositions(t *testing.T) {
 		},
 	})
 
-	if result.Status != ShadowVerificationCompleted || len(result.Claims) != 2 {
+	if result.Status != ShadowVerificationCompleted || len(result.Claims) != 3 {
 		t.Fatalf("expected completed accounting with skipped non-proposed candidates, got %#v", result)
 	}
 	for _, claim := range result.Claims {
