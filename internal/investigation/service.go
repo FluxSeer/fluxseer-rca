@@ -78,7 +78,10 @@ type EvidenceCollectionResult struct {
 	SchedulingEvidence []domain.SchedulingEvidence
 	Scheduling         []diagnostic.SchedulingObservation
 	Diagnostics        []diagnostic.Result
-	Issue              *Issue
+	// Reconciliation is internal shadow-mode lineage. It is deliberately not
+	// consumed by the canonical RCA/verifier path in Phase 3A-2.
+	Reconciliation *CandidateReconciliationResult
+	Issue          *Issue
 }
 
 type CollectionStep struct {
@@ -190,6 +193,14 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 	}
 	result.Summary = fmt.Sprintf("collected %d evidence records from %d investigation queries", totalRecords, len(preflight.CollectionPlan))
 	result.Diagnostics = s.evaluateDiagnostics(ctx, preflight, result)
+	reconciliation := ReconcileDiagnosticCandidates(CandidateReconciliationInput{
+		Diagnostics:            result.Diagnostics,
+		Evidence:               diagnosticEvidenceInventory(result, s.reconciliationTargetUIDs(ctx, preflight), now.Add(-window), now),
+		EvidenceInventoryReady: true,
+		IncidentStart:          now.Add(-window),
+		IncidentEnd:            now,
+	})
+	result.Reconciliation = &reconciliation
 	return result, nil
 }
 
