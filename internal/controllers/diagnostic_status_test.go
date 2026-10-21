@@ -40,6 +40,7 @@ func TestShadowReconciliationDoesNotChangeCanonicalRCAClaims(t *testing.T) {
 	}}}
 	withoutShadow, withoutVerification := buildRCAClaims(rca, evidence, "")
 	evidence.Reconciliation = &investigation.CandidateReconciliationResult{Status: investigation.ReconciliationCompleted}
+	evidence.ShadowVerification = &investigation.ShadowVerificationResult{Status: investigation.ShadowVerificationCompleted}
 	withShadow, withVerification := buildRCAClaims(rca, evidence, "")
 	if !reflect.DeepEqual(withoutShadow, withShadow) || !reflect.DeepEqual(withoutVerification, withVerification) {
 		t.Fatalf("shadow reconciliation changed canonical RCA output: without=%#v/%#v with=%#v/%#v", withoutShadow, withoutVerification, withShadow, withVerification)
