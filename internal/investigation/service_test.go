@@ -234,6 +234,78 @@ func TestServiceEvaluatesComposableImagePullDiagnosticAfterEvidenceCollection(t 
 	}
 }
 
+func TestCollectEvidenceServicePortOnlyShadowLineage(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	controller := true
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "prod", UID: "deployment-1"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "checkout"}},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "checkout"}}},
+		},
+	}
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+		Name: "checkout-rs", Namespace: "prod", UID: "replicaset-1", Labels: map[string]string{"app": "checkout"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: "checkout", UID: deployment.UID, Controller: &controller}},
+	}}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "checkout-pod", Namespace: "prod", UID: "pod-1", Labels: map[string]string{"app": "checkout"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "checkout-rs", UID: replicaSet.UID, Controller: &controller}},
+	}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, replicaSet, pod).Build()
+	service := &Service{
+		Client: reader,
+		Registry: datasource.NewRegistry(fakeDataSource{
+			name:      "service-config",
+			queryType: domain.QueryTypeServiceConfiguration,
+			records: []map[string]any{{
+				"serviceName":        "checkout",
+				"targetPortRaw":      "8080",
+				"targetPortResolved": int32(8080),
+				"workloadKind":       "Deployment",
+				"workloadName":       "checkout",
+				"containerName":      "app",
+				"containerPort":      int32(3000),
+				"resolution":         "NumericTargetPortDoesNotMatchContainerPort",
+				"mismatchConfirmed":  true,
+				"reason":             "ServicePortMismatch",
+			}},
+		}),
+		DiagnosticPlanner: diagnostic.DefaultPlanner(),
+		ScopeResolver:     scope.NewResolver(reader, scope.Limits{}),
+	}
+	preflight := PreflightResult{
+		Target:          domain.ResourceRef{Namespace: "prod", Kind: "Deployment", Name: "checkout"},
+		DatasourceNames: []string{"service-config"},
+		CollectionPlan:  []CollectionStep{{Name: "service-config", DatasourceName: "service-config", QueryType: domain.QueryTypeServiceConfiguration, Query: "service-port-configuration"}},
+	}
+
+	result, err := service.CollectEvidence(context.Background(), v1alpha1.InvestigationRequestSpec{
+		Target: v1alpha1.TargetRef{Namespace: "prod", Kind: "Deployment", Name: "checkout"},
+	}, preflight, time.Date(2026, 10, 22, 2, 0, 0, 0, time.UTC))
+	if err != nil || result.Issue != nil {
+		t.Fatalf("unexpected service-port-only collection result: err=%v issue=%#v", err, result.Issue)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].DiagnosticID != "service-port" {
+		t.Fatalf("expected ServicePort diagnostic from service evidence without scheduling evidence, got %#v", result.Diagnostics)
+	}
+	if len(result.Diagnostics[0].Claims) != 1 || result.Diagnostics[0].Claims[0].TargetUID != "pod-1" {
+		t.Fatalf("expected ServicePort candidate to retain the validated Pod UID, got %#v", result.Diagnostics[0].Claims)
+	}
+	if result.Reconciliation == nil || result.Reconciliation.Status != ReconciliationCompleted || result.Reconciliation.Accounting.Summary.ProposedClaimCount != 1 {
+		t.Fatalf("expected one proposed ServicePort candidate, got %#v", result.Reconciliation)
+	}
+	if result.ShadowVerification == nil || result.ShadowVerification.Status != ShadowVerificationCompleted || len(result.ShadowVerification.Claims) != 1 || result.ShadowVerification.Claims[0].Verification != "Supported" {
+		t.Fatalf("expected ServicePort candidate to enter shadow verifier, got %#v", result.ShadowVerification)
+	}
+}
+
 func TestServiceComposesImagePullAndSchedulingDiagnosticsWithIsolatedClaims(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
