@@ -56,18 +56,21 @@ func (d ImagePullDiagnostic) Evaluate(evidence EvidenceSet) Result {
 		result.MissingRequirements = append(result.MissingRequirements, d.Requirements(evidence)[0])
 		return result
 	}
+	targetUID := imagePullTargetUID(evidence)
 
 	result.Claims = append(result.Claims,
 		CandidateClaim{
 			ID:           "image-pull-observed",
 			Type:         ClaimObservation,
 			Statement:    "A target container is waiting because Kubernetes reported an image-pull failure.",
+			TargetUID:    targetUID,
 			EvidenceRefs: ids,
 		},
 		CandidateClaim{
 			ID:           "image-pull-failure",
 			Type:         ClaimFailureMechanism,
 			Statement:    "The target container could not retrieve its configured image.",
+			TargetUID:    targetUID,
 			EvidenceRefs: ids,
 		},
 	)
@@ -107,6 +110,7 @@ func (d ImagePullDiagnostic) Evaluate(evidence EvidenceSet) Result {
 				ID:           "image-pull-cause-" + kind,
 				Type:         ClaimRootCause,
 				Statement:    imagePullCauseStatement(kind),
+				TargetUID:    targetUID,
 				EvidenceRefs: ids,
 			})
 		}
@@ -117,6 +121,16 @@ func (d ImagePullDiagnostic) Evaluate(evidence EvidenceSet) Result {
 	}
 	result.Summary = fmt.Sprintf("Image-pull failure evidence matched %d bounded observation(s); causal verification remains separate.", len(ids))
 	return result
+}
+
+// imagePullTargetUID is intentionally conservative. A single validated Pod
+// scope can safely identify the target; a Deployment with multiple Pods must
+// remain unscoped until evidence correlation supplies a UID.
+func imagePullTargetUID(evidence EvidenceSet) string {
+	if !evidence.Scope.Complete || len(evidence.Scope.Pods) != 1 {
+		return ""
+	}
+	return strings.TrimSpace(string(evidence.Scope.Pods[0].UID))
 }
 
 func imagePullEvidenceIDs(evidence EvidenceSet) []string {

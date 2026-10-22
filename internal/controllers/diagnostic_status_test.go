@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -29,6 +30,20 @@ func TestDiagnosticAlternativeHypothesesRemainExplicitlyUnverified(t *testing.T)
 	}
 	if hypotheses[0].EvidenceRefs[0] != "event-1" || hypotheses[1].EvidenceRefs[0] != "event-2" {
 		t.Fatalf("expected evidence links to remain attached, got %#v", hypotheses)
+	}
+}
+
+func TestShadowReconciliationDoesNotChangeCanonicalRCAClaims(t *testing.T) {
+	rca := investigation.RCAResult{Reasoning: &domain.ReasoningOutput{RiskSummary: "Pod remains pending"}}
+	evidence := investigation.EvidenceCollectionResult{EvidenceRefs: []v1alpha1.EvidenceRef{{
+		ID: "event-1", Kind: string(domain.QueryTypeEvent), Reason: "FailedScheduling", Summary: "scheduler reported no available node",
+	}}}
+	withoutShadow, withoutVerification := buildRCAClaims(rca, evidence, "")
+	evidence.Reconciliation = &investigation.CandidateReconciliationResult{Status: investigation.ReconciliationCompleted}
+	evidence.ShadowVerification = &investigation.ShadowVerificationResult{Status: investigation.ShadowVerificationCompleted}
+	withShadow, withVerification := buildRCAClaims(rca, evidence, "")
+	if !reflect.DeepEqual(withoutShadow, withShadow) || !reflect.DeepEqual(withoutVerification, withVerification) {
+		t.Fatalf("shadow reconciliation changed canonical RCA output: without=%#v/%#v with=%#v/%#v", withoutShadow, withoutVerification, withShadow, withVerification)
 	}
 }
 

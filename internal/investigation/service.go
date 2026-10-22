@@ -78,6 +78,12 @@ type EvidenceCollectionResult struct {
 	SchedulingEvidence []domain.SchedulingEvidence
 	Scheduling         []diagnostic.SchedulingObservation
 	Diagnostics        []diagnostic.Result
+	// Reconciliation is internal shadow-mode lineage. It is deliberately not
+	// consumed by the canonical RCA/verifier path in Phase 3A-2.
+	Reconciliation *CandidateReconciliationResult
+	// ShadowVerification is internal Phase 3A-3 output. It never participates
+	// in canonical verdict construction.
+	ShadowVerification *ShadowVerificationResult
 	Issue              *Issue
 }
 
@@ -190,6 +196,19 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 	}
 	result.Summary = fmt.Sprintf("collected %d evidence records from %d investigation queries", totalRecords, len(preflight.CollectionPlan))
 	result.Diagnostics = s.evaluateDiagnostics(ctx, preflight, result)
+	reconciliation := ReconcileDiagnosticCandidates(CandidateReconciliationInput{
+		Diagnostics:            result.Diagnostics,
+		Evidence:               diagnosticEvidenceInventory(result, s.reconciliationTargetUIDs(ctx, preflight), now.Add(-window), now),
+		EvidenceInventoryReady: true,
+		IncidentStart:          now.Add(-window),
+		IncidentEnd:            now,
+	})
+	result.Reconciliation = &reconciliation
+	shadowVerification := runShadowVerificationSafely(ctx, ShadowVerificationInput{
+		Reconciliation: reconciliation,
+		EvidenceRefs:   result.EvidenceRefs,
+	}, VerifyReconciledCandidates)
+	result.ShadowVerification = &shadowVerification
 	return result, nil
 }
 
@@ -202,12 +221,24 @@ func (s *Service) evaluateDiagnostics(ctx context.Context, preflight PreflightRe
 		EvidenceRefs: append([]v1alpha1.EvidenceRef(nil), evidence.EvidenceRefs...),
 		Scheduling:   append([]diagnostic.SchedulingObservation(nil), evidence.Scheduling...),
 	}
-	if len(s.DiagnosticPlanner.Candidates(input)) == 0 {
-		return nil
-	}
 	if s.ScopeResolver != nil && strings.EqualFold(strings.TrimSpace(preflight.Target.Kind), "Deployment") {
 		resolved, _ := s.ScopeResolver.ResolveDeployment(ctx, preflight.Target.Namespace, preflight.Target.Name)
 		input.Scope = resolved
+	} else if strings.EqualFold(strings.TrimSpace(preflight.Target.Kind), "Pod") {
+		// Pod targets have no ownership traversal, but a validated API read still
+		// provides the UID needed to scope ImagePull candidates safely.
+		if pods, ok := s.resolveSchedulingPodRefs(ctx, preflight); ok && len(pods) == 1 && strings.TrimSpace(pods[0].UID) != "" {
+			input.Scope = scope.Result{
+				Pods: []scope.ResourceRef{{
+					APIVersion: "v1",
+					Kind:       "Pod",
+					Namespace:  pods[0].Namespace,
+					Name:       pods[0].Name,
+					UID:        types.UID(pods[0].UID),
+				}},
+				Complete: true,
+			}
+		}
 	}
 	results := s.DiagnosticPlanner.Evaluate(input)
 	for _, result := range results {

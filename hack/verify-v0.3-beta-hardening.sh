@@ -70,5 +70,6 @@ grep -q "providerResult:" "${root}/config/crd/bases/aiops.platform_investigation
 grep -q "classification:" "${root}/config/crd/bases/aiops.platform_investigationrequests.yaml"
 grep -q "execution:" "${root}/config/crd/bases/aiops.platform_investigationrequests.yaml"
 grep -q "egressAttempts:" "${root}/config/crd/bases/aiops.platform_investigationrequests.yaml"
+grep -q "relatedTargets:" "${root}/config/crd/bases/aiops.platform_risksignals.yaml"
 
 echo "v0.3 beta hardening gate passed"
