@@ -221,9 +221,6 @@ func (s *Service) evaluateDiagnostics(ctx context.Context, preflight PreflightRe
 		EvidenceRefs: append([]v1alpha1.EvidenceRef(nil), evidence.EvidenceRefs...),
 		Scheduling:   append([]diagnostic.SchedulingObservation(nil), evidence.Scheduling...),
 	}
-	if len(s.DiagnosticPlanner.Candidates(input)) == 0 {
-		return nil
-	}
 	if s.ScopeResolver != nil && strings.EqualFold(strings.TrimSpace(preflight.Target.Kind), "Deployment") {
 		resolved, _ := s.ScopeResolver.ResolveDeployment(ctx, preflight.Target.Namespace, preflight.Target.Name)
 		input.Scope = resolved
