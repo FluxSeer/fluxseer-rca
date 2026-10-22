@@ -306,6 +306,57 @@ func TestCollectEvidenceServicePortOnlyShadowLineage(t *testing.T) {
 	}
 }
 
+func TestEvaluateDiagnosticsServicePortDoesNotBindMultiPodScope(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	controller := true
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "prod", UID: "deployment-1"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "checkout"}},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "checkout"}}},
+		},
+	}
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+		Name: "checkout-rs", Namespace: "prod", UID: "replicaset-1", Labels: map[string]string{"app": "checkout"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: "checkout", UID: deployment.UID, Controller: &controller}},
+	}}
+	podOne := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "checkout-pod-1", Namespace: "prod", UID: "pod-1", Labels: map[string]string{"app": "checkout"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "checkout-rs", UID: replicaSet.UID, Controller: &controller}},
+	}}
+	podTwo := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "checkout-pod-2", Namespace: "prod", UID: "pod-2", Labels: map[string]string{"app": "checkout"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "checkout-rs", UID: replicaSet.UID, Controller: &controller}},
+	}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, replicaSet, podOne, podTwo).Build()
+	service := &Service{
+		Client:            reader,
+		DiagnosticPlanner: diagnostic.DefaultPlanner(),
+		ScopeResolver:     scope.NewResolver(reader, scope.Limits{}),
+	}
+	results := service.evaluateDiagnostics(context.Background(), PreflightResult{
+		Target: domain.ResourceRef{Namespace: "prod", Kind: "Deployment", Name: "checkout"},
+	}, EvidenceCollectionResult{
+		Observations: []domain.Observation{{
+			ID:   "evidence-001",
+			Type: domain.ObservationTypeServiceConfiguration,
+			Value: domain.ObservationValue{ServiceConfiguration: &domain.ServiceConfigurationObservation{
+				MismatchConfirmed: true,
+			}},
+		}},
+		EvidenceRefs: []v1alpha1.EvidenceRef{{ID: "evidence-001", Kind: "serviceConfiguration", Reason: "ServicePortMismatch"}},
+	})
+	if len(results) != 0 {
+		t.Fatalf("expected multi-Pod service evidence to remain outside candidate scope, got %#v", results)
+	}
+}
+
 func TestServiceComposesImagePullAndSchedulingDiagnosticsWithIsolatedClaims(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := appsv1.AddToScheme(scheme); err != nil {
