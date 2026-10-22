@@ -75,4 +75,3 @@ Candidate artifact publication passed in
   are not established by this gate.
 - The deployment emitted PodSecurity restricted warnings. SecurityContext
   hardening is tracked separately and is not silently included in this phase.
-
