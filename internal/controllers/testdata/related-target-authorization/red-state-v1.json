@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "fluxseer-related-target-authorization-fixture/v1",
+  "baseline": {
+    "release": "v0.5.0-alpha.3",
+    "commit": "6ac8e92c333278de65f79e401db2fefc2c124a60",
+    "probe": "baseline-acceptance-red-state"
+  },
+  "investigationTarget": {
+    "cluster": "test-cluster",
+    "namespace": "prod",
+    "kind": "Deployment",
+    "name": "checkout",
+    "apiVersion": "apps/v1",
+    "uid": "deployment-checkout-uid"
+  },
+  "cases": [
+    {
+      "name": "valid-scope-target",
+      "evidenceID": "log-valid-scope",
+      "evidenceAuthorized": true,
+      "targetAuthorized": true,
+      "targetIdentityVerified": true,
+      "relatedTarget": {
+        "cluster": "test-cluster",
+        "namespace": "prod",
+        "kind": "Service",
+        "name": "inventory",
+        "apiVersion": "v1"
+      },
+      "baseline": {
+        "coverageAccepted": true,
+        "rootCauseEntityAccepted": true
+      },
+      "afterFix": {
+        "coverage": "Authorized",
+        "rootCauseEntity": "Authorized"
+      }
+    },
+    {
+      "name": "cross-namespace-target",
+      "evidenceID": "log-cross-namespace",
+      "evidenceAuthorized": true,
+      "targetAuthorized": false,
+      "targetIdentityVerified": false,
+      "expectedReason": "CrossScopeTarget",
+      "relatedTarget": {
+        "cluster": "test-cluster",
+        "namespace": "payments",
+        "kind": "Service",
+        "name": "inventory",
+        "apiVersion": "v1"
+      },
+      "baseline": {
+        "coverageAccepted": true,
+        "rootCauseEntityAccepted": true
+      },
+      "afterFix": {
+        "coverage": "Rejected",
+        "rootCauseEntity": "Rejected"
+      }
+    },
+    {
+      "name": "cross-cluster-target",
+      "evidenceID": "log-cross-cluster",
+      "evidenceAuthorized": true,
+      "targetAuthorized": false,
+      "targetIdentityVerified": false,
+      "expectedReason": "UnauthorizedCluster",
+      "relatedTarget": {
+        "cluster": "other-cluster",
+        "namespace": "prod",
+        "kind": "Service",
+        "name": "inventory",
+        "apiVersion": "v1"
+      },
+      "baseline": {
+        "coverageAccepted": true,
+        "rootCauseEntityAccepted": true
+      },
+      "afterFix": {
+        "coverage": "Rejected",
+        "rootCauseEntity": "Rejected"
+      }
+    },
+    {
+      "name": "target-without-verifiable-uid",
+      "evidenceID": "log-missing-uid",
+      "evidenceAuthorized": true,
+      "targetAuthorized": true,
+      "targetIdentityVerified": false,
+      "expectedReason": "TargetIdentityUnavailable",
+      "relatedTarget": {
+        "cluster": "test-cluster",
+        "namespace": "prod",
+        "kind": "Service",
+        "name": "inventory",
+        "apiVersion": "v1"
+      },
+      "baseline": {
+        "coverageAccepted": true,
+        "rootCauseEntityAccepted": true
+      },
+      "afterFix": {
+        "coverage": "Unresolved",
+        "rootCauseEntity": "Unresolved"
+      }
+    },
+    {
+      "name": "evidence-not-in-inventory",
+      "evidenceID": "log-missing-from-inventory",
+      "evidenceAuthorized": false,
+      "targetAuthorized": false,
+      "targetIdentityVerified": false,
+      "expectedReason": "EvidenceUnauthorized",
+      "relatedTarget": {
+        "cluster": "test-cluster",
+        "namespace": "prod",
+        "kind": "Service",
+        "name": "inventory",
+        "apiVersion": "v1"
+      },
+      "baseline": {
+        "coverageAccepted": false,
+        "rootCauseEntityAccepted": false
+      },
+      "afterFix": {
+        "coverage": "Rejected",
+        "rootCauseEntity": "Rejected"
+      }
+    }
+  ]
+}

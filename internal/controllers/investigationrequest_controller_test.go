@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/authorization"
 	"github.com/FluxSeer/fluxseer-rca/internal/datasource"
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 	evidencepkg "github.com/FluxSeer/fluxseer-rca/internal/evidence"
@@ -2346,14 +2347,34 @@ func TestCausalRootCauseEntityUsesLinkedDependencyEvidence(t *testing.T) {
 			Verification: verifier.VerificationSupported,
 			EvidenceRefs: []string{"evidence-002"},
 		}},
-		investigation.EvidenceCollectionResult{EvidenceRefs: []v1alpha1.EvidenceRef{
-			{ID: "evidence-001", Kind: string(domain.QueryTypeMetric), Source: "prometheus"},
-			{ID: "evidence-002", Kind: string(domain.QueryTypeLog), Source: "loki", RelatedTargets: []v1alpha1.TargetRef{dependency}},
-		}},
+		investigation.EvidenceCollectionResult{
+			EvidenceRefs: []v1alpha1.EvidenceRef{
+				{ID: "evidence-001", Kind: string(domain.QueryTypeMetric), Source: "prometheus"},
+				{ID: "evidence-002", Kind: string(domain.QueryTypeLog), Source: "loki", RelatedTargets: []v1alpha1.TargetRef{dependency}},
+			},
+			RelatedTargetAuthorization: authorizedRelatedTargetContext("evidence-002", dependency),
+		},
 	)
 	if entity == nil || !sameTargetRef(*entity, dependency) {
 		t.Fatalf("expected linked dependency entity, got %#v", entity)
 	}
+}
+
+func authorizedRelatedTargetContext(evidenceID string, target v1alpha1.TargetRef) investigation.RelatedTargetAuthorizationContext {
+	return investigation.RelatedTargetAuthorizationContext{
+		Ready: true,
+		Decisions: []authorization.Decision{{
+			EvidenceID:  evidenceID,
+			Target:      target,
+			Disposition: authorization.DispositionAuthorized,
+		}},
+	}
+}
+
+func mergeRelatedTargetContext(left, right investigation.RelatedTargetAuthorizationContext) investigation.RelatedTargetAuthorizationContext {
+	left.Ready = left.Ready || right.Ready
+	left.Decisions = append(left.Decisions, right.Decisions...)
+	return left
 }
 
 func TestCausalRootCauseEntityDoesNotInferUnlinkedDependency(t *testing.T) {
@@ -2473,10 +2494,16 @@ func TestEvaluateEvidenceRequirementsUsesProfileMatrix(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			evidence := investigation.EvidenceCollectionResult{EvidenceRefs: tt.refs}
+			for _, ref := range tt.refs {
+				for _, target := range ref.RelatedTargets {
+					evidence.RelatedTargetAuthorization = mergeRelatedTargetContext(evidence.RelatedTargetAuthorization, authorizedRelatedTargetContext(ref.ID, target))
+				}
+			}
 			gate := evaluateEvidenceRequirements(v1alpha1.InvestigationRequestSpec{
 				EvidenceRequirements: v1alpha1.EvidenceRequirements{Profile: tt.profile},
 				Queries:              tt.queries,
-			}, investigation.EvidenceCollectionResult{EvidenceRefs: tt.refs})
+			}, evidence)
 			if gate == nil {
 				t.Fatalf("expected evidence requirement gate")
 			}
