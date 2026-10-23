@@ -28,6 +28,7 @@ const (
 	ReasonInvalidTargetRef          = "InvalidTargetRef"
 	ReasonAuthorizationScopeMissing = "AuthorizationScopeMissing"
 	ReasonTargetIdentityUnavailable = "TargetIdentityUnavailable"
+	ReasonTargetSnapshotConflict    = "TargetSnapshotConflict"
 	ReasonTargetUIDMismatch         = "TargetUIDMismatch"
 	ReasonTargetAuthorized          = "TargetAuthorized"
 )
@@ -138,7 +139,13 @@ func validateTarget(input Input, target EvidenceTarget) Decision {
 		return decision
 	}
 
-	snapshot, found := findSnapshot(input.Snapshots, decision.Target)
+	snapshot, found, conflict := findSnapshot(input.Snapshots, decision.Target)
+	if conflict {
+		decision.Disposition = DispositionRejected
+		decision.Reason = ReasonTargetSnapshotConflict
+		decision.Stage = "TargetIdentityVerification"
+		return decision
+	}
 	if !found || strings.TrimSpace(snapshot.UID) == "" || decision.TargetUID == "" {
 		decision.Disposition = DispositionUnresolved
 		decision.Reason = ReasonTargetIdentityUnavailable
@@ -189,13 +196,19 @@ func normalizeTarget(target v1alpha1.TargetRef) v1alpha1.TargetRef {
 	return target
 }
 
-func findSnapshot(snapshots []ResourceSnapshot, target v1alpha1.TargetRef) (ResourceSnapshot, bool) {
+func findSnapshot(snapshots []ResourceSnapshot, target v1alpha1.TargetRef) (ResourceSnapshot, bool, bool) {
+	var found ResourceSnapshot
+	matched := false
 	for _, snapshot := range snapshots {
 		if targetKey(snapshot.Ref) == targetKey(target) {
-			return snapshot, true
+			if matched && strings.TrimSpace(found.UID) != strings.TrimSpace(snapshot.UID) {
+				return ResourceSnapshot{}, false, true
+			}
+			found = snapshot
+			matched = true
 		}
 	}
-	return ResourceSnapshot{}, false
+	return found, matched, false
 }
 
 func targetKey(target v1alpha1.TargetRef) string {

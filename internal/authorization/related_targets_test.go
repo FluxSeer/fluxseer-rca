@@ -60,6 +60,14 @@ func TestValidateRelatedTargetsMatrix(t *testing.T) {
 			wantReason:   ReasonTargetUIDMismatch,
 		},
 		{
+			name:         "conflicting snapshots",
+			target:       EvidenceTarget{Ref: validRef, UID: "service-inventory-uid"},
+			evidenceAuth: true,
+			snapshots:    []ResourceSnapshot{snapshot, {Ref: validRef, UID: "service-recreated-uid"}},
+			want:         DispositionRejected,
+			wantReason:   ReasonTargetSnapshotConflict,
+		},
+		{
 			name:         "stale or deleted target",
 			target:       EvidenceTarget{Ref: validRef, UID: "service-inventory-uid"},
 			evidenceAuth: true,
