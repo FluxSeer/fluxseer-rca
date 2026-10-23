@@ -141,6 +141,9 @@ the context decisions:
 
 - Canonical causal evidence coverage and `RootCauseEntity` require an
   `Authorized` decision.
+- Decision lookup is fail-closed across all matching decisions: an
+  `Authorized` result cannot override a `Rejected`, `Unresolved`, or identity
+  conflict for the same `(EvidenceID, TargetKey)`.
 - Shadow candidate inventory marks related-target evidence unauthorized unless
   every relation is authorized.
 - RiskSignal compatibility projection removes rejected or unresolved
@@ -150,6 +153,9 @@ the context decisions:
   per investigation, applies a per-snapshot timeout, and stops issuing reads
   after context cancellation. Cross-scope assertions are rejected before an
   API lookup.
+- Snapshot results are cached for the investigation. Repeated references to
+  the same Target Key reuse one Snapshot; different UID assertions for that
+  key across EvidenceRefs invalidate all matching relations.
 
 The datasource `dependency_uid` value is treated only as an untrusted
 assertion. It is accepted only when it matches the UID from the trusted

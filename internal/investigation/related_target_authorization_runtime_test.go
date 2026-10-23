@@ -214,6 +214,112 @@ func TestAuthorizeRelatedTargetsStopsAfterContextCancellation(t *testing.T) {
 	}
 }
 
+func TestAuthorizedTargetFailsClosedOnConflictingDecisions(t *testing.T) {
+	target := runtimeRelatedTarget()
+	context := RelatedTargetAuthorizationContext{
+		Ready: true,
+		Decisions: []authorization.Decision{
+			{EvidenceID: "log-1", Target: target, Disposition: authorization.DispositionAuthorized},
+			{EvidenceID: "log-1", Target: target, Disposition: authorization.DispositionRejected, Reason: authorization.ReasonTargetUIDMismatch},
+		},
+	}
+	if context.AuthorizedTarget("log-1", target) || context.AuthorizedEvidenceRef(v1alpha1.EvidenceRef{ID: "log-1", RelatedTargets: []v1alpha1.TargetRef{target}}) {
+		t.Fatal("conflicting decisions must not authorize an evidence relation")
+	}
+}
+
+func TestAuthorizeRelatedTargetsRejectsDuplicateTargetUIDConflict(t *testing.T) {
+	scheme := runtimeScheme(t)
+	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "inventory", Namespace: "prod", UID: "uid-a"}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(service).Build()
+	target := runtimeRelatedTarget()
+	got := (&Service{Client: reader}).authorizeRelatedTargets(
+		context.Background(),
+		PreflightResult{Target: domain.ResourceRef{Cluster: "in-cluster", Namespace: "prod"}},
+		[]domain.Observation{{ID: "log-1", RelatedTargetUIDAssertions: []string{"uid-a", "uid-b"}}},
+		[]v1alpha1.EvidenceRef{{ID: "log-1", RelatedTargets: []v1alpha1.TargetRef{target, target}}},
+	)
+	if len(got.Decisions) != 2 || got.AuthorizedEvidenceRef(v1alpha1.EvidenceRef{ID: "log-1", RelatedTargets: []v1alpha1.TargetRef{target, target}}) {
+		t.Fatalf("duplicate target UID conflict must fail closed, got %#v", got)
+	}
+	for _, decision := range got.Decisions {
+		if decision.Reason != authorization.ReasonTargetAssertionConflict || decision.Disposition != authorization.DispositionRejected {
+			t.Fatalf("expected assertion conflict rejection, got %#v", decision)
+		}
+	}
+}
+
+func TestAuthorizeRelatedTargetsCachesSnapshotAcrossEvidenceRefs(t *testing.T) {
+	scheme := runtimeScheme(t)
+	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "inventory", Namespace: "prod", UID: "uid-a"}}
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(service).Build()
+	calls := 0
+	reader := interceptor.NewClient(base, interceptor.Funcs{
+		Get: func(ctx context.Context, intercepted client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			calls++
+			return intercepted.Get(ctx, key, obj, opts...)
+		},
+	})
+	target := runtimeRelatedTarget()
+	refs := []v1alpha1.EvidenceRef{
+		{ID: "log-1", RelatedTargets: []v1alpha1.TargetRef{target}},
+		{ID: "log-2", RelatedTargets: []v1alpha1.TargetRef{target}},
+	}
+	observations := []domain.Observation{
+		{ID: "log-1", RelatedTargetUIDAssertions: []string{"uid-a"}},
+		{ID: "log-2", RelatedTargetUIDAssertions: []string{"uid-a"}},
+	}
+	got := (&Service{Client: reader}).authorizeRelatedTargets(
+		context.Background(),
+		PreflightResult{Target: domain.ResourceRef{Cluster: "in-cluster", Namespace: "prod"}},
+		observations,
+		refs,
+	)
+	if calls != 1 {
+		t.Fatalf("expected one cached snapshot lookup, got %d", calls)
+	}
+	for _, ref := range refs {
+		if !got.AuthorizedEvidenceRef(ref) {
+			t.Fatalf("same UID relation should remain authorized, ref=%#v decisions=%#v", ref, got.Decisions)
+		}
+	}
+}
+
+func TestAuthorizeRelatedTargetsRejectsCrossEvidenceUIDConflict(t *testing.T) {
+	scheme := runtimeScheme(t)
+	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "inventory", Namespace: "prod", UID: "uid-a"}}
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(service).Build()
+	calls := 0
+	reader := interceptor.NewClient(base, interceptor.Funcs{
+		Get: func(ctx context.Context, intercepted client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			calls++
+			return intercepted.Get(ctx, key, obj, opts...)
+		},
+	})
+	target := runtimeRelatedTarget()
+	refs := []v1alpha1.EvidenceRef{
+		{ID: "log-1", RelatedTargets: []v1alpha1.TargetRef{target}},
+		{ID: "log-2", RelatedTargets: []v1alpha1.TargetRef{target}},
+	}
+	got := (&Service{Client: reader}).authorizeRelatedTargets(
+		context.Background(),
+		PreflightResult{Target: domain.ResourceRef{Cluster: "in-cluster", Namespace: "prod"}},
+		[]domain.Observation{
+			{ID: "log-1", RelatedTargetUIDAssertions: []string{"uid-a"}},
+			{ID: "log-2", RelatedTargetUIDAssertions: []string{"uid-b"}},
+		},
+		refs,
+	)
+	if calls != 1 {
+		t.Fatalf("expected one cached snapshot lookup despite cross-evidence conflict, got %d", calls)
+	}
+	for _, ref := range refs {
+		if got.AuthorizedEvidenceRef(ref) {
+			t.Fatalf("cross-evidence UID conflict must invalidate every relation, ref=%#v decisions=%#v", ref, got.Decisions)
+		}
+	}
+}
+
 func runtimeRelatedTarget() v1alpha1.TargetRef {
 	return v1alpha1.TargetRef{Cluster: "in-cluster", Namespace: "prod", Kind: "Service", Name: "inventory", APIVersion: "v1"}
 }

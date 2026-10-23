@@ -29,6 +29,7 @@ const (
 	ReasonAuthorizationScopeMissing = "AuthorizationScopeMissing"
 	ReasonTargetIdentityUnavailable = "TargetIdentityUnavailable"
 	ReasonTargetSnapshotConflict    = "TargetSnapshotConflict"
+	ReasonTargetAssertionConflict   = "TargetAssertionConflict"
 	ReasonTargetUIDMismatch         = "TargetUIDMismatch"
 	ReasonTargetAuthorized          = "TargetAuthorized"
 )

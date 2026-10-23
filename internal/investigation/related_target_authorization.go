@@ -47,12 +47,17 @@ func (c RelatedTargetAuthorizationContext) AuthorizedEvidenceRef(ref v1alpha1.Ev
 }
 
 func (c RelatedTargetAuthorizationContext) AuthorizedTarget(evidenceID string, target v1alpha1.TargetRef) bool {
+	found := false
 	for _, decision := range c.Decisions {
-		if decision.EvidenceID == strings.TrimSpace(evidenceID) && targetKey(decision.Target) == targetKey(target) && decision.Disposition == authorization.DispositionAuthorized {
-			return true
+		if decision.EvidenceID != strings.TrimSpace(evidenceID) || targetKey(decision.Target) != targetKey(target) {
+			continue
+		}
+		found = true
+		if decision.Disposition != authorization.DispositionAuthorized {
+			return false
 		}
 	}
-	return false
+	return found
 }
 
 func (s *Service) authorizeRelatedTargets(ctx context.Context, preflight PreflightResult, observations []domain.Observation, refs []v1alpha1.EvidenceRef) RelatedTargetAuthorizationContext {
@@ -62,6 +67,7 @@ func (s *Service) authorizeRelatedTargets(ctx context.Context, preflight Preflig
 		assertions[observation.ID] = append([]string(nil), observation.RelatedTargetUIDAssertions...)
 	}
 	snapshotCount := 0
+	snapshotCache := make(map[string]relatedTargetSnapshotLookup)
 	for _, ref := range refs {
 		if len(ref.RelatedTargets) == 0 {
 			continue
@@ -84,19 +90,25 @@ func (s *Service) authorizeRelatedTargets(ctx context.Context, preflight Preflig
 				uid = strings.TrimSpace(uidAssertions[index])
 			}
 			input.Evidence.RelatedTargets = append(input.Evidence.RelatedTargets, authorization.EvidenceTarget{Ref: target, UID: uid})
-			if snapshotCount >= maxRelatedTargetSnapshots || !relatedTargetWithinScope(preflight.Target, target) || ctx.Err() != nil {
-				continue
+			key := targetKey(target)
+			lookup, cached := snapshotCache[key]
+			if !cached {
+				if snapshotCount < maxRelatedTargetSnapshots && relatedTargetWithinScope(preflight.Target, target) && ctx.Err() == nil {
+					snapshotCount++
+					snapshotCtx, cancel := context.WithTimeout(ctx, relatedTargetSnapshotTimeout)
+					snapshot, ok := s.snapshotRelatedTarget(snapshotCtx, target)
+					cancel()
+					lookup = relatedTargetSnapshotLookup{snapshot: snapshot, found: ok}
+				}
+				snapshotCache[key] = lookup
 			}
-			snapshotCount++
-			snapshotCtx, cancel := context.WithTimeout(ctx, relatedTargetSnapshotTimeout)
-			snapshot, ok := s.snapshotRelatedTarget(snapshotCtx, target)
-			cancel()
-			if ok {
-				input.Snapshots = append(input.Snapshots, snapshot)
+			if lookup.found {
+				input.Snapshots = append(input.Snapshots, lookup.snapshot)
 			}
 		}
 		result.Decisions = append(result.Decisions, authorization.ValidateRelatedTargets(input)...)
 	}
+	applyCrossEvidenceTargetConflicts(result.Decisions)
 	sort.SliceStable(result.Decisions, func(i, j int) bool {
 		left, right := result.Decisions[i], result.Decisions[j]
 		if left.EvidenceID != right.EvidenceID {
@@ -105,6 +117,40 @@ func (s *Service) authorizeRelatedTargets(ctx context.Context, preflight Preflig
 		return targetKey(left.Target) < targetKey(right.Target)
 	})
 	return result
+}
+
+type relatedTargetSnapshotLookup struct {
+	snapshot authorization.ResourceSnapshot
+	found    bool
+}
+
+func applyCrossEvidenceTargetConflicts(decisions []authorization.Decision) {
+	uidsByTarget := make(map[string]map[string]struct{})
+	for _, decision := range decisions {
+		uid := strings.TrimSpace(decision.TargetUID)
+		if uid == "" {
+			continue
+		}
+		key := targetKey(decision.Target)
+		if uidsByTarget[key] == nil {
+			uidsByTarget[key] = make(map[string]struct{})
+		}
+		uidsByTarget[key][uid] = struct{}{}
+	}
+	conflictedTargets := make(map[string]struct{})
+	for key, uids := range uidsByTarget {
+		if len(uids) > 1 {
+			conflictedTargets[key] = struct{}{}
+		}
+	}
+	for index := range decisions {
+		if _, conflicted := conflictedTargets[targetKey(decisions[index].Target)]; !conflicted {
+			continue
+		}
+		decisions[index].Disposition = authorization.DispositionRejected
+		decisions[index].Reason = authorization.ReasonTargetAssertionConflict
+		decisions[index].Stage = "TargetIdentityVerification"
+	}
 }
 
 func relatedTargetWithinScope(scope domain.ResourceRef, target v1alpha1.TargetRef) bool {
