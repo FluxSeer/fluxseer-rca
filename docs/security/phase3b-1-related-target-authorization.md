@@ -146,8 +146,10 @@ the context decisions:
 - RiskSignal compatibility projection removes rejected or unresolved
   `relatedTargets`; InvestigationRequest source evidence remains intact.
 - Snapshot reads are bounded, same-cluster/same-namespace only, and support
-  common Kubernetes resource kinds. Cross-scope assertions are rejected before
-  an API lookup.
+  common Kubernetes resource kinds. The adapter limits lookup attempts to 32
+  per investigation, applies a per-snapshot timeout, and stops issuing reads
+  after context cancellation. Cross-scope assertions are rejected before an
+  API lookup.
 
 The datasource `dependency_uid` value is treated only as an untrusted
 assertion. It is accepted only when it matches the UID from the trusted
@@ -157,3 +159,9 @@ Kubernetes snapshot. If the assertion is absent, the relation remains
 The HighHTTPErrorRate runtime regression covers both a valid Service relation
 that remains confirmed and a cross-namespace relation that remains in source
 provenance but cannot satisfy canonical coverage or create a RiskSignal.
+
+Local failure-injection tests cover Kubernetes `Forbidden`, `NotFound`, API
+conflict, timeout, canceled-context, and lookup-budget exhaustion. Each case
+remains `Unresolved` or otherwise unauthorized; none can become `Authorized`.
+The budget test also verifies that valid relations within the first 32 bounded
+lookups remain usable while later relations stay unresolved.

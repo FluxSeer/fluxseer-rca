@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -16,6 +17,8 @@ import (
 )
 
 const maxRelatedTargetSnapshots = 32
+
+const relatedTargetSnapshotTimeout = 2 * time.Second
 
 // RelatedTargetAuthorizationContext is internal runtime state. It keeps
 // source RelatedTargets available for audit while exposing only validated
@@ -81,12 +84,15 @@ func (s *Service) authorizeRelatedTargets(ctx context.Context, preflight Preflig
 				uid = strings.TrimSpace(uidAssertions[index])
 			}
 			input.Evidence.RelatedTargets = append(input.Evidence.RelatedTargets, authorization.EvidenceTarget{Ref: target, UID: uid})
-			if snapshotCount >= maxRelatedTargetSnapshots || !relatedTargetWithinScope(preflight.Target, target) {
+			if snapshotCount >= maxRelatedTargetSnapshots || !relatedTargetWithinScope(preflight.Target, target) || ctx.Err() != nil {
 				continue
 			}
-			if snapshot, ok := s.snapshotRelatedTarget(ctx, target); ok {
+			snapshotCount++
+			snapshotCtx, cancel := context.WithTimeout(ctx, relatedTargetSnapshotTimeout)
+			snapshot, ok := s.snapshotRelatedTarget(snapshotCtx, target)
+			cancel()
+			if ok {
 				input.Snapshots = append(input.Snapshots, snapshot)
-				snapshotCount++
 			}
 		}
 		result.Decisions = append(result.Decisions, authorization.ValidateRelatedTargets(input)...)

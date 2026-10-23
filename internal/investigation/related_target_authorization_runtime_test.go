@@ -2,13 +2,20 @@ package investigation
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 	"github.com/FluxSeer/fluxseer-rca/internal/authorization"
@@ -72,6 +79,143 @@ func TestDiagnosticEvidenceInventoryUsesRelatedTargetAuthorization(t *testing.T)
 	if len(inventory) != 1 || inventory[0].Authorized {
 		t.Fatalf("expected rejected related target evidence to stay out of trusted inventory, got %#v", inventory)
 	}
+}
+
+func TestAuthorizeRelatedTargetsFailsClosedOnSnapshotErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "forbidden", err: apierrors.NewForbidden(schema.GroupResource{Resource: "services"}, "inventory", errors.New("denied"))},
+		{name: "not-found", err: apierrors.NewNotFound(schema.GroupResource{Resource: "services"}, "inventory")},
+		{name: "conflict", err: apierrors.NewConflict(schema.GroupResource{Resource: "services"}, "inventory", errors.New("conflict"))},
+		{name: "timeout", err: context.DeadlineExceeded},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtimeScheme(t)
+			base := fake.NewClientBuilder().WithScheme(scheme).Build()
+			calls := 0
+			reader := interceptor.NewClient(base, interceptor.Funcs{
+				Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, _ client.Object, opts ...client.GetOption) error {
+					calls++
+					return tt.err
+				},
+			})
+			got := (&Service{Client: reader}).authorizeRelatedTargets(
+				context.Background(),
+				PreflightResult{Target: domain.ResourceRef{Cluster: "in-cluster", Namespace: "prod"}},
+				nil,
+				[]v1alpha1.EvidenceRef{{ID: "log-1", RelatedTargets: []v1alpha1.TargetRef{runtimeRelatedTarget()}}},
+			)
+			if calls != 1 {
+				t.Fatalf("expected one bounded snapshot lookup, got %d", calls)
+			}
+			if len(got.Decisions) != 1 || got.Decisions[0].Disposition == authorization.DispositionAuthorized || got.Decisions[0].Reason != authorization.ReasonTargetIdentityUnavailable {
+				t.Fatalf("snapshot error must fail closed as unresolved, got %#v", got.Decisions)
+			}
+		})
+	}
+}
+
+func TestAuthorizeRelatedTargetsPassesSnapshotTimeoutContext(t *testing.T) {
+	scheme := runtimeScheme(t)
+	base := fake.NewClientBuilder().WithScheme(scheme).Build()
+	deadlineSeen := false
+	reader := interceptor.NewClient(base, interceptor.Funcs{
+		Get: func(ctx context.Context, _ client.WithWatch, _ client.ObjectKey, _ client.Object, opts ...client.GetOption) error {
+			_, deadlineSeen = ctx.Deadline()
+			return context.DeadlineExceeded
+		},
+	})
+	got := (&Service{Client: reader}).authorizeRelatedTargets(
+		context.Background(),
+		PreflightResult{Target: domain.ResourceRef{Cluster: "in-cluster", Namespace: "prod"}},
+		nil,
+		[]v1alpha1.EvidenceRef{{ID: "log-1", RelatedTargets: []v1alpha1.TargetRef{runtimeRelatedTarget()}}},
+	)
+	if !deadlineSeen {
+		t.Fatal("snapshot lookup did not receive a cancellation deadline")
+	}
+	if len(got.Decisions) != 1 || got.Decisions[0].Disposition == authorization.DispositionAuthorized {
+		t.Fatalf("timed out snapshot must not authorize target, got %#v", got.Decisions)
+	}
+}
+
+func TestAuthorizeRelatedTargetsBoundsSnapshotLookupAttempts(t *testing.T) {
+	scheme := runtimeScheme(t)
+	baseObjects := make([]client.Object, 0, maxRelatedTargetSnapshots+8)
+	refs := make([]v1alpha1.EvidenceRef, 0, maxRelatedTargetSnapshots+8)
+	observations := make([]domain.Observation, 0, maxRelatedTargetSnapshots+8)
+	for i := 0; i < maxRelatedTargetSnapshots+8; i++ {
+		name := fmt.Sprintf("dependency-%02d", i)
+		uid := types.UID(fmt.Sprintf("dependency-uid-%02d", i))
+		baseObjects = append(baseObjects, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "prod", UID: uid}})
+		target := runtimeRelatedTarget()
+		target.Name = name
+		id := fmt.Sprintf("log-%02d", i)
+		refs = append(refs, v1alpha1.EvidenceRef{ID: id, RelatedTargets: []v1alpha1.TargetRef{target}})
+		observations = append(observations, domain.Observation{ID: id, RelatedTargetUIDAssertions: []string{string(uid)}})
+	}
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(baseObjects...).Build()
+	calls := 0
+	reader := interceptor.NewClient(base, interceptor.Funcs{
+		Get: func(ctx context.Context, intercepted client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			calls++
+			return intercepted.Get(ctx, key, obj, opts...)
+		},
+	})
+	got := (&Service{Client: reader}).authorizeRelatedTargets(
+		context.Background(),
+		PreflightResult{Target: domain.ResourceRef{Cluster: "in-cluster", Namespace: "prod"}},
+		observations,
+		refs,
+	)
+	if calls != maxRelatedTargetSnapshots {
+		t.Fatalf("expected %d bounded snapshot lookups, got %d", maxRelatedTargetSnapshots, calls)
+	}
+	authorized, unresolved := 0, 0
+	for _, decision := range got.Decisions {
+		switch decision.Disposition {
+		case authorization.DispositionAuthorized:
+			authorized++
+		case authorization.DispositionUnresolved:
+			unresolved++
+		}
+	}
+	if authorized != maxRelatedTargetSnapshots || unresolved != 8 {
+		t.Fatalf("expected bounded authorization split %d/%d, got authorized=%d unresolved=%d decisions=%#v", maxRelatedTargetSnapshots, 8, authorized, unresolved, got.Decisions)
+	}
+}
+
+func TestAuthorizeRelatedTargetsStopsAfterContextCancellation(t *testing.T) {
+	scheme := runtimeScheme(t)
+	base := fake.NewClientBuilder().WithScheme(scheme).Build()
+	calls := 0
+	reader := interceptor.NewClient(base, interceptor.Funcs{
+		Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, _ client.Object, opts ...client.GetOption) error {
+			calls++
+			return nil
+		},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	got := (&Service{Client: reader}).authorizeRelatedTargets(
+		ctx,
+		PreflightResult{Target: domain.ResourceRef{Cluster: "in-cluster", Namespace: "prod"}},
+		nil,
+		[]v1alpha1.EvidenceRef{{ID: "log-1", RelatedTargets: []v1alpha1.TargetRef{runtimeRelatedTarget()}}},
+	)
+	if calls != 0 {
+		t.Fatalf("canceled context must prevent snapshot lookups, got %d", calls)
+	}
+	if len(got.Decisions) != 1 || got.Decisions[0].Disposition == authorization.DispositionAuthorized {
+		t.Fatalf("canceled context must fail closed, got %#v", got.Decisions)
+	}
+}
+
+func runtimeRelatedTarget() v1alpha1.TargetRef {
+	return v1alpha1.TargetRef{Cluster: "in-cluster", Namespace: "prod", Kind: "Service", Name: "inventory", APIVersion: "v1"}
 }
 
 func runtimeScheme(t *testing.T) *runtime.Scheme {
