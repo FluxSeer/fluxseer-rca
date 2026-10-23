@@ -2,8 +2,8 @@
 
 ## Status
 
-- Phase: 3B-1A / 3B-1B
-- Decision: `HIGH / VERIFICATION_PENDING`
+- Phase: 3B-1A / 3B-1B / 3B-1C
+- Decision: `PASS_WITH_RISKS / RUNTIME_INTEGRATION_PENDING`
 - Baseline: FluxSeer RCA `v0.5.0-alpha.3`
 - Baseline commit: `6ac8e92c333278de65f79e401db2fefc2c124a60`
 - Scope: audit and reproducible baseline red-state only
@@ -98,4 +98,33 @@ runtime remediation path has been exercised; that belongs to 3B-1D/3B-1E.
 
 3B-1C must add a pure, deterministic, fail-closed authorization validator and
 convert the red-state cases into security regression assertions before runtime
-integration or Kubernetes qualification begins.
+integration or Kubernetes qualification begins. The pure validator now lives
+under `internal/authorization`; its result is not consumed by the existing
+runtime yet.
+
+## Pure validator contract (3B-1C)
+
+`authorization.ValidateRelatedTargets` accepts only:
+
+- an explicit evidence authorization decision from the collection layer;
+- an explicit investigation cluster and allowed namespace set;
+- related targets paired with a trusted evidence-observed UID; and
+- trusted resource snapshots supplied by the runtime adapter.
+
+The function performs no Kubernetes/API calls and returns one deterministic
+decision per related target. It checks evidence authorization before scope,
+scope before identity, and identity before `Authorized`:
+
+| Result | Meaning |
+| --- | --- |
+| `Authorized / TargetAuthorized` | Evidence, scope, and UID identity all agree |
+| `Rejected / EvidenceUnauthorized` | Evidence itself is not permitted |
+| `Rejected / CrossScopeTarget` or `UnauthorizedCluster` | Target is outside the investigation boundary |
+| `Rejected / TargetUIDMismatch` | Trusted snapshot and evidence UID conflict |
+| `Unresolved / TargetIdentityUnavailable` | UID or trusted snapshot is missing |
+
+The validator's unit matrix covers valid, cross-namespace, cross-cluster,
+missing UID, UID mismatch, stale/deleted target, missing scope, unauthorized
+evidence, and input-order determinism. Runtime adapters still need to construct
+the trusted inputs and enforce the decisions in both Canonical and Shadow
+paths.
