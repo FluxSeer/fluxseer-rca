@@ -7,7 +7,7 @@ import (
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
 )
 
-func TestDiagnosticEvidenceInventoryMarksRelatedTargetEvidenceAuthorizedRedState(t *testing.T) {
+func TestDiagnosticEvidenceInventoryRejectsUnverifiedRelatedTarget(t *testing.T) {
 	start := time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
 	result := EvidenceCollectionResult{
 		EvidenceRefs: []v1alpha1.EvidenceRef{{
@@ -27,8 +27,8 @@ func TestDiagnosticEvidenceInventoryMarksRelatedTargetEvidenceAuthorizedRedState
 	if len(inventory) != 1 {
 		t.Fatalf("expected one inventory entry, got %#v", inventory)
 	}
-	if !inventory[0].Authorized || !inventory[0].Valid {
-		t.Fatalf("baseline behavior changed unexpectedly: inventory=%#v", inventory[0])
+	if inventory[0].Authorized || !inventory[0].Valid {
+		t.Fatalf("expected unverified related target evidence to be excluded from trusted inventory: inventory=%#v", inventory[0])
 	}
-	t.Logf("RED_STATE baseline marked related target evidence authorized without target authorization or UID verification: %#v", inventory[0])
+	t.Logf("RED_STATE baseline marked related target evidence authorized; fixed path now rejects it: %#v", inventory[0])
 }

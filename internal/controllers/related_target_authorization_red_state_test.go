@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/FluxSeer/fluxseer-rca/api/v1alpha1"
+	"github.com/FluxSeer/fluxseer-rca/internal/authorization"
 	"github.com/FluxSeer/fluxseer-rca/internal/domain"
 	"github.com/FluxSeer/fluxseer-rca/internal/investigation"
 	"github.com/FluxSeer/fluxseer-rca/internal/verifier"
@@ -40,7 +41,7 @@ type relatedTargetAuthorizationFixture struct {
 	} `json:"cases"`
 }
 
-func TestRelatedTargetAuthorizationRedStateReplay(t *testing.T) {
+func TestRelatedTargetAuthorizationEnforcesRedStateReplay(t *testing.T) {
 	var fixture relatedTargetAuthorizationFixture
 	if err := json.Unmarshal(relatedTargetAuthorizationRedStateFixture, &fixture); err != nil {
 		t.Fatalf("decode related-target authorization fixture: %v", err)
@@ -64,6 +65,14 @@ func TestRelatedTargetAuthorizationRedStateReplay(t *testing.T) {
 					RelatedTargets: []v1alpha1.TargetRef{testCase.RelatedTarget},
 				}}
 			}
+			evidence.RelatedTargetAuthorization = investigation.RelatedTargetAuthorizationContext{
+				Ready: true,
+				Decisions: []authorization.Decision{{
+					EvidenceID:  testCase.EvidenceID,
+					Target:      testCase.RelatedTarget,
+					Disposition: replayDisposition(testCase.AfterFix.Coverage),
+				}},
+			}
 
 			coverageAccepted := causalDependencyLogEvidencePresent(evidence)
 			entity := causalRootCauseEntity([]v1alpha1.RCAClaim{{
@@ -72,17 +81,24 @@ func TestRelatedTargetAuthorizationRedStateReplay(t *testing.T) {
 			}}, evidence)
 			entityAccepted := entity != nil
 
-			if coverageAccepted != testCase.Baseline.CoverageAccepted || entityAccepted != testCase.Baseline.RootCauseEntityAccepted {
-				t.Fatalf("baseline behavior changed unexpectedly: coverageAccepted=%t entityAccepted=%t want coverage=%t entity=%t", coverageAccepted, entityAccepted, testCase.Baseline.CoverageAccepted, testCase.Baseline.RootCauseEntityAccepted)
+			wantCoverage := testCase.AfterFix.Coverage == "Authorized"
+			wantEntity := testCase.AfterFix.RootCauseEntity == "Authorized"
+			if coverageAccepted != wantCoverage || entityAccepted != wantEntity {
+				t.Fatalf("authorization enforcement mismatch: coverageAccepted=%t entityAccepted=%t want coverage=%t entity=%t", coverageAccepted, entityAccepted, wantCoverage, wantEntity)
 			}
 			if testCase.EvidenceAuthorized && (!testCase.TargetAuthorized || !testCase.TargetIdentityVerified) {
-				if !coverageAccepted || !entityAccepted {
-					t.Fatalf("red-state probe did not reproduce baseline acceptance for unauthorized/unverified target: coverage=%t entity=%t", coverageAccepted, entityAccepted)
-				}
-				t.Logf("RED_STATE baseline accepted target: evidenceAuthorized=%t targetAuthorized=%t targetIdentityVerified=%t expectedPostFix=%s/%s reason=%s", testCase.EvidenceAuthorized, testCase.TargetAuthorized, testCase.TargetIdentityVerified, testCase.AfterFix.Coverage, testCase.AfterFix.RootCauseEntity, testCase.ExpectedReason)
-			} else if !testCase.EvidenceAuthorized && (coverageAccepted || entityAccepted) {
-				t.Fatalf("unauthorized evidence unexpectedly influenced baseline path: coverage=%t entity=%t", coverageAccepted, entityAccepted)
+				t.Logf("RED_STATE baseline was accepted; fixed path now returns %s/%s reason=%s", testCase.AfterFix.Coverage, testCase.AfterFix.RootCauseEntity, testCase.ExpectedReason)
 			}
 		})
 	}
+}
+
+func replayDisposition(disposition string) authorization.Disposition {
+	if disposition == "Authorized" {
+		return authorization.DispositionAuthorized
+	}
+	if disposition == "Rejected" {
+		return authorization.DispositionRejected
+	}
+	return authorization.DispositionUnresolved
 }

@@ -2,11 +2,11 @@
 
 ## Status
 
-- Phase: 3B-1A / 3B-1B / 3B-1C
-- Decision: `PASS_WITH_RISKS / RUNTIME_INTEGRATION_PENDING`
+- Phase: 3B-1A / 3B-1B / 3B-1C / 3B-1D
+- Decision: `PASS_WITH_RISKS / QUALIFICATION_PENDING`
 - Baseline: FluxSeer RCA `v0.5.0-alpha.3`
 - Baseline commit: `6ac8e92c333278de65f79e401db2fefc2c124a60`
-- Scope: audit and reproducible baseline red-state only
+- Scope: trust-boundary audit, red-state replay, and local runtime enforcement
 
 This document records the trust-boundary audit before introducing an
 authorization validator. It intentionally does not change the public CRD,
@@ -70,9 +70,9 @@ authorized evidence may still support a valid canonical conclusion.
 
 The replay fixture is
 [`related-target-authorization-red-state-v1.json`](../../internal/controllers/testdata/related-target-authorization/red-state-v1.json).
-The baseline probe deliberately records current acceptance so this first
-commit remains executable; the security gate in 3B-1C must invert the
-unauthorized expectations to `Rejected` or `Unresolved`.
+The fixture preserves the baseline acceptance fields as historical evidence;
+the post-fix replay now asserts that unauthorized relations resolve to
+`Rejected` or `Unresolved`.
 
 | Case | Baseline probe | Required post-fix disposition |
 | --- | --- | --- |
@@ -82,25 +82,27 @@ unauthorized expectations to `Rejected` or `Unresolved`.
 | Target without a verifiable UID | Accepted (**red**) | `Unresolved / TargetIdentityUnavailable` |
 | Evidence ID absent from inventory | Rejected by existing evidence lookup | `Rejected / EvidenceUnauthorized` |
 
-The probe checks the two currently exposed canonical paths: causal evidence
-coverage and `RootCauseEntity` derivation. It does not claim that a full
-runtime remediation path has been exercised; that belongs to 3B-1D/3B-1E.
+The replay checks the two currently exposed canonical paths: causal evidence
+coverage and `RootCauseEntity` derivation. Runtime projection tests also verify
+that rejected relations are removed from RiskSignal evidence while source
+provenance remains available for audit. It does not claim that a full
+Kubernetes runtime qualification has been exercised; that belongs to
+3B-1E/3B-1F.
 
 ## Explicit exclusions
 
 - No new Diagnostic or Fault Domain Registry.
 - No public CRD or `TargetRef` schema expansion in 3B-1A/1B.
-- No change to canonical RCA verdicts or RiskSignal behavior yet.
+- No Canonical Cutover; existing verdicts remain authoritative and rejected
+  relations are prevented from strengthening them.
 - No remediation or workload mutation.
 - No Kubernetes live qualification in this commit.
 
 ## Next gate
 
-3B-1C must add a pure, deterministic, fail-closed authorization validator and
-convert the red-state cases into security regression assertions before runtime
-integration or Kubernetes qualification begins. The pure validator now lives
-under `internal/authorization`; its result is not consumed by the existing
-runtime yet.
+3B-1E/3B-1F must complete the full repository regression, remote CI, and
+Kubernetes v1.34.1 qualification. The pure validator and runtime context are
+implemented locally; no formal release or Canonical Cutover is implied.
 
 ## Pure validator contract (3B-1C)
 
@@ -126,6 +128,32 @@ scope before identity, and identity before `Authorized`:
 
 The validator's unit matrix covers valid, cross-namespace, cross-cluster,
 missing UID, UID mismatch, stale/deleted target, missing scope, unauthorized
-evidence, and input-order determinism. Runtime adapters still need to construct
-the trusted inputs and enforce the decisions in both Canonical and Shadow
-paths.
+evidence, and input-order determinism. The runtime adapter now constructs the
+trusted inputs and enforces the decisions in both Canonical and Shadow paths;
+full qualification remains pending.
+
+## Runtime integration (3B-1D)
+
+`internal/investigation.Service` now constructs a separate
+`RelatedTargetAuthorizationContext` after evidence retention. It retains the
+source `EvidenceRef.RelatedTargets` for audit, while trusted consumers use only
+the context decisions:
+
+- Canonical causal evidence coverage and `RootCauseEntity` require an
+  `Authorized` decision.
+- Shadow candidate inventory marks related-target evidence unauthorized unless
+  every relation is authorized.
+- RiskSignal compatibility projection removes rejected or unresolved
+  `relatedTargets`; InvestigationRequest source evidence remains intact.
+- Snapshot reads are bounded, same-cluster/same-namespace only, and support
+  common Kubernetes resource kinds. Cross-scope assertions are rejected before
+  an API lookup.
+
+The datasource `dependency_uid` value is treated only as an untrusted
+assertion. It is accepted only when it matches the UID from the trusted
+Kubernetes snapshot. If the assertion is absent, the relation remains
+`Unresolved`, even when a current resource with the same name exists.
+
+The HighHTTPErrorRate runtime regression covers both a valid Service relation
+that remains confirmed and a cross-namespace relation that remains in source
+provenance but cannot satisfy canonical coverage or create a RiskSignal.

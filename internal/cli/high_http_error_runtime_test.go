@@ -33,10 +33,12 @@ import (
 )
 
 type highHTTPErrorRuntimeCase struct {
-	id             string
-	name           string
-	causalEvidence bool
-	expected       runtimeharness.ExpectedRuntimeResult
+	id                       string
+	name                     string
+	causalEvidence           bool
+	causalEvidenceAuthorized bool
+	dependencyNamespace      string
+	expected                 runtimeharness.ExpectedRuntimeResult
 }
 
 type highHTTPErrorRuntimeProvider struct{}
@@ -68,9 +70,10 @@ func TestHighHTTPErrorRuntimeQualification(t *testing.T) {
 	namespace := "fluxseer-runtime-high-http"
 	cases := []highHTTPErrorRuntimeCase{
 		{
-			id:             "high-http-error-with-causal-dependency",
-			name:           "High HTTP error rate with linked inventory dependency evidence",
-			causalEvidence: true,
+			id:                       "high-http-error-with-causal-dependency",
+			name:                     "High HTTP error rate with linked inventory dependency evidence",
+			causalEvidence:           true,
+			causalEvidenceAuthorized: true,
 			expected: runtimeharness.ExpectedRuntimeResult{
 				InvestigationPhase:       v1alpha1.PhaseCompleted,
 				InvestigationOutcome:     v1alpha1.InvestigationOutcomeConfirmed,
@@ -93,6 +96,23 @@ func TestHighHTTPErrorRuntimeQualification(t *testing.T) {
 				RootCauseType:            "",
 				RootCauseEntity:          "",
 				RequiredEvidenceSources:  []string{"prometheus"},
+				RiskSignalExpected:       false,
+				FailureReason:            "",
+				MaxUnexpectedSideEffects: 0,
+			},
+		},
+		{
+			id:                       "high-http-error-cross-namespace-dependency",
+			name:                     "High HTTP error rate with cross-namespace dependency assertion",
+			causalEvidence:           true,
+			causalEvidenceAuthorized: false,
+			dependencyNamespace:      "other-namespace",
+			expected: runtimeharness.ExpectedRuntimeResult{
+				InvestigationPhase:       v1alpha1.PhaseCompleted,
+				InvestigationOutcome:     v1alpha1.InvestigationOutcomeInconclusive,
+				RootCauseType:            "",
+				RootCauseEntity:          "",
+				RequiredEvidenceSources:  []string{"prometheus", "loki"},
 				RiskSignalExpected:       false,
 				FailureReason:            "",
 				MaxUnexpectedSideEffects: 0,
@@ -138,6 +158,10 @@ func TestHighHTTPErrorRuntimeQualification(t *testing.T) {
 			}))
 			defer prometheusServer.Close()
 
+			dependencyNamespace := testCase.dependencyNamespace
+			if dependencyNamespace == "" {
+				dependencyNamespace = namespace
+			}
 			lokiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/loki/api/v1/query_range" {
 					http.NotFound(w, r)
@@ -147,7 +171,7 @@ func TestHighHTTPErrorRuntimeQualification(t *testing.T) {
 					_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"streams","result":[]}}`))
 					return
 				}
-				_, _ = fmt.Fprintf(w, `{"status":"success","data":{"resultType":"streams","result":[{"stream":{"app":"checkout","dependency_kind":"Service","dependency_name":"inventory","dependency_namespace":%q,"dependency_api_version":"v1"},"values":[["1787058000000000000","upstream inventory unavailable: connection refused"]]}]}}`, namespace)
+				_, _ = fmt.Fprintf(w, `{"status":"success","data":{"resultType":"streams","result":[{"stream":{"app":"checkout","dependency_kind":"Service","dependency_name":"inventory","dependency_namespace":%q,"dependency_api_version":"v1","dependency_uid":"inventory-service-uid"},"values":[["1787058000000000000","upstream inventory unavailable: connection refused"]]}]}}`, dependencyNamespace)
 			}))
 			defer lokiServer.Close()
 
@@ -191,6 +215,12 @@ func setupHighHTTPErrorRuntimeCase(ctx context.Context, env *runtimeharness.Envi
 		},
 	}); err != nil {
 		return fmt.Errorf("create Deployment fixture: %w", err)
+	}
+	if err := env.Create(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "inventory", Namespace: env.Namespace, UID: types.UID("inventory-service-uid")},
+		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "inventory"}, Ports: []corev1.ServicePort{{Port: 8080}}},
+	}); err != nil {
+		return fmt.Errorf("create dependency Service fixture: %w", err)
 	}
 	if err := env.Create(ctx, &v1alpha1.ModelProvider{
 		ObjectMeta: metav1.ObjectMeta{Name: providerName, Namespace: env.Namespace},
@@ -309,7 +339,7 @@ func assertPublicHighHTTPErrorReport(t *testing.T, artifactDir string, testCase 
 		for _, ref := range request.Status.EvidenceRefs {
 			if ref.Source == "loki" && len(ref.RelatedTargets) == 1 {
 				causalRefID = ref.ID
-				if runtimeharness.TargetIdentity(ref.RelatedTargets[0]) != testCase.expected.RootCauseEntity {
+				if testCase.causalEvidenceAuthorized && runtimeharness.TargetIdentity(ref.RelatedTargets[0]) != testCase.expected.RootCauseEntity {
 					t.Fatalf("public report causal dependency mismatch: %#v", ref.RelatedTargets)
 				}
 			}
@@ -317,19 +347,32 @@ func assertPublicHighHTTPErrorReport(t *testing.T, artifactDir string, testCase 
 		if causalRefID == "" {
 			t.Fatal("public report missing explicit Loki causal dependency ref")
 		}
-		linked := false
-		for _, claim := range request.Status.Claims {
-			if claim.Verification != "Supported" {
-				continue
-			}
-			for _, evidenceLink := range claim.EvidenceLinks {
-				if evidenceLink.EvidenceRef == causalRefID && evidenceLink.Role == "Supports" {
-					linked = true
+		if !testCase.causalEvidenceAuthorized {
+			for _, claim := range request.Status.Claims {
+				if claim.Verification != "Supported" {
+					continue
+				}
+				for _, evidenceLink := range claim.EvidenceLinks {
+					if evidenceLink.EvidenceRef == causalRefID {
+						t.Fatalf("unauthorized causal evidence linked from supported claim: %#v", claim)
+					}
 				}
 			}
-		}
-		if !linked {
-			t.Fatalf("public report causal Loki evidence is not linked from a supported claim: %#v", request.Status.Claims)
+		} else {
+			linked := false
+			for _, claim := range request.Status.Claims {
+				if claim.Verification != "Supported" {
+					continue
+				}
+				for _, evidenceLink := range claim.EvidenceLinks {
+					if evidenceLink.EvidenceRef == causalRefID && evidenceLink.Role == "Supports" {
+						linked = true
+					}
+				}
+			}
+			if !linked {
+				t.Fatalf("public report causal Loki evidence is not linked from a supported claim: %#v", request.Status.Claims)
+			}
 		}
 	}
 	if testCase.expected.RiskSignalExpected {

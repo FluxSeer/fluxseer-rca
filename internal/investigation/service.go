@@ -72,12 +72,13 @@ func (r PreflightResult) Successful() bool {
 }
 
 type EvidenceCollectionResult struct {
-	Summary            string
-	EvidenceRefs       []v1alpha1.EvidenceRef
-	Observations       []domain.Observation
-	SchedulingEvidence []domain.SchedulingEvidence
-	Scheduling         []diagnostic.SchedulingObservation
-	Diagnostics        []diagnostic.Result
+	Summary                    string
+	EvidenceRefs               []v1alpha1.EvidenceRef
+	Observations               []domain.Observation
+	SchedulingEvidence         []domain.SchedulingEvidence
+	Scheduling                 []diagnostic.SchedulingObservation
+	Diagnostics                []diagnostic.Result
+	RelatedTargetAuthorization RelatedTargetAuthorizationContext
 	// Reconciliation is internal shadow-mode lineage. It is deliberately not
 	// consumed by the canonical RCA/verifier path in Phase 3A-2.
 	Reconciliation *CandidateReconciliationResult
@@ -194,6 +195,7 @@ func (s *Service) CollectEvidence(ctx context.Context, spec v1alpha1.Investigati
 		result.Issue = issue
 		return result, nil
 	}
+	result.RelatedTargetAuthorization = s.authorizeRelatedTargets(ctx, preflight, result.Observations, result.EvidenceRefs)
 	result.Summary = fmt.Sprintf("collected %d evidence records from %d investigation queries", totalRecords, len(preflight.CollectionPlan))
 	result.Diagnostics = s.evaluateDiagnostics(ctx, preflight, result)
 	reconciliation := ReconcileDiagnosticCandidates(CandidateReconciliationInput{
@@ -1611,6 +1613,7 @@ func normalizeObservation(record map[string]any, result *datasource.QueryResult,
 		CollectedAt:      collectedAt.UTC(),
 	}
 	obs.RelatedTargets = relatedTargetsFromRecord(record, req)
+	obs.RelatedTargetUIDAssertions = relatedTargetUIDAssertionsFromRecord(record, len(obs.RelatedTargets))
 	switch result.QueryType {
 	case domain.QueryTypeMetric:
 		metricName, _ := record["metric"].(string)
@@ -1966,15 +1969,7 @@ func observationRecordString(record map[string]any, key string) string {
 }
 
 func relatedTargetsFromRecord(record map[string]any, req datasource.QueryRequest) []domain.ResourceRef {
-	labels, ok := record["labels"].(map[string]any)
-	if !ok {
-		if stringLabels, ok := record["labels"].(map[string]string); ok {
-			labels = make(map[string]any, len(stringLabels))
-			for key, value := range stringLabels {
-				labels[key] = value
-			}
-		}
-	}
+	labels := relatedTargetLabels(record)
 	if labels == nil {
 		return nil
 	}
@@ -1998,6 +1993,37 @@ func relatedTargetsFromRecord(record map[string]any, req datasource.QueryRequest
 		Name:       name,
 		APIVersion: apiVersion,
 	}}
+}
+
+func relatedTargetUIDAssertionsFromRecord(record map[string]any, targetCount int) []string {
+	if targetCount == 0 {
+		return nil
+	}
+	assertions := make([]string, targetCount)
+	labels := relatedTargetLabels(record)
+	if labels == nil {
+		return assertions
+	}
+	uid := firstLabelValue(labels, "dependency_uid", "causal_dependency_uid")
+	if uid != "" && targetCount == 1 {
+		assertions[0] = uid
+	}
+	return assertions
+}
+
+func relatedTargetLabels(record map[string]any) map[string]any {
+	labels, ok := record["labels"].(map[string]any)
+	if ok {
+		return labels
+	}
+	if stringLabels, ok := record["labels"].(map[string]string); ok {
+		labels = make(map[string]any, len(stringLabels))
+		for key, value := range stringLabels {
+			labels[key] = value
+		}
+		return labels
+	}
+	return nil
 }
 
 func firstLabelValue(labels map[string]any, keys ...string) string {

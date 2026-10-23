@@ -615,6 +615,9 @@ func causalDependencyLogEvidencePresent(evidence investigation.EvidenceCollectio
 		if !strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeLog)) || len(ref.RelatedTargets) == 0 {
 			continue
 		}
+		if !evidence.RelatedTargetAuthorization.AuthorizedEvidenceRef(ref) {
+			continue
+		}
 		text := strings.ToLower(strings.Join([]string{ref.Source, ref.Reason, ref.Summary, ref.Query}, " "))
 		if containsAny(text, "connection refused", "upstream unavailable", "dependency unavailable", "service unavailable", "upstream timeout", "failed to connect", "dial tcp", "connection reset") {
 			return true
@@ -1730,6 +1733,9 @@ func causalRootCauseEntity(claims []v1alpha1.RCAClaim, evidence investigation.Ev
 			if !ok || !strings.EqualFold(strings.TrimSpace(ref.Kind), string(domain.QueryTypeLog)) || len(ref.RelatedTargets) != 1 {
 				continue
 			}
+			if !evidence.RelatedTargetAuthorization.AuthorizedEvidenceRef(ref) {
+				continue
+			}
 			target := ref.RelatedTargets[0]
 			if strings.TrimSpace(target.Kind) == "" || strings.TrimSpace(target.Name) == "" {
 				continue
@@ -2619,7 +2625,7 @@ func buildRCAClaims(rca investigation.RCAResult, evidence investigation.Evidence
 			claims = append(claims, v1alpha1.RCAClaim{ID: "claim-scheduling-mechanism", Statement: statement})
 		}
 	}
-	verification := verifier.VerifyClaims(verifierClaims(claims), verifierEvidenceRefs(evidence.EvidenceRefs))
+	verification := verifier.VerifyClaims(verifierClaims(claims), verifierEvidenceRefs(evidence))
 	return applyClaimVerification(claims, verification), verification
 }
 
@@ -2708,9 +2714,12 @@ func verifierClaims(claims []v1alpha1.RCAClaim) []verifier.Claim {
 	return out
 }
 
-func verifierEvidenceRefs(refs []v1alpha1.EvidenceRef) []verifier.EvidenceRef {
-	out := make([]verifier.EvidenceRef, 0, len(refs))
-	for index, ref := range refs {
+func verifierEvidenceRefs(evidence investigation.EvidenceCollectionResult) []verifier.EvidenceRef {
+	out := make([]verifier.EvidenceRef, 0, len(evidence.EvidenceRefs))
+	for index, ref := range evidence.EvidenceRefs {
+		if !evidence.RelatedTargetAuthorization.AuthorizedEvidenceRef(ref) {
+			continue
+		}
 		id := strings.TrimSpace(ref.ID)
 		if id == "" {
 			id = evidenceID(index + 1)
@@ -2908,7 +2917,7 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 		riskSignal.Spec.Confidence = rca.Reasoning.Confidence.Score
 		riskSignal.Spec.DryRun = true
 		riskSignal.Spec.TTLSeconds = 3600
-		riskSignal.Spec.Evidence = append([]v1alpha1.EvidenceRef(nil), evidence.EvidenceRefs...)
+		riskSignal.Spec.Evidence = riskSignalEvidenceRefs(evidence)
 		riskSignal.Spec.ActionType = "notification.sendSlack"
 		riskSignal.Spec.Parameters = map[string]string{
 			"channel":              "webhook",
@@ -2950,6 +2959,24 @@ func (r *InvestigationRequestReconciler) promoteToRiskSignal(ctx context.Context
 		Name:      riskSignal.Name,
 		Namespace: riskSignal.Namespace,
 	}, nil
+}
+
+// riskSignalEvidenceRefs preserves ordinary provenance but removes related
+// target assertions that did not pass the runtime authorization context. The
+// full source EvidenceRefs remain on InvestigationRequest for audit; the
+// compatibility projection must not present rejected relations as trusted
+// causal evidence.
+func riskSignalEvidenceRefs(evidence investigation.EvidenceCollectionResult) []v1alpha1.EvidenceRef {
+	refs := make([]v1alpha1.EvidenceRef, 0, len(evidence.EvidenceRefs))
+	for _, ref := range evidence.EvidenceRefs {
+		copyRef := ref
+		copyRef.RelatedTargets = nil
+		if evidence.RelatedTargetAuthorization.AuthorizedEvidenceRef(ref) {
+			copyRef.RelatedTargets = append([]v1alpha1.TargetRef(nil), ref.RelatedTargets...)
+		}
+		refs = append(refs, copyRef)
+	}
+	return refs
 }
 
 func applyProjectedInvestigationRCAResult(status *v1alpha1.RiskSignalStatus, request *v1alpha1.InvestigationRequest, generation int64, rca investigation.RCAResult, now time.Time) {

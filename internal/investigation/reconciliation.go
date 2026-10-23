@@ -70,7 +70,7 @@ func diagnosticEvidenceInventory(result EvidenceCollectionResult, targetUIDs []s
 				TargetUID:     singleTargetUID,
 				IncidentStart: incidentStart,
 				IncidentEnd:   incidentEnd,
-				Authorized:    true,
+				Authorized:    result.RelatedTargetAuthorization.AuthorizedEvidenceRef(ref),
 				Valid:         true,
 				Incomplete:    ref.Truncated,
 			})
@@ -82,7 +82,7 @@ func diagnosticEvidenceInventory(result EvidenceCollectionResult, targetUIDs []s
 				TargetUID:     match.targetUID,
 				IncidentStart: match.incidentStart,
 				IncidentEnd:   match.incidentEnd,
-				Authorized:    true,
+				Authorized:    result.RelatedTargetAuthorization.AuthorizedEvidenceRef(ref),
 				Valid:         true,
 				Incomplete:    ref.Truncated,
 			})

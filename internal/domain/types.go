@@ -185,6 +185,10 @@ type Observation struct {
 	RetainedBytes          int                          `json:"retainedBytes"`
 	CollectedAt            time.Time                    `json:"collectedAt"`
 	RelatedTargets         []ResourceRef                `json:"relatedTargets,omitempty"`
+	// RelatedTargetUIDAssertions is an internal, untrusted UID assertion from
+	// the datasource record. It is never serialized and must be checked against
+	// a trusted Kubernetes snapshot before authorization.
+	RelatedTargetUIDAssertions []string `json:"-"`
 }
 
 type IncidentContext struct {
