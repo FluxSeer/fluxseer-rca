@@ -121,6 +121,7 @@ scope before identity, and identity before `Authorized`:
 | `Rejected / EvidenceUnauthorized` | Evidence itself is not permitted |
 | `Rejected / CrossScopeTarget` or `UnauthorizedCluster` | Target is outside the investigation boundary |
 | `Rejected / TargetUIDMismatch` | Trusted snapshot and evidence UID conflict |
+| `Rejected / TargetSnapshotConflict` | Trusted snapshots disagree for one target identity |
 | `Unresolved / TargetIdentityUnavailable` | UID or trusted snapshot is missing |
 
 The validator's unit matrix covers valid, cross-namespace, cross-cluster,
